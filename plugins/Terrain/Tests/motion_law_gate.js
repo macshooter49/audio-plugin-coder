@@ -92,7 +92,13 @@ function homeMiss (s) {
   if (! C || C.sqs.length !== 4 || ! C.sqs.every (q => near (q, 0.6, 0.0005))) m.push ('CHOP dots ' + J (C && C.sqs));
   if (! C || ! C.ball || ! near (C.ball[0], 33, 0.01) || ! near (C.ball[1], 1, 0.001)) m.push ('CHOP ball ' + J (C && C.ball));
   if (! G || ! G.cell || ! near (G.cell[0], 11, 0.001) || ! near (G.cell[1], 11, 0.001)) m.push ('GLITCH cell ' + J (G && G.cell));
-  if (! R || ! R.bob || ! near (R.bob[0], 0, 0.001) || ! near (R.bob[1], 0, 0.01) || ! (R.wingY < 18.5)) m.push ('ROBIN bird bob ' + J (R && R.bob) + ' wing top y ' + (R && R.wingY) + ' (up 17.2 / down 20)');
+  /* fb637 — ROBIN RESTS WINGS DOWN, was wings up. Max: "the wings stop appearing up when they should
+     stop appearing down, because the robin has to be dead centre". The home moved 1.8 → 0.6 of the same
+     2.4 s loop: the bob is level at BOTH (each is the exact midpoint of a symmetric spline segment, so
+     the eased translate is 0), and only the discrete 0.8 s wing flap differs — 1.8 mod 0.8 = 0.2 lands in
+     the UP half, 0.6 mod 0.8 = 0.6 in the DOWN half. So the bob assertion is unchanged and the wing test
+     flips: the down path's control points sit BELOW the anchors, which puts the bbox top at y 20, not 17.2. */
+  if (! R || ! R.bob || ! near (R.bob[0], 0, 0.001) || ! near (R.bob[1], 0, 0.01) || ! (R.wingY > 18.5)) m.push ('ROBIN bird bob ' + J (R && R.bob) + ' wing top y ' + (R && R.wingY) + ' (up 17.2 / down 20 — home is DOWN since fb637)');
   if (! R || R.wind.length !== 2 || ! R.wind.every (w => w === '0')) m.push ('ROBIN wind ' + J (R && R.wind));
   for (const k of TILE_KEYS) if (! s[k] || s[k].r !== 1 || s[k].parked) m.push (k + ' rest weight ' + (s[k] && s[k].r) + (s[k] && s[k].parked ? ' (still winding)' : ''));
   return m;
@@ -114,7 +120,10 @@ function mutatedPage () {
   else if (MUT === 'nowindup') { sub ("    MOT.m = live ? Math.min(1, MOT.m + dt / 0.25)", "    MOT.m = live ? 1");
                                  sub ("      st.m = Math.min(1, st.m + dt / 0.25); st.tau += dt * rate * sstep(st.m);", "      st.m = 1; st.tau += dt * rate * sstep(st.m);"); }
   else if (MUT === 'litonly')  sub ("T.B, live), r = K[key].r;", "T.B, live && tl.el.classList.contains('act')), r = K[key].r;");
-  else if (MUT === 'anyband')  sub ("chop: { P: 2.2, B: [[1.2, 1.52]] },\n                glitch: { P: 9.6, B: [[0, 0.6], [2.2, 2.65], [4.63, 4.95], [7.7, 8.03]] }, drift: { P: 2.4, B: [[1.8, 1.8]] } };",
+  /* fb637 — ROBIN's home moved 1.8 → 0.6 (it now comes to rest WINGS DOWN). This mutation rewrites
+     the source text literally and sub() hard-fails unless its anchor matches exactly once, so the
+     anchor has to quote the band the way index.html spells it today, trailing comment included. */
+  else if (MUT === 'anyband')  sub ("chop: { P: 2.2, B: [[1.2, 1.52]] },\n                glitch: { P: 9.6, B: [[0, 0.6], [2.2, 2.65], [4.63, 4.95], [7.7, 8.03]] }, drift: { P: 2.4, B: [[0.6, 0.6]] } };   /* fb637 — wings DOWN at rest (0.6 mod 0.8 = 0.6 → the down path); the bob is level at 0.6 exactly as it was at 1.8 */",
                                     "chop: { P: 2.2, B: [[1.892, 2.2], [1.188, 1.54]] },\n                glitch: { P: 9.6, B: [[0, 9.6]] }, drift: { P: 2.4, B: [[0, 2.4]] } };");
   else if (MUT === 'norest')   { sub ("    st.r = k.r0 + (1 - k.r0) * sstep(s);\n", "    st.r = k.r0;\n");
                                  sub ("    st.tau = f; st.park = null; st.m = 0; st.r = 1; }", "    st.tau = f; st.park = null; st.m = 0; }"); }

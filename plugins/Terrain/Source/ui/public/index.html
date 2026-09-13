@@ -683,13 +683,20 @@
        CHOP   1.20–1.52 of 2.2 (the SMIL keeps the ball docked on the last, big step there); the four step dots even at .6
        GLITCH the four windows where the dice sits in the TOP-LEFT cell (the 16 hops are discrete: the picture is identical
               anywhere inside them); its hops slow and it settles there
-       ROBIN  exactly 1.8 of 2.4: the flap is retimed 0.72 → 0.8 s so wing and bob share the 2.4 s loop; there the bob is
-              level (0) and the wings are up; the two wind streaks fade out with r ("the wind dies") — their own 2.8/3.4 s
-              loops never repeat inside 2.4 s, so they are never seen at rest
+       ROBIN  exactly 0.6 of 2.4: the flap is retimed 0.72 → 0.8 s so wing and bob share the 2.4 s loop; there the bob is
+              level (0) and the WINGS ARE DOWN; the two wind streaks fade out with r ("the wind dies") — their own 2.8/3.4 s
+              loops never repeat inside 2.4 s, so they are never seen at rest.
+              fb637 — 1.8 → 0.6. Max: "the wings stop appearing up when they should stop appearing down, because the robin
+              has to be dead centre in the middle". The bob is level at BOTH 0.6 and 1.8 (each is the exact midpoint of one
+              spline segment of the 2.4 s translate, and that spline is symmetric, so the eased value is exactly 0 there) —
+              the wing is what differs. The flap is calcMode="discrete" over two d values in 0.8 s: local phase [0,0.4) is
+              the UP path (control y 14, above the anchors) and [0.4,0.8) is the DOWN path (control y 26, below them).
+              1.8 mod 0.8 = 0.2 → up; 0.6 mod 0.8 = 0.6 → down. So the home moves a third of a loop earlier and NOTHING
+              else is retimed: same period, same level bob, same dead streaks, wings down.
      fb104's law holds: SMIL still animates attributes in viewBox space, and arpTick writes the SAME scale() the killed
      keyframes wrote on fill-box circles. */
   var TILES = { arp: { P: 1.9, B: [[1.06, 1.9]] }, chop: { P: 2.2, B: [[1.2, 1.52]] },
-                glitch: { P: 9.6, B: [[0, 0.6], [2.2, 2.65], [4.63, 4.95], [7.7, 8.03]] }, drift: { P: 2.4, B: [[1.8, 1.8]] } };
+                glitch: { P: 9.6, B: [[0, 0.6], [2.2, 2.65], [4.63, 4.95], [7.7, 8.03]] }, drift: { P: 2.4, B: [[0.6, 0.6]] } };   /* fb637 — wings DOWN at rest (0.6 mod 0.8 = 0.6 → the down path); the bob is level at 0.6 exactly as it was at 1.8 */
   var tileList = null, tileScan = 0;
   function tileFind(){ var out = [];
     try { var ts = document.querySelectorAll('#syn-panel .flow-mode');
@@ -4968,8 +4975,25 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 
 /* ── .ti-syn-page grid ── */
 #syn-panel .ti-syn-page {
+  min-height: 0;   /* 🚨 fb637 — THE FLEXBOX AUTO-MINIMUM, the other half of the cut-off footer. This is a
+                      flex item (flex:1) of #syn-panel, and a flex item's min-height defaults to AUTO, which
+                      means "never smaller than my content". So when the page asked for more than 656 the item
+                      REFUSED to shrink and simply hung 12px out of the bottom of the panel, where
+                      #syn-panel's overflow:hidden cut it off. min-height:0 lets it be the size it is given;
+                      the grid's minmax(0,1fr) row below then passes that truth down to the cards. Both are
+                      needed — either one alone leaves the overflow in place (measured). */
   flex: 1; padding: 12px 14px 6px;   /* fb272 — bottom pad 12→6: the grown FX/voice boxes sit closer to the (thinner) capture strip, less dead space */
-  display: grid; grid-template-rows: 140px 140px 96px 1fr; gap: 12px;   /* fb272 — row-4 (FX rack + voice column) = 1fr: absorbs all remaining height so devices/macros/voice column fill to the bottom (no dead space) and stay filled at every window size (resize-robust — Always/Scaled can't clip since the grid fills the panel by construction) */
+  display: grid; grid-template-rows: 140px 140px 96px minmax(0, 1fr); gap: 12px;   /* fb272 — row-4 (FX rack + voice column) = 1fr: absorbs all remaining height so devices/macros/voice column fill to the bottom (no dead space) and stay filled at every window size */
+  /* 🚨 fb637 — minmax(0, 1fr), NOT 1fr. THIS IS WHY THE FOOTER WAS CUT OFF. A bare `1fr` is
+     minmax(AUTO, 1fr): the track may never shrink below the row's MIN-CONTENT height. The FX rack +
+     voice column ask for more than the space that is left, so the track grew instead of shrinking and
+     .ti-syn-page overflowed its own 656 box — MEASURED at exactly +12px at scale 1.0, clipped away by
+     #syn-panel's overflow:hidden. That clipped band is precisely what Max reported: the Always/Scaled
+     pills and the FX cards' bottom line, guillotined at the bottom edge, worse the smaller the window.
+     minmax(0, 1fr) removes the auto floor so the track is exactly the space that remains; the children
+     (.fxr-clip, .vm-voiceview) already carry min-height:0 and absorb it. fb272's claim that
+     "Always/Scaled can't clip since the grid fills the panel by construction" was true of the INTENT
+     and false of the CSS — the floor was the hole in it. */
   /* fb630 — the ground is painted by #plugin now (see body.ti-syn-open #plugin). This element used to
      carry var(--bg-main) PLUS a 4% purple radial vignette whose brightest point sat at (410,44) —
      the exact seam under the header — so the header read "slightly darker" than the page no matter
@@ -5269,8 +5293,17 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
   background: var(--bg-hero);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 2px;
+  gap: 1px;
   padding: 1px 0 2px;   /* label + value + gaps = 26.9px inside the 28px pill */
+  /* 🚨 fb637 — gap 2px → 1px, AND THE ARITHMETIC ABOVE, CORRECTED. The pill is height-capped at 28px,
+     and that budget forgot its own 2px of border: the usable content box is 28 − 2(border) − 3(padding)
+     = 23px, not 26.9. The label (9px at line-height 1.1 = 9.9) plus the value (10px at 1.2 = 12) plus a
+     2px gap is 23.9 — nearly a pixel more than exists. A flex item shrinks by default, so instead of
+     overflowing visibly the two lines were quietly compressed below their own line-height and the
+     bottoms of the letters were cut off, at every window size. That is Max's "the word Coarse gets cut
+     off at the bottom". One pixel of gap buys the room back: 9.9 + 1 + 12 = 22.9 ≤ 23, and the words
+     are whole. The gap is the right thing to spend — it is bare whitespace between two lines that
+     already carry their own leading, and spending line-height instead would clip the glyphs again. */
   position: relative;
   overflow: hidden;
 }
@@ -5289,6 +5322,28 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
      overflow:hidden. 5px of side inset keeps the … off the 1px border. */
   max-width: calc(100% - 5px);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* 🚨 fb637 — THE BACK-PANEL WORDS THAT GOT THEIR BOTTOMS CUT OFF, fixed without moving anything.
+     `overflow:hidden` is here for the ellipsis, but it clips BOTH axes, and it clips to the padding
+     box — which on a single-line div is exactly font-size × line-height. A font paints taller than
+     that: Segoe UI and SF Pro both ink about 1.33em from ascender to descender, so a 1.2 line box is
+     ~0.13em short and a 1.1 one (the sub/warp2/coarse labels) is ~0.23em short. The difference was
+     shaved off the bottom of the glyphs. MEASURED before this: 'Mix' and 'None' clipped by 1px, the
+     value chips by 2px, at EVERY scale — Max's "the word gets cut off at the bottom".
+     The trick: grow the padding box (which is what clips) and take the same amount back in margin
+     (which is what the layout sees). The clip gains 2px of headroom top and bottom, the text does
+     not move by even a sub-pixel, and the box still occupies exactly the height it always did — so
+     no chip, pill or row shifts. Raising line-height would have fixed the clip too, and grown every
+     one of these 46 boxes; this fixes the clip and touches no geometry. */
+  padding-top: 1px; padding-bottom: 1px; margin-top: -1px; margin-bottom: -1px;   /* 1px, not 2: the ink overruns a 1.2 line box by about 1.3px in total, so half a pixel each side is the real need and 1px covers it with room. 2px was enough headroom too, but the padding box then poked a pixel out of the pill, which has its own overflow:hidden — the relief has to fit inside the box it is relieving. */
+  /* fb637 — AND THE LINE BOX IS NEVER SQUEEZED. These two lines are flex items of the pill, and a
+     flex item shrinks by default. The pill's content box is ~1.4px shorter than the label + value +
+     gap actually need (the pill's own comment budgets "26.9px inside the 28px pill" and does not
+     count its 2px of border, and .ph-val then takes line-height 1.25 instead of 1.2), so BOTH lines
+     were quietly compressed below their own line-height and the glyphs were cut to fit. Measured:
+     the boxes could really scroll — 1px on the labels, 2px on the values, at every window size.
+     flex-shrink:0 says the words keep the height the type was set at; the pill is content-sized
+     (its grid row is align-items:center) so it takes the 1.4px back instead. */
+  flex-shrink: 0;
 }
 /* The <select> overlays the sel, transparent, takes the clicks */
 #syn-panel .sel-select {
@@ -5445,7 +5500,15 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    the circle. fb631: bare numbers only — WT Pos is the frame number, no fraction. */
 #syn-panel .knob-ring .kv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   pointer-events: none; font-family: -apple-system, 'SF Pro Display', sans-serif; font-weight: 300; color: var(--text-secondary);
-  line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap;
+  padding-top: 0.2em; box-sizing: border-box; }
+  /* 🚨 fb637 — THE NUMBER SITS IN THE MIDDLE OF THE RING. Max, on WT Pos: "the number 1 on there looks
+     a little suspicious, it doesn't look like it's in the middle" — he was right, and it measured 0.75px
+     HIGH in the 24px ring. align-items:center centres the em box, and digits do not fill it: they sit
+     entirely above the baseline while the em box reserves descender room below, so the visible digit
+     rides high. Padding the top by 0.2em lowers the content box centre by half that (0.1em), which is
+     exactly the measured error — and because it is per-em it stays correct across the three font sizes
+     paintRingVal picks (7.5 / 6.5 / 5.8px), instead of being right for one of them. */
 
 #syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; text-transform: none; }
 /* OSCFIX-READOUT-CSS — knob label swaps to live value while dragging (zero reflow) */
@@ -6391,21 +6454,22 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 #syn-panel .voice-toggle:hover { color: var(--text-muted); }
 #syn-panel .voice-toggle.on { background: transparent; color: var(--text-primary); }
 #syn-panel .sel[data-syn-row].dragging { background: rgba(139,92,246,0.18); }
-#syn-panel .sel.kt-pill { gap: 2px; }
+#syn-panel .sel.kt-pill { gap: 1px; }   /* fb637 — see .sel: the pill has 23px of content box, not 26.9; a 2px gap squeezed the two lines below their own line-height and cut the letters off */
 #syn-panel .kt-dest-row { position: relative; width: 100%; display: flex; align-items: center; justify-content: center; }
 #syn-panel .kt-dest-value { font-size: 11px; }
 #syn-panel .kt-depth { cursor: ns-resize; user-select: none; color: var(--text-muted); }
 #syn-panel .kt-depth.dragging { color: var(--text-primary); }
 /* (rt-pill CSS removed 2026-07-09 — ROUTE tiles retired for COARSE) */
-#syn-panel .sel.ph-pill { gap: 3px; }   /* fb538 */
+#syn-panel .sel.ph-pill { gap: 1px; }   /* fb538 */   /* fb637 — 3px → 1px. This pill was the worst of them: 9.9 + 3 + 12.5 = 25.4 asked of a 23px box, so it clipped 2px. */
 #syn-panel .ph-pill .ph-label { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; white-space: nowrap; }
-#syn-panel .ph-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; font-variant-numeric: tabular-nums; }
+#syn-panel .ph-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.2;   /* fb637 — 1.25 → 1.2, matching every other .sel-value: the extra 0.05em was the last half pixel this pill did not have. */ font-variant-numeric: tabular-nums; }
 #syn-panel .sel.sub-pill { gap: 3px; }
+#syn-panel .sel.sub-pill { gap: 0; }   /* fb637 — the tightest pill of the set: its label (9.9) + value (12) leave only a tenth of a pixel inside the 23px content box, and the value carries a bold <b> whose glyphs ink about 2px taller than its own line box. With the gap spent it fits with room, and the two lines still read apart on their own leading. */
 #syn-panel .sub-pill .sub-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .sub-pill .sub-val { cursor: ns-resize; user-select: none; color: var(--text-primary); }
 #syn-panel .sub-suffix { font-style: normal; opacity: 0.75; }
-#syn-panel .sel.coarse-pill { gap: 3px; }
-#syn-panel .coarse-pill .coarse-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .sel.coarse-pill { gap: 1px; }   /* fb637 — 3px → 1px; 9.9 + 3 + 12 = 24.9 in a 23px box was Coarse losing its bottom. */
+#syn-panel .coarse-pill .coarse-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* fb637 — line-height stays 1.1: the clipping this label suffered is cured by the padding/margin headroom on .sel-value above, which costs no geometry. Raising it to 1.2 also cured it but grew the label ~1px, and a fix for a clip has no business resizing the thing it clipped. */
 #syn-panel .coarse-pill .coarse-val { cursor: ns-resize; user-select: none; color: var(--text-primary); }
 #syn-panel .sel.warp2-pill { gap: 3px; }
 /* fb559 — MEASURED, and it was not the overflow everyone assumed. The name never escaped this
@@ -8985,7 +9049,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
            purple-500 outline with PURPLE-400 LETTERS, which is the one combination the law does not
            allow: the outline carries the colour, the letters go white, and the lit one JUMPS. */
         #syn-panel .ribbon-row.rr-new .voice-toggle{ flex:1; border:1px solid rgba(255,255,255,.42); border-radius:5px; padding:3px 0; text-align:center; color:var(--text-secondary); background:transparent; transition:.14s; }
-        #syn-panel .ribbon-row.rr-new .voice-mode-row .voice-toggle:first-child{ text-align:center; padding-left:0; }
+        #syn-panel .ribbon-row.rr-new .voice-mode-row .voice-toggle:first-child{ text-align:center; }   /* fb637 — dropped `padding-left:0`. With padding-right still 1px the box was asymmetric, so "Mono" sat half a pixel left of its own pill while its three neighbours were centred — the odd one out in the row. text-align:center (kept) is what actually centres it; the zeroed padding was a leftover from when this button was left-aligned. */
         #syn-panel .ribbon-row.rr-new .voice-toggle:hover{ border-color:rgba(255,255,255,.72); color:var(--text-primary); }
         #syn-panel .ribbon-row.rr-new .voice-toggle.on{ background:transparent; border-color:var(--purple-400); color:#fff;
           text-shadow:0 0 6px rgba(255,255,255,.35); }   /* fb627 — the text's answer to fb119's drop-shadow on the emblem */
@@ -9019,14 +9083,34 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         #syn-panel .fxr-tab.on{ color:var(--purple-400); }   /* fb268 — casual: selected = purple text, NO glow/box-shadow bleed */
         #syn-panel .fxr-tabhint{ margin-left:auto; font-size:9px; color:var(--text-dim); letter-spacing:1px; font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         /* min-width:0 → the grid's 1fr track can shrink so the rack scrolls (else it pushes the voice column off) */
-        #syn-panel .rr-left{ min-width:0; position:relative; }
+        #syn-panel .rr-left{ min-width:0; min-height:0; position:relative; }   /* fb637 — min-height:0 for the same reason as .ti-syn-page: this is a flex item whose auto minimum was holding the FX rack at its content height and pushing the cards' bottom line out through the clip */
         /* fb269 — pill retired → reclaim the top padding to CLOSE the gap under Env/LFO (thin division like the others); bottom stays put */
-        #syn-panel .ribbon-row.rr-new{ padding:3px 0 3px; }   /* fb272 — 0 horizontal: first FX box left edge aligns with Env/Filter/Osc (x=14); voice column right edge aligns with LFO */
+        #syn-panel .ribbon-row.rr-new{ padding:3px 0 3px; grid-template-rows:minmax(0, 1fr); }   /* fb272 — 0 horizontal: first FX box left edge aligns with Env/Filter/Osc (x=14); voice column right edge aligns with LFO */
+        /* 🚨 fb637 — grid-template-rows:minmax(0,1fr) — THE LAST LINK. With no row track declared, this
+           grid's single row was IMPLICIT, and an implicit row is auto = max-content: it sized itself to
+           the FX cards' natural height (188px) while the row it lives in had only given it 182px, so it
+           hung 6px out of its own box and 3px out of the panel — the exact band .fxr-clip's
+           overflow-y:hidden then sliced off the cards' bottom line. Declaring the row as minmax(0,1fr)
+           makes it the height it was actually given. Chain, top to bottom, all four now bounded:
+           .ti-syn-page(min-height:0) → its minmax(0,1fr) row → THIS row → .rr-left/.fxr-clip(min-height:0). */
         /* voice column: fills the reclaimed height, bigger/taller buttons, Always anchored at the bottom */
         #syn-panel .ribbon-row.rr-new .voice-meta{ padding-top:0; gap:7px; height:100%; }
         #syn-panel .ribbon-row.rr-new .voice-toggle-row{ gap:5px; }
-        #syn-panel .ribbon-row.rr-new .voice-toggle{ padding:4px 0; }
-        #syn-panel .ribbon-row.rr-new .vm-4 .voice-toggle{ font-size:8.5px; letter-spacing:.2px; padding:4px 1px; }   /* 4 buttons fit without squeezing the words */
+        #syn-panel .ribbon-row.rr-new .voice-toggle{ padding:calc(4px - 0.056em) 0 calc(4px + 0.056em); text-indent:1px; }
+        /* 🚨 fb637 — DEAD CENTRE IN THE PILL, and it STOPS MOVING WHEN YOU RESIZE. Measured, at the
+           design size: the word sat 0.50px LOW and 0.50px LEFT of the pill's centre.
+             LEFT  — letter-spacing is added after EVERY glyph, the last one included, so a centred line
+                     carries a trailing gap of one full space and the ink sits ls/2 to the left of centre.
+                     text-indent:1px (= the inherited letter-spacing) gives that space back to the front.
+             LOW   — equal 4px/4px padding centres the EM BOX, but the em box is not symmetric about the
+                     letters: it reserves descender room under a word like "Mono" that has none. Centring
+                     the CAP BAND instead means biasing the padding up by half the error; 0.056em is that
+                     half at this font size, and stays right if the font size changes (it is per-em, not px).
+           Why it matters more than half a pixel sounds: a fixed 0.5px bias is the thing that made the
+           text MOVE. At one window size the renderer rounds it to 0, a drag later it rounds to a whole
+           pixel, and the word visibly hops inside its box — Max's "they move inside of their boxes".
+           Centre it and every zoom rounds the same way, so it never hops again. */
+        #syn-panel .ribbon-row.rr-new .vm-4 .voice-toggle{ font-size:8.5px; letter-spacing:.2px; padding:4px 1px; text-indent:.2px; }   /* 4 buttons fit without squeezing the words. fb637 — text-indent tracks THIS row's own .2px letter-spacing (Mono · Legato · Poly · Macros). NOTE it keeps the plain 4px/4px padding: measured, this row is already dead-centre vertically, because these buttons are STRETCHED to the row height by the flex row's align-items and land on a different rounding than the taller Always/Scaled pills. Inheriting that row's optical nudge overshot it by half a pixel the other way — so the correction is applied where it was measured, and only there. */
         /* fb575 — THE PILLS GO WITH THEIR VIEW. The row-4 button rule above says `transition:.14s` = ALL properties,
            visibility included; when fb574 hid the voice view (visibility, inherited) every Always/Scaled pill began
            a 140 ms visibility transition — and the real WebKit page never ended it: measured on the installed AU,
@@ -9035,7 +9119,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
            repainted. Max: "it lags for a couple of seconds... it glitches." Two rules: the pills transition their
            COLOURS only, and a hidden view is also opacity:0, so nothing inside it can show through a transition. */
         #syn-panel .ribbon-row.rr-new .voice-toggle{ transition:color .14s, border-color .14s, background-color .14s; }
-        #syn-panel .vm-voiceview{ flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-between; gap:7px; }   /* fb272 — even distribution: as row-4 grows the rows spread evenly (no single big gap before Always/Scaled) */
+        #syn-panel .vm-voiceview{ flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-between; gap:0; }   /* fb272 — even distribution: as row-4 grows the rows spread evenly (no single big gap before Always/Scaled) */
+        /* 🚨 fb637 — gap:0, was gap:7px. THIS IS WHY "Always / Scaled" WAS CUT OFF. The six rows are
+           121px of content; with a FIXED 7px gap they demanded 121 + 5×7 = 156px inside a 144px column,
+           so the last row hung 12px below the box and #syn-panel's overflow:hidden took the bottom off
+           the two pills. A fixed gap and justify-content:space-between are the same job done twice: the
+           gap is a floor that can force an overflow, while space-between already distributes whatever
+           room there is. Dropping the floor leaves the distribution — 23px over 5 gaps = 4.6px here, so
+           the rows sit a touch tighter than before, and they FIT, at every window size: as the column
+           grows the spacing opens back up on its own and the pills stay pinned to the bottom edge. */
         #syn-panel .vm-voiceview > .voice-toggle-row{ margin-top:0; }   /* fb272 — space-between already lands Always/Scaled at the bottom */
         /* 9-macro view (placeholder — real design later) swaps in when 'Macros' is selected */
         #syn-panel .vm-macroview{ flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; padding-top:0; }   /* fb565 — NINE macros, 3×3 (Max: "I liked my three rows of three") */   /* fb272 claimed "same box geometry as vm-voiceview so toggling Macros never reflows anything" — it did not hold, see fb574 below */
@@ -9063,7 +9155,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         #syn-panel .voice-meta.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on{ border-color:rgba(255,255,255,.42); color:var(--text-primary); }
         #syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
         #syn-panel .fxr-macros-pane{ flex-direction:column; justify-content:center; }
-        #syn-panel .fxr-clip{ flex:1; min-width:0; overflow-x:auto; overflow-y:hidden; display:flex; scrollbar-width:none; }
+        #syn-panel .fxr-clip{ flex:1; min-width:0; min-height:0; overflow-x:auto; overflow-y:hidden; display:flex; scrollbar-width:none; }   /* fb637 — min-height:0: the last link in the chain. Its overflow-y:hidden is the blade that actually cut the cards' bottom line off, and without this it was handed a height bigger than the space that existed. */
         #syn-panel .fxr-clip::-webkit-scrollbar{ display:none; }   /* fb268 — NO visible slider; shift+scroll / two-finger trackpad pans the chain */
         #syn-panel .fxr-rack{ display:flex; gap:9px; align-items:stretch; padding:0; min-height:0; }   /* fb272 — drop 2px side pad so the first device left edge lands at x=14 (edge-to-edge with the modules above) */
         /* fb268 — TRANSPARENT boxes: no glass fill, no glow. Top+bottom borders meet the separator (Mono→Always). */
@@ -9140,7 +9232,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
            frame dispatcher). The rack's exception is its meters and spectra, which are untouched. */
         html.ti-still #syn-panel .fxr-core .dst-curve, html.ti-still #syn-panel .fxr-core .grn-wave,
         #syn-panel .fxr-core .dst-curve.ti-br-held, #syn-panel .fxr-core .grn-wave.ti-br-held{ animation-play-state:paused; }
-        #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
+        #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; flex:0 0 auto; }   /* fb637 — THE FOOTER IS NEVER THE THING THAT GIVES. A flex item defaults to flex-shrink:1, so when a card was shorter than its content the dial row + pills (the card's bottom line) were squeezed and then sliced by .fxr-clip's overflow-y:hidden. The core (.fxr-core, flex:1 1 0, min-height:0) is the part that is designed to absorb height — pin the footer and the shortfall goes there instead. */
         /* fb451 — THE DIVIDER IS CENTRED BY CONSTRUCTION, on every card. Cards are content-wide (their headers decide: 284..357 css px),
            so a stretching 1fr grid put the last dial 10..20 px from the divider depending on the card. The four dials are now FIXED 36 px
            columns spread edge to edge (space-between), so the outer dials hug the row's edges the same on every card, and the divider's

@@ -7427,7 +7427,19 @@ void TerrainUiCore::resized()
     // 820-wide proportions; pageZoom (pushed from timerCallback until the peer
     // exists) scales the page itself.
     const double sc = getWidth() / 820.0;
-    captureDragStrip.setBounds (b.removeFromBottom (juce::roundToInt (CAPTURE_STRIP_HEIGHT * sc)));
+    // 🚨 fb637 — THE PAGE MUST NEVER BE HANDED LESS THAN ITS DESIGN BOX. The page is a fixed
+    // 820x656 CSS box with overflow:hidden, and it is shown at pageZoom == sc, so it needs
+    // ceil(656*sc) device px to draw its last row. The strip used to take round(16*sc) and the
+    // page got whatever was left — which is 656 CSS px only when the two roundings happen to
+    // agree. They do not: at sc 1.10 the window is round(739.2)=739 and the strip round(17.6)=18,
+    // leaving 721 px = 655.45 CSS px, so the bottom half-pixel of the last row was simply cut off,
+    // and WHICH sizes clipped changed as the user dragged. Size the WEB AREA first and give the
+    // strip the remainder: the page always gets its 656, and the strip absorbs the +/-1px of slack
+    // (invisible on a plain 16px drag bar). jlimit keeps the strip real if a host ever forces a
+    // window shorter than the design box.
+    const int webH  = (int) std::ceil (656.0 * sc);
+    const int strip = juce::jlimit (1, juce::jmax (1, b.getHeight() - 1), b.getHeight() - webH);
+    captureDragStrip.setBounds (b.removeFromBottom (strip));
     if (webView != nullptr)
         webView->setBounds(b);
     uiZoom_ = sc;
