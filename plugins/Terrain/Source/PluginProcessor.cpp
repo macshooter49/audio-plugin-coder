@@ -14100,17 +14100,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
-    // Write final output to rolling capture buffer
-    captureBuffer.writeBlock(leftChannel,
-        numChannels > 1 ? rightChannel : nullptr, numSamples);
-
-    // Capture the post-FX master into the masterFx ring (in lockstep with the
-    // per-layer DRY rings). WET stem export uses energy-ratio attribution
-    // against this ring so each layer's WET file carries its proportional
-    // share of the shared FX processing.
-    writeToMasterFxRing (leftChannel,
-                         numChannels > 1 ? rightChannel : leftChannel,
-                         numSamples);
+    // (fb636e — the Export capture and the masterFx ring moved to the END of processBlock: see there.)
 
     // Sync transport state back (auto-stop may have changed wantRecord/wantPlay)
     tapeLoopRecording.store(wantRecord ? 1.f : 0.f);
@@ -14598,6 +14588,22 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (sampAudFade_ <= 0 && sampAudPending_) { sampAudPending_ = false; startSampPreview(); }
         }
     }
+
+    // 🎙️ fb636e — THE CAPTURE IS THE LAST THING THAT TOUCHES THE OUTPUT. Max: "the terra capture only captures the stuff
+    //    that isn't affected by the four modes … we must hear the glitch … it captures everything, including the patcher."
+    //    It used to copy the block right after the master limiter, BEFORE the FLOW Chop and Glitch stages rewrote the
+    //    buffer, so every export was missing them (Arp and Robin act on notes, so they were already in it). Taken here,
+    //    after Chop, Glitch and the auditions, the capture is exactly what the host receives — and anything added to the
+    //    chain later (the patcher) is inside it automatically, as long as it runs above this line. No return statement
+    //    sits between the audio stages and here, so every block is captured. Tests/capture_last_gate.py pins the order.
+    captureBuffer.writeBlock (leftChannel,
+        numChannels > 1 ? rightChannel : nullptr, numSamples);
+
+    // The masterFx ring (WET stem export attributes each layer's share of the shared FX against it) moves with it, so the
+    // WET stems carry the FLOW stages too; it stays in lockstep with the per-layer DRY rings written earlier this block.
+    writeToMasterFxRing (leftChannel,
+                         numChannels > 1 ? rightChannel : leftChannel,
+                         numSamples);
 
     // (ANNULUS RESONATOR moved UP to the synth-section output — pre-FX — see above.)
     TI_PROF ("auditions"); tiProf_.end();
