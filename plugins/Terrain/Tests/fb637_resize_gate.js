@@ -112,7 +112,13 @@ function source () {
   else if (MUT === 'gap')      sub('justify-content:space-between; gap:0; }', 'justify-content:space-between; gap:7px; }');
   else if (MUT === 'indent')   sub('padding:calc(4px - 0.056em) 0 calc(4px + 0.056em); text-indent:1px; }',
                                    'padding:4px 0; }');
-  else if (MUT === 'knob')     sub('  padding-top: 0.2em; box-sizing: border-box; }', '  }');
+  else if (MUT === 'knob')     sub('  padding-top: var(--kv-pad, 0.2em); box-sizing: border-box; }', '  }');
+  /* fb637b — the knob nudge is no longer a constant: the page measures the LIVE .kv at boot and
+     writes --kv-pad, because 0.2em was the answer for this machine's font and the Mac's SF Pro
+     needed a different one. `knob` removes the declaration outright, so it still proves bar [4].
+     `kvconst` freezes it back to the hard-coded Windows value — it stays GREEN here and should go
+     RED on the Mac, which is the whole point of measuring instead of guessing. */
+  else if (MUT === 'kvconst')  sub('padding-top: var(--kv-pad, 0.2em);', 'padding-top: 0.2em;');
   else if (MUT)                { console.error('unknown RG_MUT ' + MUT); process.exit(2); }
   if (! MUT) return SRC;
   const tmp = path.join(os.tmpdir(), 'fb637-mut-' + MUT + '.html');

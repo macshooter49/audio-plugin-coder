@@ -906,6 +906,76 @@ window.__bootPage=+((location.search.match(/[?&]page=([1-4])/)||[])[1]||0);   /*
   W.addEventListener('resize',kick);
   setTimeout(apply,1300); setTimeout(apply,2600); setTimeout(apply,5000);
 })();
+/* ═══ fb637b — THE KNOB NUMBER IS CENTRED BY THE FONT'S OWN METRICS, NOT BY A CONSTANT ═════════
+   A digit centred with align-items:center rides HIGH, because what gets centred is the EM box and
+   digits do not fill it: the em box reserves descender room under a "0" that has none. fb637 nudged
+   it back down with a measured 0.2em of padding — measured on WINDOWS. The Mac then read 0.3px the
+   other way at every scale, because the correction is a property of the FONT (this stack resolves to
+   SF Pro there and to the system sans here) and 0.2em is only the answer for one of them.
+   So ask the font instead of hard-coding either answer. For a flex-centred line box the cap band's
+   centre sits (A − D − cap)/2 below the box centre, where A/D are the font's ascent and descent and
+   cap is the cap height; padding the top by P lowers the content centre by P/2, so the correction is
+   exactly P = cap + D − A, in em, whatever the font turns out to be. Falls back to the Windows-
+   measured 0.2em if the metrics are unavailable (older engines expose no fontBoundingBox*), which is
+   no worse than before. Re-run on fonts.ready: the first measurement can land on a fallback face. */
+(function () {
+  function measure () {
+    try {
+      /* MEASURE THE REAL ELEMENT, NOT A STAND-IN. Two tidier versions were tried and both lied:
+         deriving the offset from fontBoundingBoxAscent/Descent asked for 0.01em where the rendered
+         digits needed 0.2em (at line-height:1 the engine does not put the baseline where those
+         metrics predict), and an off-screen box built to look like a .kv measured 0.02em, because a
+         stand-in only reproduces the geometry you remembered to copy. The live knob value is the
+         only box guaranteed to have the real one, so wait for one to exist and read IT. */
+      var kv = document.querySelector('#syn-panel .knob-ring .kv');
+      if (! kv) return false;                          /* none built yet — the caller retries */
+      var txt = null;
+      for (var i = 0; i < kv.childNodes.length; i++)
+        if (kv.childNodes[i].nodeType === 3 && kv.childNodes[i].nodeValue.trim()) { txt = kv.childNodes[i]; break; }
+      if (! txt) return false;
+      var cs = getComputedStyle(kv), fs = parseFloat(cs.fontSize);
+      if (! (fs > 0)) return false;
+      /* IT HAS TO BE LAID OUT. On the front page #syn-panel is display:none, so the knob value exists
+         in the DOM with a 0x0 rect at the origin — measuring that yields a confident, meaningless
+         number. Wait for a box with real height instead; the retry loop comes back. */
+      if (! (kv.getBoundingClientRect().height > 0)) return false;
+      var ctx = document.createElement('canvas').getContext('2d');
+      ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+      var cap = ctx.measureText('H').actualBoundingBoxAscent;
+      if (! (cap > 0)) return false;                   /* no metrics → keep the CSS fallback */
+      /* read the uncorrected position: zero the nudge, wrap the text so the sitter shares its line
+         box (in a flex box a bare sitter is a SIBLING item and reports the box centre, not the
+         baseline), measure, then put everything back. All synchronous — nothing repaints in between. */
+      var prevPad = kv.style.paddingTop;
+      kv.style.paddingTop = '0px';
+      var wrap = document.createElement('span');
+      wrap.style.cssText = 'display:inline;font:inherit;letter-spacing:inherit';
+      kv.insertBefore(wrap, txt); wrap.appendChild(txt);
+      var sit = document.createElement('i');
+      sit.style.cssText = 'display:inline-block;width:0;height:0;padding:0;margin:0;border:0;vertical-align:baseline';
+      wrap.appendChild(sit);
+      var r = kv.getBoundingClientRect();
+      var err = (sit.getBoundingClientRect().bottom - cap / 2) - (r.top + r.height / 2);
+      sit.remove(); kv.insertBefore(txt, wrap); wrap.remove();
+      kv.style.paddingTop = prevPad;
+      var pad = (-2 * err) / fs;                       /* padding-top lowers the centre by half of itself */
+      if (! (pad > -0.5 && pad < 0.5)) return false;   /* nonsense → keep the fallback and TRY AGAIN:
+                                                          a reading this far out means we caught the
+                                                          page mid-layout, not that the font is exotic */
+      document.documentElement.style.setProperty('--kv-pad', pad.toFixed(4) + 'em');
+      return true;
+    } catch (e) {}
+  }
+  /* The knob values are built lazily, so keep looking until one exists — then stop for good. Cheap
+     and bounded: a handful of tries over the first few seconds, and it settles on the first hit. */
+  var tries = 0;
+  function attempt () {
+    if (measure() === true) return;
+    if (++tries < 40) setTimeout(attempt, 250);
+  }
+  attempt();
+  try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { tries = 0; attempt(); }); } catch (e) {}
+})();
 
 /* ═══ fb623 — THE PRESET PILLS REMEMBER THEIR NAMES ════════════════════════════════════════════
    Max: "whenever I have a preset saved such as Deep Passage on my phaser, and I make another
@@ -5501,7 +5571,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .knob-ring .kv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   pointer-events: none; font-family: -apple-system, 'SF Pro Display', sans-serif; font-weight: 300; color: var(--text-secondary);
   line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap;
-  padding-top: 0.2em; box-sizing: border-box; }
+  padding-top: var(--kv-pad, 0.2em); box-sizing: border-box; }
   /* 🚨 fb637 — THE NUMBER SITS IN THE MIDDLE OF THE RING. Max, on WT Pos: "the number 1 on there looks
      a little suspicious, it doesn't look like it's in the middle" — he was right, and it measured 0.75px
      HIGH in the 24px ring. align-items:center centres the em box, and digits do not fill it: they sit
