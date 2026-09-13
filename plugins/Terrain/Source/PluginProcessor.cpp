@@ -14281,6 +14281,17 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         else if (flowChain.order[ci] == 3) glitchStage();
     }
 
+    // 🎚️ fb636e (clean-up) — THE masterFx RING. The WET stem export attributes each layer's share of the shared FX
+    //    against it, so it is written HERE: after the FLOW Chop/Glitch stages (the WET stems carry them) and ABOVE the
+    //    browser auditions (noise / wavetable / sample previews). A preview is the user checking a sound, not part of any
+    //    layer — written at the end of processBlock, a preview landed in Stem-X-WET at full level whenever one layer was
+    //    sounding. Nothing between here and the auditions writes audio, so this is the buffer the FLOW stages left.
+    //    (The layer DRY rings arm and advance on their own, fb517 — WET pairing by age is an open item, not lockstep.)
+    //    Tests/capture_last_gate.py rule [4] pins it after the dispatch and before the first audition write.
+    writeToMasterFxRing (leftChannel,
+                         numChannels > 1 ? rightChannel : leftChannel,
+                         numSamples);
+
     // ── FLOW · DRIFT (mode 4): generative MOD SOURCE — makes no audio; advances 8 bipolar lanes
     //    (FlowDrift.h). Kept alive every block so the card scopes have live motion and the lanes
     //    are ready for the mod matrix. DEPTH = MORPH macro. (Lane→ModDest routing = mod-matrix phase.)
@@ -14599,11 +14610,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     captureBuffer.writeBlock (leftChannel,
         numChannels > 1 ? rightChannel : nullptr, numSamples);
 
-    // The masterFx ring (WET stem export attributes each layer's share of the shared FX against it) moves with it, so the
-    // WET stems carry the FLOW stages too; it stays in lockstep with the per-layer DRY rings written earlier this block.
-    writeToMasterFxRing (leftChannel,
-                         numChannels > 1 ? rightChannel : leftChannel,
-                         numSamples);
+    // (The masterFx ring for the WET stems is written right after the FLOW dispatch loop, above the auditions: see there.)
 
     // (ANNULUS RESONATOR moved UP to the synth-section output — pre-FX — see above.)
     TI_PROF ("auditions"); tiProf_.end();
