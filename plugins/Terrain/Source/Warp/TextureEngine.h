@@ -99,6 +99,8 @@ namespace tw
         }
 
         int inputLatency() const noexcept { return inner.inputLatency(); }
+        int  outputSeekLength() const noexcept { return inner.outputSeekLength(); }             // fb642
+        void outputSeek (const float* l, const float* r, int n) { inner.outputSeek (l, r, n); }  // fb642
 
         void seek (const float* primeL, const float* primeR, int numSamples)
         {

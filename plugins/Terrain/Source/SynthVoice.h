@@ -417,6 +417,7 @@ class SynthVoice : public juce::SynthesiserVoice
             modalReady_.store (false, std::memory_order_release);   // MODAL-ENGINE-VOICE
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
+            warpPrime_.setSize (2, juce::jmax (8192, (int) (sampleRate_ * 0.5)), false, true, false);   // fb642 — ≥ any primeLength() at stretch ≥ 1
             airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
             oscGateCoef_ = 1.0f - std::exp (-1.0f / (0.004f * (float) juce::jmax (1.0, sampleRate_)));  // ~4ms mute fade — click-free
             lvlSmCoef_ = 1.0f - std::exp (-1.0f / (0.0025f * (float) juce::jmax (1.0, sampleRate_)));   // fb180 — level glide
@@ -7426,6 +7427,7 @@ class SynthVoice : public juce::SynthesiserVoice
         const juce::AudioBuffer<float>* sampleBufLast_[4] = { nullptr, nullptr, nullptr, nullptr };
         double sampleNativeOverOut_[4] = { 1.0, 1.0, 1.0, 1.0 };
         juce::AudioBuffer<float> sampleBlkA_, sampleBlkB_, sampleBlkC_, sampleBlkD_, warpSrc_;
+        juce::AudioBuffer<float> warpPrime_;   // fb642 — the look-ahead that primes the vocoder (sized in prepare)
         const float *sampBlkAL_ = nullptr, *sampBlkAR_ = nullptr, *sampBlkBL_ = nullptr, *sampBlkBR_ = nullptr,
                     *sampBlkCL_ = nullptr, *sampBlkCR_ = nullptr, *sampBlkDL_ = nullptr, *sampBlkDR_ = nullptr;
         bool          sampleNoteOnPending_ = false;
@@ -7729,6 +7731,7 @@ class SynthVoice : public juce::SynthesiserVoice
             // values to neutral (skip the vocoder): stretch < 0.3 % (ratio ~1.009) and formant < 2 %
             // (~0.03 semitone) are inaudible, so stay on the cheap direct-resample path.
             const bool useWarp = (p.stretch > 0.003f) || (std::fabs (p.formant) > 0.02f);
+            if (! useWarp) warp.markUnprimed();   // fb642 — leaving the warp path: engaging it again must re-prime
             if (useWarp)
             {
                 const tw::WarpMode wm = (p.stretchMode == 1) ? tw::WarpMode::Beats
@@ -7753,34 +7756,60 @@ class SynthVoice : public juce::SynthesiserVoice
                     warpSrc_.setSize (2, srcN, false, false, true);
                 float* sL = warpSrc_.getWritePointer (0);
                 float* sR = warpSrc_.getWritePointer (1);
-                if (N <= 1)
+                // fb642 — THE WARP SOURCE, ONE DEFINITION: the render below and the zero-latency prime read the sample
+                // through the same unison sum, so the primed look-ahead is exactly the audio the vocoder then receives.
+                auto readWarpSource = [&] (float* dL, float* dR, int n)
                 {
-                    for (int k = 0; k < srcN; ++k) engs[0].tick (sL[k], sR[k]);
-                }
-                else
-                {
-                    // UNISON can't run 16 FFT phase-vocoders — sum the detuned reads into the warp
-                    // SOURCE (detune + width survive), then warp ONCE. (Serum-class approach.)
-                    juce::FloatVectorOperations::clear (sL, srcN);
-                    juce::FloatVectorOperations::clear (sR, srcN);
-                    for (int u = 0; u < N; ++u)
+                    if (N <= 1)
                     {
-                        auto& e = engs[(size_t) u];
-                        // PUNCH ANCHOR (Max: "unison turns shit down"): keep full-level voice(s) for
-                        // the attack, RMS-normalise only the INNER bed — no 1/√N punch loss.
-                        // fb256 — anchor the SYMMETRIC OUTER PAIR (voices 0 AND N-1), not voice 0 alone.
-                        // Voice 0 is the LEFTMOST slot, so anchoring it alone pulled the image LEFT
-                        // (Max's bug on ALL engines). A mirror pair is balanced → punchy AND centered.
-                        const float gu = (u == 0 || u == N - 1) ? 1.0f : uNorm;
-                        const float pl = panL[u] * gu, pr = panR[u] * gu;
-                        for (int k = 0; k < srcN; ++k)
+                        for (int k = 0; k < n; ++k) engs[0].tick (dL[k], dR[k]);
+                    }
+                    else
+                    {
+                        // UNISON can't run 16 FFT phase-vocoders — sum the detuned reads into the warp
+                        // SOURCE (detune + width survive), then warp ONCE. (Serum-class approach.)
+                        juce::FloatVectorOperations::clear (dL, n);
+                        juce::FloatVectorOperations::clear (dR, n);
+                        for (int u = 0; u < N; ++u)
                         {
-                            float l, r; e.tick (l, r);
-                            const float m = 0.5f * (l + r);
-                            sL[k] += m * pl; sR[k] += m * pr;
+                            auto& e = engs[(size_t) u];
+                            // PUNCH ANCHOR (Max: "unison turns shit down"): keep full-level voice(s) for
+                            // the attack, RMS-normalise only the INNER bed — no 1/√N punch loss.
+                            // fb256 — anchor the SYMMETRIC OUTER PAIR (voices 0 AND N-1), not voice 0 alone.
+                            // Voice 0 is the LEFTMOST slot, so anchoring it alone pulled the image LEFT
+                            // (Max's bug on ALL engines). A mirror pair is balanced → punchy AND centered.
+                            const float gu = (u == 0 || u == N - 1) ? 1.0f : uNorm;
+                            const float pl = panL[u] * gu, pr = panR[u] * gu;
+                            for (int k = 0; k < n; ++k)
+                            {
+                                float l, r; e.tick (l, r);
+                                const float m = 0.5f * (l + r);
+                                dL[k] += m * pl; dR[k] += m * pr;
+                            }
                         }
                     }
+                };
+                // fb642 — ZERO-LATENCY START. Max: "the formant adds latency to the sample … we do not want the formant to add
+                // latency on the sample mode or any other mode." The first render after a note-on, a Tones/Beats/Texture
+                // change, or the warp engaging mid-note (a Formant or Stretch turned up while a note holds) reads
+                // primeLength() source samples AHEAD of the playhead and primes the engine with them, so its output is
+                // aligned to the playhead instead of arriving one STFT late (~140 ms at presetCheaper). The sample's
+                // future is already in memory — the latency is paid in advance, once, not heard.
+                if (! warp.isPrimed())
+                {
+                    const int pn = warp.primeLength();
+                    if (pn > 0)
+                    {
+                        if (warpPrime_.getNumChannels() < 2 || warpPrime_.getNumSamples() < pn)
+                            warpPrime_.setSize (2, pn, false, false, true);   // fallback only — prepare sized it for stretch ≥ 1
+                        float* pL = warpPrime_.getWritePointer (0);
+                        float* pR = warpPrime_.getWritePointer (1);
+                        readWarpSource (pL, pR, pn);
+                        warp.primeOutput (pL, pR, pn);
+                    }
+                    else warp.primeOutput (nullptr, nullptr, 0);
                 }
+                readWarpSource (sL, sR, srcN);
                 warp.process (sL, sR, wL, wR, numSamples);            // distinct in/out (Signalsmith requires)
                 warp.processTilt (wL, wR, numSamples, fmTilt, sampleRate_);   // FORMANT-MODE — spectral tilt post-process
             }

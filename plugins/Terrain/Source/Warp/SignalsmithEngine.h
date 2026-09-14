@@ -14,6 +14,7 @@
 // for one-shot sampler use.
 //
 #pragma once
+#include <vector>
 
 #include <juce_core/juce_core.h>
 #include <signalsmith-stretch/signalsmith-stretch.h>
@@ -44,6 +45,16 @@ namespace tw
             // sample material. setFormantFactor(1.0) keeps formants correct at any pitch.
             stretcher.presetCheaper (channels, (float) sampleRate);
             stretcher.setFormantFactor (formantFactor);
+
+            // fb642 — outputSeek() sizes two internal scratch vectors the first time it runs. Run it ONCE here, off the
+            // audio thread, so a note-on never allocates; then reset back to silence.
+            {
+                const int n = juce::jmax (1, stretcher.inputLatency() + stretcher.outputLatency());
+                std::vector<float> z ((size_t) n, 0.0f);
+                const float* in[2] = { z.data(), z.data() };
+                stretcher.outputSeek (in, n);
+                stretcher.reset();
+            }
 
             ready = true;
         }
@@ -93,6 +104,26 @@ namespace tw
             if (! ready || numSamples <= 0) return;
             const float* inputs[2] = { primeL, channels == 2 ? primeR : primeL };
             stretcher.seek (inputs, numSamples, 1.0f /*playbackRateHint*/);
+        }
+
+        /** fb642 — ZERO-LATENCY START. Max: "the formant adds latency to the sample … we do not want the formant to add
+         *  latency." The phase vocoder's latency (inputLatency + outputLatency, ~100 ms of STFT at presetCheaper) is
+         *  a property of processing a LIVE stream. A sample is not live: its future is already in memory. So the voice
+         *  reads outputSeekLength() source samples AHEAD and hands them to outputSeek(), which (Signalsmith's own API)
+         *  resets, seeks and pre-computes the pre-roll — the NEXT process() output is aligned to the FIRST of those
+         *  samples. The latency is paid in advance, once, at note-on, instead of being heard. */
+        int outputSeekLength() const noexcept
+        {
+            if (! ready) return 0;
+            auto& s = const_cast<signalsmith::stretch::SignalsmithStretch<float>&> (stretcher);
+            return (int) std::ceil ((double) s.inputLatency() + (double) s.outputLatency() / (double) stretchRatio);
+        }
+        void outputSeek (const float* primeL, const float* primeR, int numSamples)
+        {
+            if (! ready || numSamples <= 0) return;
+            const float* inputs[2] = { primeL, channels == 2 ? primeR : primeL };
+            stretcher.setTransposeSemitones (pitchSemitones);
+            stretcher.outputSeek (inputs, numSamples);
         }
 
         /** Process numSamples of audio.

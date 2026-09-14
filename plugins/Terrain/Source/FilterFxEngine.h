@@ -214,14 +214,35 @@ public:
         slot_.setSpread (p.wide ? 0.5f : 0.0f);
 
         // 8. BUS LIFT — the FX bus program sits at ~-26 dBFS while the cores were voiced at
-        //    about -12. +14 dB in, -14 dB out; at Drive 0 the pair nulls exactly.
-        float wl = inL * kBusLift_, wr = inR * kBusLift_;
+        //    about -12. +14 dB in, -14 dB out.
+        //    🔑 fb642 — "at Drive 0 the pair nulls exactly" was only true of a LINEAR core, and most cores are not:
+        //    the ladder, diode, SVF, acid and MS-20 models saturate INSIDE themselves. So the fixed +14 dB drove every
+        //    signal louder than -26 dBFS into that saturation with Drive at 0 — MEASURED on the default Ladder LP 24,
+        //    220 Hz sine, Drive 0: -34.6 dB THD at -12 dBFS in, -13.9 dB at 0 dBFS (Tests/fxfilter_drive0_fb642.sh).
+        //    Max: "the filter saturates and drives the audio signal for no damn reason even though the drive is at
+        //    zero — it's broken." For the FILTER MODELS (liftRidesDrive) the lift now RIDES THE DRIVE: ×1 at Drive 0 (the
+        //    core sees the bus as it is — exactly how the main filter sees a voice) rising to the old +14 dB at Drive
+        //    100 %, where the old constants are used verbatim, so the top of the knob is the same violence it always
+        //    was (the lifeguard law) and the bottom is the clean filter the knob promises. The drop is the reciprocal
+        //    at every Drive, so the linear path stays at unity gain.
+        //    The EFFECT types keep the old +14 dB exactly: a crusher, a Radio, a comb or a formant bank has its
+        //    non-linearity AS the sound, voiced at that level — measured, the "Broken Bitcrush" preset's Radio stage
+        //    alone moved its null to -4.8 dB when it rode the Drive, and those are not what "drive at zero" meant.
+        //    Keyed on curType_ (the engine actually in the slot), so it changes at the floor of the swap dip.
+        const bool ride = liftRidesDrive (curType_);
+        if (drvSm_ != liftFor_ || ride != liftRide_)
+        {
+            liftFor_ = drvSm_; liftRide_ = ride;
+            if (! ride || drvSm_ >= 1.0f) { lift_ = kBusLift_; drop_ = kBusDrop_; }   // the old voicing, bit for bit
+            else                          { lift_ = std::exp (drvSm_ * kLnBusLift_); drop_ = 1.0f / lift_; }
+        }
+        float wl = inL * lift_, wr = inR * lift_;
 
         // 9. the FilterSlot — one call per sample, coefficients prewarped at coefSr_
         slot_.setParams (cutSm_, resSm_, drvSm_, coefSr_);
         slot_.processStereo (wl, wr);
 
-        wl *= kBusDrop_; wr *= kBusDrop_;
+        wl *= drop_; wr *= drop_;
 
         // 10. post drive flavour — the shipped drive-type list, applied AFTER the filter exactly
         //     as SYN_FILTER1_DRIVETYPE does. At Drive 0 every flavour is bit-identical to unity.
@@ -246,6 +267,34 @@ public:
     //    fb389 added a 12-band follower bank here and fb390 removed it again — once the spectrum
     //    moved to the real FFT nothing read those bands, and ~36 mults a sample x 6 instances of
     //    unread arithmetic is not "spare capacity", it is waste with a comment on it.
+    // fb642 — THE FILTER MODELS: every engine whose job is a filter RESPONSE (LP / HP / BP / notch / peak of the ladder,
+    // Xpander, diode, SVF, SEM, OB-X, Wasp, MS-20, Multi, Scream, acid and 4-pole SVF cores). Their saturation is analog
+    // colour the DRIVE knob should own, so at Drive 0 they must be clean. Everything else — combs, formant banks,
+    // phasers, ring mods, the crusher, the shaper, reverbs, Bode, grain, samp-hold, Radio, the EQs — keeps the old
+    // fixed +14 dB voicing. Tests/fxfilter_drive0_fb642.cpp classifies with THIS function, not with its own list.
+    static bool liftRidesDrive (int engine) noexcept
+    {
+        using T = filters::Type;
+        switch ((T) engine)
+        {
+            case T::LADDER_LP24: case T::LADDER_LP12: case T::LADDER_LP6:  case T::LADDER_LP18: case T::GERMAN_LP:
+            case T::LADDER_HP24: case T::XPD_HP6:     case T::XPD_HP12:    case T::XPD_HP18:    case T::XPD_BP12:
+            case T::XPD_BP24:    case T::XPD_BP6:     case T::XPD_NOTCH:   case T::XPD_PHASE:   case T::XPD_LP1:
+            case T::DIODE_LP:    case T::GERMANIUM_LP: case T::FRENCH_LP:  case T::POLIVOKS:
+            case T::SVF_LP:      case T::SVF_HP:      case T::SVF_BP:      case T::SVF_NOTCH:   case T::OBX_SVF:
+            case T::SVF_PEAK:    case T::SEM_LP:      case T::SEM_NOTCH:   case T::SEM_HP:      case T::SEM_BP:
+            case T::WASP:        case T::MS20_LP:
+            case T::MULTI_LH:    case T::MULTI_LB:    case T::MULTI_LN:    case T::MULTI_HB:    case T::MULTI_HN:
+            case T::MULTI_BB:    case T::MULTI_BN:    case T::MULTI_PP:    case T::MULTI_NN:    case T::MULTI_PH:
+            case T::ADD_BASS:    case T::SCREAM_LP:   case T::SCREAM_BP:
+            case T::ACID_303:    case T::ACID_SCREAM:
+            case T::SVF_LP24:    case T::SVF_HP24:    case T::SVF_BP24:    case T::SVF_N24:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     float liveLevel() const noexcept { return lvlSm_; }
     float liveCutHz() const noexcept { return cutSm_ > 0.0f ? cutSm_ : 20.0f; }
     float liveRes()   const noexcept { return resSm_ > 0.0f ? resSm_ : 0.0f; }
@@ -282,8 +331,11 @@ private:
     int   curType_ = -1, pendingType_ = -1, lastNote_ = 60;
     float bpm_ = 120.0f; double ppq_ = 0.0; bool playing_ = false;
 
-    static constexpr float kBusLift_ = 5.0119f;   // +14 dB
+    static constexpr float kBusLift_ = 5.0119f;   // +14 dB — effect types always; filter models at Drive 100 % (fb642)
     static constexpr float kBusDrop_ = 0.19953f;  // -14 dB, exact reciprocal
+    static constexpr float kLnBusLift_ = 1.61182f;   // ln (5.0119)
+    float liftFor_ = -1.0f, lift_ = kBusLift_, drop_ = kBusDrop_;   // fb642 — cached against (drvSm_, liftRide_)
+    bool  liftRide_ = false;
     // one-pole glide coefficients at 48k; recomputed nowhere because they are close enough
     // across 44.1-96k and the law only asks for 10-30 ms.
     static constexpr float kc10ms_ = 0.00208f, kc15ms_ = 0.00139f, kt20ms_ = 0.00104f;

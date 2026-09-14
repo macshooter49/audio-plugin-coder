@@ -52,6 +52,7 @@ namespace tw
         {
             if (m == mode) return;
             mode = m;
+            primed_ = false;   // fb642 — a new engine starts cold: prime it before its first output
             if (mode == WarpMode::Tones)
             {
                 if (! signalsmithEngine)
@@ -154,6 +155,7 @@ namespace tw
             if (beatsEngine)       beatsEngine      ->reset();
             if (textureEngine)     textureEngine    ->reset();
             tiltLpL_ = tiltLpR_ = 0.f;   // FORMANT-MODE
+            primed_ = false;             // fb642 — the next render primes before it outputs
         }
 
         /** Returns the active engine's input latency in samples. Caller
@@ -197,6 +199,28 @@ namespace tw
                 || textureEngine     != nullptr;
         }
         WarpMode getMode() const noexcept { return mode; }
+
+        /** fb642 — ZERO-LATENCY START (SignalsmithEngine::outputSeek). The caller reads primeLength() source samples
+         *  AHEAD of the playhead and passes them to primeOutput() before the first process() after a reset, a mode
+         *  change, or the warp engaging mid-note; the next output is then aligned to the first primed sample. Beats
+         *  is a history reader, so its prime is a plain seek of its grain history. */
+        int primeLength() const noexcept
+        {
+            if (mode == WarpMode::Tones)   return signalsmithEngine ? signalsmithEngine->outputSeekLength() : 0;
+            if (mode == WarpMode::Texture) return textureEngine ? textureEngine->outputSeekLength() : 0;
+            if (mode == WarpMode::Beats)   return beatsEngine ? beatsEngine->inputLatency() : 0;
+            return 0;
+        }
+        void primeOutput (const float* primeL, const float* primeR, int numSamples)
+        {
+            if (mode == WarpMode::Tones)        { if (signalsmithEngine) signalsmithEngine->outputSeek (primeL, primeR, numSamples); }
+            else if (mode == WarpMode::Texture) { if (textureEngine)     textureEngine->outputSeek (primeL, primeR, numSamples); }
+            else if (mode == WarpMode::Beats)   { if (beatsEngine)       beatsEngine->seek (primeL, primeR, numSamples); }
+            primed_ = true;
+        }
+        bool isPrimed() const noexcept   { return primed_; }
+        void markUnprimed() noexcept     { primed_ = false; }   // the voice left the warp path: re-prime on return
+        bool primed_ = false;
 
         /** How many source samples the caller must fill into the engine's
          *  input buffer to produce numSamples of output.

@@ -11038,6 +11038,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               // same log-f axis as the curve. Every frame, so it spikes and falls like the one on
               // the synth page instead of crawling at the push rate.
               fx4SpecCv(core);   // fb442 — the audio layer, on its own canvas at device resolution
+              /* fb642 — AND PUT IT ON SCREEN. Max: "the filter effects rack card lost its filter visualizer … I can't see
+                 its background waveform anymore." fb633 (the Bode heal) made fx4SpecCanvas draw into an OFF-SCREEN buffer
+                 (core.__specBuf) that fx4SpecCommit copies to the visible canvas in one step — and gave fx4Tick the commit,
+                 but not this loop. So the filter card painted its spectrum every frame into a buffer nobody saw.
+                 fx4_ui.js "a live frame paints both canvases" had been red on it since (flt=0%). */
+              fx4SpecCommit(core);
             }
           }
           // ═══ fb413 — THE CHORUS / FLANGER / PHASER CARDS, LIVE ══════════════════════════
