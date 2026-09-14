@@ -7503,7 +7503,8 @@ class SynthVoice : public juce::SynthesiserVoice
                 // pitch source MATCHES the engine: WT/FM glide (glideNote_); the sample-family
                 // engines snap to currentMidiNote_ at note-on — the sub must stay glued to its
                 // OWN osc, not slide away from it during portamento (cleanup-sweep fix)
-                const bool glides = (eng4[o] == Engine::WT || eng4[o] == Engine::FM);
+                // fb641 — the SAMPLE engine glides now (renderSampleOsc reads glideNote_), so its sub glides with it.
+                const bool glides = (eng4[o] == Engine::WT || eng4[o] == Engine::FM || eng4[o] == Engine::SAMP);
                 const double noteSrc = glides ? glideNote_ : (double) currentMidiNote_;
                 const double semis = (noteSrc - 69.0)
                                    + (double) octs[o] * 12.0 + (double) sems[o]
@@ -7683,7 +7684,11 @@ class SynthVoice : public juce::SynthesiserVoice
                 return;
             }
             // pitch: root MIDI 60 = C3; resample ratio incl native/output SR
-            const double noteSemis  = (double) (currentMidiNote_ - 60 + oct * 12 + semi) + (double) cent * 0.01;
+            // fb641 — Max: "I want the one shot to glide with the glide/portamento as well, just like with the synth."
+            // The read ratio followed currentMidiNote_ (the note that was PRESSED), so a sample never slid. It now
+            // follows glideNote_ — the pitch actually sounding, exactly what the wavetable/FM oscillators use — in every
+            // loop mode, one-shot included. With no slide in progress glideNote_ IS the note, so nothing else moves.
+            const double noteSemis  = (glideNote_ - 60.0 + (double) (oct * 12 + semi)) + (double) cent * 0.01;
             const double pitchRatio = nativeOverOut * std::pow (2.0, noteSemis / 12.0);
             const int    N          = juce::jlimit (1, kMaxUnison, uniCount);
 

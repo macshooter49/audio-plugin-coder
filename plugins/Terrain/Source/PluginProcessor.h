@@ -963,6 +963,9 @@ public:
     void         saveImportsRegistry (int kind);
     tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
     juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
+    // fb641 — copy one osc's loaded sample onto another: the audio, its NATIVE RATE, the source path, the loaded-path record
+    //    and the waveform payload. false when src == dst or the source is empty. Message thread (the copyOscSample native).
+    bool              copyOscSampleSlot  (int src, int dst);
     /** BLEND — persisted source-pair paths (which: 0 = A, 1 = B). Empty = no live blend.
      *  The editor reloads both files on reopen so the blend knobs stay LIVE across sessions. */
     juce::String&     blendSrcPath (int idx, int which) noexcept { return blendSrcPaths_[(size_t) juce::jlimit (0, 3, idx)][(size_t) (which & 1)]; }

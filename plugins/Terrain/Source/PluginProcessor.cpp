@@ -2625,6 +2625,29 @@ void TerrainAudioProcessor::applyPendingImportEdits()
     for (auto& e : edits) editImportsRegistry (e.kind, e.path, e.add);   // re-queues itself if a walk has the lock again
 }
 
+// ═══ fb641 — A PASTED SAMPLE KEEPS ITS PITCH ═════════════════════════════════════════════════════════════════════════
+// Max: "copying a sample and pasting it over to the next oscillator changes the pitching key — that's a big no-no." A slot's
+// playback ratio is nativeRate / outputRate × the note (SynthVoice reads the slot's getSampleRate() every block), and the
+// native rate lives BESIDE the audio in tw::SampleBuffer. The copy moved only the audio, so the target kept whatever rate it
+// had (0 → ratio 1.0, or the rate of the sample it held before): a 44.1 kHz sample pasted into a fresh osc played 1.47
+// semitones sharp at 48 kHz. The rate is set before the audio is published so the audio thread never pairs the new audio
+// with the old rate. oscLoadedPath_ travels too — it is the record a preset load uses to skip re-reading a slot, and a
+// stale one would let a later load of the target's OLD file keep playing the pasted audio instead.
+bool TerrainAudioProcessor::copyOscSampleSlot (int src, int dst)
+{
+    src = juce::jlimit (0, 3, src); dst = juce::jlimit (0, 3, dst);
+    if (src == dst) return false;
+    auto srcBuf = oscSampleBuffers_[(size_t) src].load();
+    if (srcBuf == nullptr || srcBuf->getNumSamples() <= 0) return false;
+    auto& target = oscSampleBuffers_[(size_t) dst];
+    target.setSampleRate (oscSampleBuffers_[(size_t) src].getSampleRate());
+    target.store (std::make_shared<juce::AudioBuffer<float>> (*srcBuf));      // duplicate + atomic publish (audio-thread safe)
+    oscSourcePaths_[(size_t) dst] = oscSourcePaths_[(size_t) src];
+    oscLoadedPath_[(size_t) dst]  = oscLoadedPath_[(size_t) src];
+    setCachedOscPayload (getCachedOscPayload (src), dst);                     // the target draws the identical waveform
+    return true;
+}
+
 // ═══ fb588 — WHICH SPEC IS THIS OSCILLATOR'S TABLE? ═════════════════════════════════════════
 // Lifted verbatim out of rebuildMorphIfNeeded so the HARMONIC bake gets the IDENTICAL answer.
 // Max: "same menu to select WT as well. Let's get it import, etc." — an imported table has to be

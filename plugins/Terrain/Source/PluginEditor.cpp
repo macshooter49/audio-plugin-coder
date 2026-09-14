@@ -3972,16 +3972,9 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 const int dst = toIdx (args[1].toString());
                 if (src == dst) { complete (juce::var ("same")); return; }
 
-                auto srcBuf = audioProcessor.getOscSampleBuffer (src).load();
-                if (srcBuf == nullptr || srcBuf->getNumSamples() <= 0) { complete (juce::var ("empty")); return; }
-
-                // Duplicate the audio and atomic-publish it into the target (audio-thread safe).
-                audioProcessor.getOscSampleBuffer (dst).store (std::make_shared<juce::AudioBuffer<float>> (*srcBuf));
-                audioProcessor.oscSourcePath (dst) = audioProcessor.oscSourcePath (src);
-
-                // Copy the display payload so the target draws the identical waveform.
-                const juce::String payload = audioProcessor.getCachedOscPayload (src);
-                audioProcessor.setCachedOscPayload (payload, dst);
+                // fb641 — the audio, its NATIVE RATE (the pitch), the paths and the waveform payload, in one place.
+                if (! audioProcessor.copyOscSampleSlot (src, dst)) { complete (juce::var ("empty")); return; }
+                const juce::String payload = audioProcessor.getCachedOscPayload (dst);
 
                 // Flip the target oscillator to the Sample engine (index 1 = "SAMP") so it plays +
                 // shows — UNLESS it's already a sample-consuming engine: pasting onto a GRANULAR

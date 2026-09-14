@@ -152,6 +152,7 @@ public:
         pingSign_   = (scanRate_ < 0.0f) ? -1 : 1;   // reverse scan → ping-pong starts heading backward
 
         double startPos = regStart_;
+        double sprayOff = 0.0;                       // how far the spray moved the start INTO the region
         const float spray = clamp01 (sprayAmount);
         if (spray > 0.f && regLen() > 1.0)
         {
@@ -159,7 +160,8 @@ public:
             uint32_t x = spraySeed ? spraySeed : 0x9E3779B9u;
             x ^= x << 13; x ^= x >> 17; x ^= x << 5;
             const double r = (double) (x & 0x00FFFFFFu) / (double) 0x01000000;
-            startPos = regStart_ + r * spray * (regLen() - 1.0);
+            sprayOff = r * spray * (regLen() - 1.0);
+            startPos = regStart_ + sprayOff;
         }
 
         pos_ = clampPos (startPos);
@@ -170,8 +172,12 @@ public:
         // the instant pos <= regStart with a negative inc). The UI follower rides
         // position01(), so it visually runs from the end too. The Reverse LOOP mode does
         // its own loop-END snap below, so leave it alone here.
+        // fb641 — Max: "whenever I have scan all the way to the left or negative, the spray isn't working … it needs to
+        // start spraying backwards if it's scanning backwards." This line used to REPLACE the sprayed start with the
+        // end, so Spray did nothing under reverse Scan. The same scatter now runs BACKWARD from the end — the mirror of
+        // the forward case (Spray 0 → exactly regEnd_ − 1, as before; full Spray reaches back to the region start).
         if (scanRate_ < 0.0f && mode_ != LoopMode::Reverse && regEnd_ > regStart_ + 1.0)
-            pos_ = regEnd_ - 1.0;
+            pos_ = (sprayOff > 0.0) ? clampPos (regEnd_ - 1.0 - sprayOff) : regEnd_ - 1.0;
 
         // LOOP-CATCH model (confirmed w/ Max): every looping mode plays a one-shot
         // lead-in forward from the region Start and only starts looping once the
