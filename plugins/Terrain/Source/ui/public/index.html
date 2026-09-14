@@ -14191,6 +14191,19 @@ if (
 
   const promiseHandler = new PromiseHandler();
 
+  /* fb640 — THE BROWSER LISTS CROSS FROM C++ AS "b64:" + base64 (UTF-8 JSON). JUCE's emitEvent escapes every result
+     with String::replace ("\\" -> "\\\\"), which is quadratic: a 150 KB list that is itself JSON carries a backslash
+     per quote, and the escape held the host's UI thread ~720 ms on every open of the wavetable browser (measured:
+     Tests/browser_freeze_sim.cpp). Base64 has nothing to escape. Decoded HERE, for exactly these natives, so every
+     reader of these lists still receives the JSON text it always did; any other string passes through untouched. */
+  const B64_LISTS = { listWtImports: 1, listNoiseImports: 1, listSampleImports: 1, listImports: 1 };
+  function b64Text(v) {
+    if (typeof v !== "string" || v.lastIndexOf("b64:", 0) !== 0) return v;
+    const bin = atob(v.slice(4)), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(u);
+  }
+
   function getNativeFunction(name) {
     if (!window.__JUCE__.initialisationData.__juce__functions.includes(name))
       console.warn(
@@ -14204,7 +14217,7 @@ if (
         params: Array.prototype.slice.call(arguments),
         resultId: promiseId,
       });
-      return result;
+      return B64_LISTS[name] ? result.then(b64Text) : result;   // fb640
     };
 
     return f;

@@ -2522,6 +2522,109 @@ void TerrainAudioProcessor::loadImportsRegistry ()
     }
 }
 
+
+// ═══ fb639 — THE BROWSER NEVER WAITS FOR THE DISK ═══════════════════════════════════════════════════════════════════
+// Max: "every time I try to open the tables, it freezes my FL Studio for about one second … not the plugin, the whole
+// entire DAW … it should be instantaneous … it shouldn't freeze my DAW ever." MEASURED (Tests/browser_open_timing.cpp):
+// listWtImports cost 93 ms cold and ~39 ms on every open once the 1.5 s cache had lapsed — the 454-file factory walk
+// (18 ms) plus building and serialising a 106 KB payload — ON THE MESSAGE THREAD, which inside a plugin is the host's own
+// UI thread. fb638 made the payload 3.8x larger; on Windows the same walk under Program Files is far slower still.
+// Now every walk runs on wtIoPool_ (fb611's reader pool: ioAlive_ makes a late callAsync a no-op, the destructor drains
+// it) and the browser is answered from the last FINISHED walk:
+//   * warm  — the served string goes back at once; an answer older than kImportsCacheTtlMs starts a quiet refresh;
+//   * stale — after a registry change (fb606: "a new root must show up on the very next open") the answer WAITS for a
+//             fresh walk — off this thread; the browser opens the moment it lands and the DAW never stops;
+//   * edits — a folder added or removed while a walk holds importsLock_ is queued, never waited on, and applied when
+//             that walk publishes.
+// getImportsJson itself is untouched — Tests/wt_folder_scan_cert.cpp compiles it verbatim — and only the job below calls
+// it. Tests/browser_never_waits_gate.py pins all of this; Tests/browser_open_timing.cpp measures it.
+void TerrainAudioProcessor::requestImportsJson (int kind, std::function<void (const juce::String&)> done)
+{
+    const int k = juce::jlimit (0, kImportKinds - 1, kind);   // fb640 — kManagedWtKind (3) is the legacy "Imported" drawer
+    if (importsJson_[k].isNotEmpty() && ! importsStale_[k])
+    {
+        done (importsJson_[k]);                                                   // instant: no disk, no JSON
+        if (juce::Time::getMillisecondCounter() - importsJsonAt_[k] >= kImportsCacheTtlMs)
+            startImportsScan (k);                                                 // refresh behind the user's back
+        return;
+    }
+    importsWaiters_[k].push_back (std::move (done));                              // first ever / just changed
+    startImportsScan (k);
+}
+
+void TerrainAudioProcessor::prefetchImportsJson()
+{
+    for (int k : { 1, kManagedWtKind, 2, 0 })  // the wavetable lists first (fb640: both of them): the ones opened most
+        if (importsJson_[k].isEmpty() || importsStale_[k])
+            startImportsScan (k);
+}
+
+void TerrainAudioProcessor::startImportsScan (int k)
+{
+    if (importsScanning_[k]) return;           // the walk in flight answers every waiter, and a raced change reruns it
+    importsScanning_[k] = true;
+    const juce::uint32 gen = importsGen_[k];
+    auto alive = ioAlive_;
+    wtIoPool_.addJob ([this, k, gen, alive]
+    {
+        if (! alive->load (std::memory_order_acquire)) return;
+        juce::String js;
+        if (k == kManagedWtKind)
+            js = getManagedWavetablesJson();   // fb640 — the managed folder: no registry, so no lock and no cache to void
+        else
+        {
+            const std::lock_guard<std::mutex> g (importsLock_);
+            importsCacheValid_[k] = false;     // always a real walk: this job IS the refresh
+            js = getImportsJson (k);
+        }
+        juce::MessageManager::callAsync ([this, k, gen, alive, js]
+        {
+            if (! alive->load (std::memory_order_acquire)) return;
+            publishImportsScan (k, gen, js);
+        });
+    });
+}
+
+void TerrainAudioProcessor::publishImportsScan (int k, juce::uint32 gen, const juce::String& js)
+{
+    importsScanning_[k] = false;
+    applyPendingImportEdits();                 // edits that arrived while this walk held the lock
+    if (gen != importsGen_[k])                 // the registry changed under this walk: its answer is already old
+    {
+        startImportsScan (k);                  // the waiters keep waiting for the fresh one
+        return;
+    }
+    importsJson_[k]   = js;
+    importsJsonAt_[k] = juce::Time::getMillisecondCounter();
+    importsStale_[k]  = false;
+    auto waiters = std::move (importsWaiters_[k]);
+    importsWaiters_[k].clear();
+    for (auto& w : waiters) w (js);
+}
+
+void TerrainAudioProcessor::addImportPathAsync    (int kind, const juce::String& path) { editImportsRegistry (kind, path, true);  }
+void TerrainAudioProcessor::removeImportPathAsync (int kind, const juce::String& path) { editImportsRegistry (kind, path, false); }
+
+void TerrainAudioProcessor::editImportsRegistry (int kind, const juce::String& path, bool add)
+{
+    const int k = juce::jlimit (0, 2, kind);
+    std::unique_lock<std::mutex> g (importsLock_, std::try_to_lock);
+    if (! g.owns_lock()) { importsPendingEdits_.push_back ({ k, path, add }); return; }   // a walk holds it: never wait
+    if (add) addImportPath (k, path); else removeImportPath (k, path);                    // the shipping mutators, unchanged
+    g.unlock();
+    ++importsGen_[k];
+    importsStale_[k] = true;
+    startImportsScan (k);                      // so the next open is (nearly always) already fresh
+}
+
+void TerrainAudioProcessor::applyPendingImportEdits()
+{
+    if (importsPendingEdits_.empty()) return;
+    auto edits = std::move (importsPendingEdits_);
+    importsPendingEdits_.clear();
+    for (auto& e : edits) editImportsRegistry (e.kind, e.path, e.add);   // re-queues itself if a walk has the lock again
+}
+
 // ═══ fb588 — WHICH SPEC IS THIS OSCILLATOR'S TABLE? ═════════════════════════════════════════
 // Lifted verbatim out of rebuildMorphIfNeeded so the HARMONIC bake gets the IDENTICAL answer.
 // Max: "same menu to select WT as well. Let's get it import, etc." — an imported table has to be
@@ -14644,6 +14747,7 @@ juce::AudioProcessorEditor* TerrainAudioProcessor::createEditor()
     // fb528 — the arm calls captureBuffer.prepare(), which prepareToPlay also calls; take the
     // prepare lock so an editor opening cannot resize the ring under a concurrent prepareToPlay.
     { const std::lock_guard<std::mutex> prepGuard (prepLock_); ensureCaptureBufferAllocated(); }
+    prefetchImportsJson();   // fb639 — the browser lists are built OFF this thread before anyone opens a browser
     return new TerrainAudioProcessorEditor(*this);
 }
 

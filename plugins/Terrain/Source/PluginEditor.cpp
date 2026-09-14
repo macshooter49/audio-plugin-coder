@@ -89,6 +89,23 @@ static juce::File terrainSettingsFile()
 // build (which would have created Noizefield/Terrain). Closing that needs the FX to move to
 // Noizefield/"Terrain FX" with the same prefer-new/fall-back shape — the FX's commit, not this one.
 // ⚠️ SELF-CONTAINED for the same reason as terrainDataDir() above (extract_helpers.py slices it).
+/* ═══ fb640 — A BIG LIST CROSSES INTO THE PAGE AS BASE64 ══════════════════════════════════════════════════════════════
+   Max, after fb639: "it still does that little freeze … about a second … it kind of freezes everything and then boom."
+   fb639 moved the folder WALK off the host's thread, but the walk was never the freeze. MEASURED with the real editor, the
+   real WKWebView and a real mousedown on the table name (Tests/browser_freeze_sim.cpp): ~720 ms on the message thread per
+   open, inside juce::WebBrowserComponent::Impl::emitEvent. A native's result is JSON-serialised into the completion event
+   and then escaped with String::replace ("\\", "\\\\") — and juce::String::replace is QUADRATIC: every hit re-walks
+   the UTF-8 string from its start (indexOf) and copies all of it (replaceSection). The list is itself JSON, so the
+   event carries one backslash per quote: thousands of hits on ~150 KB, each a full walk and a full copy. Base64 has no
+   backslash and no apostrophe, so both replaces find nothing and the event costs one linear pass. The page decodes
+   "b64:" inside Juce.getNativeFunction (index.html, B64_LISTS) for exactly the four list natives, so no reader of these
+   lists changed. JUCE itself is untouched — it is a shared, unpatched submodule.
+   Tests/browser_never_waits_gate.py [7]–[9] pin it; Tests/browser_freeze_sim.sh measures it. */
+static juce::var tiListPayload (const juce::String& json)
+{
+    return juce::var ("b64:" + juce::Base64::toBase64 (json.toRawUTF8(), json.getNumBytesAsUTF8()));
+}
+
 static juce::File terrainWavetablesDir()
 {
     const auto nf     = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
@@ -1803,7 +1820,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     if (safe == nullptr) return;
                     const auto f = fc.getResult();
                     if (! f.exists()) return;   // cancelled
-                    safe->audioProcessor.addImportPath (0, f.getFullPathName());
+                    safe->audioProcessor.addImportPathAsync (0, f.getFullPathName());
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript ("if(window.onNoiseImportsChanged)window.onNoiseImportsChanged();", nullptr);
                 });
@@ -1827,7 +1844,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     if (safe == nullptr) return;
                     const auto f = fc.getResult();
                     if (! f.exists()) return;
-                    safe->audioProcessor.addImportPath (1, f.getFullPathName());
+                    safe->audioProcessor.addImportPathAsync (1, f.getFullPathName());
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript (
                             juce::String ("if(window.onWavetableImportsChanged)window.onWavetableImportsChanged('")
@@ -1838,12 +1855,20 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             .withNativeFunction("listNoiseImports", [this](const juce::Array<juce::var>&,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getImportsJson (0)));
+                // fb639 — answered from the processor's last finished walk (never a disk walk on the host's UI thread);
+                // the SafePointer makes a completion that lands after the editor closed a no-op.
+                juce::Component::SafePointer<std::remove_pointer_t<decltype (this)>> safeUi (this);
+                audioProcessor.requestImportsJson (0, [safeUi, complete] (const juce::String& js)
+                { if (safeUi != nullptr) complete (tiListPayload (js)); });
             })
             .withNativeFunction("listWtImports", [this](const juce::Array<juce::var>&,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getImportsJson (1)));
+                // fb639 — answered from the processor's last finished walk (never a disk walk on the host's UI thread);
+                // the SafePointer makes a completion that lands after the editor closed a no-op.
+                juce::Component::SafePointer<std::remove_pointer_t<decltype (this)>> safeUi (this);
+                audioProcessor.requestImportsJson (1, [safeUi, complete] (const juce::String& js)
+                { if (safeUi != nullptr) complete (tiListPayload (js)); });
             })
             .withNativeFunction("loadNoiseByPath", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1892,7 +1917,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // DELETE (fb61) — un-reference a user folder OR single import (file on disk untouched).
-                if (args.size() >= 1) audioProcessor.removeImportPath (0, args[0].toString());
+                if (args.size() >= 1) audioProcessor.removeImportPathAsync (0, args[0].toString());
                 if (webView != nullptr)
                     webView->evaluateJavascript ("if(window.onNoiseImportsChanged)window.onNoiseImportsChanged();", nullptr);
                 complete (juce::var ("ok"));
@@ -1900,7 +1925,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             .withNativeFunction("removeWtImport", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                if (args.size() >= 1) audioProcessor.removeImportPath (1, args[0].toString());
+                if (args.size() >= 1) audioProcessor.removeImportPathAsync (1, args[0].toString());
                 if (webView != nullptr)
                     webView->evaluateJavascript ("if(window.onWavetableImportsChanged)window.onWavetableImportsChanged('a');", nullptr);
                 complete (juce::var ("ok"));
@@ -1925,7 +1950,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     if (safe == nullptr) return;
                     const auto f = fc.getResult();
                     if (! f.exists()) return;   // cancelled
-                    safe->audioProcessor.addImportPath (2, f.getFullPathName());
+                    safe->audioProcessor.addImportPathAsync (2, f.getFullPathName());
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript (
                             juce::String ("if(window.onSampleImportsChanged)window.onSampleImportsChanged('")
@@ -1936,7 +1961,11 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             .withNativeFunction("listSampleImports", [this](const juce::Array<juce::var>&,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getImportsJson (2)));
+                // fb639 — answered from the processor's last finished walk (never a disk walk on the host's UI thread);
+                // the SafePointer makes a completion that lands after the editor closed a no-op.
+                juce::Component::SafePointer<std::remove_pointer_t<decltype (this)>> safeUi (this);
+                audioProcessor.requestImportsJson (2, [safeUi, complete] (const juce::String& js)
+                { if (safeUi != nullptr) complete (tiListPayload (js)); });
             })
             .withNativeFunction("loadSampleByPath", [this](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1959,7 +1988,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // DELETE — un-reference a user FOLDER (single imports have no delete since fb73; Finder owns them).
-                if (args.size() >= 1) audioProcessor.removeImportPath (2, args[0].toString());
+                if (args.size() >= 1) audioProcessor.removeImportPathAsync (2, args[0].toString());
                 if (webView != nullptr)
                     webView->evaluateJavascript ("if(window.onSampleImportsChanged)window.onSampleImportsChanged('a');", nullptr);
                 complete (juce::var ("ok"));
@@ -3818,7 +3847,12 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 //    path relative to the Wavetables root, "" for a file sitting directly in it.
                 auto dir = terrainWavetablesDir();   // fb602 — one accessor, SAME legacy location
                 if (! dir.exists()) dir.createDirectory();
-                complete (juce::var (audioProcessor.getManagedWavetablesJson()));
+                // fb640 — this walk ran on the host's UI thread on EVERY open of the wavetable browser. It is now kind
+                // kManagedWtKind of fb639's machinery (walked on wtIoPool_, answered from the last finished walk) and
+                // crosses as base64 like the other lists.
+                juce::Component::SafePointer<std::remove_pointer_t<decltype (this)>> safeUi (this);
+                audioProcessor.requestImportsJson (TerrainAudioProcessor::kManagedWtKind, [safeUi, complete] (const juce::String& js)
+                { if (safeUi != nullptr) complete (tiListPayload (js)); });
             })
             .withNativeFunction("loadImportedWavetable", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)

@@ -945,6 +945,16 @@ public:
     // FACTORY CONTENT IS NEVER IN `folders[]` — that is what makes "Remove Folder" structurally
     // unable to reach it. MESSAGE THREAD ONLY (it walks the filesystem).
     juce::String getImportsJson (int kind);
+    // 🧊 fb639 — THE BROWSER NEVER WAITS FOR THE DISK. getImportsJson walks folders and builds a ~100 KB payload; on the
+    //    message thread that is the HOST's UI thread (Max: "it freezes my FL Studio for about one second"). These answer
+    //    from the last finished scan at once and do every walk on wtIoPool_. MESSAGE THREAD ONLY.
+    void requestImportsJson    (int kind, std::function<void (const juce::String&)> done);
+    void prefetchImportsJson   ();
+    void addImportPathAsync    (int kind, const juce::String& path);   // never blocks: queued if a walk holds the lock
+    void removeImportPathAsync (int kind, const juce::String& path);
+    // fb640 — kinds 0 noise · 1 wavetable · 2 sample are the registries; kManagedWtKind is the managed Wavetables folder
+    //    (listImports, the wavetable browser's legacy "Imported" drawer), served by the same machinery.
+    static constexpr int kManagedWtKind = 3, kImportKinds = 4;
     // fb606 — the MANAGED Wavetables folder (what "Open Imports Folder" reveals), same recursive
     // walker and same caps. { root, exists, total, dirs, depth, subs:[…], items:[{name,path,rel}],
     // truncated, cap, depthCap, ms }. ⚠️ This REPLACES listImports' old bare array of names.
@@ -2422,6 +2432,21 @@ private:
     juce::uint32 importsCacheAt_[3] { 0, 0, 0 };
     bool         importsCacheValid_[3] { false, false, false };
     static constexpr juce::uint32 kImportsCacheTtlMs = 1500;
+    // fb639 — the SERVED payload (message thread only). getImportsJson and the registry arrays are touched by ONE walk at a
+    // time on wtIoPool_, under importsLock_; the message thread only ever try_locks it, so it can never wait on a walk.
+    std::mutex   importsLock_;
+    juce::String importsJson_[kImportKinds];                     // fb640 — [kManagedWtKind] = the managed Wavetables folder
+    juce::uint32 importsJsonAt_[kImportKinds]   { 0, 0, 0, 0 };
+    bool         importsStale_[kImportKinds]    { true, true, true, true };   // a registry change: the next answer waits for a FRESH walk
+    bool         importsScanning_[kImportKinds] { false, false, false, false };
+    juce::uint32 importsGen_[kImportKinds]      { 0, 0, 0, 0 };  // bumped per change; a walk that raced one is rerun
+    std::vector<std::function<void (const juce::String&)>> importsWaiters_[kImportKinds];
+    struct PendingImportEdit { int kind; juce::String path; bool add; };
+    std::vector<PendingImportEdit> importsPendingEdits_;       // edits that arrived while a walk held the lock
+    void startImportsScan      (int kind);
+    void publishImportsScan    (int kind, juce::uint32 gen, const juce::String& json);
+    void editImportsRegistry   (int kind, const juce::String& path, bool add);
+    void applyPendingImportEdits();
     juce::Array<juce::var> builtinWtCatItems (int cat) const;   // fb606 — the 46 built-ins for one merged category
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
