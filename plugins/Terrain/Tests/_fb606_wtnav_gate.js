@@ -210,7 +210,7 @@ const HELP = () => {
   const cine = cats.find((c) => c.name === 'Cinematic');
   chk(!!cine && cine.count === 4,
       'FACTORY BANK MERGES INTO THE TEN — the tagged "Cinematic" folder joins the built-in Cinematic drawer',
-      cine ? ('Cinematic count ' + cine.count + ' = 2 built-in (Terra Cloud, Terra Dust) + 2 from the bank') : 'no Cinematic row');
+      cine ? ('Cinematic count ' + cine.count + ' = 2 built-in (Dense Cloud, White Grit) + 2 from the bank') : 'no Cinematic row');
 
   const g0 = await pg.evaluate(() => window.__geom());
   const crumb0 = await pg.evaluate(() => window.__crumb());

@@ -11,7 +11,8 @@ Contract for a generator module:
     def my_table():
         ...
         return wtlib.finalize(frames)      # frames: (FRAMES, SIZE) float
-    TABLES = [("TERRA SOMETHING", my_table), ...]
+    TABLES   = [("SOMETHING", my_table), ...]     # ALL CAPS; new tables carry no "TERRA " prefix
+    CATEGORY = {"SOMETHING": "<Category>", ...}
 
 `finalize` is mandatory: it kills NaN/inf, removes DC, peak-normalises every frame, and
 guarantees the exact dtype/shape the WAV writer and the gate expect.
@@ -149,13 +150,26 @@ def selfcheck(name, frames, min_h60=60, min_span=8.0):
     return ok, f"{flag} {name:<30} harm60 {m['harm60']:>4}  span {m['span']:>6.1f} st  dead {m['dead']}"
 
 
-# ══ fb612 — THE SHIPPING NAME ═════════════════════════════════════════════════════════════════
-#  Max: "everything respective capitals, not ALL CAPS. preset names 'Terra - (Name)' just so we
-#  have organization, the dash will give us that."
-#  The generators keep their ALL-CAPS identifiers ("TERRA BIT LADDER") because those are what the
-#  TABLES lists and every log line use. This is the one place that turns an identifier into the
-#  name a user reads, so gate.py (which renders the bank) and mkbank.py (which converts it for
-#  shipping) cannot drift apart.
+# ══ THE SHIPPING NAME — fb612, re-ruled 2026-09-13 ═══════════════════════════════════════════
+#  fb612 · Max: "everything respective capitals, not ALL CAPS. preset names 'Terra - (Name)' just so
+#  we have organization, the dash will give us that."                     -> "Terra - Bit Ladder"
+#  2026-09-13 · Max: "no more Terra … just have the name of the wavetable."    -> "Bit Ladder"
+#  WHY it changed: the factory library grows from 166 to 500 tables filed in 13 category folders.
+#  The folder already IS the organisation the prefix was standing in for, and 454 files that all
+#  begin "Terra - " sort and read on the one word that tells the user nothing. So shipping_name()
+#  now returns the PLAIN Title Case name, and accepts every identifier shape in circulation:
+#      "TERRA BIT LADDER"    the 120 historical identifiers (gen_*.py, gate.py, MANIFEST.csv)
+#      "BIT LADDER"          new gen2_*.py identifiers, which carry NO "TERRA " prefix
+#      "Terra - Bit Ladder"  an already-pretty name (mkbank.py reads the stems of the files gate.py
+#                            rendered, and those are shipping names already)
+#  -> all three give "Bit Ladder", and shipping_name(shipping_name(x)) == shipping_name(x).
+#  legacy_shipping_name() keeps the fb612 form for ONE job: the rename map. The 120 FLACs that
+#  already ship are RENAMED, never regenerated or re-encoded, because presets find them by a hash
+#  of their file BYTES — so old name -> new name is computed by the same law that named them, not
+#  by string surgery on file names.
+#  The generators keep their ALL-CAPS identifiers because those are what TABLES and every log line
+#  use. This is the ONE place an identifier becomes the name a user reads, so gate.py, mkbank.py,
+#  wtkit.py and gate500.py cannot drift apart.
 SHIP_KEEP_UPPER = {"CZ", "FB", "PD", "PWM", "VCO", "XOR", "FM", "Y"}   # initialisms, not words
 SHIP_SPLIT = {          # all-caps single tokens that are really two words; .capitalize() alone
     "BITFLIP":  "Bit Flip",     # gives "Pidigits", "Primegap", "Xorfold"
@@ -166,15 +180,33 @@ SHIP_SPLIT = {          # all-caps single tokens that are really two words; .cap
     "RULE30":   "Rule 30",
     "RINGMOD":  "Ring Mod",
 }
+LEGACY_PREFIX = "Terra - "      # fb612's on-disk prefix, retired 2026-09-13
+
+
+def _ship_word(w):
+    if w in SHIP_SPLIT:
+        return SHIP_SPLIT[w]
+    if w in SHIP_KEEP_UPPER or w.isdigit():
+        return w
+    return w.capitalize()
+
 
 def shipping_name(stem):
-    """'TERRA BIT LADDER' -> 'Terra - Bit Ladder'.  Pure; duplicates are the caller's problem."""
-    if not stem.startswith("TERRA "):
-        raise ValueError("not a Terra table identifier: %r" % (stem,))
-    out = []
-    for w in stem[len("TERRA "):].split():
-        if   w in SHIP_SPLIT:      out.append(SHIP_SPLIT[w])
-        elif w in SHIP_KEEP_UPPER: out.append(w)
-        elif w.isdigit():          out.append(w)
-        else:                      out.append(w.capitalize())
-    return "Terra - " + " ".join(out)
+    """'TERRA BIT LADDER' / 'BIT LADDER' / 'Terra - Bit Ladder' -> 'Bit Ladder'.
+    Pure and idempotent; duplicates are the caller's problem."""
+    s = " ".join(str(stem).split())
+    if s.startswith(LEGACY_PREFIX):
+        s = s[len(LEGACY_PREFIX):]
+    elif s.startswith("TERRA "):
+        s = s[len("TERRA "):]
+    if not s:
+        raise ValueError("empty table identifier: %r" % (stem,))
+    if s != s.upper():          # already Title Case: a shipping name, not an identifier
+        return s
+    return " ".join(_ship_word(w) for w in s.split())
+
+
+def legacy_shipping_name(stem):
+    """'TERRA BIT LADDER' / 'BIT LADDER' -> 'Terra - Bit Ladder': the fb612 on-disk name of the 120
+    FLACs that already ship. Only for building the old -> new rename map; never name a new file with it."""
+    return LEGACY_PREFIX + shipping_name(stem)

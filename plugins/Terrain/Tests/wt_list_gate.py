@@ -101,7 +101,7 @@ for o in 'ABCD':
     if MUT == 'optD' and o == 'D':
         block = block[:block.rfind('<option')]
     if MUT == 'rename' and o == 'B':
-        block = block.replace('>Terra Growl<', '>Terra Grrrowl<')
+        block = block.replace('>Snarl<', '>Snaaarl<')   # fb638 — the built-in formerly 'Terra Growl'
     rows = re.findall(r'<option value="(\d+)"[^>]*>(.*?)</option>', block, re.S)
     opts[o] = rows
     site = 7 + 'ABCD'.index(o)

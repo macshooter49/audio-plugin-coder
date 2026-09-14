@@ -52,7 +52,7 @@ print("  name collisions after renaming: %s" % (clash if clash else "none"))
 if clash: sys.exit("REFUSING to write with colliding names")
 
 wrote = tot_in = tot_out = 0
-worst = (0.0, "")
+worst = (-1e9, "")   # fb638 — was (0.0, ""): real round-trip errors are negative dBr, so 0.0 was never beaten and the report printed "0.0 dBr ()"
 for cat, stem, name, f in rows:
     if WRITE:
         d = os.path.join(DST, cat); os.makedirs(d, exist_ok=True)
@@ -63,7 +63,7 @@ for cat, stem, name, f in rows:
         assert y.shape == x.shape, (out, y.shape, x.shape)
         err = float(np.max(np.abs(x - y))); pk = float(np.max(np.abs(x)))
         db = 20*np.log10(max(err,1e-30)/max(pk,1e-30))
-        if db > worst[0] or worst[1] == "": worst = (db, name) if db > worst[0] else worst
+        if db > worst[0]: worst = (db, name)
         tot_in += os.path.getsize(f); tot_out += os.path.getsize(out); wrote += 1
 print()
 for cat in sorted({r[0] for r in rows}):

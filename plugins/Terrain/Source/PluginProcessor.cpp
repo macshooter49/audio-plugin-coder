@@ -17,6 +17,7 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
 #include "PluginEditor.h"
 #include "PresetBank.h"   // fb619 — the bank file layer
 #include "PresetAssets.h"  // fb621 — the asset envelope (FLAC)
+#include "WtFactoryAliases.h"   // fb638 — legacy "Terra - " factory paths -> current
 #include <string_view>
 #include "PresetCarries.h" // fb632 — what a preset carries, counted where it is played (the file, the sheet, the heal)
 
@@ -2117,12 +2118,17 @@ void TerrainAudioProcessor::removeImportPath (int kind, const juce::String& path
 namespace {
     struct WtCatDef { const char* name; };
     // The ten, in display order. An index here is what kWtBuiltinCat[] stores.
+    // fb638 — THREE MORE, APPENDED (the ten keep their indices; kWtBuiltinCat stores them): Abstract (shapes that make
+    // you ask what they are), Processed (one process swept across the frames) and Textures (Max's own Waves Crate
+    // one-shots, turned into tables). The 500-table factory library files into all thirteen.
     const WtCatDef kWtCats[] = { { "Basic Shapes" }, { "Analog" }, { "Digital" }, { "Vocal" },
                                  { "Metallic" }, { "Spectral" }, { "Chaos" }, { "Cinematic" },
-                                 { "Harmonic" }, { "Physical" } };
+                                 { "Harmonic" }, { "Physical" },
+                                 { "Abstract" }, { "Processed" }, { "Textures" } };
     constexpr int kWtNumCats = (int) (sizeof (kWtCats) / sizeof (kWtCats[0]));
     enum { CAT_BASIC = 0, CAT_ANALOG, CAT_DIGITAL, CAT_VOCAL, CAT_METALLIC,
-           CAT_SPECTRAL, CAT_CHAOS, CAT_CINEMATIC, CAT_HARMONIC, CAT_PHYSICAL };
+           CAT_SPECTRAL, CAT_CHAOS, CAT_CINEMATIC, CAT_HARMONIC, CAT_PHYSICAL,
+           CAT_ABSTRACT, CAT_PROCESSED, CAT_TEXTURES };   // fb638 — appended
 
     // 46 entries, index-for-index with the WT_PRESET roster. Position IS the preset index.
     const int kWtBuiltinCat[] = {
@@ -4202,12 +4208,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                             // this StringArray is one of ten places the table list lives. All ten must
                             // grow in ONE commit or a <select> normalises by the wrong divisor and
                             // picks a different table. Gated by Tests/wt_list_gate.py.
-                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
-                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
-                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
-                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
-                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
-                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
+                            // 🏷️ fb638 — no more "Terra" (Max 2026-09-13: "just have the name of the wave table").
+                            //    The eight that would collide once the prefix went (Stack/Drift/Sweep/Pulse are
+                            //    built-ins, Choir/Cloud/Dust/Growl are factory tables) got new unique names; the
+                            //    INDEX is what a patch stores, so renaming a label moves nothing.
+                            "Super Stack", "Drift Chorus", "Duty Morph", "Hollow",
+                            "Vox", "Vox Choir", "Bell", "Bar",
+                            "Fold", "Reso Climb", "Dense Cloud", "White Grit",
+                            "Glass", "Bow", "Reed", "Snarl" },
         0);  // default = Sine
     const juce::StringArray wtRoster = wtPresetA->choices;   // fb601 — the ONE roster (see above)
     layout.add (std::move (wtPresetA));
@@ -4428,12 +4436,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                             // this StringArray is one of ten places the table list lives. All ten must
                             // grow in ONE commit or a <select> normalises by the wrong divisor and
                             // picks a different table. Gated by Tests/wt_list_gate.py.
-                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
-                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
-                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
-                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
-                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
-                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
+                            // 🏷️ fb638 — no more "Terra" (Max 2026-09-13: "just have the name of the wave table").
+                            //    The eight that would collide once the prefix went (Stack/Drift/Sweep/Pulse are
+                            //    built-ins, Choir/Cloud/Dust/Growl are factory tables) got new unique names; the
+                            //    INDEX is what a patch stores, so renaming a label moves nothing.
+                            "Super Stack", "Drift Chorus", "Duty Morph", "Hollow",
+                            "Vox", "Vox Choir", "Bell", "Bar",
+                            "Fold", "Reso Climb", "Dense Cloud", "White Grit",
+                            "Glass", "Bow", "Reed", "Snarl" },
         0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_FRAME, 1 },
@@ -4614,12 +4624,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                             // this StringArray is one of ten places the table list lives. All ten must
                             // grow in ONE commit or a <select> normalises by the wrong divisor and
                             // picks a different table. Gated by Tests/wt_list_gate.py.
-                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
-                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
-                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
-                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
-                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
-                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
+                            // 🏷️ fb638 — no more "Terra" (Max 2026-09-13: "just have the name of the wave table").
+                            //    The eight that would collide once the prefix went (Stack/Drift/Sweep/Pulse are
+                            //    built-ins, Choir/Cloud/Dust/Growl are factory tables) got new unique names; the
+                            //    INDEX is what a patch stores, so renaming a label moves nothing.
+                            "Super Stack", "Drift Chorus", "Duty Morph", "Hollow",
+                            "Vox", "Vox Choir", "Bell", "Bar",
+                            "Fold", "Reso Climb", "Dense Cloud", "White Grit",
+                            "Glass", "Bow", "Reed", "Snarl" },
         0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WT_FRAME, 1 },
@@ -4800,12 +4812,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                             // this StringArray is one of ten places the table list lives. All ten must
                             // grow in ONE commit or a <select> normalises by the wrong divisor and
                             // picks a different table. Gated by Tests/wt_list_gate.py.
-                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
-                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
-                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
-                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
-                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
-                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
+                            // 🏷️ fb638 — no more "Terra" (Max 2026-09-13: "just have the name of the wave table").
+                            //    The eight that would collide once the prefix went (Stack/Drift/Sweep/Pulse are
+                            //    built-ins, Choir/Cloud/Dust/Growl are factory tables) got new unique names; the
+                            //    INDEX is what a patch stores, so renaming a label moves nothing.
+                            "Super Stack", "Drift Chorus", "Duty Morph", "Hollow",
+                            "Vox", "Vox Choir", "Bell", "Bar",
+                            "Fold", "Reso Climb", "Dense Cloud", "White Grit",
+                            "Glass", "Bow", "Reed", "Snarl" },
         0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WT_FRAME, 1 },
@@ -17369,13 +17383,25 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                     continue;
                 }
                 bool got = false;
+                juce::String upgradedRef;   // fb638 — set when a legacy "Terra - " path was mapped to its current name
                 if (tw::asset::isRef (neu))
                 {
                     juce::String rel, want;
                     if (tw::asset::parseRef (neu, rel, want))
                     {
                         // fb624 — the reference always speaks '/'; the file system gets its own separator back
-                        const auto f = wtFactoryRoot().getChildFile (rel.replaceCharacter ('/', juce::File::getSeparatorChar()));
+                        auto f = wtFactoryRoot().getChildFile (rel.replaceCharacter ('/', juce::File::getSeparatorChar()));
+                        // 🏷️ fb638 — Max: "no more Terra … just have the name of the wave table." The shipped tables
+                        //    lost their "Terra - " prefix; a preset saved before still names the old path. The files were
+                        //    MOVED, not re-encoded, so the saved hash still matches the file — only the path moved, and
+                        //    WtFactoryAliases.h maps it. The ref is upgraded in the cache so the next save writes the new
+                        //    path (same hash), and the display name follows. Gated by Tests/wt_factory_gate.py.
+                        if (! f.existsAsFile())
+                            if (const auto cur = tw::wtalias::currentFor (rel); cur.isNotEmpty())
+                            {
+                                const auto g = wtFactoryRoot().getChildFile (cur.replaceCharacter ('/', juce::File::getSeparatorChar()));
+                                if (g.existsAsFile()) { f = g; upgradedRef = tw::asset::makeRef (cur, want); }
+                            }
                         std::vector<float> mono;
                         if (f.existsAsFile() && tiDecodeWavetableMono (f, mono) && ! mono.empty())
                         {
@@ -17424,9 +17450,13 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                 importFrames_[o] = (int)  newState.getProperty ("wtImportFrames" + s, 40);
                 importIsFile_[o] = (bool) newState.getProperty ("wtImportFile"   + s, false);
                 importName_[o]   =        newState.getProperty ("wtImportName"   + s, juce::String()).toString();
+                if (upgradedRef.isNotEmpty()) importName_[o] = tw::wtalias::currentName (importName_[o]);   // fb638
                 // 🚨 the cache takes the string it LOADED, so the next save writes those exact bytes
                 // back — save → load → save stays a fixed point (Tests/preset_roundtrip_cert.cpp).
-                assetB64Wt_[(size_t) o] = neu; assetKeyWt_[(size_t) o] = neu.isEmpty() ? 0 : tiKeyOf (importedPcm_[o]);
+                // fb638 — except a legacy path, which is stored UPGRADED (same hash, current path); from that save on
+                // the fixed point holds again.
+                const juce::String& loaded = upgradedRef.isNotEmpty() ? upgradedRef : neu;
+                assetB64Wt_[(size_t) o] = loaded; assetKeyWt_[(size_t) o] = loaded.isEmpty() ? 0 : tiKeyOf (importedPcm_[o]);
                 rebuildImport (o);
             }
             clearPatchBlobs();   // fb618 — absent means CLEAR for every blob below, on the host path too

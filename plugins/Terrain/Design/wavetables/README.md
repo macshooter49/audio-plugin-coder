@@ -1,5 +1,54 @@
 # THE TERRAIN FACTORY WAVETABLE BANK — the generators
 
+## fb638 — THE FIVE HUNDRED, AND NO MORE "TERRA" (2026-09-13)
+Max: *"I want 500 total factory wave tables … no more Terra when it comes to the name … just have the name of the wave
+table."* And, mid-build: *"Riot's banks are EXTREME and RAW + they usually morph into something crazy … keep basic stuff in
+there too (a little bit lol, aim for the crazy ones, even some subby ones, MAX quality and harmonics)."*
+
+**500 = 46 built-ins + 454 FLAC** (the 120 from fb604a/fb612 + 334 new), in THIRTEEN categories: the ten plus **Abstract**
+(shapes that make you ask what they are), **Processed** (one process swept across the frames — the Virtual Riot idea, built
+our own way) and **Textures** (Max's own Waves Crate one-shots turned into tables). **Shipped (measured on the FLACs):** 454 tables · harmonics > -60 dB mean **439** (the new 334: 452; Serum 2 Xfer factory: 318) · centroid travel median **61.6 st** (Serum 2: 23.2) · crest median 2.43 · median distance to the nearest other table 9.31 dB, 15 % within 7.65 dB · worst FLAC round-trip -138.5 dBr · 235.6 MB (the new 334 are 174.4 MB). Per category: Chaos 58 · Digital 50 · Abstract 48 · Spectral 46 · Processed 42 · Metallic 30 · Vocal 30 · Analog 28 · Cinematic 28 · Harmonic 24 · Physical 24 · Textures 24 · Basic Shapes 22. Frozen-bank golden 0/52 static + automated; `Tests/wt_factory_gate.py` 10/10.
+
+### The rename is preset-safe
+`rename_factory.py --apply` git-mv'd the 120 files (`Terra - X.flac` → `X.flac`) — never re-encoded, so a preset's
+`ref:1|<rel>|<hash of the file's bytes>` still matches — and generated `Source/WtFactoryAliases.h` (120 legacy → current
+pairs) from `renames_fb638.csv` (with the md5s). The restore path maps a missing legacy path through it, upgrades the cached
+ref and fixes a legacy display name. Proven: the frozen-bank golden renders all 52 of Max's presets bit-identical on a bundle
+with no "Terra - " file left, and `Tests/wt_factory_gate.py` bar [8] resolves every factory ref in his 62 real presets.
+The 16 built-in "Terra X" names lost the prefix too; the eight that would collide were renamed (Super Stack, Drift Chorus,
+Duty Morph, Reso Climb, Vox Choir, Dense Cloud, White Grit, Snarl) — built-ins are saved by INDEX, so a label moves nothing.
+
+### The toolchain (all in this folder)
+| tool | job |
+|---|---|
+| `wtlib.py` | the contract + `shipping_name()` — now the plain Title Case name, no prefix (`legacy_shipping_name()` keeps the old form for the rename map) |
+| `gen2_<category>.py` | the 334's generators, one designer per category (+ `_b` modules for the Textures and Processed refills) |
+| `wtkit.py check <module>` | render, sanity bars (shape, NaN, DC, peak, dead frames, SEAM, static), nearest neighbours in-module and in the fixed set, contact sheets |
+| `fixed_set.py` | fingerprints of the 120 shipped + 46 built-ins (dumped by `builtin_probe.cpp` from the plugin's own WavetableBank) + the **reference guard** |
+| `gate500.py` | the selection: per-category quotas (`wtkit.QUOTA_NEW`), round-robin greedy, `--spacing` (dB between ANY two tables), `--exclude` (critique vetoes), `--prefer` (critique swap-ins), names unique against everything |
+| `mkbank.py` | wav → 24-bit FLAC into `../../Resources/Wavetables/<Category>/` (only the bank it is given: the 120 are never touched) |
+| `rename_factory.py` | the fb638 rename + `WtFactoryAliases.h` |
+| `align_frames.py <bank>` | **no dropouts when the table is scanned**: Terrain crossfades adjacent frames, so anti-correlated neighbours cancel (a critic measured -18 dB holes). Each frame gets the circular shift + polarity that best matches the frame before — magnitude spectra untouched, fingerprint change 0.0000 dB — applied to any table whose worst midpoint dip is under -6 dB; `--check` fails the build if any table still has a worst dip under -9 dB or a median under -4.5 dB |
+| `bank3_probe.cpp` / `bank3h_probe.cpp` / `fx_probe.cpp` | Terrain's own ModalEngine / HarmonicEngine / filters rendered for the Physical, Harmonic and Processed generators |
+
+**Clean-room guard.** `ref_fp.npz` (built by the session's `ref_fp.py`) holds FINGERPRINTS ONLY — 768 numbers per table, no
+audio — of the Serum 2 Xfer factory tables and DYNOX PLUTO 2. `fixed_set.load()` appends them as kind="reference", so every
+new table must sit at least the spacing away from every reference table too. No third-party audio was ever read into a table.
+
+**How the 334 were chosen.** 13 designers wrote ~600 candidates against PLAN (quotas skewed to the extreme categories, THE
+JOURNEY RULE: frame 0 playable, the last frame wild). `gate500 --spacing 7.0` (the calibrated collision floor is 5.10 dB, a
+gently re-tilted saw; 7.0 dB leaves real air between any two tables). Eight critics then looked at every selected table —
+sheets, level curves, recipes — and vetoed the dull, the broken and the look-alikes (48 + Processed), renamed the awkward
+ones and chose same-category swap-ins; module owners fixed the faults in the tables they kept (reversed journeys, level holes,
+a grain-position freeze).
+
+### Regenerating
+Engine/FX-derived tables read probe dumps: build the probes (same recipe as `bank2_probe.cpp` below) and point
+`TERRAIN_WT500` (or the per-module `TERRAIN_WT_DUMP3` / `TERRAIN_WT_FXDUMP` variables) at their output. Textures re-read Max's
+own Waves Crate library from `~/Desktop/Waves Crate` (solo packs only — no collaborations, no Splice archive). As in fb612,
+the SHIPPED FLACs are the source of truth: they are the exact tables that were auditioned and gated.
+
+
 120 wavetables, 128 frames each, in **TEN categories** (fb606). **This directory regenerates them.**
 The rendered `.wav` bank is NOT in git (120 MB); it is produced by running the pipeline below.
 

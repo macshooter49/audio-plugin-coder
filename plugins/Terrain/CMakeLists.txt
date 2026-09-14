@@ -80,9 +80,12 @@ if (EXISTS "${TERRAIN_WT_BANK}")
                 set(_dst "")
             endif()
             if (NOT _dst STREQUAL "")
+                #  fb638 — WIPE FIRST. copy_directory only adds and overwrites; a renamed table ("Terra - X" -> "X")
+                #  would otherwise ride along in every incremental build as a stale duplicate in the browser.
                 add_custom_command(TARGET Terrain_${_fmt} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E rm -rf "${_dst}"
                     COMMAND ${CMAKE_COMMAND} -E copy_directory "${TERRAIN_WT_BANK}" "${_dst}"
-                    COMMENT "Terrain: installing the 120-table factory wavetable library into the ${_fmt} bundle")
+                    COMMENT "Terrain: installing the factory wavetable library into the ${_fmt} bundle")
             endif()
         endif()
     endforeach()
