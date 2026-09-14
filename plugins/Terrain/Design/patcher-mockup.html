@@ -6,38 +6,36 @@
 <title>Terrain Patcher</title>
 <style>
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
-   TERRAIN — THE PATCHER (interactive mockup, revision 1 — 2026-09-14)
+   TERRAIN — THE PATCHER (interactive mockup, revision 2 — 2026-09-14)
 
-   Max: "it's going to be an entire page … whenever we click that synth button it will then put us
-   to the patcher … replacing the hero, the grain engine, tape engine and the chop mode … keep the
-   header and the footer … one MIDI in, one out, in between we click anywhere to open up our
-   browser, our dark purple glass … glass boxes with nodes and that's it … purple-white electricity
-   as they're connected … all oscillator nodes have the waterfall … scrolling to zoom."
+   Revision 2 is Max's notes on r1, applied: "these need to be the real size … oscillator A literally
+   has everything there including the six buttons with the arrows … the scroll should be up and down,
+   control-scroll zooms … no words on the ports — circles … LFO connects to the bottom, right under the
+   knob it modulates … basic thin white lines, a purple spike goes through when playing … whichever port
+   we're supposed to have lights up, no legend … the four modes stay the same box: connected = the
+   outside glows purple, the inside white; right-click extends it … the effect cards are the real cards
+   … no CPU … the browser is just: add an oscillator, add this, boom."
 
-   Everything here is Terrain's own vocabulary, copied from Source/ui/public/index.html — the dark
-   tokens, the 44px header and 48px footer, .mod-btn pills, the .device glass box (bg-card, 13px),
-   the FX-card header grammar (grip · name · type pill · preset pill · power dot · ✕ on ONE
-   centreline), the .pmenu / two-pane-browser glass (rgba(22,20,34,.72) + blur 20), the LFO line
-   (#ECE8F2, purple halo pair, mvBreathe), wtWaterfall's own geo()/proj() math, the four FLOW
-   emblems verbatim, the fb118 selection grammar (outline, no fill). No new furniture.
-
-   Cables carry THREE things and wear the shape of their port: ■ notes · ● audio · ◆ mod.
-   The electricity is not decoration — it is the signal: a cable glows and crackles with the level
-   actually flowing through it, and rests when the notes stop.
+   So every node here IS the synth page's own module at its own size, copied from
+   Source/ui/public/index.html: the oscillator (332×140: OSC · engine ▾ / table ▾ · letter · + / the
+   waterfall / ‹ five knobs › / the unison set), the filter (332×140, analyzer + the four emblems), the
+   LFO (448×96, the mod-engine scope + its bottom row), the envelope (332×96, graph + shelf), the four
+   FLOW tiles (113×65, verbatim), the FX rack card (272×134, fxr- grammar verbatim). The only thing the
+   Patcher adds to a module is its ports: ● in on the left edge, ● out on the right, and a ● under every
+   knob for modulation. Nothing else is new furniture.
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root, [data-theme="dark"] {
   --bg-main: #1A1A2E; --bg-hero: #12121F; --bg-surface: #232340; --bg-footer: #1E1E36;
   --bg-card: #2A2A48; --bg-card-hover: #33335C;
-  --purple-600: #9B6DFF; --purple-500: #8B5CF6; --purple-400: #B794FF;
+  --purple-600: #9B6DFF; --purple-500: #8B5CF6; --purple-400: #B794FF; --purple-300: #C4B5FD;
   --border: rgba(58,58,88,0.5); --border-strong: rgba(88,88,128,0.5);
   --text-primary: #E0DCE8; --text-soft: #C4BDD6; --text-secondary: #9B93B0; --text-muted: #6B6080; --text-dim: #504870;
-  --menu-bg: rgba(22,20,34,0.72); --menu-fg: #fff; --menu-fg-dim: rgba(255,255,255,.78); --menu-fg-faint: rgba(255,255,255,.50);
-  --menu-line: rgba(255,255,255,0.11); --menu-wash: rgba(139,92,246,0.18); --menu-wash-cur: rgba(139,92,246,0.26);
-  --sel: rgba(139,92,246,0.18); --sel-strong: rgba(139,92,246,0.28); --sel-fg: #B794FF;
-  --edge: rgba(255,255,255,0.45); --edge-soft: rgba(255,255,255,0.22); --on-fg: #fff;
+  --menu-bg: rgba(22,20,34,0.72); --menu-line: rgba(255,255,255,0.11);
+  --edge: rgba(255,255,255,0.45); --on-fg: #fff;
   --syn-arc: rgba(255,255,255,0.92); --syn-trk: rgba(255,255,255,0.13);
+  --ghost: rgba(255,255,255,0.55); --ghost-dim: rgba(255,255,255,0.34);
   --rose: #f43f5e;
 }
 html { background: #0d0d16; color-scheme: dark; }
@@ -53,12 +51,11 @@ button, input, select { font-family: inherit; }
 .note b { color: var(--text-secondary); font-weight: 500; }
 .note kbd { font: inherit; color: var(--text-soft); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px; }
 
-/* ─── THE PLUGIN BOX — 820 × 656, exactly ─────────────────────────────────────────────────── */
+/* ─── THE PLUGIN BOX — 820 × 656 ──────────────────────────────────────────────────────────── */
 #plugin { width: 820px; height: 656px; position: relative; overflow: hidden; border-radius: 6px; box-shadow: 0 30px 80px rgba(0,0,0,.55);
-  /* fb630 — the synth page's own ground, vignette included, painted ONCE across header and page */
   background: radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main); }
 
-/* header — verbatim geometry (fb631): wordmark dead centre, preset cluster at 16px left, pills + gear right */
+/* header — verbatim */
 #header { height: 44px; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; background: transparent; position: relative; z-index: 20; }
 .header-left { position: absolute; left: 50%; top: 0; height: 44px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; }
 .brand-name { font-weight: 600; font-size: 18px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-primary); }
@@ -75,7 +72,7 @@ button, input, select { font-family: inherit; }
 .mod-btn { position: relative; display: flex; align-items: center; justify-content: center; padding: 3px 10px 3px 11.5px; border-radius: 12px; border: 1.5px solid rgba(139,92,246,0.2); background: transparent; cursor: pointer;
   font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-secondary); margin-left: 12px; transition: all .2s ease; flex-shrink: 0; }
 .mod-btn:hover { border-color: rgba(139,92,246,0.4); color: var(--purple-500); }
-.mod-btn.active { background: transparent; border-color: var(--purple-400); color: var(--on-fg); }   /* the tile rule, verbatim */
+.mod-btn.active { background: transparent; border-color: var(--purple-400); color: var(--on-fg); }
 .mod-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--purple-400); margin-right: 5px; box-shadow: 0 0 6px rgba(183,148,255,.6); }
 .gear { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); margin-left: 12px; cursor: pointer; }
 .gear:hover { color: var(--purple-400); }
@@ -101,163 +98,300 @@ button, input, select { font-family: inherit; }
 .master-mix-value { font-variant-numeric: tabular-nums; font-weight: 500; font-size: 10px; color: var(--text-primary); min-width: 42px; text-align: right; }
 .footer-brand { font-size: 8px; color: var(--text-muted); letter-spacing: .5px; margin-left: auto; flex-shrink: 0; }
 
-/* ─── THE PATCHER PAGE — between header and footer, where the hero was ─────────────────────── */
+/* ─── THE PATCHER PAGE ─────────────────────────────────────────────────────────────────────── */
 #patcher { position: absolute; left: 0; right: 0; top: 44px; bottom: 48px; overflow: hidden; cursor: default; }
 #patcher.panning { cursor: grabbing; }
-#grid { position: absolute; inset: 0; pointer-events: none;
-  background-image: radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1.2px);
-  background-size: 26px 26px; background-position: 0 0; }
+#grid { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1.2px); background-size: 26px 26px; }
 #world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
 #cables { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-#cables path, #cables polyline, #cables circle { pointer-events: none; }
 #cables .hit { pointer-events: stroke; stroke: transparent; stroke-width: 14; fill: none; cursor: pointer; }
 #nodes { position: absolute; left: 0; top: 0; }
 
-/* ─── THE NODE — the .device glass box, wearing the FX card's header ───────────────────────── */
-.node { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 13px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 10px 30px rgba(0,0,0,.28);
-  display: flex; flex-direction: column; transition: border-color .15s, opacity .15s, box-shadow .15s; }
+/* ─── THE NODE — the .device glass box (the box Max approved in r1) ────────────────────────── */
+.node { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 13px; overflow: visible;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 10px 30px rgba(0,0,0,.28); transition: border-color .15s, opacity .15s, box-shadow .15s; }
 .node:hover { border-color: rgba(255,255,255,.34); }
-.node.sel { border-color: var(--purple-400); }                                    /* fb118 — an outline, never a fill */
-.node.off { opacity: .45; }
-.node.off .emb, .node.off svg animate, .node.off svg animateTransform { animation-play-state: paused; }
-.node.dead { opacity: .55; }                                                       /* no path to Out: costs nothing, sounds nothing */
+.node.sel { border-color: var(--purple-400); }                       /* fb118 — an outline, never a fill */
+.node.off > *:not(.port):not(.dlr):not(.fxh) { opacity: .4; filter: grayscale(1); }
+.node.dead { opacity: .55; }
 .node.shake { animation: shake .32s ease; }
 @keyframes shake { 0%,100%{transform:translate(var(--tx),var(--ty))} 25%{transform:translate(calc(var(--tx) - 4px),var(--ty))} 75%{transform:translate(calc(var(--tx) + 4px),var(--ty))} }
 .node.landing { animation: land .28s cubic-bezier(.2,.9,.3,1.2); }
-@keyframes land { from { opacity: 0; transform: translate(var(--tx),var(--ty)) scale(.86); } to { opacity: 1; transform: translate(var(--tx),var(--ty)) scale(1); } }
+@keyframes land { from { opacity: 0; transform: translate(var(--tx),var(--ty)) scale(.9); } to { opacity: 1; transform: translate(var(--tx),var(--ty)) scale(1); } }
+.clip { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }   /* the module's own overflow:hidden, without eating the ports */
 
-.nh { display: flex; align-items: center; gap: 6px; padding: 5px 8px 4px 9px; height: 26px; flex: none; }   /* fb275 — ONE centreline, equal-height boxes, no nudges */
-.nh .grip { color: var(--text-dim); font-size: 11px; line-height: 1; letter-spacing: -2px; cursor: grab; display: flex; align-items: center; }
-.nh .grip:active { cursor: grabbing; }
-.nh .nm { font-size: 11.5px; color: var(--text-primary); font-weight: 500; white-space: nowrap; line-height: 1; display: flex; align-items: center; }
-.nh .tp { position: relative; flex: 1 1 auto; min-width: 34px; max-width: 118px; font-size: 9px; color: var(--text-secondary); border: 1px solid var(--border-strong); border-radius: 9px; padding: 0 7px; height: 16px; display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer; font-weight: 300; line-height: 1; white-space: nowrap; overflow: hidden; }
-.nh .tp .car { color: var(--text-muted); font-size: 8px; position: relative; top: .5px; }
-.nh .tp select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; border: none; background: transparent; color: transparent; }   /* fb275 — a REAL dropdown */
-.nh .tp .lbl { display: inline-block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.nh .pr { position: relative; display: flex; align-items: center; gap: 5px; width: 56px; height: 16px; border: 1px solid var(--border-strong); border-radius: 9px; padding: 0 8px; cursor: pointer; line-height: 1; overflow: hidden; flex: none; }   /* fb293 — FIXED width, a long name never moves anything */
-.nh .pr .star { color: var(--purple-400); font-size: 8px; line-height: 1; position: relative; top: -1px; }
-.nh .pr .pn { flex: 1; min-width: 0; text-align: center; font-size: 9px; color: var(--text-secondary); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nh .sp { flex: 1; }
-.nh .code { font-weight: 300; font-size: 9px; color: var(--text-muted); line-height: 1; white-space: nowrap; letter-spacing: 1px; }
-.nh .pwr { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--purple-400); background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.5); cursor: pointer; flex: 0 0 auto; }
-.node.off .nh .pwr { background: transparent; border-color: var(--text-muted); box-shadow: none; }
-.nh .x { width: 14px; height: 14px; display: grid; place-items: center; cursor: pointer; color: var(--text-muted); flex: none; }
-.nh .x svg { width: 14px; height: 14px; display: block; }
-.nh .x:hover { color: #EF4444; }
-
-.nb { flex: 1 1 0; min-height: 0; margin: 1px 10px 0; position: relative; overflow: hidden; }
-.nb canvas, .nb > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.nb .emb { position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; transform: translate(-50%,-50%); color: rgba(255,255,255,0.92); opacity: .85; filter: drop-shadow(0 0 4px rgba(255,255,255,0.35)); }
-.nb .emb [stroke] { stroke: currentColor; }
-.nb .wf-pos { position: absolute; right: 2px; top: 2px; font-size: 8px; letter-spacing: 1px; color: var(--text-muted); }
-/* the LFO line — #ECE8F2, the purple halo pair, the breathe (verbatim) */
-.line { fill: none; stroke: #ECE8F2; stroke-width: 1.3; filter: drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5)); animation: mvBreathe 3.2s ease-in-out infinite; }
-.line.dim { stroke: rgba(236,232,242,.35); filter: none; animation: none; }
-.foll { fill: #FFFFFF; filter: drop-shadow(0 0 2px rgba(167,139,250,0.95)) drop-shadow(0 0 5px rgba(167,139,250,0.6)); }
-@keyframes mvBreathe { 0%,100%{opacity:.9} 50%{opacity:1} }
-.gridlines { stroke: rgba(139,92,246,0.10); }
-
-/* knobs — the SYN knob: white round-cap arc + faint track, 9px letter-spaced label */
-.knobs { display: flex; align-items: flex-start; justify-content: space-around; padding: 4px 6px 7px; height: 44px; flex: none; }
-.knob { width: 40px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: ns-resize; }
-.knob svg { width: 24px; height: 24px; display: block; }
-.knob .kl { font-size: 8px; letter-spacing: 1px; color: var(--text-secondary); font-weight: 300; white-space: nowrap; }
-.knob.drag .kl { color: var(--text-primary); }
-#world.lod .knobs .kl { visibility: hidden; }
-
-/* MIDI In / Out — the endpoints, slimmer */
-.node.end { background: transparent; border-color: var(--border-strong); }
-.node.end .nb { display: flex; align-items: center; justify-content: center; gap: 8px; }
-.keys { display: flex; gap: 1.5px; align-items: flex-end; height: 22px; }
-.keys i { display: block; width: 7px; height: 22px; border-radius: 0 0 2px 2px; background: rgba(255,255,255,.14); transition: background .08s; }
-.keys i.bk { width: 5px; height: 13px; background: rgba(255,255,255,.28); margin: 0 -2.5px; z-index: 1; position: relative; }
-.keys i.on { background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.7); }
-.outm { display: flex; gap: 4px; align-items: flex-end; height: 24px; }
-.outm b { display: block; width: 5px; height: 24px; background: var(--border); border-radius: 2px; position: relative; overflow: hidden; }
-.outm b i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--purple-400); border-radius: 2px; }
-
-/* ─── PORTS — the shape is the type: ■ notes · ● audio · ◆ mod ─────────────────────────────── */
-.port { position: absolute; width: 18px; height: 18px; display: grid; place-items: center; cursor: crosshair; z-index: 3; }
-.port.in { left: -9px; } .port.out { right: -9px; }
-.port i { display: block; width: 9px; height: 9px; background: var(--bg-card); border: 1.4px solid var(--edge); transition: border-color .12s, box-shadow .12s, background .12s; }
-.port.n i { border-radius: 2px; }
-.port.a i { border-radius: 50%; }
-.port.m i { border-radius: 2px; transform: rotate(45deg) scale(.86); }
+/* ─── PORTS — circles, all of them. No labels: the lit ones are the legal ones. ────────────── */
+.port { position: absolute; width: 18px; height: 18px; display: grid; place-items: center; cursor: crosshair; z-index: 5; }
+.port.in { left: -9px; } .port.out { right: -9px; } .port.mod { bottom: -9px; }
+.port i { display: block; width: 9px; height: 9px; border-radius: 50%; background: var(--bg-card); border: 1.4px solid var(--edge); transition: border-color .12s, box-shadow .12s, background .12s, opacity .12s; }
 .port.live i { background: var(--purple-400); border-color: var(--purple-400); box-shadow: 0 0 7px rgba(183,148,255,.75); }
-.port.can i { border-color: var(--purple-400); box-shadow: 0 0 0 3px rgba(183,148,255,.22); }   /* a legal target while a cable is being drawn */
-.port.no { opacity: .28; }
+.port.can i { border-color: var(--purple-400); box-shadow: 0 0 0 3px rgba(183,148,255,.22), 0 0 8px rgba(183,148,255,.6); background: rgba(183,148,255,.35); }
+.port.no i { opacity: .22; }
 .port:hover i { border-color: #fff; }
-.port .pl { position: absolute; top: 50%; transform: translateY(-50%); font-size: 7.5px; letter-spacing: .8px; color: var(--text-muted); white-space: nowrap; pointer-events: none; }
-.port.in .pl { left: 17px; } .port.out .pl { right: 17px; }
-.port.implicit::before { content: ''; position: absolute; right: 100%; top: 50%; width: 22px; border-top: 1.4px dotted rgba(183,148,255,.55); }   /* notes arrive from MIDI In without a cable — the pre-cord */
 
-/* ─── the canvas chrome: the 13px glyph cluster (the browser header's own spec) ─────────────── */
+/* ═══ THE OSCILLATOR — .device.osc verbatim (332×140) ════════════════════════════════════════ */
+.node.osc { width: 332px; height: 140px; padding: 24px 14px 12px; display: flex; flex-direction: column; gap: 7px; }
+.dlr { position: absolute; top: 4px; left: 17px; height: 16px; display: flex; align-items: center; gap: 6px; z-index: 2; }
+.dlr .dl { font-size: 9px; font-weight: 300; letter-spacing: 2px; color: #fff; text-transform: uppercase; display: inline-flex; align-items: center; cursor: pointer; }
+.node.off .dlr .dl { color: var(--text-muted); }
+.dlr .dl .sep { width: 2px; height: 2px; border-radius: 50%; background: rgba(255,255,255,.42); display: inline-block; margin-left: 5px; position: relative; top: .5px; }
+.ew { position: relative; display: inline-flex; align-items: center; }
+.ew .ed { font-size: 9.5px; font-weight: 300; letter-spacing: .5px; color: #fff; pointer-events: none; white-space: nowrap; }
+.ew:hover .ed { color: var(--purple-400); }
+.ew select, .pw select, .tp select { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; background: transparent; color: transparent; border: none; opacity: 0; cursor: pointer; z-index: 2; }
+.dcp { position: absolute; top: 4px; right: 14px; height: 16px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; }
+.pw { position: relative; display: inline-block; }
+.pw .pd { display: block; font-size: 9.5px; font-weight: 300; letter-spacing: .8px; color: var(--text-primary); padding: 2px 6px; border-radius: 5px; white-space: nowrap; max-width: 108px; overflow: hidden; text-overflow: ellipsis; pointer-events: none; position: relative; left: 1px; }
+.pw:hover .pd { background: rgba(139,92,246,.15); }
+.dcp .lt { margin-left: 8px; width: 16px; height: 16px; border: 1px solid var(--border-strong); border-radius: 4px; display: inline-grid; place-items: center; font-size: 9px; color: var(--text-primary); padding-top: 1.5px; line-height: 1; cursor: pointer; }
+.dcp .sw { width: 16px; height: 16px; border: 1px solid var(--border-strong); border-radius: 4px; display: grid; place-items: center; color: var(--text-primary); font-size: 12px; line-height: 1; cursor: pointer; }
+.dcp .lt:hover, .dcp .sw:hover { color: #fff; border-color: var(--purple-400); background: rgba(139,92,246,.22); box-shadow: 0 0 7px rgba(167,139,250,.45); }
+.od { flex: 1; min-height: 60px; position: relative; overflow: hidden; border-radius: 8px; }
+.od svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.od .wf-pos { position: absolute; right: 2px; top: 1px; font-size: 8px; letter-spacing: 1px; color: var(--text-muted); }
+/* the knob row + the two chevrons (rs2: every row has ‹ ›) */
+.kw { flex: 0 0 auto; position: relative; display: flex; align-items: stretch; gap: 3px; }
+.kw .ar { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
+.kw .ar:hover { opacity: .95; }
+.kw .ar::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
+.kw .ar.prev { margin-left: -15px; } .kw .ar.prev::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+.kr { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; min-height: 38px; }
+.kr.c6 { grid-template-columns: repeat(6, 1fr); } .kr.c4 { grid-template-columns: repeat(4, 1fr); }
+.kr.hide { display: none; }
+/* THE SYN KNOB — 24px ring, the value inside (fb630), the 8px letter-spaced label */
+.knob { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: ns-resize; min-width: 0; }
+.ring { position: relative; width: 24px; height: 24px; border-radius: 50%; }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ring .t { fill: none; stroke: var(--syn-trk); stroke-width: 2; stroke-linecap: round; }
+.ring .v { fill: none; stroke: var(--syn-arc); stroke-width: 2; stroke-linecap: round; }
+.ring .kv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font-weight: 300; color: var(--text-secondary); line-height: 1; font-size: 7.5px; padding-top: .2em; white-space: nowrap; }
+.kl { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; white-space: nowrap; overflow: hidden; max-width: 100%; text-align: center; }
+.knob.drag .kl { letter-spacing: .3px; font-weight: 400; color: rgba(255,255,255,.9); }
+/* the unison pills (fb579: transparent stroke, the number carries the weight) */
+.upill { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: ns-resize; }
+.upill .pv { position: relative; height: 20px; min-width: 30px; margin-top: 2px; padding: 0 6px; border: 1px solid transparent; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 10px; letter-spacing: .4px; font-weight: 400; color: var(--text-primary); line-height: 1; white-space: nowrap; }
+.upill .pv.s { font-size: 9px; letter-spacing: .6px; font-weight: 300; }
+#world.lod .kl, #world.lod .ring .kv { visibility: hidden; }
+
+/* ═══ THE FILTER — the analyzer card (332×140), verbatim chrome ═══════════════════════════════ */
+.node.flt { width: 332px; height: 140px; }
+.flt .cv { position: absolute; inset: 0; }
+.flt .cv svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.flt .curve { fill: none; stroke: var(--purple-300); stroke-width: 1.3; filter: drop-shadow(0 0 2px rgba(183,148,255,.7)); }
+.flt .spec { fill: rgba(255,255,255,.07); }
+.flt .fgrid { stroke: rgba(139,92,246,.14); stroke-width: .5; }
+.flt .dd { position: absolute; top: 7px; left: 11px; z-index: 3; height: 16px; display: flex; align-items: center; gap: 5px; color: rgba(255,255,255,.62); font-size: 9px; letter-spacing: 1.1px; font-weight: 300; text-shadow: 0 1px 3px rgba(0,0,0,.9); cursor: pointer; max-width: calc(100% - 88px); }
+.flt .dd:hover { color: #fff; }
+.flt .dd .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flt .nav { width: 11px; height: 16px; font-size: 11px; line-height: 1; color: rgba(255,255,255,.4); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transform: translateY(-1px); flex: none; }
+.flt .nav:hover { color: var(--purple-400); }
+.flt .tg { position: absolute; top: 7px; right: 12px; z-index: 3; display: flex; gap: 8px; height: 16px; align-items: center; }
+.flt .tg .p { position: relative; color: rgba(255,255,255,.4); font-size: 10px; font-weight: 400; text-shadow: 0 1px 3px rgba(0,0,0,.9); cursor: pointer; }
+.flt .tg .p.act { color: #fff; font-weight: 600; }
+.flt .tg .p.act::after { content: ""; position: absolute; left: -1px; right: -1px; bottom: -3px; height: 1.5px; background: var(--purple-400); border-radius: 1px; }
+.flt .tg .exp { width: 11px; height: 11px; color: rgba(255,255,255,.92); cursor: pointer; display: inline-flex; }
+.flt .tg .exp svg { width: 11px; height: 11px; }
+.flt .tg .sw { color: rgba(255,255,255,.92); font-size: 12px; line-height: 1; cursor: pointer; }
+.flt .ems { position: absolute; left: 0; right: 0; bottom: 6px; z-index: 3; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0 12px; }
+.flt .em { height: 30px; cursor: ns-resize; position: relative; }
+.flt .em svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.flt .em path { fill: none; stroke: rgba(255,255,255,.85); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.flt .em circle { fill: #fff; }
+.flt .em.drag path { stroke: #fff; }
+
+/* ═══ THE LFO — #mod-engine (448×96) ═════════════════════════════════════════════════════════ */
+.node.lfo { width: 448px; height: 96px; }
+.lfo .sc { position: absolute; inset: 0; }
+.lfo .sc svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.lfo .sh-grid line { stroke: rgba(255,255,255,.065); stroke-width: .6; }
+.lfo .sh-grid line.maj { stroke: rgba(255,255,255,.14); }
+.lfo .mv-fill { fill: rgba(224,216,245,0.07); }
+.mv-stroke { fill: none; stroke: #ECE8F2; stroke-width: 1.7; filter: drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5)); animation: mvBreathe 3.2s ease-in-out infinite; }
+@keyframes mvBreathe { 0%,100%{opacity:.9} 50%{opacity:1} }
+.mv-play { stroke: rgba(236,232,242,.42); stroke-width: 1; transition: opacity .12s; }
+.mv-foll { fill: #FFFFFF; filter: drop-shadow(0 0 2px rgba(167,139,250,0.95)) drop-shadow(0 0 5px rgba(167,139,250,0.6)); transition: opacity .12s; }
+.node.idle .mv-play, .node.idle .mv-foll { opacity: 0; transition: opacity .35s; }
+.lfo .ov { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 11px 4px; display: flex; align-items: center; justify-content: space-between; z-index: 3; }
+.lfo .ov::before { content: ''; position: absolute; left: 0; right: 0; top: -.6px; height: 1px; background: rgba(255,255,255,.075); }
+.lfo .c { position: relative; top: 1px; display: flex; align-items: center; gap: 5px; font-size: 9px; letter-spacing: 1.1px; font-weight: 300; color: var(--ghost); cursor: pointer; text-shadow: 0 1px 3px rgba(0,0,0,.9); white-space: nowrap; }
+.lfo .c:hover { color: #fff; }
+.lfo .c.drag { cursor: ns-resize; }
+.lfo .c .ar { font-size: 8px; opacity: .55; }
+.lfo .c .ic { display: inline-flex; width: 20px; height: 11px; }
+.lfo .c .ic svg { width: 20px; height: 11px; }
+.lfo .c.shape { min-width: 64px; } .lfo .c.rate { min-width: 62px; }
+.lfo .seg { position: relative; top: 1px; font-size: 9px; letter-spacing: 1px; font-weight: 300; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+.lfo .seg b { cursor: pointer; font-weight: 300; } .lfo .seg .on { color: #fff; } .lfo .seg .off { color: var(--ghost-dim); }
+.lfo .tabs { display: flex; align-items: center; gap: 5px; }
+.lfo .tabs .t { position: relative; width: 13px; flex: none; text-align: center; font-size: 10px; font-weight: 400; color: var(--ghost-dim); cursor: pointer; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+.lfo .tabs .t:hover { color: var(--ghost); }
+.lfo .tabs .t.act { color: #fff; font-weight: 600; }
+.lfo .tabs .t.act::after { content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 1px; background: var(--purple-400); }
+.lfo .dep { position: relative; top: 1px; display: flex; align-items: center; gap: 5px; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+.lfo .dep .l { font-size: 7.5px; letter-spacing: 1px; color: var(--ghost-dim); }
+.lfo .dep .rg { width: 15px; height: 15px; border-radius: 50%; cursor: ns-resize; -webkit-mask: radial-gradient(closest-side, transparent 71%, #000 73%); mask: radial-gradient(closest-side, transparent 71%, #000 73%); }
+
+/* ═══ THE ENVELOPE — .device.envs (332×96) ═══════════════════════════════════════════════════ */
+.node.env { width: 332px; height: 96px; display: flex; flex-direction: column; }
+.env .ec { flex: 1 1 auto; min-height: 0; position: relative; border-radius: 12px 12px 0 0; cursor: crosshair; overflow: hidden; }
+.env .ec svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.env .hud { position: absolute; top: 6px; right: 2px; z-index: 3; font-size: 11px; letter-spacing: .3px; color: rgba(255,255,255,.55); font-weight: 300; padding: 2px 7px; cursor: pointer; }
+.env .hud:hover { color: #fff; }
+.env .hud .a { font-size: 7px; opacity: .7; }
+.env .shelf { flex: 0 0 20px; display: flex; align-items: center; justify-content: space-between; padding: 0 9px; border-top: 1px solid var(--border); }
+.env .ch { font-size: 9px; font-weight: 300; letter-spacing: .2px; color: rgba(255,255,255,.34); cursor: ns-resize; white-space: nowrap; }
+.env .ch b { font-weight: 400; color: rgba(255,255,255,.55); margin-left: 2px; font-size: 8.5px; display: inline-block; width: 27px; text-align: left; }
+.env .ch:hover { color: rgba(255,255,255,.6); } .env .ch:hover b { color: #fff; }
+.env .en { fill: #fff; }
+
+/* ═══ THE FLOW TILE — .flow-mode verbatim (113×65) ═══════════════════════════════════════════ */
+.node.flow { width: 113px; height: 65px; border-radius: 11px; border: 1px solid rgba(255,255,255,0.45); background: transparent; box-shadow: none;
+  display: flex; align-items: center; justify-content: center; color: var(--text-secondary); transition: color .2s ease, border-color .2s ease, box-shadow .25s ease; }
+.node.flow:hover { color: var(--text-primary); border-color: rgba(255,255,255,.7); }
+.node.flow .emb { width: 42px; height: 42px; display: block; opacity: .55; transition: opacity .2s ease; color: rgba(255,255,255,0.92); }
+.node.flow:hover .emb { opacity: .8; }
+.node.flow .emb [stroke] { stroke: currentColor; }
+.node.flow.act { border-color: var(--purple-400); color: #fff; }                          /* fb118 — connected: the outside purple, the inside white */
+.node.flow.act .emb { color: #fff; opacity: 1; filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }
+.node.flow.act .emb [opacity] { opacity: .75; }
+.node.flow.sel { box-shadow: 0 0 0 2px rgba(183,148,255,.35); }
+.node.flow.off .emb { opacity: .25; filter: grayscale(1); }
+
+/* ═══ THE FX CARD — .fxr-dev verbatim (272×134) ══════════════════════════════════════════════ */
+.node.fx { width: 272px; height: 134px; display: flex; flex-direction: column; }
+.fxh { display: flex; align-items: center; gap: 6px; padding: 5px 8px 4px; height: 26px; flex: none; }
+.fxh .grip { color: var(--text-dim); font-size: 11px; line-height: 1; letter-spacing: -2px; cursor: grab; display: flex; align-items: center; }
+.fxh .nm { font-size: 11.5px; color: var(--text-primary); font-weight: 500; white-space: nowrap; line-height: 1; display: flex; align-items: center; }
+.tp { position: relative; font-size: 9px; color: var(--text-secondary); border: 1px solid var(--border-strong); border-radius: 9px; padding: 0 7px; height: 16px; display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: 300; line-height: 1; margin-left: 3px; white-space: nowrap; max-width: 132px; overflow: hidden; }
+.tp .car { color: var(--text-muted); font-size: 8px; position: relative; top: .5px; }
+.fxh .pr { position: relative; display: flex; align-items: center; gap: 5px; width: 88px; height: 16px; border: 1px solid var(--border-strong); border-radius: 9px; padding: 0 9px; cursor: pointer; line-height: 1; overflow: hidden; flex: none; }
+.fxh .pr .star { color: var(--purple-400); font-size: 8px; line-height: 1; position: relative; top: -1px; }
+.fxh .pr .pn { flex: 1; min-width: 0; text-align: center; font-size: 9px; color: var(--text-secondary); font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fxh .pr .car { color: var(--text-muted); font-size: 8px; margin-left: auto; position: relative; top: .5px; }
+.fxh .sp { flex: 1; }
+.fxh .hr { display: flex; align-items: center; gap: 9px; }
+.fxh .sw, .fxh .x { width: 14px; height: 14px; display: grid; place-items: center; cursor: pointer; color: var(--text-muted); }
+.fxh .sw svg, .fxh .x svg { width: 14px; height: 14px; display: block; }
+.fxh .sw { color: var(--text-secondary); } .fxh .x:hover { color: #EF4444; }
+.pwr { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--purple-400); background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.5); cursor: pointer; flex: 0 0 auto; }
+.node.off .pwr { background: transparent; border-color: var(--text-muted); box-shadow: none; }
+.fxc { flex: 1 1 0; min-height: 0; margin: 1px 10px 0; position: relative; overflow: hidden; color: var(--text-primary); }
+.fxc svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.fxc .dst-curve { fill: none; stroke: #ECE8F2; stroke-width: 1.3; filter: drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5)); animation: mvBreathe 3.2s ease-in-out infinite; }
+.fxk { display: flex; align-items: flex-end; gap: 10px; padding: 5px 10px 9px; flex: 0 0 auto; }
+.fxk .dials { flex: 1; display: grid; grid-template-columns: repeat(4, 36px); justify-content: space-between; align-items: end; min-width: 0; }
+.fxk .dk { display: flex; flex-direction: column; align-items: center; gap: 1.5px; padding-bottom: 2.5px; min-width: 0; cursor: ns-resize; }
+.fxk .dial { width: 29px; height: 29px; }
+.fxk .dial svg { width: 100%; height: 100%; display: block; }
+.fxk .lab { font-size: 7px; letter-spacing: .01em; color: var(--text-secondary); white-space: nowrap; text-align: center; font-weight: 400; }
+.fxk .div { flex: 0 0 auto; width: 1px; height: 92%; align-self: center; position: relative; left: -2px; background: var(--border-strong); }
+.fxk .rc { flex: 0 0 92px; align-self: stretch; position: relative; }
+.fxk .pills { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; }        /* fb593 — no route row here: the cable IS the route, so the pills own the column */
+.fxk .pill { flex: 1 1 0; min-height: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--border-strong); border-radius: 9px; font-size: 8.5px; letter-spacing: .03em; color: var(--text-muted); font-weight: 300; cursor: pointer; }
+.fxk .pill.on { border-color: var(--purple-400); color: #fff; text-shadow: 0 0 3px rgba(255,255,255,.35); }
+
+/* ═══ MIDI IN · OUT ══════════════════════════════════════════════════════════════════════════ */
+.node.midiin { width: 124px; height: 62px; display: flex; align-items: center; justify-content: center; }
+.keys { display: flex; gap: 1.5px; align-items: flex-end; height: 26px; }
+.keys i { display: block; width: 8px; height: 26px; border-radius: 0 0 2px 2px; background: rgba(255,255,255,.14); transition: background .08s; }
+.keys i.bk { width: 5.5px; height: 15px; background: rgba(255,255,255,.28); margin: 0 -2.75px; z-index: 1; position: relative; }
+.keys i.on { background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.7); }
+.node.out { width: 176px; height: 86px; display: flex; align-items: stretch; gap: 10px; padding: 10px 12px 10px 14px; }
+.out .scope { flex: 1; position: relative; }
+.out .scope svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.out .scope .gl { stroke: rgba(139,92,246,.14); stroke-width: .5; }
+.out .mtr { display: flex; gap: 4px; align-items: flex-end; flex: none; }
+.out .mtr b { display: block; width: 5px; height: 100%; background: var(--border); border-radius: 2px; position: relative; overflow: hidden; }
+.out .mtr b i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--purple-400); border-radius: 2px; }
+
+/* ─── the canvas chrome — the 13px glyph cluster ───────────────────────────────────────────── */
 .tools { position: absolute; top: 10px; right: 14px; display: flex; align-items: center; gap: 13px; z-index: 12; }
 .tools .g { display: flex; align-items: center; justify-content: center; padding: 2px 1px; cursor: pointer; color: rgba(255,255,255,.5); transition: color .12s; }
-.tools .g:hover { color: #fff; }
-.tools .g.on { color: #fff; }
-.tools .g.on svg { filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }
+.tools .g:hover { color: #fff; } .tools .g.on { color: #fff; } .tools .g.on svg { filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }
 .tools .g.dis { color: rgba(255,255,255,.16); cursor: default; }
 .tools .g svg { width: 13px; height: 13px; display: block; }
-.tools .cpu { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
-.tools .cpu b { color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
 .tools .sep { width: 1px; height: 14px; background: var(--border-strong); }
-.legend { position: absolute; left: 14px; bottom: 10px; display: flex; align-items: center; gap: 14px; font-size: 8px; letter-spacing: 1px; color: var(--text-muted); z-index: 12; }
-.legend i { display: inline-block; width: 7px; height: 7px; border: 1.2px solid var(--edge-soft); vertical-align: -1px; margin-right: 5px; }
-.legend i.a { border-radius: 50%; } .legend i.n { border-radius: 1.5px; } .legend i.m { transform: rotate(45deg) scale(.85); }
-.legend .zoom { margin-left: 8px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-
-/* the mini-map — the .pmenu glass */
 #mini { position: absolute; right: 14px; bottom: 10px; width: 118px; height: 72px; z-index: 12; border-radius: 9px; border: 1px solid var(--menu-line); background: var(--menu-bg); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06); overflow: hidden; cursor: pointer; }
 #mini.hidden { display: none; }
 #mini svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-/* ─── THE ADD BROWSER — the two-pane glass (fb608's one band of chrome) ────────────────────── */
-.tpb { position: absolute; z-index: 300; width: 384px; height: 294px; display: none; flex-direction: column;
-  background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid rgba(255,255,255,0.11); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); overflow: hidden; }
-.tpb.on { display: flex; }
-.tpb .head { display: flex; align-items: center; height: 31px; padding: 0 9px 0 14px; border-bottom: 1px solid rgba(255,255,255,0.07); flex: none; gap: 6px; }
-.tpb .mag { width: 10px; height: 10px; flex: none; color: rgba(255,255,255,.5); }
-.tpb .mag svg { width: 10px; height: 10px; display: block; }
-.tpb input { flex: 1; min-width: 60px; height: 22px; background: transparent; border: none; outline: none; color: #fff; font-size: 10px; letter-spacing: .3px; }
-.tpb input::placeholder { color: rgba(255,255,255,.30); }
-.tpb .crumb { font-size: 9px; color: rgba(255,255,255,.5); letter-spacing: .5px; white-space: nowrap; margin-right: 8px; }
-.tpb .x { display: flex; align-items: center; justify-content: center; padding: 2px 1px; cursor: pointer; color: rgba(255,255,255,.5); }
-.tpb .x:hover { color: #fff; }
-.tpb .x svg { width: 13px; height: 13px; display: block; }
-.tpb .panes { flex: 1; min-height: 0; display: flex; }
-.tpb .cats { width: 124px; flex: none; border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; padding: 6px 0; scrollbar-width: none; }
-.tpb .items { flex: 1; min-width: 0; overflow-y: auto; padding: 6px 4px; scrollbar-width: none; }
-.tpb .cats::-webkit-scrollbar, .tpb .items::-webkit-scrollbar { width: 0; height: 0; display: none; }
-.tpb .row { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px 0 14px; cursor: pointer; font-size: 10px; color: rgba(255,255,255,.5); transition: .1s; border-radius: 6px; margin: 0 4px; }
-.tpb .row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tpb .row .ct { font-size: 9px; color: rgba(255,255,255,.30); }
-.tpb .row .hint { font-size: 8.5px; color: rgba(255,255,255,.30); letter-spacing: .3px; }
-.tpb .row:hover { color: rgba(255,255,255,.86); background: rgba(255,255,255,0.05); }
-.tpb .row.cur { color: #fff; background: rgba(255,255,255,0.07); }
-.tpb .row.cur::before { content: '•'; color: #fff; font-size: 9px; line-height: 1; flex: none; margin-left: -8px; margin-right: 1px; }
-.tpb .row i { display: inline-block; width: 7px; height: 7px; border: 1.2px solid rgba(255,255,255,.4); flex: none; }
-.tpb .row i.a { border-radius: 50%; } .tpb .row i.n { border-radius: 1.5px; } .tpb .row i.m { transform: rotate(45deg) scale(.85); }
-
-/* ─── THE NODE MENU — .pmenu verbatim ──────────────────────────────────────────────────────── */
+/* ─── THE ADD LIST — the .pmenu glass, one column, nothing but the names ───────────────────── */
 .pmenu { position: absolute; z-index: 310; display: none; min-width: 176px; max-width: 206px; background: var(--menu-bg); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid var(--menu-line); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); padding: 5px; color: var(--menu-fg); }
+  border: 1px solid var(--menu-line); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); padding: 5px; color: #fff; }
 .pmenu.on { display: block; }
 .pmenu .ps { font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255,255,255,.30); padding: 6px 9px 3px; }
 .pmenu .pi { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 6px; cursor: pointer; font-size: 9.5px; letter-spacing: .5px; color: rgba(255,255,255,.5); transition: .1s; }
 .pmenu .pi:hover { color: rgba(255,255,255,.86); background: rgba(255,255,255,0.05); }
 .pmenu .pi.danger:hover { color: var(--rose); }
+.pmenu .pi.dis { opacity: .3; cursor: default; }
 .pmenu .sepd { height: 1px; background: rgba(255,255,255,.08); margin: 4px 6px; }
+.pmenu .srch { display: flex; align-items: center; gap: 6px; padding: 4px 9px 5px; border-bottom: 1px solid rgba(255,255,255,.07); margin-bottom: 3px; }
+.pmenu .srch svg { width: 10px; height: 10px; color: rgba(255,255,255,.5); flex: none; }
+.pmenu input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #fff; font-size: 10px; letter-spacing: .3px; }
+.pmenu input::placeholder { color: rgba(255,255,255,.30); }
+.pmenu .list { max-height: 300px; overflow-y: auto; scrollbar-width: none; } .pmenu .list::-webkit-scrollbar { display: none; }
+
+/* ─── THE EXTENSION CARD — .ti-card verbatim (the glass the FLOW cards already pop) ────────── */
+.ti-card { position: absolute; z-index: 305; width: 316px; border-radius: 14px; display: none;
+  background: linear-gradient(180deg, rgba(38,34,62,.84), rgba(28,25,50,.92)); -webkit-backdrop-filter: blur(22px) saturate(1.15); backdrop-filter: blur(22px) saturate(1.15);
+  border: 1px solid rgba(255,255,255,.14); box-shadow: 0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07); overflow: hidden; font-variant-numeric: tabular-nums; }
+.ti-card.open { display: block; }
+.ti-card .h { display: flex; align-items: center; gap: 6px; padding: 10px 10px 9px; border-bottom: 1px solid rgba(255,255,255,.08); cursor: grab; }
+.ti-card .h .g { letter-spacing: 2px; color: rgba(255,255,255,.30); font-size: 10px; }
+.ti-card .h .dot { width: 5px; height: 5px; border-radius: 50%; background: #B794FF; }
+.ti-card .h .tt { font-size: 9px; letter-spacing: 1.8px; color: rgba(255,255,255,.92); text-transform: uppercase; font-weight: 600; white-space: nowrap; }
+.ti-card .h .pset { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.ti-card .h .pset .pa { color: rgba(255,255,255,.42); font-size: 12px; line-height: 1; cursor: pointer; padding: 0 1px; }
+.ti-card .h .pset .pn { max-width: 104px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; letter-spacing: .4px; color: rgba(255,255,255,.9); cursor: pointer; padding: 2px 5px; border: 1px solid transparent; border-radius: 6px; }
+.ti-card .h .pset .pn:hover { border-color: rgba(255,255,255,.28); }
+.ti-card .mix { margin-left: auto; display: flex; align-items: baseline; gap: 4px; cursor: ew-resize; font-size: 6.5px; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(255,255,255,.40); }
+.ti-card .mix b { font-size: 11px; font-weight: 200; letter-spacing: .3px; color: rgba(255,255,255,.92); min-width: 27px; text-align: right; }
+.ti-card .h .pop { position: relative; top: 1px; margin-left: 12px; font-size: 7px; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(255,255,255,.45); font-weight: 500; cursor: pointer; line-height: 1; white-space: nowrap; }
+.ti-card .h .x { margin-left: 10px; color: rgba(255,255,255,.80); font-size: 12px; cursor: pointer; line-height: 1; }
+.ti-card .h .pop:hover, .ti-card .h .x:hover { color: #fff; }
+.ti-card .b { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.ti-card .hero { position: relative; height: 88px; }
+.ti-card .hero svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ti-card .tabs { display: flex; justify-content: center; gap: 26px; }
+.ti-card .tab { position: relative; font-size: 8px; letter-spacing: 1.8px; text-transform: uppercase; color: rgba(255,255,255,.45); cursor: pointer; padding-bottom: 4px; }
+.ti-card .tab.on { color: rgba(255,255,255,.95); }
+.ti-card .tab.on::after { content: ''; position: absolute; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; height: 1px; background: var(--purple-400); }
+.ti-card .gboxrow { display: grid; grid-template-columns: 1.32fr 1fr; gap: 8px; align-items: stretch; }
+.ti-card .gbox { position: relative; border: 1px solid rgba(255,255,255,.15); border-radius: 9px; padding: 12px 8px 10px; display: flex; flex-direction: column; justify-content: center; }
+.ti-card .gbl { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); font-size: 6px; letter-spacing: 1.6px; text-transform: uppercase; line-height: 8px; color: rgba(255,255,255,.52); background: #232045; padding: 0 6px; white-space: nowrap; }
+.ti-card .gr { display: grid; gap: 5px; } .ti-card .gr4 { grid-template-columns: repeat(4, 1fr); } .ti-card .gr3 { grid-template-columns: repeat(3, 1fr); }
+.ti-card .cell { display: flex; flex-direction: column; align-items: center; cursor: ns-resize; }
+.ti-card .cell svg { width: 34px; height: 34px; display: block; }
+.ti-card .cell .lb { font-size: 6.5px; letter-spacing: 1.3px; text-transform: uppercase; color: rgba(255,255,255,.45); line-height: 1; margin-top: 6px; }
+.ti-card .cell .vl { font-size: 9px; color: rgba(255,255,255,.90); font-weight: 500; line-height: 1; margin-top: 4px; min-height: 9px; }
+.ti-card .k .tr { fill: none; stroke: rgba(255,255,255,.16); stroke-width: 1; } .ti-card .k .va { fill: none; stroke: rgba(255,255,255,.9); stroke-width: 1.2; stroke-linecap: round; }
 
 .toast { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 6px 12px; border-radius: 8px; background: var(--menu-bg); border: 1px solid var(--menu-line); font-size: 9.5px; letter-spacing: .5px; color: rgba(255,255,255,.78); z-index: 320; opacity: 0; transition: opacity .2s; pointer-events: none; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 .toast.on { opacity: 1; }
+
+
+/* ─── THE GLASS — the browser menu's own dark purple glass on every node (Max: "I wanna see what they would look like").
+   Default here; the g key flips back to the r2 card box for the comparison. Flow tiles keep the tile law. ─────── */
+#plugin.glass .node:not(.flow) { background: var(--menu-bg); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  border-color: var(--menu-line); box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); }
+#plugin.glass .node:not(.flow):hover { border-color: rgba(255,255,255,.28); }
+#plugin.glass .node.sel:not(.flow) { border-color: var(--purple-400); }
+#plugin.glass .port i { background: #16141f; }
+
+/* ─── CABLE INK — thin white lines; the purple spike is the signal ─────────────────────────── */
+#cables .cable .core { fill: none; stroke: #ECE8F2; stroke-width: 1.3; stroke-linecap: round; opacity: .5; transition: opacity .2s; }
+#cables .cable.m .core { stroke-width: 1; }
+#cables .cable.hot .core { opacity: .85; }
+#cables .cable.sel .core { stroke: #fff; stroke-width: 2; opacity: 1; }
+#cables .cable.mute .core { stroke-dasharray: 2 4; opacity: .3; }
+#cables .cable .spk { fill: none; stroke: var(--purple-400); stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(183,148,255,.9)); opacity: 0; }
+#cables .cable.mute .spk { display: none; }
+#cables #drawg .core { fill: none; stroke: #ECE8F2; stroke-width: 1.3; opacity: .7; stroke-dasharray: 4 4; }
 </style>
 </head>
 <body>
 
-<div id="plugin">
+<div id="plugin" class="glass">
   <div id="header">
     <div class="header-preset">
       <button class="hbtn" title="Save preset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -277,42 +411,26 @@ button, input, select { font-family: inherit; }
   <div id="patcher">
     <div id="grid"></div>
     <div id="world">
-      <svg id="cables">
-        <defs>
-          <filter id="cblur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.4"/></filter>
-          <filter id="sblur" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.8"/></filter>
-        </defs>
-        <g id="cg"></g>
-        <g id="drawg"></g>
-      </svg>
+      <svg id="cables"><g id="cg"></g><g id="drawg"></g></svg>
       <div id="nodes"></div>
     </div>
 
     <div class="tools">
-      <span class="cpu">CPU <b id="cpu">0 %</b></span>
-      <span class="sep"></span>
       <span class="g" id="undo" title="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></span>
       <span class="g" id="redo" title="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></span>
-      <span class="g" id="arrange" title="Auto-arrange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
-      <span class="g" id="fit" title="Fit to view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></span>
-      <span class="g on" id="minitog" title="Mini-map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="6" height="5" rx="1"/></svg></span>
+      <span class="g" id="fit" title="Fit everything in view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></span>
       <span class="g" id="dice" title="Surprise me — a random patch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></span>
       <span class="sep"></span>
-      <span class="g" id="hp" title="Preview (headphone) — hear the patch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2.5" y="13.5" width="4" height="6.5" rx="1.4"/><rect x="17.5" y="13.5" width="4" height="6.5" rx="1.4"/></svg></span>
+      <span class="g" id="hp" title="Hear the patch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2.5" y="13.5" width="4" height="6.5" rx="1.4"/><rect x="17.5" y="13.5" width="4" height="6.5" rx="1.4"/></svg></span>
     </div>
-    <div class="legend"><span><i class="n"></i>notes</span><span><i class="a"></i>audio</span><span><i class="m"></i>mod</span><span class="zoom" id="zoomro">100 %</span></div>
     <div id="mini"><svg id="minisvg" viewBox="0 0 118 72" preserveAspectRatio="none"></svg></div>
 
-    <div class="tpb" id="tpb">
-      <div class="head">
-        <span class="mag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg></span>
-        <input id="tpbq" placeholder="Search" spellcheck="false">
-        <span class="crumb">Add node</span>
-        <span class="x" id="tpbx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></span>
-      </div>
-      <div class="panes"><div class="cats" id="tpbc"></div><div class="items" id="tpbi"></div></div>
+    <div class="pmenu" id="addm">
+      <div class="srch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg><input id="addq" placeholder="Add" spellcheck="false"></div>
+      <div class="list" id="addl"></div>
     </div>
     <div class="pmenu" id="nmenu"></div>
+    <div class="ti-card" id="xcard"></div>
     <div class="toast" id="toast"></div>
   </div>
 
@@ -335,93 +453,92 @@ button, input, select { font-family: inherit; }
 </div>
 
 <div class="note">
-  <b>Read it like the plugin.</b> Notes come in on the left, sound leaves on the right. <b>Click empty space</b> to open the browser and add a node · <b>drag a port</b> to another port to patch (legal targets light up; drop on empty space to add a node already wired) · <b>scroll</b> to zoom, <b>drag empty space</b> to pan · <b>click a cable</b> then <kbd>⌫</kbd> to cut it, right-click a cable to mute it · <b>right-click a node</b> for Duplicate / Save as my node / Remove · <b>drag a knob</b> up and down · the power dot on MIDI In starts and stops the notes · the headphone lets you hear the patch · the dice builds a random one.
-  A node with no path to Out goes dim and costs nothing. An oscillator with no notes cable takes them from MIDI In (the dotted stub) — you only draw a notes cable to put an Arp, a Robin or a split in between.
+  <b>Revision 2 · glass.</b> The nodes wear the browser menu's dark purple glass; press <kbd>g</kbd> to flip to the card box and back. Every node is the synth page's own module at its real size. <b>Scroll</b> moves the canvas up and down (shift for sideways), <b>⌃ scroll</b> or a pinch zooms · <b>drag empty space</b> to pan · <b>click empty space</b> to add · <b>drag any port</b>: the ports it can go to light up; drop it on empty space to add something already wired · a modulator goes to the circle <b>under the knob</b> it moves · <b>click a cable</b> then <kbd>⌫</kbd>, right-click it to mute · <b>right-click a node</b> (a Flow tile: Extend opens its card) · <kbd>⌘Z</kbd> · <kbd>f</kbd> fits · the MIDI In keys start and stop the notes · the headphone lets you hear it.
 </div>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   THE MODEL — nodes, ports, cables. Three signal kinds: n (notes) · a (audio) · m (mod).
+   THE MODEL — nodes, side ports, the modulation dots under the knobs, cables.
+   Three signal kinds still exist underneath (n notes · a audio · m modulation) but no port SAYS so:
+   when you drag, the ports you may land on light up. That is the whole legend.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+const ENGINES = ['Wavetable', 'Sample', 'Granular', 'Resynth', 'FM', 'Modal', 'Harmonic'];
+const TABLES = ['Sine', 'Prophet Saw', 'Jupiter PWM', 'PPG Wave', 'Choir A→O', 'Bowed Metal', 'Spectral Drift', 'Super Stack', 'Vox Choir', 'Snarl'];
+const FLT_TYPES = ['Ladder LP · 24', 'Diode LP', 'Acid 303', 'SVF LP', 'MS-20 LP', 'Comb +', 'Formant A', 'Xpd HP 12', 'SEM Notch'];
+const LFO_SHAPES = ['Sine', 'Tri', 'Saw', 'Ramp', 'Square', 'S&H', 'Smooth'];
 const DEFS = {
-  midiin:  { name:'MIDI In', cat:'MIDI', w:124, h:62, end:true, ins:[], outs:[{t:'n',l:'notes'}], cost:.2, hint:'the notes coming from your DAW' },
-  out:     { name:'Out',     cat:'MIDI', w:124, h:70, end:true, ins:[{t:'a',l:'audio'}], outs:[], cost:.2, hint:'what leaves the plugin' },
-  osc:     { name:'Osc', cat:'Oscillators', w:216, h:164, ins:[{t:'n',l:'notes',implicit:true},{t:'m',l:'pitch'},{t:'m',l:'pos'}], outs:[{t:'a',l:'audio'}],
-             types:['Wavetable','Sample','Granular','Resynth','FM','Modal','Harmonic'], knobs:[['Level',.7],['Pos',.35],['Warp',0],['Pan',.5]], viz:'waterfall', cost:5.5, hint:'a whole oscillator — its own table, engine and warps' },
-  filter:  { name:'Filter', cat:'Filters', w:196, h:130, ins:[{t:'a',l:'audio'},{t:'m',l:'cut'}], outs:[{t:'a',l:'audio'}],
-             types:['Ladder LP 24','Diode LP','Acid 303','SVF LP','MS-20 LP','Comb +','Formant A','Xpd HP 12'], knobs:[['Cutoff',.62],['Res',.35],['Drive',0],['Mix',1]], viz:'curve', cost:1.8, hint:'118 engines, the rack filter' },
-  lfo:     { name:'LFO', cat:'Modulators', w:176, h:112, ins:[], outs:[{t:'m',l:'mod'}], types:['Sine','Triangle','Saw','Square','Drawn'], knobs:[['Rate',.4],['Depth',.7],['Shape',.5]], viz:'lfo', cost:.3, hint:'the LFO, drawn or shaped' },
-  env:     { name:'Env', cat:'Modulators', w:176, h:112, ins:[{t:'n',l:'notes',implicit:true}], outs:[{t:'m',l:'mod'}], types:['ADSR','Infinite'], knobs:[['A',.1],['D',.4],['S',.6],['R',.3]], viz:'env', cost:.2, hint:'an envelope per note' },
-  arp:     { name:'Arp', cat:'Flow', w:156, h:118, ins:[{t:'n',l:'notes'}], outs:[{t:'n',l:'notes'}], types:['Up','Down','Up Down','Random','Chord'], knobs:[['Rate',.5],['Oct',.33],['Gate',.6]], viz:'flow', emb:'arp', cost:.3, hint:'plays the notes it is given' },
-  robin:   { name:'Robin', cat:'Flow', w:156, h:118, ins:[{t:'n',l:'notes'}], outs:[{t:'n',l:'notes'}], types:['Round','Random','Cycle'], knobs:[['Voices',.5],['Glide',.2],['Spread',.4]], viz:'flow', emb:'robin', cost:.3, hint:'round-robin voicing' },
-  chop:    { name:'Chop', cat:'Flow', w:176, h:118, ins:[{t:'a',l:'audio'}], outs:[{t:'a',l:'audio'}], types:['1/16','1/8','1/32','Triplet'], knobs:[['Rate',.5],['Gate',.5],['Swing',.2],['Mix',1]], viz:'flow', emb:'chop', cost:.8, hint:'rhythmic gating of whatever comes in' },
-  glitch:  { name:'Glitch', cat:'Flow', w:176, h:118, ins:[{t:'a',l:'audio'},{t:'m',l:'jump'}], outs:[{t:'a',l:'audio'}], types:['Stutter','Teleport','Reverse','Freeze'], knobs:[['Rate',.5],['Jump',.4],['Pitch',.5],['Mix',1]], viz:'flow', emb:'glitch', cost:1.6, hint:'the glitch stage — stack as many as you like' },
-  reverb:  { name:'Reverb', cat:'Effects', w:196, h:118, ins:[{t:'a',l:'audio'}], outs:[{t:'a',l:'audio'}], types:['Hall','Basin','Digital','Plate','Convolution'], knobs:[['Size',.6],['Decay',.5],['Tone',.5],['Mix',.35]], viz:'reverb', cost:2.4, hint:'a reverb card as a node' },
-  delay:   { name:'Delay', cat:'Effects', w:196, h:118, ins:[{t:'a',l:'audio'}], outs:[{t:'a',l:'audio'}], types:['Tape','Digital','Ping Pong','Moog'], knobs:[['Time',.4],['Feed',.5],['Tone',.5],['Mix',.3]], viz:'delay', cost:.9, hint:'a delay card as a node' },
-  dist:    { name:'Distortion', cat:'Effects', w:196, h:118, ins:[{t:'a',l:'audio'}], outs:[{t:'a',l:'audio'}], types:['Tube','Fold','Hard','Crush','Fuzz'], knobs:[['Drive',.4],['Tone',.5],['Bias',.5],['Mix',1]], viz:'dist', cost:.5, hint:'the distortion card' },
-  chorus:  { name:'Chorus', cat:'Effects', w:196, h:118, ins:[{t:'a',l:'audio'}], outs:[{t:'a',l:'audio'}], types:['Classic','Ensemble','Dimension'], knobs:[['Rate',.3],['Depth',.5],['Voices',.5],['Mix',.5]], viz:'chorus', cost:.6, hint:'chorus / flanger / phaser family' },
-  ott:     { name:'OTT', cat:'Effects', w:196, h:118, ins:[{t:'a',l:'audio'}], outs:[{t:'a',l:'audio'}], types:['3 band','2 band'], knobs:[['Depth',.5],['Time',.4],['In',.5],['Out',.5]], viz:'ott', cost:1.1, hint:'multiband upward + downward' },
-  eq:      { name:'Equalizer', cat:'Effects', w:196, h:118, ins:[{t:'a',l:'audio'}], outs:[{t:'a',l:'audio'}], types:['British','Surgical','Tilt'], knobs:[['Low',.5],['Mid',.5],['High',.5],['Mix',1]], viz:'curve', cost:.4, hint:'the EQ card' },
-  split:   { name:'Key Split', cat:'MIDI', w:156, h:96, ins:[{t:'n',l:'notes'}], outs:[{t:'n',l:'low'},{t:'n',l:'high'}], types:['C3','C2','C4'], knobs:[['Split',.5],['Fade',.2]], viz:'split', cost:.1, hint:'low keys one way, high keys the other' },
-  gain:    { name:'Utility', cat:'Utility', w:156, h:96, ins:[{t:'a',l:'audio'},{t:'m',l:'gain'}], outs:[{t:'a',l:'audio'}], types:['Gain','Pan','Width'], knobs:[['Gain',.7],['Pan',.5]], viz:'gain', cost:.1, hint:'level, pan, width' },
-  synth:   { name:'Terrain Synth', cat:'Oscillators', w:300, h:150, ins:[{t:'n',l:'notes',implicit:true}], outs:[{t:'a',l:'audio'}], types:['Current patch'], knobs:[['A',.7],['B',.5],['C',0],['D',0]], viz:'synth', cost:9, hint:'the whole synth page as one node' },
+  midiin: { name: 'MIDI In', w: 124, h: 62, ins: [], outs: ['n'], end: true },
+  out:    { name: 'Out',     w: 176, h: 86, ins: ['a'], outs: [], end: true },
+  osc:    { name: 'Osc', w: 332, h: 140, ins: ['n'], outs: ['a'], knobs: [['WT Pos', .18], ['Warp', 0], ['Spectral', 0], ['Fold', 0], ['Feedback', 0]], uni: [['Range', .3], ['Detune', .4], ['Blend', .5], ['Width', .5]], cost: 5.5 },
+  filter: { name: 'Filter', w: 332, h: 140, ins: ['a'], outs: ['a'], knobs: [['Cut', .62], ['Res', .3], ['Drv', 0], ['Env', .5]], cost: 1.8 },
+  lfo:    { name: 'LFO', w: 448, h: 96, ins: [], outs: ['m'], cost: .3 },
+  env:    { name: 'Envelope', w: 332, h: 96, ins: [], outs: ['m'], cost: .2 },
+  arp:    { name: 'Arp',    flow: true, w: 113, h: 65, ins: ['n'], outs: ['n'], mod: 1, cost: .3 },
+  robin:  { name: 'Robin',  flow: true, w: 113, h: 65, ins: ['n'], outs: ['n'], mod: 1, cost: .3 },
+  chop:   { name: 'Chop',   flow: true, w: 113, h: 65, ins: ['a'], outs: ['a'], mod: 1, cost: .8 },
+  glitch: { name: 'Glitch', flow: true, w: 113, h: 65, ins: ['a'], outs: ['a'], mod: 1, cost: 1.6 },
+  reverb: { name: 'Reverb', fx: 'reverb', w: 272, h: 134, ins: ['a'], outs: ['a'], types: ['Hall', 'Basin', 'Digital', 'Plate', 'Spring', 'Convolution'], knobs: [['Size', .6], ['Decay', .5], ['Tone', .5], ['Mix', .35]], pills: ['Freeze', 'Mod'], cost: 2.4 },
+  delay:  { name: 'Delay', fx: 'delay', w: 272, h: 134, ins: ['a'], outs: ['a'], types: ['Tape', 'Digital', 'Ping Pong', 'Moog', 'Grain'], knobs: [['Time', .4], ['Feedback', .5], ['Tone', .5], ['Mix', .3]], pills: ['Sync', 'Duck'], cost: .9 },
+  dist:   { name: 'Distortion', fx: 'dist', w: 272, h: 134, ins: ['a'], outs: ['a'], types: ['Tube', 'Fold', 'Hard', 'Crush', 'Fuzz', 'Radio'], knobs: [['Drive', .4], ['Tone', .5], ['Bias', .5], ['Mix', 1]], pills: ['Pre', 'Post'], cost: .5 },
+  chorus: { name: 'Chorus', fx: 'chorus', w: 272, h: 134, ins: ['a'], outs: ['a'], types: ['Classic', 'Ensemble', 'Dimension', 'Flanger', 'Phaser'], knobs: [['Rate', .3], ['Depth', .5], ['Voices', .5], ['Mix', .5]], pills: ['Sync', 'Wide'], cost: .6 },
+  ott:    { name: 'OTT', fx: 'ott', w: 272, h: 134, ins: ['a'], outs: ['a'], types: ['3 band', '2 band'], knobs: [['Depth', .5], ['Time', .4], ['In', .5], ['Out', .5]], pills: ['Up', 'Down'], cost: 1.1 },
+  eq:     { name: 'Equalizer', fx: 'eq', w: 272, h: 134, ins: ['a'], outs: ['a'], types: ['British', 'Surgical', 'Tilt'], knobs: [['Low', .5], ['Mid', .5], ['High', .5], ['Mix', 1]], pills: ['HP', 'LP'], cost: .4 },
+  gain:   { name: 'Utility', fx: 'gain', w: 272, h: 134, ins: ['a'], outs: ['a'], types: ['Gain', 'Pan', 'Width'], knobs: [['Gain', .7], ['Pan', .5], ['Width', .5], ['Mix', 1]], pills: ['Mono', 'Ø'], cost: .1 },
 };
-const CATS = ['All','Oscillators','Filters','Modulators','Flow','Effects','MIDI','Utility'];
-const TYPE_ITEMS = Object.keys(DEFS).filter(k => k !== 'midiin' && k !== 'out');
+/* the add list — one column, names only, in the order the synth page shows them */
+const ADD = [['osc', 'Oscillator'], ['filter', 'Filter'], ['env', 'Envelope'], ['lfo', 'LFO'], null, ['arp', 'Arp'], ['chop', 'Chop'], ['glitch', 'Glitch'], ['robin', 'Robin'], null,
+             ['reverb', 'Reverb'], ['delay', 'Delay'], ['dist', 'Distortion'], ['chorus', 'Chorus'], ['ott', 'OTT'], ['eq', 'Equalizer'], ['gain', 'Utility']];
+function modCount(t) { const d = DEFS[t]; return d.mod || (d.knobs ? d.knobs.length : 0); }
 
 let G = { nodes: [], cables: [], next: 1 };
 const view = { x: 0, y: 0, z: 1 };
 const play = { on: true, t0: performance.now() };
 let sel = { nodes: new Set(), cable: null };
 const undo = [], redo = [];
-
 const $ = s => document.querySelector(s);
 const patcher = $('#patcher'), world = $('#world'), nodesEl = $('#nodes'), cg = $('#cg'), drawg = $('#drawg');
 const uid = () => 'n' + (G.next++);
 
 function addNode(type, x, y, opts = {}) {
   const d = DEFS[type];
-  const n = { id: uid(), type, x, y, w: d.w, h: d.h, on: true, sub: 0, name: d.name,
-              knobs: (d.knobs || []).map(k => k[1]), seed: Math.random() * 1000, ...opts };
+  const n = { id: uid(), type, x, y, w: d.w, h: d.h, on: true, sub: 0, seed: Math.random() * 1000, page: 0,
+              k: (d.knobs || []).map(k => k[1]), u: (d.uni || []).map(k => k[1]), voices: 1, stack: 0, tbl: 0,
+              shape: 0, rate: .32, depth: 1, sync: false, tab: 1, e: [0, .06, 0, .45, .7, .35], pills: [false, false], ...opts };
   if (type === 'osc') n.code = opts.code || nextOscLetter();
   G.nodes.push(n); return n;
 }
 function nextOscLetter() { const used = new Set(G.nodes.filter(n => n.type === 'osc').map(n => n.code)); for (const c of 'ABCDEFGHIJKLMNOP') if (!used.has(c)) return c; return '·'; }
 function node(id) { return G.nodes.find(n => n.id === id); }
-function portType(n, side, i) { return DEFS[n.type][side][i].t; }
-function connect(from, fo, to, ti) {
-  const a = node(from), b = node(to); if (!a || !b) return false;
-  if (portType(a, 'outs', fo) !== portType(b, 'ins', ti)) return false;
-  if (G.cables.some(c => c.from === from && c.fo === fo && c.to === to && c.ti === ti)) return false;
-  if (reaches(to, from)) return 'cycle';                  // v1: no feedback loops
-  G.cables.push({ id: 'c' + (G.next++), from, fo, to, ti, t: portType(a, 'outs', fo), lvl: 1, mute: false }); return true;
+function outType(n, i) { return DEFS[n.type].outs[i]; }
+function inType(n, kind, i) { return kind === 'mod' ? 'm' : DEFS[n.type].ins[i]; }
+function connect(from, fo, to, kind, ti) {
+  const a = node(from), b = node(to); if (!a || !b || a === b) return false;
+  if (outType(a, fo) !== inType(b, kind, ti)) return false;
+  if (kind === 'mod' && ti >= modCount(b.type)) return false;
+  if (G.cables.some(c => c.from === from && c.fo === fo && c.to === to && c.kind === kind && c.ti === ti)) return false;
+  if (reaches(to, from)) return 'cycle';
+  G.cables.push({ id: 'c' + (G.next++), from, fo, to, kind, ti, t: outType(a, fo), mute: false }); return true;
 }
-function reaches(a, b) {                                   // can a reach b following cables downstream?
-  const seen = new Set(), st = [a];
-  while (st.length) { const x = st.pop(); if (x === b) return true; if (seen.has(x)) continue; seen.add(x); for (const c of G.cables) if (c.from === x) st.push(c.to); }
-  return false;
-}
-function alive() {                                         // nodes with a path to Out — the only ones that cost anything
-  const outs = G.nodes.filter(n => n.type === 'out').map(n => n.id), ok = new Set();
-  const st = [...outs];
+function reaches(a, b) { const seen = new Set(), st = [a]; while (st.length) { const x = st.pop(); if (x === b) return true; if (seen.has(x)) continue; seen.add(x); for (const c of G.cables) if (c.from === x) st.push(c.to); } return false; }
+function alive() {
+  const ok = new Set(), st = G.nodes.filter(n => n.type === 'out').map(n => n.id);
   while (st.length) { const x = st.pop(); if (ok.has(x)) continue; ok.add(x); for (const c of G.cables) if (c.to === x && !c.mute) st.push(c.from); }
   for (const n of G.nodes) if (n.type === 'midiin') ok.add(n.id);
-  for (const n of G.nodes) if (n.type === 'lfo' || n.type === 'env') { if (G.cables.some(c => c.from === n.id && ok.has(c.to))) ok.add(n.id); }
   return ok;
 }
-function notesSource(n) {                                  // what feeds an oscillator's notes: 'arp' | 'midi' | null
-  const c = G.cables.find(c => c.to === n.id && c.t === 'n' && !c.mute);
-  if (!c) return DEFS[n.type].ins.some(p => p.implicit) ? 'midi' : null;
+function notesSource(n, depth = 0) {
+  if (depth > 8) return null;
+  const c = G.cables.find(c => c.to === n.id && c.t === 'n' && !c.mute); if (!c) return null;
   const s = node(c.from); if (!s) return null;
-  if (s.type === 'arp') return 'arp';
+  if (s.type === 'arp') return notesSource(s, depth + 1) ? 'arp' : null;
   if (s.type === 'midiin') return 'midi';
-  return notesSource(s) ? (s.type === 'robin' || s.type === 'split' ? 'midi' : notesSource(s)) : null;
+  return notesSource(s, depth + 1);
 }
+function connected(n) { return G.cables.some(c => c.from === n.id || c.to === n.id); }
 
-/* ═══ history ═══ */
-/* snap() COMMITS the state after a change: the previous committed state goes onto the undo stack. Call it after mutating. */
+/* ═══ history — commit after every change (snap pushes the PREVIOUS committed state) ═══ */
 let cur = null;
-const SKIP = new Set(['el', 'viz', 'halo', 'core', 'arc', 'sp', 'hit', 'hnd', 'pts', 'jit', 'mid', 'len', 'tail', 'lfoVal', 'lvlSm', 'spk']);
+const SKIP = new Set(['el', 'viz', 'mx', 'core', 'spk', 'hit', 'len', 's', 'lvlSm', 'wait', 'lfoVal', 'tail', 'ph']);
 const ser = () => JSON.stringify(G, (k, v) => SKIP.has(k) ? undefined : v);
 function snap() { if (cur !== null) undo.push(cur); cur = ser(); if (undo.length > 60) undo.shift(); redo.length = 0; paintTools(); }
 function restore(s) { G = JSON.parse(s); sel = { nodes: new Set(), cable: null }; rebuildAll(); }
@@ -429,253 +546,296 @@ function doUndo() { if (!undo.length) return; redo.push(cur); cur = undo.pop(); 
 function doRedo() { if (!redo.length) return; undo.push(cur); cur = redo.pop(); restore(cur); paintTools(); }
 function paintTools() { $('#undo').classList.toggle('dis', !undo.length); $('#redo').classList.toggle('dis', !redo.length); }
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   THE DEMO — Max's own example: osc C through an Arp, osc B through a Glitch, everything separate.
-   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+/* ═══ THE DEMO — Max's example, every module at its real size ═══ */
 function demo() {
   G = { nodes: [], cables: [], next: 1 };
-  const mi = addNode('midiin', 40, 150);
-  const lfo = addNode('lfo', 40, 340, { sub: 0, knobs: [.3, .7, .5] });
-  const arp = addNode('arp', 214, 8, { sub: 2 });
-  const oc = addNode('osc', 424, 8, { code: 'C', sub: 0 });
-  const oa = addNode('osc', 424, 212, { code: 'A', sub: 2 });
-  const ob = addNode('osc', 424, 416, { code: 'B', sub: 1 });
-  const flt = addNode('filter', 686, 96, { sub: 0 });
-  const gl = addNode('glitch', 686, 432, { sub: 1 });
-  const rv = addNode('reverb', 928, 254, { sub: 0 });
-  const out = addNode('out', 1170, 278);
-  connect(mi.id, 0, arp.id, 0); connect(arp.id, 0, oc.id, 0); connect(mi.id, 0, ob.id, 0);
-  connect(oc.id, 0, flt.id, 0); connect(oa.id, 0, flt.id, 0); connect(ob.id, 0, gl.id, 0);
-  connect(lfo.id, 0, oc.id, 2); connect(flt.id, 0, rv.id, 0); connect(gl.id, 0, rv.id, 0); connect(rv.id, 0, out.id, 0);
+  const mi = addNode('midiin', 0, 236);
+  const arp = addNode('arp', 190, 60);
+  const rb = addNode('robin', 190, 420);
+  const oc = addNode('osc', 380, 0, { code: 'C', sub: 0, tbl: 3, k: [.3, .2, 0, 0, 0] });
+  const oa = addNode('osc', 380, 176, { code: 'A', sub: 4, tbl: 1, k: [.5, 0, .3, 0, .1] });
+  const ob = addNode('osc', 380, 352, { code: 'B', sub: 1, tbl: 5, k: [.1, .45, 0, .2, 0] });
+  const lfo = addNode('lfo', 0, 546, { shape: 0, rate: .3, depth: .8 });
+  const flt = addNode('filter', 780, 60, { sub: 0, k: [.55, .35, 0, .5] });
+  const env = addNode('env', 780, 240, { e: [0, .12, 0, .5, .55, .4] });
+  const gl = addNode('glitch', 800, 400);
+  const ch = addNode('chop', 960, 400);
+  const rv = addNode('reverb', 1180, 150, { sub: 0, pills: [false, true] });
+  const out = addNode('out', 1520, 174);
+  connect(mi.id, 0, arp.id, 'in', 0); connect(arp.id, 0, oc.id, 'in', 0);
+  connect(mi.id, 0, oa.id, 'in', 0);
+  connect(mi.id, 0, rb.id, 'in', 0); connect(rb.id, 0, ob.id, 'in', 0);
+  connect(oc.id, 0, flt.id, 'in', 0); connect(oa.id, 0, flt.id, 'in', 0);
+  connect(ob.id, 0, gl.id, 'in', 0); connect(gl.id, 0, ch.id, 'in', 0);
+  connect(lfo.id, 0, ob.id, 'mod', 1);            /* the LFO lands under Osc B's Warp */
+  connect(env.id, 0, flt.id, 'mod', 3);           /* the envelope lands under the filter's Env */
+  connect(flt.id, 0, rv.id, 'in', 0); connect(ch.id, 0, rv.id, 'in', 0); connect(rv.id, 0, out.id, 'in', 0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   THE VIEW — one transform on #world, wheel = zoom about the cursor, drag empty = pan.
+   THE MODULES — each builder is the synth page's markup for that device, plus its ports.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-function applyView() {
-  world.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.z})`;
-  $('#grid').style.backgroundSize = `${26 * view.z}px ${26 * view.z}px`;
-  $('#grid').style.backgroundPosition = `${view.x}px ${view.y}px`;
-  $('#zoomro').textContent = Math.round(view.z * 100) + ' %';
-  world.classList.toggle('lod', view.z < 0.45);
-  drawMini();
-}
-function fit(pad = 40) {
-  if (!G.nodes.length) return;
-  const b = bounds(), W = patcher.clientWidth, H = patcher.clientHeight;
-  const z = Math.min(1.25, Math.min((W - pad * 2) / (b.w), (H - pad * 2 - 40) / (b.h)));
-  view.z = z; view.x = (W - b.w * z) / 2 - b.x * z; view.y = (H - b.h * z) / 2 - b.y * z + 6; applyView();
-}
-function bounds() {
-  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-  for (const n of G.nodes) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h); }
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-}
-patcher.addEventListener('wheel', e => {
-  e.preventDefault();
-  const r = patcher.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-  const k = Math.exp(-e.deltaY * 0.0022), nz = Math.max(0.28, Math.min(2.4, view.z * k));
-  view.x = mx - (mx - view.x) * (nz / view.z); view.y = my - (my - view.y) * (nz / view.z); view.z = nz;
-  applyView();
-}, { passive: false });
-function toWorld(cx, cy) { const r = patcher.getBoundingClientRect(); return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z }; }
-
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   NODES — the DOM. Header (the FX card's grammar) · body (the viz) · knobs (the SYN knob).
-   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-const X_SVG = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg>';
+const SVGNS = 'http://www.w3.org/2000/svg';
+const X14 = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
+const PLUS14 = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>';
+const EXP16 = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>';
 const EMB = {
   arp: `<svg class="emb" viewBox="0 0 42 42"><g fill="currentColor"><circle cx="9" cy="13" r="2.4"/><circle cx="9" cy="21" r="2.4"/><circle cx="9" cy="29" r="2.4"/></g><g fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12,13 C22,13 24,8 33,8"/><path d="M12,21 C22,21 24,21 33,21"/><path d="M12,29 C22,29 24,34 33,34"/></g><g fill="currentColor"><circle class="an" cx="34" cy="8" r="2.2"/><circle class="an" cx="34" cy="21" r="2.2"/><circle class="an" cx="34" cy="34" r="2.2"/></g></svg>`,
-  chop: `<svg class="emb" viewBox="0 0 42 42"><g fill="currentColor"><circle cx="9" cy="21" r="2.2"/><circle cx="17" cy="21" r="2.2"/><circle cx="25" cy="21" r="2.2"/><circle cx="33" cy="21" r="3.2"/><circle cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle></g></svg>`,
+  chop: `<svg class="emb" viewBox="0 0 42 42"><g fill="currentColor"><circle cx="9" cy="21" r="2.2"/><circle cx="17" cy="21" r="2.2"/><circle cx="25" cy="21" r="2.2"/><circle cx="33" cy="21" r="3.2"/><circle cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle></g></svg>`,
   glitch: `<svg class="emb" viewBox="0 0 42 42" fill="none" stroke-width="2"><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.24"/><rect x="24" y="11" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.24"/><rect x="24" y="24" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.24"/><rect x="11" y="24" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.24"/><g><rect x="0" y="0" width="7" height="7" rx="1.5" fill="currentColor"/><animateTransform attributeName="transform" type="translate" dur="9.6s" repeatCount="indefinite" calcMode="discrete" keyTimes="0.0000;0.0667;0.0933;0.1867;0.2267;0.2800;0.3867;0.4133;0.4800;0.5200;0.6000;0.6267;0.7467;0.8000;0.8400;0.9333" values="11 11;24 24;24 11;11 24;11 11;24 11;11 24;24 24;11 11;11 24;24 11;24 24;11 24;11 11;24 24;24 11"/></g></svg>`,
   robin: `<svg class="emb" viewBox="0 0 42 42" fill="none" stroke-linecap="round"><path d="M30,13 H35" stroke="currentColor" stroke-width="1.4" opacity="0.35"><animateTransform attributeName="transform" type="translate" dur="2.8s" repeatCount="indefinite" calcMode="linear" values="4 0;-28 0"/></path><path d="M27,30 H31" stroke="currentColor" stroke-width="1.4" opacity="0.35"><animateTransform attributeName="transform" type="translate" dur="3.4s" begin="1.4s" repeatCount="indefinite" calcMode="linear" values="6 0;-26 0"/></path><g><path stroke="currentColor" stroke-width="2" d="M10,21 Q16,14 21,20 Q26,14 32,21"><animate attributeName="d" dur="0.8s" repeatCount="indefinite" calcMode="discrete" values="M10,21 Q16,14 21,20 Q26,14 32,21;M10,23 Q16,26 21,20 Q26,26 32,23"/></path><circle cx="21" cy="20.5" r="1.8" fill="currentColor"/><animateTransform attributeName="transform" type="translate" dur="2.4s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines="0.4 0 0.6 1;0.4 0 0.6 1" values="0 1.2;0 -1.2;0 1.2"/></g></svg>`,
 };
-function knobSvg(v) {
-  const a0 = 135, a1 = 135 + 270 * v, r = 9.5, cx = 12, cy = 12;
-  const P = a => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)];
-  const arc = (b, e) => { const [x0, y0] = P(b), [x1, y1] = P(e); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${(e - b) > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
-  return `<svg viewBox="0 0 24 24"><path d="${arc(135, 405)}" fill="none" stroke="var(--syn-trk)" stroke-width="2" stroke-linecap="round"/>${v > 0.004 ? `<path class="kv" d="${arc(a0, a1)}" fill="none" stroke="var(--syn-arc)" stroke-width="2" stroke-linecap="round"/>` : '<path class="kv" d="" fill="none"/>'}</svg>`;
+/* the SYN knob — 24px ring, faint 270° track, white value arc, the number inside (fb630) */
+function arcD(cx, cy, r, a0, a1) { const P = a => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)]; const [x0, y0] = P(a0), [x1, y1] = P(a1); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${(a1 - a0) > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; }
+function ringHTML(v, txt) { return `<div class="ring"><svg viewBox="0 0 24 24"><path class="t" d="${arcD(12, 12, 10, 135, 405)}"/>${v > 0.004 ? `<path class="v" d="${arcD(12, 12, 10, 135, 135 + 270 * v)}"/>` : ''}</svg><span class="kv">${txt}</span></div>`; }
+function synKnob(label, v, txt, attrs) { return `<div class="knob" ${attrs}>${ringHTML(v, txt)}<div class="kl">${label}</div></div>`; }
+/* the FX dial — knobSVG verbatim (viewBox 30, r 11.5, the number inside, fits by construction) */
+function knobSVG(pct, label) {
+  pct = Math.max(0, Math.min(100, Math.round(pct))); const cx = 15, cy = 15, r = 11.5;
+  const pt = deg => { const a = deg * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const t0 = pt(135), t1 = pt(405), v1 = pt(135 + 270 * pct / 100), large = (270 * pct / 100) > 180 ? 1 : 0;
+  const txt = label != null ? '' + label : '' + pct; const fs = label == null ? 8 : (txt.length >= 5 ? 5.6 : txt.length >= 4 ? 6.5 : 7.5);
+  return `<svg viewBox="0 0 30 30"><path d="M${t0[0].toFixed(1)} ${t0[1].toFixed(1)} A ${r} ${r} 0 1 1 ${t1[0].toFixed(1)} ${t1[1].toFixed(1)}" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/><path d="M${t0[0].toFixed(1)} ${t0[1].toFixed(1)} A ${r} ${r} 0 ${large} 1 ${v1[0].toFixed(1)} ${v1[1].toFixed(1)}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,'SF Pro Display',sans-serif" font-size="${fs}" font-weight="300" fill="var(--text-secondary)">${txt}</text></svg>`;
 }
+const pct = v => Math.round(v * 100);
+function oscKnobTxt(n, i) { return i === 0 ? String(1 + Math.round(n.k[0] * 19)) : String(pct(n.k[i])); }
+
 function buildNode(n) {
   const d = DEFS[n.type];
-  const el = document.createElement('div'); el.className = 'node' + (d.end ? ' end' : ''); el.dataset.id = n.id;
-  el.style.width = n.w + 'px'; el.style.height = n.h + 'px';
-  const types = d.types || [];
-  const typePill = types.length ? `<span class="tp" title="${d.name} type"><span class="lbl">${types[n.sub] || types[0]}</span><span class="car">▾</span><select>${types.map((t, i) => `<option value="${i}"${i === n.sub ? ' selected' : ''}>${t}</option>`).join('')}</select></span>` : '';
-  const presetPill = d.end ? '' : `<span class="pr" title="Presets"><span class="star">✦</span><span class="pn">Init</span></span>`;
-  const nm = n.type === 'osc' ? `${n.name} ${n.code}` : n.name;
-  el.innerHTML = `<div class="nh"><span class="grip">⋮⋮</span><span class="nm">${nm}</span>${typePill}${presetPill}<span class="pwr" title="${d.end && n.type === 'midiin' ? 'Play / stop the notes' : 'Power'}"></span>${d.end ? '' : `<span class="x" title="Remove">${X_SVG}</span>`}</div>
-    <div class="nb"></div>${d.knobs ? `<div class="knobs">${d.knobs.map((k, i) => `<div class="knob" data-i="${i}">${knobSvg(n.knobs[i])}<span class="kl">${k[0]}</span></div>`).join('')}</div>` : ''}`;
-  d.ins.forEach((p, i) => { const s = document.createElement('div'); s.className = `port in ${p.t}${p.implicit ? ' implicit' : ''}`; s.dataset.side = 'ins'; s.dataset.i = i; s.dataset.id = n.id; s.style.top = (portY(n, 'ins', i) - 9) + 'px'; s.innerHTML = `<i></i><span class="pl">${p.l}</span>`; el.appendChild(s); });
-  d.outs.forEach((p, i) => { const s = document.createElement('div'); s.className = `port out ${p.t}`; s.dataset.side = 'outs'; s.dataset.i = i; s.dataset.id = n.id; s.style.top = (portY(n, 'outs', i) - 9) + 'px'; s.innerHTML = `<i></i><span class="pl">${p.l}</span>`; el.appendChild(s); });
-  buildViz(n, el.querySelector('.nb'));
+  const el = document.createElement('div'); el.className = 'node ' + (d.flow ? 'flow' : d.fx ? 'fx' : n.type === 'filter' ? 'flt' : n.type); el.dataset.id = n.id;
+  if (n.type === 'osc') el.innerHTML = oscHTML(n);
+  else if (n.type === 'filter') el.innerHTML = filterHTML(n);
+  else if (n.type === 'lfo') el.innerHTML = lfoHTML(n);
+  else if (n.type === 'env') el.innerHTML = envHTML(n);
+  else if (d.flow) el.innerHTML = EMB[n.type];
+  else if (d.fx) el.innerHTML = fxHTML(n);
+  else if (n.type === 'midiin') el.innerHTML = `<div class="keys">${'wbwbwwbwbwbw'.split('').map((k, i) => `<i class="${k === 'b' ? 'bk' : ''}"></i>`).join('')}</div>`;
+  else if (n.type === 'out') el.innerHTML = `<div class="scope"><svg viewBox="0 0 120 66" preserveAspectRatio="none"><g class="gl"><path d="M30 0V66M60 0V66M90 0V66M0 33H120"/></g><path class="mv-stroke" d=""/></svg></div><div class="mtr"><b><i></i></b><b><i></i></b></div>`;
+  // side ports — the middle of each edge
+  d.ins.forEach((t, i) => { const p = document.createElement('div'); p.className = 'port in'; p.dataset.kind = 'in'; p.dataset.i = i; p.dataset.id = n.id; p.style.top = (n.h / 2 - 9) + 'px'; p.innerHTML = '<i></i>'; el.appendChild(p); });
+  d.outs.forEach((t, i) => { const p = document.createElement('div'); p.className = 'port out'; p.dataset.kind = 'out'; p.dataset.i = i; p.dataset.id = n.id; p.style.top = (n.h / 2 - 9) + 'px'; p.innerHTML = '<i></i>'; el.appendChild(p); });
   nodesEl.appendChild(el); n.el = el; place(n);
+  // the modulation dots — one under every knob (measured off the knob itself, so they sit dead under it)
+  n.mx = [];
+  const anchors = d.flow ? [null] : [...el.querySelectorAll('.modk')];
+  anchors.forEach((a, i) => { let x = n.w / 2; if (a) { x = a.offsetWidth / 2; let e = a; while (e && e !== el) { x += e.offsetLeft; e = e.offsetParent; } }
+    n.mx.push(x); const p = document.createElement('div'); p.className = 'port mod'; p.dataset.kind = 'mod'; p.dataset.i = i; p.dataset.id = n.id; p.style.left = (x - 9) + 'px'; p.innerHTML = '<i></i>'; el.appendChild(p); });
+  if (n.type === 'osc') { const box = el.querySelector('.od'); n.viz = { svg: box.querySelector('svg'), tbl: genTable(n.tbl % 3, n.seed), w: 304, h: 56 }; WF.build(n); WF.draw(n, n.k[0]); }
+  if (n.type === 'filter') drawFilter(n, 0);
+  if (n.type === 'lfo') drawLfo(n, 0);
+  if (n.type === 'env') drawEnv(n);
   return el;
 }
-function portY(n, side, i) { const d = DEFS[n.type], k = d[side].length; const top = d.end ? 31 : 40, gap = 18; return d.end ? n.h / 2 : (k === 1 ? top + 8 : top + i * gap); }
-function portPos(n, side, i) { return { x: side === 'outs' ? n.x + n.w : n.x, y: n.y + portY(n, side, i) }; }
 function place(n) { n.el.style.setProperty('--tx', n.x + 'px'); n.el.style.setProperty('--ty', n.y + 'px'); n.el.style.transform = `translate(${n.x}px,${n.y}px)`; }
+function portPos(n, kind, i) { if (kind === 'out') return { x: n.x + n.w, y: n.y + n.h / 2 }; if (kind === 'in') return { x: n.x, y: n.y + n.h / 2 }; return { x: n.x + (n.mx ? n.mx[i] : n.w / 2), y: n.y + n.h }; }
 
-function rebuildAll() {
-  nodesEl.innerHTML = ''; cg.innerHTML = '';
-  for (const n of G.nodes) buildNode(n);
-  for (const c of G.cables) buildCable(c);
-  refreshState(); drawMini();
+/* ── OSC — .device.osc: label row · engine ▾ · table ▾ · letter · + · the display · ‹ knobs › ── */
+function oscHTML(n) {
+  const d = DEFS.osc, uni = n.page === 1;
+  const sel = (arr, cur) => arr.map((t, i) => `<option value="${i}"${i === cur ? ' selected' : ''}>${t}</option>`).join('');
+  return `<div class="dlr"><span class="dl">Osc<span class="sep"></span></span><span class="ew"><span class="ed">${ENGINES[n.sub]}</span><select data-sel="engine">${sel(ENGINES, n.sub)}</select></span></div>
+    <div class="dcp"><span class="pw"><span class="pd">${TABLES[n.tbl]}</span><select data-sel="table">${sel(TABLES, n.tbl)}</select></span><span class="lt" title="Toggle">${n.code}</span><span class="sw" title="Back panel">+</span></div>
+    <div class="od"><svg viewBox="0 0 304 56" preserveAspectRatio="none"></svg><span class="wf-pos"></span></div>
+    <div class="kw"><span class="ar prev" data-pg="-1"></span>
+      <div class="kr${uni ? ' hide' : ''}" data-pg="0">${d.knobs.map((k, i) => synKnob(k[0], n.k[i], oscKnobTxt(n, i), `data-k="${i}" data-set="k"`).replace('class="knob"', 'class="knob modk"')).join('')}</div>
+      <div class="kr c6${uni ? '' : ' hide'}" data-pg="1"><div class="upill" data-set="voices"><div class="pv">${n.voices}</div><div class="kl">Voices</div></div><div class="upill" data-set="stack"><div class="pv s">${['Off', '12 (1x)', '12 (2x)', '12+7 (1x)', 'Center-12'][n.stack]}</div><div class="kl">Stack</div></div>${d.uni.map((k, i) => synKnob(k[0], n.u[i], String(pct(n.u[i])), `data-k="${i}" data-set="u"`)).join('')}</div>
+      <span class="ar" data-pg="1"></span></div>`;
 }
+/* the waterfall — wtWaterfall's own geo()/proj(), as SVG so the world's zoom scales it exactly */
+function genTable(kind, seed) {
+  const N = 20, P = 72, dd = new Float32Array(N * P), r = mulberry(seed), ph = Array.from({ length: 16 }, () => r() * 6.283);
+  for (let k = 0; k < N; k++) { const f = k / (N - 1); for (let i = 0; i < P; i++) { const x = i / (P - 1) * 6.283185; let a = 0;
+    if (kind === 0) { for (let h = 1; h <= 14; h++) a += 1 / h * (h % 2 ? 1 : f) * (1 - f * 0.5 * (h > 6)) * Math.sin(h * x); a *= 0.62; }
+    else if (kind === 1) { for (let h = 1; h <= 12; h++) a += Math.exp(-h * (0.12 + f * 0.9)) * (0.7 + 0.5 * Math.sin(ph[h] + f * 3)) * Math.sin(h * x + ph[h] * f); a *= 1.1; }
+    else { for (let h = 1; h <= 10; h++) a += (0.5 + 0.5 * Math.sin(ph[h % 16] + f * 9 + h)) / Math.sqrt(h) * Math.sin(h * x + ph[h % 16]) * (0.55 + 0.45 * Math.sin(x * (2 + f * 6))); a *= 0.42; }
+    dd[k * P + i] = Math.max(-1, Math.min(1, a)); } }
+  return { n: N, p: P, d: dd };
+}
+function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const WF = {
+  geo: (w, h) => ({ flx: w * 0.04, frx: w * 0.96, fby: h * 0.84, blx: w * 0.30, brx: w * 0.90, bby: h * 0.16, ampF: h * 0.15, ampB: h * 0.06 }),
+  proj: (g, u, a, d) => { const lx = g.flx + (g.blx - g.flx) * d, rx = g.frx + (g.brx - g.frx) * d, by = g.fby + (g.bby - g.fby) * d, amp = g.ampF + (g.ampB - g.ampF) * d; return { x: lx + u * (rx - lx), y: by - a * amp }; },
+  build(n) { const v = n.viz, g = WF.geo(v.w, v.h), { n: N, p: P, d: D } = v.tbl; let out = '';
+    for (let k = N - 1; k >= 0; k--) { const dp = k / (N - 1), near = 1 - dp, base = k * P; let pts = '';
+      for (let i = 0; i < P; i++) { const q = WF.proj(g, i / (P - 1), D[base + i], dp); pts += q.x.toFixed(1) + ',' + q.y.toFixed(1) + ' '; }
+      out += `<polyline points="${pts}" fill="none" stroke="rgba(255,255,255,${(0.05 + near * 0.62).toFixed(3)})" stroke-width="${(0.4 + near * 0.7).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"/>`; }
+    v.svg.innerHTML = out + '<polyline class="wfcur" points="" fill="none" stroke="#B794FF" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>'; v.cur = v.svg.querySelector('.wfcur'); v.lastPos = -1; },
+  draw(n, pos) { const v = n.viz; if (!v || !v.cur) return; const g = WF.geo(v.w, v.h), { n: N, p: P, d: D } = v.tbl, fp = pos * (N - 1), f0 = Math.floor(fp), f1 = Math.min(N - 1, f0 + 1), fr = fp - f0; let pts = '';
+    for (let i = 0; i < P; i++) { const a = D[f0 * P + i] + (D[f1 * P + i] - D[f0 * P + i]) * fr, q = WF.proj(g, i / (P - 1), a, pos); pts += q.x.toFixed(1) + ',' + q.y.toFixed(1) + ' '; } v.cur.setAttribute('points', pts); }
+};
+
+/* ── FILTER — the analyzer card: name ‹ › top-left, 1 2 K E ⤢ + top-right, the curve over the spectrum, four emblems ── */
+function filterHTML(n) {
+  return `<div class="clip"><div class="cv"><svg viewBox="0 0 332 140" preserveAspectRatio="none"><g class="fgrid"><path d="M77 0V140M166 0V140M255 0V140M0 35H332M0 70H332M0 105H332"/></g><path class="spec" d=""/><path class="curve" d=""/></svg></div>
+    <div class="dd" title="Filter type"><span class="nav">‹</span><span class="nm">${FLT_TYPES[n.sub]}</span><span class="nav">›</span></div>
+    <div class="tg"><span class="p act">1</span><span class="p">2</span><span class="p">K</span><span class="p${n.pills[0] ? ' act' : ''}">E</span><span class="exp" title="Extend">${EXP16}</span><span class="sw" title="Back panel">+</span></div>
+    <div class="ems">${DEFS.filter.knobs.map((k, i) => `<div class="em modk" data-k="${i}" data-set="k" title="${k[0]}"><svg viewBox="0 0 68 30" preserveAspectRatio="none"><path d=""/><circle r="2" cx="-9" cy="-9"/></svg></div>`).join('')}</div></div>`;
+}
+function drawFilter(n, t) {
+  const el = n.el, cut = n.k[0], res = n.k[1], drv = n.k[2], L = nodeLevel(n);
+  // the curve lives inside [29, 140-38] (fb164), the spectrum underneath it in the same 7 % white
+  let cd = '', sd = 'M0 102 ', hp = n.sub === 7;
+  const fc = cut, q = 0.5 + res * 7, breath = 1 + 0.05 * Math.sin(t * 1.8);
+  for (let i = 0; i <= 66; i++) { const u = i / 66, w = Math.pow(1000, u - fc); let mag = hp ? (w * w) / Math.sqrt((1 - w * w) ** 2 + (w / q) ** 2) : 1 / Math.sqrt((1 - w * w) ** 2 + (w / q) ** 2);
+    const db = 20 * Math.log10(Math.max(1e-4, mag)) * breath + drv * 4; const y = Math.max(29, Math.min(102, 70 - db * 0.9)); cd += (i ? 'L' : 'M') + (u * 332).toFixed(1) + ' ' + y.toFixed(1) + ' ';
+    const s = L * (0.9 * Math.exp(-u * 2.6) + 0.35 * Math.exp(-((u - 0.45 + 0.1 * Math.sin(t * 2)) ** 2) * 30) + 0.08 * mulberry(i * 7 + Math.floor(t * 9))()); sd += 'L' + (u * 332).toFixed(1) + ' ' + (102 - s * 60).toFixed(1) + ' '; }
+  el.querySelector('.curve').setAttribute('d', cd); el.querySelector('.spec').setAttribute('d', sd + 'L332 102 Z');
+  // the four emblems — emCUT / emRES / emDRV / emENV, the same little worlds
+  const ems = el.querySelectorAll('.em'); const W = 68, H = 30, cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.42, x0 = cx - r, x1 = cx + r;
+  const pp = x => { x = x % 2; return x < 1 ? x : 2 - x; };
+  ems.forEach((em, i) => { const v = n.k[i], p = em.querySelector('path'), c = em.querySelector('circle'); let d = '';
+    if (i === 0) { const ytop = cy - r * .5, ybot = cy + r * .72, knee = cx - r * .45 + v * r * .85; const sy = px => px <= knee ? ytop : ytop + ((px - knee) / (x1 - knee)) ** 2 * (ybot - ytop);
+      for (let j = 0; j <= 40; j++) { const px = x0 + j / 40 * 2 * r; d += (j ? 'L' : 'M') + px.toFixed(1) + ' ' + sy(px).toFixed(1) + ' '; } const px = x0 + pp(t * .5) * 2 * r; c.setAttribute('cx', px.toFixed(1)); c.setAttribute('cy', sy(px).toFixed(1)); }
+    else if (i === 1) { const amp = (0.12 + v * 0.62) * r, osc = 1 + (Math.sin(t * (3 + v * 8)) - 1); for (let j = 0; j <= 44; j++) { const x = j / 44; d += (j ? 'L' : 'M') + (x0 + x * 2 * r).toFixed(1) + ' ' + (cy - Math.sin(x * Math.PI) * amp * osc).toFixed(1) + ' '; } c.setAttribute('cx', cx); c.setAttribute('cy', (cy - amp * osc).toFixed(1)); }
+    else if (i === 2) { const k = 1 + v * 10, nrm = Math.tanh(k); for (let j = 0; j <= 48; j++) { const x = j / 48, s = Math.tanh(Math.sin(x * Math.PI * 2 - t * 3.2) * k) / nrm; d += (j ? 'L' : 'M') + (cx - r + x * 2 * r).toFixed(1) + ' ' + (cy - s * r * .7).toFixed(1) + ' '; } c.setAttribute('cx', -9); }
+    else { const base = cy + r * .7, top = base - r * 1.35 * (0.35 + v * 0.65); const es = x => x < .18 ? x / .18 : x < .5 ? 1 - (x - .18) / .32 * .45 : x < .72 ? .55 : .55 * (1 - (x - .72) / .28); const ey = x => base - es(x) * (base - top);
+      for (let j = 0; j <= 44; j++) { const x = j / 44; d += (j ? 'L' : 'M') + (x0 + x * 2 * r).toFixed(1) + ' ' + ey(x).toFixed(1) + ' '; } const px = pp(t * .45); c.setAttribute('cx', (x0 + px * 2 * r).toFixed(1)); c.setAttribute('cy', ey(px).toFixed(1)); }
+    p.setAttribute('d', d); });
+}
+
+/* ── LFO — #mod-engine: the field (grid · fill · the white line · playhead), the bottom row verbatim ── */
+const LFO_ICON = s => `<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.1"><path d="${lfoIconD(s)}"/></svg>`;
+function lfoVal(s, p) { p = ((p % 1) + 1) % 1; if (s === 0) return Math.sin(p * 6.2831853); if (s === 1) return 1 - 4 * Math.abs(p - 0.5); if (s === 2) return 2 * p - 1; if (s === 3) return 1 - 2 * p; if (s === 4) return p < 0.5 ? 1 : -1; if (s === 5) return [.2, -.7, .5, .9, -.3, .1, -.9, .6][Math.floor(p * 8)]; return Math.sin(p * 6.283) * .6 + Math.sin(p * 18.85 + 1) * .4; }
+function lfoIconD(s) { let d = ''; for (let i = 0; i <= 20; i++) { const x = i; d += (i ? 'L' : 'M') + x + ' ' + (5.5 - lfoVal(s, i / 20) * 4).toFixed(1) + ' '; } return d; }
+function lfoHTML(n) {
+  const tabs = [1, 2, 3, 4, 5].map(i => `<span class="t${i === n.tab ? ' act' : ''}" data-tab="${i}">${i}</span>`).join('') + '<span class="t" title="LFOs 6–10">›</span>';
+  const rate = n.sync ? `<span class="c rate" data-act="div">1/8 <span class="ar">▾</span></span>` : `<span class="c rate drag" data-set="rate"><span class="rv">${lfoHz(n).toFixed(2)}</span> Hz <span class="ar">⇅</span></span>`;
+  return `<div class="clip"><div class="sc"><svg viewBox="0 0 456 96" preserveAspectRatio="none"><g class="sh-grid">${[1, 2, 3, 4, 5, 6, 7].map(i => `<line${i === 4 ? ' class="maj"' : ''} x1="${i * 57}" y1="8" x2="${i * 57}" y2="70"/>`).join('')}${[0, 1, 2, 3, 4].map(i => `<line${i === 0 ? ' class="maj"' : ''} x1="0" y1="${70 - i * 15.5}" x2="456" y2="${70 - i * 15.5}"/>`).join('')}</g><path class="mv-fill" d=""/><path class="mv-stroke" d=""/><line class="mv-play" x1="0" y1="4" x2="0" y2="74"/><circle class="mv-foll" cx="0" cy="39" r="2.4"/></svg></div>
+    <div class="ov"><span class="c shape" data-act="shape"><span class="ic">${LFO_ICON(n.shape)}</span> ${LFO_SHAPES[n.shape]} <span class="ar">▾</span></span>${rate}<span class="seg"><b class="${n.sync ? 'on' : 'off'}" data-act="bpm">BPM</b> · <b class="${n.sync ? 'off' : 'on'}" data-act="hz">Hz</b></span><span class="c drag" data-set="phase" title="slide the LFO"><svg viewBox="0 0 14 10" width="13" height="9" style="opacity:.8" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3 L1 5 L4 7 M10 3 L13 5 L10 7 M1 5 H13"/></svg> <span class="shv">${Math.round((n.ph || 0) * 360)}°</span></span><div class="tabs">${tabs}</div><div class="dep"><span class="l">Dep</span><div class="rg" data-set="depth" style="background:${ringBG(n.depth)}"></div></div></div></div>`;
+}
+function ringBG(d) { const a = Math.round(d * 270); return `conic-gradient(from 225deg, #ECE8F2 0deg ${a}deg, rgba(255,255,255,.14) ${a}deg 270deg, transparent 270deg 360deg)`; }
+function lfoHz(n) { return 0.05 * Math.pow(400, n.rate); }
+function drawLfo(n, t) {
+  const el = n.el, s = el.querySelector('.mv-stroke'), f = el.querySelector('.mv-fill'), pl = el.querySelector('.mv-play'), fo = el.querySelector('.mv-foll');
+  const shift = n.ph || 0; let d = ''; for (let i = 0; i <= 220; i++) { const u = i / 220; d += (i ? 'L' : 'M') + (u * 456).toFixed(1) + ' ' + (39 - lfoVal(n.shape, u + shift) * 31 * n.depth).toFixed(1) + ' '; }
+  s.setAttribute('d', d); f.setAttribute('d', 'M0 70 ' + d.replace(/^M/, 'L') + 'L456 70 Z');
+  const ph = play.on ? (t * lfoHz(n) * 0.5) % 1 : 0; const x = ph * 456; pl.setAttribute('x1', x.toFixed(1)); pl.setAttribute('x2', x.toFixed(1)); const y = lfoVal(n.shape, ph + shift); fo.setAttribute('cx', x.toFixed(1)); fo.setAttribute('cy', (39 - y * 31 * n.depth).toFixed(1)); n.lfoVal = y * n.depth;
+  el.classList.toggle('idle', !play.on);
+}
+
+/* ── ENVELOPE — the graph on top, the shelf of six chips under it ── */
+const CHIPS = [['Dly', 0], ['Atk', 1], ['Hld', 2], ['Dec', 3], ['Sus', 4], ['Rel', 5]];
+function msOf(v) { return Math.round(Math.pow(v, 2) * 10000); }
+function fmtMs(ms) { return ms >= 1000 ? (ms / 1000).toFixed(2) + 's' : ms + 'ms'; }
+function envHTML(n) {
+  return `<div class="ec"><svg viewBox="0 0 280 70" preserveAspectRatio="none"><defs><linearGradient id="eg${n.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.26"/><stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.02"/></linearGradient></defs>
+    <g stroke="rgba(201,190,239,0.06)" stroke-width="0.4"><path d="M35 2V62M70 2V62M105 2V62M140 2V62M175 2V62M210 2V62M245 2V62M0 14H280M0 26H280M0 38H280M0 50H280"/></g><line x1="0" y1="62" x2="280" y2="62" stroke="rgba(201,190,239,0.22)" stroke-width="0.6"/>
+    <path class="ef" d="" fill="url(#eg${n.id})"/><path class="el" d="" stroke="#C9BEEF" stroke-width="1.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/><g class="ens"></g><circle class="mv-foll" r="2.9" cx="-9" cy="-9"/></svg>
+    <span class="hud" data-act="env">Amp <span class="a">▾</span></span></div>
+    <div class="shelf">${CHIPS.map((c, i) => `<span class="ch" data-set="e" data-k="${i}">${c[0]}<b>${i === 4 ? pct(n.e[4]) + '%' : fmtMs(msOf(n.e[i]))}</b></span>`).join('')}</div>`;
+}
+function envPts(n) { const [dl, a, h, dc, s, r] = n.e; const W = 280, y0 = 62, y1 = 6; const xs = [4]; xs.push(xs[0] + dl * 40); xs.push(xs[1] + 6 + a * 50); xs.push(xs[2] + h * 40); xs.push(xs[3] + 6 + dc * 60); xs.push(xs[4] + 30); xs.push(Math.min(276, xs[5] + 6 + r * 60));
+  const ys = [y0, y0, y1, y1, y0 - s * (y0 - y1), y0 - s * (y0 - y1), y0]; return xs.map((x, i) => [x, ys[i]]); }
+function drawEnv(n) { const P = envPts(n); const d = P.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  n.el.querySelector('.el').setAttribute('d', d); n.el.querySelector('.ef').setAttribute('d', d + ` L${P[P.length - 1][0].toFixed(1)} 62 L4 62 Z`);
+  n.el.querySelector('.ens').innerHTML = P.slice(1).map(p => `<circle class="en" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.9"/>`).join('');
+  n.el.querySelectorAll('.ch b').forEach((b, i) => b.textContent = i === 4 ? pct(n.e[4]) + '%' : fmtMs(msOf(n.e[i]))); }
+function envFollow(n, t) { const P = envPts(n), fo = n.el.querySelector('.mv-foll'); if (!play.on) { fo.setAttribute('cx', -9); return; } const ph = (t * 0.35) % 1, x = 4 + ph * (P[P.length - 1][0] - 4); let y = 62;
+  for (let i = 1; i < P.length; i++) if (x <= P[i][0]) { const a = P[i - 1], b = P[i]; y = b[0] === a[0] ? b[1] : a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); break; } fo.setAttribute('cx', x.toFixed(1)); fo.setAttribute('cy', y.toFixed(1)); }
+
+/* ── FX CARD — .fxr-dev: head (grip · name · type ▾ · ✦ preset ▾ · + · light · ×) · the core · dials + pills ── */
+function fxHTML(n) {
+  const d = DEFS[n.type];
+  return `<div class="fxh"><span class="grip">⋮⋮</span><span class="nm">${d.name}</span><span class="tp" title="Type"><span class="lbl">${d.types[n.sub]}</span><span class="car">▾</span><select data-sel="type">${d.types.map((t, i) => `<option value="${i}"${i === n.sub ? ' selected' : ''}>${t}</option>`).join('')}</select></span><span class="pr" title="Presets"><span class="star">✦</span><span class="pn">Init</span><span class="car">▾</span></span><span class="sp"></span><span class="hr"><span class="sw" title="More parameters">${PLUS14}</span><span class="pwr" title="Power"></span><span class="x" title="Remove">${X14}</span></span></div>
+    <div class="fxc" data-core="${d.fx}">${coreHTML(n)}</div>
+    <div class="fxk"><div class="dials">${d.knobs.map((k, i) => `<div class="dk modk" data-k="${i}" data-set="k"><div class="dial">${knobSVG(pct(n.k[i]))}</div><span class="lab">${k[0]}</span></div>`).join('')}</div><div class="div"></div><div class="rc"><div class="pills">${d.pills.map((p, i) => `<span class="pill${n.pills[i] ? ' on' : ''}" data-pill="${i}">${p}</span>`).join('')}</div></div></div>`;
+}
+function coreHTML(n) {
+  const X0 = 6.5, X1 = 219.5, W = X1 - X0;
+  if (n.type === 'reverb') { const cols = 20, rows = 6, gap = 1.4, cw = W / cols, ch = 78 / rows; let white = '', bloom = '';
+    for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) { const bass = r / (rows - 1), decay = Math.exp(-c / (4.5 + bass * 9)); const op = Math.max(0.05, Math.min(0.9, decay * (0.62 + 0.30 * Math.sin(c * 1.7 + r * 2.1) * 0.5 + 0.15)));
+      const x = (X0 + c * cw + gap / 2).toFixed(2), y = (r * ch + gap / 2).toFixed(2), w = (cw - gap).toFixed(2), h = (ch - gap).toFixed(2);
+      white += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="currentColor" opacity="${op.toFixed(3)}"/>`; bloom += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="var(--purple-400)" opacity="0"/>`; }
+    return `<svg viewBox="0 0 226 78" preserveAspectRatio="none">${white}<g class="bloom" opacity="0">${bloom}</g></svg>`; }
+  if (n.type === 'delay') return `<svg viewBox="0 0 226 78" preserveAspectRatio="none"><line x1="6.5" y1="39" x2="219.5" y2="39" stroke="var(--border)" stroke-width="1"/><g class="taps" stroke-linecap="round"></g><g class="dbloom" opacity=".3"><path class="envu" fill="none" stroke="var(--purple-400)" stroke-dasharray="2 3"/><path class="envd" fill="none" stroke="var(--purple-400)" stroke-dasharray="2 3"/><line class="pulse" x1="14" y1="12" x2="14" y2="66" stroke="var(--purple-400)" stroke-width="1.2"/></g></svg>`;
+  if (n.type === 'dist') return `<svg viewBox="0 0 226 78" preserveAspectRatio="none"><g stroke="rgba(139,92,246,.14)" stroke-width=".5"><path d="M6.5 39H219.5M113 4V74"/></g><path class="dst-curve" d=""/></svg>`;
+  if (n.type === 'chorus') return `<svg viewBox="0 0 226 78" preserveAspectRatio="none"><path class="dst-curve" style="opacity:.35;filter:none;animation:none" d=""/><path class="dst-curve" d=""/></svg>`;
+  if (n.type === 'ott') return `<svg viewBox="0 0 226 78"><g stroke="rgba(139,92,246,.14)" stroke-width=".5"><path d="M77.5 4V74M148.5 4V74"/></g>${[42, 113, 184].map(x => `<rect x="${x - 14}" y="14" width="28" height="56" rx="2" fill="currentColor" opacity=".18"/><rect class="ob" x="${x - 14}" y="40" width="28" height="30" rx="2" fill="currentColor" opacity=".8"/>`).join('')}</svg>`;
+  if (n.type === 'eq') return `<svg viewBox="0 0 226 78" preserveAspectRatio="none"><g stroke="rgba(139,92,246,.14)" stroke-width=".5"><path d="M59.5 4V74M113 4V74M166.5 4V74M6.5 39H219.5"/></g><path class="spec" fill="rgba(255,255,255,.07)" d=""/><path class="dst-curve" d=""/><g class="eqn" fill="#fff"></g></svg>`;
+  return `<svg viewBox="0 0 226 78" preserveAspectRatio="none"><g stroke="rgba(139,92,246,.14)" stroke-width=".5"><path d="M6.5 39H219.5"/></g><path class="dst-curve" d=""/></svg>`;
+}
+function drawCore(n, t) {
+  const L = nodeLevel(n), svg = n.el.querySelector('.fxc svg'); if (!svg) return;
+  if (n.type === 'reverb') { const g = svg.querySelector('.bloom'); g.setAttribute('opacity', (0.15 + 0.85 * Math.min(1, n.tail || 0)).toFixed(2)); const rs = g.children, frac = 0.12 + 0.5 * n.k[0]; const rr = mulberry(Math.floor(t * 6));
+    for (let i = 0; i < rs.length; i++) rs[i].setAttribute('opacity', rr() < frac ? (0.35 + 0.6 * rr()).toFixed(2) : '0'); }
+  else if (n.type === 'delay') { const taps = svg.querySelector('.taps'), tm = 22 + n.k[0] * 60, fb = n.k[1]; let h = '', nt = 6; for (let i = 0; i < 9; i++) { const x = 14 + i * tm; if (x > 219) break; const amp = 26 * Math.pow(fb, i * .9 + .1); h += `<line x1="${x}" y1="${39 - amp}" x2="${x}" y2="${39 + amp}" stroke="currentColor" stroke-width="1.6" opacity="${(0.35 + 0.6 * Math.pow(fb, i)).toFixed(2)}"/>`; nt = i; }
+    taps.innerHTML = h; let u = '', dn = ''; for (let i = 0; i <= 20; i++) { const x = 14 + i / 20 * 205, k = (x - 14) / tm, amp = 26 * Math.pow(fb, k * .9 + .1); u += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + (39 - amp).toFixed(1) + ' '; dn += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + (39 + amp).toFixed(1) + ' '; }
+    svg.querySelector('.envu').setAttribute('d', u); svg.querySelector('.envd').setAttribute('d', dn); const px = 14 + ((play.on ? t * 60 / tm : 0) % ((nt + 1))) * tm; const pl = svg.querySelector('.pulse'); pl.setAttribute('x1', px.toFixed(1)); pl.setAttribute('x2', px.toFixed(1)); svg.querySelector('.dbloom').setAttribute('opacity', (0.3 + 0.7 * Math.min(1, n.tail || 0)).toFixed(2)); }
+  else if (n.type === 'dist') { const k = 1 + n.k[0] * 14, nrm = Math.tanh(k); let d = ''; for (let i = 0; i <= 60; i++) { const x = i / 60, y = Math.tanh((x * 2 - 1) * k) / nrm; d += (i ? 'L' : 'M') + (6.5 + x * 213).toFixed(1) + ' ' + (39 - y * 31).toFixed(1) + ' '; } svg.querySelector('.dst-curve').setAttribute('d', d); }
+  else if (n.type === 'chorus') { const ps = svg.querySelectorAll('.dst-curve'); ps.forEach((p, j) => { let d = ''; for (let i = 0; i <= 80; i++) { const x = i / 80; const y = Math.sin(x * 12.57 + (play.on ? t * (0.5 + n.k[0] * 4) : 0) * (j ? 1 : -1) + j * 1.2) * (0.3 + n.k[1] * 0.6); d += (i ? 'L' : 'M') + (6.5 + x * 213).toFixed(1) + ' ' + (39 - y * 30).toFixed(1) + ' '; } p.setAttribute('d', d); }); }
+  else if (n.type === 'ott') svg.querySelectorAll('.ob').forEach((r, i) => { const h = 8 + 48 * Math.min(1, L * (1.15 - i * 0.2) * (0.6 + n.k[0])); r.setAttribute('y', (70 - h).toFixed(1)); r.setAttribute('height', h.toFixed(1)); });
+  else if (n.type === 'eq') { let d = '', nodes = ''; const bands = [[0.2, n.k[0]], [0.5, n.k[1]], [0.8, n.k[2]]]; for (let i = 0; i <= 80; i++) { const x = i / 80; let g = 0; for (const [c, v] of bands) g += (v - .5) * 2 * Math.exp(-((x - c) ** 2) * 40); d += (i ? 'L' : 'M') + (6.5 + x * 213).toFixed(1) + ' ' + (39 - g * 26).toFixed(1) + ' '; }
+    for (const [c, v] of bands) nodes += `<circle cx="${(6.5 + c * 213).toFixed(1)}" cy="${(39 - (v - .5) * 2 * 26).toFixed(1)}" r="2.6"/>`; svg.querySelector('.dst-curve').setAttribute('d', d); svg.querySelector('.eqn').innerHTML = nodes;
+    let sd = 'M6.5 74 '; for (let i = 0; i <= 40; i++) { const u = i / 40; sd += 'L' + (6.5 + u * 213).toFixed(1) + ' ' + (74 - L * 60 * (0.9 * Math.exp(-u * 2.4) + 0.1 * mulberry(i * 3 + Math.floor(t * 8))())).toFixed(1) + ' '; } svg.querySelector('.spec').setAttribute('d', sd + 'L219.5 74 Z'); }
+  else { let d = ''; for (let i = 0; i <= 60; i++) { const x = i / 60; d += (i ? 'L' : 'M') + (6.5 + x * 213).toFixed(1) + ' ' + (39 - Math.sin(x * 25 + t * 4) * 20 * L * n.k[0]).toFixed(1) + ' '; } svg.querySelector('.dst-curve').setAttribute('d', d); }
+}
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   BUILD · STATE
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+function rebuildAll() { nodesEl.innerHTML = ''; cg.innerHTML = ''; for (const n of G.nodes) buildNode(n); for (const c of G.cables) buildCable(c); refreshState(); drawMini(); }
+function rebuildNode(n) { const was = n.el; buildNode(n); if (was) was.remove(); for (const c of G.cables) if (c.from === n.id || c.to === n.id) layoutCable(c); refreshState(); }
 function refreshState() {
   const ok = alive();
-  for (const n of G.nodes) {
-    n.el.classList.toggle('dead', !ok.has(n.id) && !DEFS[n.type].end);
-    n.el.classList.toggle('off', !n.on);
-    n.el.classList.toggle('sel', sel.nodes.has(n.id));
-    for (const p of n.el.querySelectorAll('.port.in')) { const i = +p.dataset.i; const has = G.cables.some(c => c.to === n.id && c.ti === i); p.classList.toggle('implicit', !!DEFS[n.type].ins[i].implicit && !has); }
-  }
+  for (const n of G.nodes) { const d = DEFS[n.type];
+    n.el.classList.toggle('dead', !ok.has(n.id) && !d.end && n.type !== 'lfo' && n.type !== 'env');
+    n.el.classList.toggle('off', !n.on); n.el.classList.toggle('sel', sel.nodes.has(n.id));
+    if (d.flow) n.el.classList.toggle('act', connected(n)); }
   for (const c of G.cables) { c.el.classList.toggle('sel', sel.cable === c.id); c.el.classList.toggle('mute', !!c.mute); }
-  let cpu = 0; for (const n of G.nodes) if (ok.has(n.id) && n.on) cpu += DEFS[n.type].cost * (n.type === 'osc' ? 1 + 0.35 * n.knobs[2] : 1);
-  $('#cpu').textContent = Math.round(cpu * 1.6) + ' %';
   buildAudio();
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   THE VIZ — the waterfall (wtWaterfall's own geo/proj), the LFO line, the FLOW emblems, the cards.
+   CABLES — a thin white line. The purple spike is the signal going through it.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-function genTable(kind, seed) {
-  const N = 20, P = 72, d = new Float32Array(N * P);
-  const r = mulberry(seed);
-  const ph = Array.from({ length: 16 }, () => r() * 6.283);
-  for (let k = 0; k < N; k++) { const f = k / (N - 1);
-    for (let i = 0; i < P; i++) { const u = i / (P - 1), x = u * 6.283185; let a = 0;
-      if (kind === 0) { for (let h = 1; h <= 14; h++) { const g = 1 / h * (h % 2 ? 1 : f) * (1 - f * 0.5 * (h > 6)); a += g * Math.sin(h * x); } a *= 0.62; }
-      else if (kind === 1) { for (let h = 1; h <= 12; h++) { const g = Math.exp(-h * (0.12 + f * 0.9)) * (0.7 + 0.5 * Math.sin(ph[h] + f * 3)); a += g * Math.sin(h * x + ph[h] * f); } a *= 1.1; }
-      else { for (let h = 1; h <= 10; h++) { const g = (0.5 + 0.5 * Math.sin(ph[h % 16] + f * 9 + h)) / Math.sqrt(h); a += g * Math.sin(h * x + ph[h % 16]) * (0.55 + 0.45 * Math.sin(x * (2 + f * 6))); } a *= 0.42; }
-      d[k * P + i] = Math.max(-1, Math.min(1, a)); } }
-  return { n: N, p: P, d };
+function cablePath(a, b, kind) {
+  if (kind === 'mod') { const dx = Math.max(40, Math.abs(b.x - a.x) * 0.35), dy = Math.max(36, Math.abs(b.y - a.y) * 0.5); return `M${a.x} ${a.y} C${a.x + dx} ${a.y}, ${b.x} ${b.y + dy}, ${b.x} ${b.y}`; }
+  const dx = Math.max(46, Math.abs(b.x - a.x) * 0.45); return `M${a.x} ${a.y} C${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
 }
-function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const WF = {
-  geo: (w, h) => ({ flx: w * 0.04, frx: w * 0.96, fby: h * 0.82, blx: w * 0.30, brx: w * 0.90, bby: h * 0.14, ampF: h * 0.14, ampB: h * 0.055 }),
-  proj: (g, u, a, d) => { const lx = g.flx + (g.blx - g.flx) * d, rx = g.frx + (g.brx - g.frx) * d, by = g.fby + (g.bby - g.fby) * d, amp = g.ampF + (g.ampB - g.ampF) * d; return { x: lx + u * (rx - lx), y: by - a * amp }; },
-  /* the stack — every frame of the table as one polyline, depth-faded white (dim far → bright near), drawn as SVG so the
-     world's zoom scales it exactly and nothing is ever re-rasterised */
-  build(n) {
-    const v = n.viz; if (!v) return; const w = v.w, h = v.h, g = WF.geo(w, h), { n: N, p: P, d: D } = v.tbl; let out = '';
-    for (let k = N - 1; k >= 0; k--) { const d = N > 1 ? k / (N - 1) : 0, near = 1 - d, base = k * P; let pts = '';
-      for (let i = 0; i < P; i++) { const q = WF.proj(g, i / (P - 1), D[base + i], d); pts += q.x.toFixed(1) + ',' + q.y.toFixed(1) + ' '; }
-      out += `<polyline points="${pts}" fill="none" stroke="rgba(255,255,255,${(0.05 + near * 0.62).toFixed(3)})" stroke-width="${(0.4 + near * 0.7).toFixed(2)}" stroke-linejoin="round" stroke-linecap="round"/>`; }
-    v.svg.innerHTML = out + '<polyline class="wfcur" points="" fill="none" stroke="#B794FF" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>';   // THIN, exact --purple-400, no glow
-    v.cur = v.svg.querySelector('.wfcur'); v.lastPos = -1;
-  },
-  draw(n, pos) {
-    const v = n.viz; if (!v || !v.cur) return; const g = WF.geo(v.w, v.h), { n: N, p: P, d: D } = v.tbl, fp = pos * (N - 1), f0 = Math.floor(fp), f1 = Math.min(N - 1, f0 + 1), fr = fp - f0; let pts = '';
-    for (let i = 0; i < P; i++) { const a = D[f0 * P + i] + (D[f1 * P + i] - D[f0 * P + i]) * fr, q = WF.proj(g, i / (P - 1), a, pos); pts += q.x.toFixed(1) + ',' + q.y.toFixed(1) + ' '; }
-    v.cur.setAttribute('points', pts);
-  }
-};
-function buildViz(n, box) {
-  const d = DEFS[n.type];
-  if (d.viz === 'waterfall') { const w = DEFS[n.type].w - 20, h = DEFS[n.type].h - 26 - 44 - 1; box.innerHTML = `<svg viewBox="0 0 ${w} ${h}"></svg><span class="wf-pos"></span>`; n.viz = { svg: box.querySelector('svg'), tbl: genTable(n.sub % 3, n.seed), w, h }; WF.build(n); WF.draw(n, n.knobs[1]); return; }
-  if (d.viz === 'flow') { box.innerHTML = EMB[d.emb]; return; }
-  if (d.viz === 'curve') { box.innerHTML = `<svg viewBox="0 0 176 60" preserveAspectRatio="none"><g class="gridlines"><path d="M44 0V60M88 0V60M132 0V60M0 20H176M0 40H176"/></g><path class="line" d=""/></svg>`; n.viz = { svg: box.querySelector('svg') }; drawCurve(n); return; }
-  if (d.viz === 'lfo' || d.viz === 'env') { box.innerHTML = `<svg viewBox="0 0 156 52" preserveAspectRatio="none"><path class="line" d=""/><circle class="foll" r="2.2" cx="0" cy="26"/></svg>`; n.viz = { svg: box.querySelector('svg') }; drawLfo(n, 0); return; }
-  if (n.type === 'midiin') { box.innerHTML = `<div class="keys">${'wbwbwwbwbwbw'.split('').map((k, i) => `<i class="${k === 'b' ? 'bk' : ''}" data-k="${i}"></i>`).join('')}</div>`; return; }
-  if (n.type === 'out') { box.innerHTML = `<div class="outm"><b><i></i></b><b><i></i></b></div>`; return; }
-  if (d.viz === 'reverb') { box.innerHTML = `<svg viewBox="0 0 176 54"><g class="rvg">${Array.from({ length: 36 }, (_, i) => `<circle cx="${12 + (i % 12) * 14}" cy="${10 + Math.floor(i / 12) * 17}" r="1.4" fill="#ECE8F2" opacity="${(0.7 - (i % 12) * 0.055).toFixed(2)}"/>`).join('')}</g></svg>`; return; }
-  if (d.viz === 'delay') { box.innerHTML = `<svg viewBox="0 0 176 54">${Array.from({ length: 7 }, (_, i) => `<rect class="dl" x="${14 + i * 24}" y="${8 + i * 5.2}" width="7" height="${38 - i * 5.2}" rx="2" fill="#ECE8F2" opacity="${(0.85 - i * 0.11).toFixed(2)}"/>`).join('')}</svg>`; return; }
-  if (d.viz === 'dist') { box.innerHTML = `<svg viewBox="0 0 176 54" preserveAspectRatio="none"><path class="line dim" d="M0 27H176"/><path class="line" d="M6 48 C 40 48, 60 6, 88 6 S 136 48, 170 48"/></svg>`; return; }
-  if (d.viz === 'chorus') { box.innerHTML = `<svg viewBox="0 0 176 54" preserveAspectRatio="none"><path class="line dim" d="M0 27 C 22 4, 44 4, 66 27 S 110 50, 132 27 S 176 4, 198 27"/><path class="line" d="M0 27 C 22 50, 44 50, 66 27 S 110 4, 132 27 S 176 50, 198 27"/></svg>`; return; }
-  if (d.viz === 'ott') { box.innerHTML = `<svg viewBox="0 0 176 54"><g class="gridlines"><path d="M58 4V50M118 4V50"/></g>${[30, 88, 148].map(x => `<rect x="${x - 9}" y="14" width="18" height="30" rx="2" fill="#ECE8F2" opacity=".35"/><rect class="ob" x="${x - 9}" y="24" width="18" height="20" rx="2" fill="#ECE8F2" opacity=".85"/>`).join('')}</svg>`; return; }
-  if (d.viz === 'split') { box.innerHTML = `<svg viewBox="0 0 136 30"><g fill="rgba(255,255,255,.18)">${Array.from({ length: 14 }, (_, i) => `<rect x="${4 + i * 9.2}" y="4" width="8" height="22" rx="1.5" fill="${i < 7 ? 'rgba(183,148,255,.55)' : 'rgba(255,255,255,.18)'}"/>`).join('')}</g><path d="M68 2V28" stroke="#ECE8F2" stroke-width="1.3"/></svg>`; return; }
-  if (d.viz === 'gain') { box.innerHTML = `<svg viewBox="0 0 136 30" preserveAspectRatio="none"><path class="line dim" d="M6 15H130"/><path class="line" d="M6 15H92"/><circle class="foll" cx="92" cy="15" r="2.6"/></svg>`; return; }
-  if (d.viz === 'synth') { box.innerHTML = `<svg viewBox="0 0 280 60" preserveAspectRatio="none">${['A', 'B', 'C', 'D'].map((L, i) => `<g transform="translate(${i * 70},0)"><text x="4" y="10" fill="#9B93B0" font-size="8" letter-spacing="1.5">${L}</text><path class="line${i > 1 ? ' dim' : ''}" d="M4 36 ${Array.from({ length: 14 }, (_, k) => `L${4 + k * 4.6} ${36 + Math.sin(k * (i + 1.3) * .9) * 12}`).join(' ')}"/></g>`).join('')}</svg>`; return; }
-}
-function drawCurve(n) {
-  const v = n.viz; if (!v) return; const cut = n.knobs[0], res = n.knobs[1], drv = n.knobs[2];
-  let d = ''; const fc = 20 * Math.pow(1000, cut);
-  for (let i = 0; i <= 60; i++) { const f = 20 * Math.pow(1000, i / 60), w = f / fc; const q = 0.5 + res * 6;
-    let mag = n.sub === 7 ? Math.sqrt((w * w) * (w * w) / ((1 - w * w) ** 2 + (w / q) ** 2)) : 1 / Math.sqrt((1 - w * w) ** 2 + (w / q) ** 2);
-    if (n.type === 'eq') mag = 1 + 0.6 * (n.knobs[0] - .5) * Math.exp(-(((i - 12) / 8) ** 2)) + 0.6 * (n.knobs[1] - .5) * Math.exp(-(((i - 30) / 8) ** 2)) + 0.6 * (n.knobs[2] - .5) * Math.exp(-(((i - 50) / 8) ** 2));
-    const db = 20 * Math.log10(Math.max(1e-4, mag)) + drv * 6; const y = 30 - db * (40 / 60);
-    d += (i ? 'L' : 'M') + (i * (176 / 60)).toFixed(1) + ' ' + Math.max(2, Math.min(58, y)).toFixed(1); }
-  v.svg.querySelector('.line').setAttribute('d', d);
-}
-function drawLfo(n, t) {
-  const v = n.viz; if (!v) return; const line = v.svg.querySelector('.line'), foll = v.svg.querySelector('.foll');
-  if (n.type === 'env') { const [a, dd, s, r] = n.knobs; const ax = 6 + a * 40, dx = ax + 6 + dd * 40, sx = dx + 28, rx = Math.min(150, sx + 6 + r * 40);
-    line.setAttribute('d', `M6 46 L${ax} 6 L${dx} ${46 - s * 40} L${sx} ${46 - s * 40} L${rx} 46`); const ph = (t * 0.35) % 1; const px = 6 + ph * (rx - 6);
-    foll.setAttribute('cx', px); foll.setAttribute('cy', px < ax ? 46 - (px - 6) / (ax - 6) * 40 : px < dx ? 6 + (px - ax) / (dx - ax) * (40 - s * 40) : px < sx ? 46 - s * 40 : 46 - s * 40 + (px - sx) / (rx - sx) * s * 40); return; }
-  const shape = n.sub; let d = '';
-  for (let i = 0; i <= 78; i++) { const u = i / 78, x = 6 + u * 144; const p = (u * 2) % 1; let y;
-    if (shape === 0) y = Math.sin(u * 2 * 6.283); else if (shape === 1) y = 1 - Math.abs(p * 4 - 2); else if (shape === 2) y = 1 - p * 2; else if (shape === 3) y = p < .5 ? 1 : -1; else y = Math.sin(u * 2 * 6.283) * 0.6 + Math.sin(u * 6 * 6.283) * 0.4;
-    d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + (26 - y * 18 * (0.3 + 0.7 * n.knobs[1])).toFixed(1); }
-  line.setAttribute('d', d); const rate = 0.25 + n.knobs[0] * 3; const ph = (t * rate * 0.5) % 1; foll.setAttribute('cx', 6 + ph * 144);
-  const p = (ph * 2) % 1; let y; if (shape === 0) y = Math.sin(ph * 2 * 6.283); else if (shape === 1) y = 1 - Math.abs(p * 4 - 2); else if (shape === 2) y = 1 - p * 2; else if (shape === 3) y = p < .5 ? 1 : -1; else y = Math.sin(ph * 2 * 6.283) * 0.6 + Math.sin(ph * 6 * 6.283) * 0.4;
-  foll.setAttribute('cy', (26 - y * 18 * (0.3 + 0.7 * n.knobs[1])).toFixed(1)); n.lfoVal = y;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   CABLES — the electricity. A halo, a white core, a crackling arc and travelling sparks; all of
-   it driven by the level flowing through the cable, resting when the notes stop.
-   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-const SVGNS = 'http://www.w3.org/2000/svg';
-function cablePath(a, b) { const dx = Math.max(46, Math.abs(b.x - a.x) * 0.45); return `M${a.x} ${a.y} C${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`; }
 function buildCable(c) {
   const g = document.createElementNS(SVGNS, 'g'); g.classList.add('cable', c.t); g.dataset.id = c.id;
-  const mk = (tag, cls) => { const e = document.createElementNS(SVGNS, tag); e.setAttribute('class', cls); g.appendChild(e); return e; };
-  c.el = g; c.halo = mk('path', 'halo'); c.core = mk('path', 'core'); c.arc = mk('polyline', 'arc'); c.sp = [mk('circle', 'spg'), mk('circle', 'sp'), mk('circle', 'spg'), mk('circle', 'sp')];
-  c.hit = mk('path', 'hit'); c.hnd = mk('path', 'hnd');
-  c.halo.setAttribute('filter', 'url(#cblur)'); c.sp[0].setAttribute('filter', 'url(#sblur)'); c.sp[2].setAttribute('filter', 'url(#sblur)');
-  c.hit.addEventListener('mousedown', e => { e.stopPropagation(); sel = { nodes: new Set(), cable: c.id }; refreshState(); });
+  const mk = cls => { const e = document.createElementNS(SVGNS, 'path'); e.setAttribute('class', cls); g.appendChild(e); return e; };
+  c.el = g; c.core = mk('core'); c.spk = mk('spk'); c.hit = mk('hit');
+  c.hit.addEventListener('mousedown', e => { e.stopPropagation(); closeMenus(); sel = { nodes: new Set(), cable: c.id }; refreshState(); });
   c.hit.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); c.mute = !c.mute; snap(); refreshState(); toast(c.mute ? 'Cable muted' : 'Cable unmuted'); });
-  c.hnd.addEventListener('mousedown', e => { e.stopPropagation(); const y0 = e.clientY, l0 = c.lvl; const mv = ev => { c.lvl = Math.max(0, Math.min(1, l0 - (ev.clientY - y0) / 80)); toast('Cable level ' + Math.round(c.lvl * 100) + ' %'); }; const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); snap(); }; window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up); });
-  c.lvlSm = 0; c.spk = [Math.random(), Math.random()]; c.jit = new Float32Array(26); cg.appendChild(g); layoutCable(c); return g;
+  c.lvlSm = 0; c.s = null; cg.appendChild(g); layoutCable(c); return g;
 }
 function layoutCable(c) {
-  const a = portPos(node(c.from), 'outs', c.fo), b = portPos(node(c.to), 'ins', c.ti); const d = cablePath(a, b);
-  c.halo.setAttribute('d', d); c.core.setAttribute('d', d); c.hit.setAttribute('d', d);
-  const L = c.core.getTotalLength(); c.len = L; c.pts = []; for (let i = 0; i <= 25; i++) c.pts.push(c.core.getPointAtLength(L * i / 25));
-  const m = c.core.getPointAtLength(L / 2); c.mid = m; c.hnd.setAttribute('d', `M${m.x - 3.5} ${m.y + 2.2} L${m.x} ${m.y - 2.4} L${m.x + 3.5} ${m.y + 2.2}`);
+  const a = portPos(node(c.from), 'out', c.fo), b = portPos(node(c.to), c.kind, c.ti), d = cablePath(a, b, c.kind);
+  c.core.setAttribute('d', d); c.spk.setAttribute('d', d); c.hit.setAttribute('d', d); c.len = c.core.getTotalLength();
+  c.spk.setAttribute('stroke-dasharray', `16 ${c.len + 60}`);
 }
 function layoutCablesOf(id) { for (const c of G.cables) if (c.from === id || c.to === id) layoutCable(c); }
 function animateCables(dt, t) {
   for (const c of G.cables) {
-    const src = node(c.from); const lvl = c.mute ? 0 : cableLevel(c) * c.lvl;
-    c.lvlSm += (lvl - c.lvlSm) * (lvl > c.lvlSm ? 0.45 : 0.12); const L = c.lvlSm;
-    const on = play.on && src && src.on;
-    c.el.setAttribute('opacity', c.mute ? .25 : 1);
-    c.halo.setAttribute('opacity', (0.10 + 0.55 * L).toFixed(3));
-    c.core.setAttribute('opacity', (0.42 + 0.58 * L).toFixed(3));
-    if (c.t === 'n') { c.core.setAttribute('stroke-dashoffset', (-t * 26 * (0.4 + L)).toFixed(1)); }
-    // the crackle — a random walk along the path, loudest in the middle, gone at the ends
-    const pts = c.pts, jit = c.jit, amp = (c.t === 'm' ? 1.6 : 3.2) * (0.15 + L);
-    let s = '';
-    for (let i = 0; i < pts.length; i++) { const bell = Math.sin(i / (pts.length - 1) * Math.PI);
-      if (c.t === 'm') jit[i] = Math.sin(t * 6 + i * 0.9) * amp * bell; else jit[i] = jit[i] * 0.55 + (Math.random() - 0.5) * 2 * amp * bell * 0.9;
-      const p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(pts.length - 1, i + 1)]; const dx = p1.x - p0.x, dy = p1.y - p0.y, n = Math.hypot(dx, dy) || 1;
-      s += (pts[i].x - dy / n * jit[i]).toFixed(1) + ',' + (pts[i].y + dx / n * jit[i]).toFixed(1) + ' '; }
-    c.arc.setAttribute('points', s); c.arc.setAttribute('opacity', on ? (0.08 + 0.6 * L).toFixed(3) : '0.05');
-    // sparks — they travel with the signal; a notes cable fires one per event
-    for (let k = 0; k < 2; k++) { if (on && L > 0.04) c.spk[k] = (c.spk[k] + dt * (0.25 + 1.1 * L) * (k ? 0.7 : 1)) % 1; const q = c.spk[k]; const p = c.core.getPointAtLength(c.len * q);
-      const gl = c.sp[k * 2], dot = c.sp[k * 2 + 1]; for (const e of [gl, dot]) { e.setAttribute('cx', p.x.toFixed(1)); e.setAttribute('cy', p.y.toFixed(1)); }
-      gl.setAttribute('r', (3.4 + 3 * L).toFixed(1)); gl.setAttribute('opacity', on ? (0.25 * L).toFixed(3) : '0'); dot.setAttribute('r', (1.1 + 1.1 * L).toFixed(2)); dot.setAttribute('opacity', on ? (0.3 + 0.7 * L).toFixed(3) : '0'); }
+    const src = node(c.from), lvl = c.mute ? 0 : cableLevel(c); c.lvlSm += (lvl - c.lvlSm) * (lvl > c.lvlSm ? 0.45 : 0.1); const L = c.lvlSm, on = play.on && src && src.on && !c.mute;
+    c.el.classList.toggle('hot', L > 0.08);
+    if (c.t === 'n') { const gate = on && lvl > 0.5; if (gate && !c.wasGate) c.s = -16; c.wasGate = gate; if (c.s != null) { c.s += dt * 560; if (c.s > c.len + 16) c.s = null; } }
+    else { if (c.s == null) c.s = -16 - Math.random() * c.len; if (on && L > 0.04) c.s += dt * (c.t === 'm' ? 70 + 40 * L : 150 + 280 * L); if (c.s > c.len + 16) c.s = -16 - (c.t === 'm' ? 50 : 0); }
+    const vis = c.s != null && on && (c.t === 'n' || L > 0.04);
+    c.spk.setAttribute('stroke-dashoffset', (-(c.s == null ? -99 : c.s)).toFixed(1)); c.spk.setAttribute('opacity', vis ? (c.t === 'n' ? 0.95 : 0.3 + 0.7 * L).toFixed(2) : '0');
   }
 }
-/* the signal on each cable, from the demo's own clock (and the real audio when the headphone is on) */
 function cableLevel(c) {
   const s = node(c.from); if (!s || !s.on || !play.on) return 0;
-  const ok = aliveSet; if (!ok.has(c.to) && !DEFS[node(c.to).type].end) return 0;
-  if (c.t === 'n') { if (s.type === 'arp') return arpGate(); if (s.type === 'midiin' || s.type === 'split' || s.type === 'robin') return chordGate(); return 0; }
-  if (c.t === 'm') { if (s.type === 'lfo') return 0.35 + 0.65 * Math.abs(s.lfoVal || 0); if (s.type === 'env') return 0.6; return 0; }
+  if (c.t === 'n') { if (s.type === 'arp') return notesSource(s) ? arpGate() : 0; if (s.type === 'midiin') return chordGate(); return notesSource(s) ? chordGate() : 0; }
+  if (c.t === 'm') { if (s.type === 'lfo') return 0.35 + 0.65 * Math.abs(s.lfoVal || 0); if (s.type === 'env') return chordEnv(); return 0; }
+  const d = node(c.to); if (d && !aliveSet.has(d.id) && !DEFS[d.type].end) return 0;
   return nodeLevel(s);
 }
-function nodeLevel(n) {
-  if (!n.on || !play.on) return 0;
-  if (n.type === 'osc' || n.type === 'synth') { const src = notesSource(n); if (!src) return 0; const env = src === 'arp' ? arpEnv() : chordEnv(); return env * n.knobs[0]; }
+function nodeLevel(n, depth = 0) {
+  if (!n || !n.on || !play.on || depth > 12) return 0;
+  if (n.type === 'osc') { const src = notesSource(n); if (!src) return 0; return (src === 'arp' ? arpEnv() : chordEnv()) * 0.85; }
+  if (n.type === 'lfo' || n.type === 'env' || n.type === 'midiin' || n.type === 'arp' || n.type === 'robin') return 0;
   const inputs = G.cables.filter(c => c.to === n.id && c.t === 'a' && !c.mute); if (!inputs.length) return 0;
-  let L = 0; for (const c of inputs) L = Math.max(L, nodeLevel(node(c.from)) * c.lvl);
-  if (n.type === 'glitch' || n.type === 'chop') { const g = glitchGate(n); L *= 0.35 + 0.65 * g; }
-  if (n.type === 'reverb') { n.tail = Math.max(L, (n.tail || 0) * 0.985); L = Math.max(L * 0.7, n.tail * 0.8 * (0.4 + 0.6 * n.knobs[3])); }
+  let L = 0; for (const c of inputs) L = Math.max(L, nodeLevel(node(c.from), depth + 1));
+  if (n.type === 'glitch' || n.type === 'chop') L *= 0.3 + 0.7 * glitchGate(n);
+  if (n.type === 'filter') L *= 0.55 + 0.45 * n.k[0];
+  if (n.type === 'reverb') { n.tail = Math.max(L, (n.tail || 0) * (0.975 + 0.02 * n.k[1])); L = Math.max(L * 0.7, n.tail * 0.8 * (0.4 + 0.6 * n.k[3])); }
   if (n.type === 'delay') { n.tail = Math.max(L, (n.tail || 0) * 0.992); L = Math.max(L * 0.8, n.tail * 0.6); }
-  if (n.type === 'dist') L = Math.min(1, L * (1 + n.knobs[0]));
+  if (n.type === 'dist') L = Math.min(1, L * (1 + n.k[0]));
   return L;
 }
 const BPM = 118, BEAT = 60 / BPM;
@@ -690,105 +850,152 @@ function arpNote() { return ARP_NOTES[Math.floor(songT() / (BEAT / 4)) % ARP_NOT
 let aliveSet = new Set();
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   THE FRAME — one rAF for everything that moves; it rests when the notes are stopped.
+   THE VIEW — scroll moves the canvas (FFOSSO), ⌃/⌘ scroll or a pinch zooms about the cursor.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-let lastT = performance.now();
+function applyView() { world.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.z})`; $('#grid').style.backgroundSize = `${26 * view.z}px ${26 * view.z}px`; $('#grid').style.backgroundPosition = `${view.x}px ${view.y}px`; world.classList.toggle('lod', view.z < 0.4); drawMini(); }
+function bounds() { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const n of G.nodes) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h); } return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; }
+function fit(pad = 34) { if (!G.nodes.length) return; const b = bounds(), W = patcher.clientWidth, H = patcher.clientHeight; const z = Math.min(1.25, (W - pad * 2) / b.w, (H - pad * 2 - 30) / b.h); view.z = z; view.x = (W - b.w * z) / 2 - b.x * z; view.y = (H - b.h * z) / 2 - b.y * z + 8; applyView(); }
+patcher.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) { const r = patcher.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; const k = Math.max(0.8, Math.min(1.25, Math.exp(-e.deltaY * 0.006))), nz = Math.max(0.22, Math.min(2.2, view.z * k));
+    view.x = mx - (mx - view.x) * (nz / view.z); view.y = my - (my - view.y) * (nz / view.z); view.z = nz; }
+  else if (e.shiftKey && !e.deltaX) view.x -= e.deltaY; else { view.x -= e.deltaX; view.y -= e.deltaY; }
+  applyView();
+}, { passive: false });
+function toWorld(cx, cy) { const r = patcher.getBoundingClientRect(); return { x: (cx - r.left - view.x) / view.z, y: (cy - r.top - view.y) / view.z }; }
+
+/* ═══ THE FRAME — everything that moves, resting when the notes stop ═══ */
+let lastT = performance.now(), keysOn = [];
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now; const t = now / 1000;
-  aliveSet = alive();
-  animateCables(dt, t);
+  aliveSet = alive(); animateCables(dt, t);
   for (const n of G.nodes) {
-    if (n.type === 'lfo' || n.type === 'env') drawLfo(n, play.on ? t : 0);
-    if (n.type === 'osc' && n.viz) { const mc = G.cables.find(c => c.to === n.id && c.ti === 2 && c.t === 'm' && !c.mute); const ms = mc ? node(mc.from) : null;
-      const wob = !(play.on && n.on) ? 0 : (ms && ms.type === 'lfo' && ms.on) ? 0.3 * (ms.lfoVal || 0) * ms.knobs[1] * mc.lvl : 0.04 * Math.sin(t * (0.6 + n.seed % 1)); const pos = Math.max(0, Math.min(1, n.knobs[1] + wob)); if (Math.abs(pos - (n.viz.lastPos || -1)) > 0.002) { n.viz.lastPos = pos; WF.draw(n, pos); n.el.querySelector('.wf-pos').textContent = Math.round(pos * 100) + ' %'; } }
-    if (n.type === 'midiin') { const gate = play.on ? chordGate() : 0, ag = play.on ? arpGate() : 0; const keys = n.el.querySelectorAll('.keys i'); const held = [0, 4, 7, 11]; keys.forEach((k, i) => k.classList.toggle('on', (gate && held.includes(i)) || (ag && i === (arpNote() % 12)))); }
-    if (n.type === 'out') { const L = nodeLevel(n.type === 'out' ? { ...n, type: 'gain' } : n); n.el.querySelectorAll('.outm i').forEach((b, i) => b.style.height = Math.round(100 * Math.min(1, L * (i ? 0.92 : 1))) + '%'); $('#mL').style.height = Math.round(100 * L) + '%'; $('#mR').style.height = Math.round(94 * L) + '%'; $('#rms').textContent = L > 0.001 ? (20 * Math.log10(L) - 6).toFixed(0) + ' dB' : '-inf'; }
-    if (n.type === 'reverb') { const L = nodeLevel(n); n.el.querySelectorAll('.rvg circle').forEach((c, i) => c.setAttribute('opacity', (0.12 + 0.6 * Math.max(0, L - (i % 12) * 0.07) + 0.05 * Math.sin(t * 3 + i)).toFixed(2))); }
-    if (n.type === 'delay') { const L = nodeLevel(n); n.el.querySelectorAll('.dl').forEach((r, i) => r.setAttribute('opacity', (0.15 + 0.7 * Math.max(0, L - i * 0.11)).toFixed(2))); }
-    if (n.type === 'ott') { const L = nodeLevel(n); n.el.querySelectorAll('.ob').forEach((r, i) => { const h = 6 + 24 * Math.min(1, L * (1.1 - i * 0.2)); r.setAttribute('y', 44 - h); r.setAttribute('height', h); }); }
-    if (n.type === 'glitch' || n.type === 'chop') { const emb = n.el.querySelector('.emb'); if (emb) emb.style.opacity = (0.45 + 0.55 * nodeLevel(n)).toFixed(2); }
-    if (n.type === 'arp') { const dots = n.el.querySelectorAll('.an'); const k = Math.floor(songT() / (BEAT / 4)) % 3; dots.forEach((d, i) => d.setAttribute('opacity', play.on && n.on && chordGate() ? (i === k ? 1 : 0.35) : 0.35)); }
+    if (n.type === 'osc' && n.viz) { const mc = G.cables.find(c => c.to === n.id && c.kind === 'mod' && c.ti === 0 && !c.mute), ms = mc ? node(mc.from) : null;
+      const wob = !(play.on && n.on) ? 0 : ms && ms.type === 'lfo' && ms.on ? 0.25 * (ms.lfoVal || 0) : ms && ms.type === 'env' ? 0.3 * chordEnv() : 0;
+      const pos = Math.max(0, Math.min(1, n.k[0] + wob)); if (Math.abs(pos - (n.viz.lastPos || -1)) > 0.002) { n.viz.lastPos = pos; WF.draw(n, pos); n.el.querySelector('.wf-pos').textContent = (1 + Math.round(pos * 19)); } }
+    else if (n.type === 'lfo') drawLfo(n, t);
+    else if (n.type === 'env') envFollow(n, t);
+    else if (n.type === 'filter') drawFilter(n, play.on ? t : 0);
+    else if (DEFS[n.type].fx) drawCore(n, t);
+    else if (n.type === 'midiin') { const gate = play.on ? chordGate() : 0, ag = play.on ? arpGate() : 0, held = [0, 4, 7, 11]; n.el.querySelectorAll('.keys i').forEach((k, i) => k.classList.toggle('on', (gate && held.includes(i)) || (ag && i === arpNote() % 12))); }
+    else if (n.type === 'out') { const L = nodeLevel(n); let d = ''; for (let i = 0; i <= 60; i++) { const x = i / 60; d += (i ? 'L' : 'M') + (x * 120).toFixed(1) + ' ' + (33 - (Math.sin(x * 31.4 + t * 9) * 0.6 + Math.sin(x * 62.8 + t * 5) * 0.4) * 26 * L).toFixed(1) + ' '; } n.el.querySelector('.mv-stroke').setAttribute('d', d);
+      n.el.querySelectorAll('.mtr i').forEach((b, i) => b.style.height = Math.round(100 * Math.min(1, L * (i ? 0.92 : 1))) + '%'); $('#mL').style.height = Math.round(100 * L) + '%'; $('#mR').style.height = Math.round(94 * L) + '%'; $('#rms').textContent = L > 0.001 ? (20 * Math.log10(L) - 6).toFixed(0) + ' dB' : '-inf'; }
+    else if (n.type === 'glitch' || n.type === 'chop') { const emb = n.el.querySelector('.emb'); emb.style.opacity = connected(n) ? (0.55 + 0.45 * nodeLevel(n)).toFixed(2) : ''; }
+    else if (n.type === 'arp') { const k = Math.floor(songT() / (BEAT / 4)) % 3, lit = play.on && n.on && connected(n) && chordGate(); n.el.querySelectorAll('.an').forEach((d, i) => d.setAttribute('opacity', lit ? (i === k ? 1 : 0.35) : 0.55)); }
   }
-  for (const c of G.cables) { const a = node(c.from), b = node(c.to); a.el.querySelector(`.port.out[data-i="${c.fo}"]`).classList.toggle('live', c.lvlSm > 0.08); b.el.querySelector(`.port.in[data-i="${c.ti}"]`).classList.toggle('live', c.lvlSm > 0.08); }
-  audioTick();
-  requestAnimationFrame(frame);
+  for (const c of G.cables) { const a = node(c.from), b = node(c.to); a.el.querySelector(`.port.out[data-i="${c.fo}"]`).classList.toggle('live', c.lvlSm > 0.08); const pi = b.el.querySelector(`.port.${c.kind}[data-i="${c.ti}"]`); if (pi) pi.classList.toggle('live', c.lvlSm > 0.08); }
+  audioTick(); requestAnimationFrame(frame);
 }
+</script>
 
+<script>
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   INTERACTION — drag nodes, draw cables, click empty space for the browser, right-click menus.
+   INTERACTION — drag modules, draw cables from any port, turn the real knobs, right-click.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 let drag = null;
+const CTRL = '.knob[data-set], .em[data-set], .dk[data-set], .upill[data-set], .ch[data-set], .rg[data-set], .c[data-set]';
 patcher.addEventListener('mousedown', e => {
   if (e.button === 1) { startPan(e); return; }
+  if (e.target.closest('.tools, #mini, .pmenu, .ti-card')) return;
   const port = e.target.closest('.port'), nodeEl = e.target.closest('.node');
   closeMenus();
-  if (port) { if (port.dataset.side === 'outs') startCable(e, port); return; }
+  if (port) { if (e.button === 0) startCable(e, port); return; }
   if (nodeEl) {
-    const n = node(nodeEl.dataset.id);
-    if (e.target.closest('.pwr')) { if (n.type === 'midiin') { play.on = !play.on; play.t0 = performance.now(); toast(play.on ? 'Playing' : 'Stopped'); } else { n.on = !n.on; snap(); } refreshState(); return; }
-    if (e.target.closest('.x')) { removeNode(n); return; }
-    if (e.target.closest('.knob')) { startKnob(e, n, +e.target.closest('.knob').dataset.i); return; }
-    if (e.target.closest('select') || e.target.closest('.pr')) return;
+    const n = node(nodeEl.dataset.id), d = DEFS[n.type];
+    if (e.button !== 0) return;
+    if (e.target.closest('.pwr')) { n.on = !n.on; snap(); refreshState(); return; }
+    if (n.type === 'midiin' && e.target.closest('.keys')) { play.on = !play.on; play.t0 = performance.now(); toast(play.on ? 'Playing' : 'Stopped'); return; }
+    if (e.target.closest('.fxh .x')) { removeNode(n); return; }
+    if (e.target.closest('.ar[data-pg]')) { n.page = n.page ? 0 : 1; rebuildNode(n); return; }
+    if (e.target.closest('.pill[data-pill]')) { const i = +e.target.closest('.pill').dataset.pill; n.pills[i] = !n.pills[i]; e.target.closest('.pill').classList.toggle('on', n.pills[i]); snap(); return; }
+    if (e.target.closest('.tg .p')) { e.target.closest('.p').classList.toggle('act'); return; }
+    if (e.target.closest('.flt .nav')) { const dir = e.target.textContent === '‹' ? -1 : 1; n.sub = (n.sub + dir + FLT_TYPES.length) % FLT_TYPES.length; nodeEl.querySelector('.dd .nm').textContent = FLT_TYPES[n.sub]; snap(); return; }
+    if (e.target.closest('[data-act]')) { lfoAct(n, e.target.closest('[data-act]').dataset.act, e); return; }
+    if (e.target.closest('.tabs .t[data-tab]')) { n.tab = +e.target.closest('.t').dataset.tab; rebuildNode(n); snap(); return; }
+    const ctl = e.target.closest(CTRL); if (ctl) { startKnob(e, n, ctl); return; }
+    if (e.target.closest('select, .pr, .pw, .ew, .sw, .exp, .lt, .hud')) return;
     if (e.shiftKey) sel.nodes.has(n.id) ? sel.nodes.delete(n.id) : sel.nodes.add(n.id); else if (!sel.nodes.has(n.id)) sel.nodes = new Set([n.id]);
-    sel.cable = null; refreshState();
-    // raise
-    nodesEl.appendChild(nodeEl);
+    sel.cable = null; refreshState(); nodesEl.appendChild(nodeEl);
     const w0 = toWorld(e.clientX, e.clientY), start = [...sel.nodes].map(id => ({ id, x: node(id).x, y: node(id).y }));
-    drag = { kind: 'node', w0, start, moved: false };
-    return;
+    drag = { kind: 'node', w0, start, moved: false }; return;
   }
-  if (e.button === 0) { drag = { kind: 'pan?', x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false }; }
+  if (e.button === 0) drag = { kind: 'pan?', x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
 });
-function startPan(e) { e.preventDefault(); drag = { kind: 'pan', x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: true }; patcher.classList.add('panning'); }
+function startPan(e) { e.preventDefault(); drag = { kind: 'pan', x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; patcher.classList.add('panning'); }
 window.addEventListener('mousemove', e => {
   if (!drag) return;
   if (drag.kind === 'pan?' && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4) { drag.kind = 'pan'; patcher.classList.add('panning'); }
   if (drag.kind === 'pan') { view.x = drag.vx + e.clientX - drag.x; view.y = drag.vy + e.clientY - drag.y; applyView(); return; }
-  if (drag.kind === 'node') { const w = toWorld(e.clientX, e.clientY); const dx = w.x - drag.w0.x, dy = w.y - drag.w0.y; if (Math.hypot(dx, dy) > 1) drag.moved = true;
+  if (drag.kind === 'node') { const w = toWorld(e.clientX, e.clientY), dx = w.x - drag.w0.x, dy = w.y - drag.w0.y; if (Math.hypot(dx, dy) > 1) drag.moved = true;
     for (const s of drag.start) { const n = node(s.id); n.x = Math.round(s.x + dx); n.y = Math.round(s.y + dy); place(n); layoutCablesOf(n.id); } drawMini(); return; }
-  if (drag.kind === 'cable') { const w = toWorld(e.clientX, e.clientY); drag.to = w; const p = portPos(drag.n, 'outs', drag.i); drag.path.setAttribute('d', cablePath(p, w));
-    const tgt = e.target.closest && e.target.closest('.port.in'); drag.hover = tgt && tgt.classList.contains('can') ? tgt : null; return; }
-  if (drag.kind === 'knob') { const n = drag.n, v = Math.max(0, Math.min(1, drag.v0 - (e.clientY - drag.y) / 120)); if (v !== n.knobs[drag.i]) { n.knobs[drag.i] = v; knobPaint(n, drag.i); drag.moved = true; } }
+  if (drag.kind === 'cable') { const w = toWorld(e.clientX, e.clientY); const p = portPos(drag.n, drag.pkind, drag.i); drag.path.setAttribute('d', drag.pkind === 'out' ? cablePath(p, w, 'in') : cablePath(w, p, drag.pkind));
+    const tgt = e.target.closest && e.target.closest('.port'); drag.hover = tgt && tgt.classList.contains('can') ? tgt : null; return; }
+  if (drag.kind === 'knob') knobMove(e);
 });
 window.addEventListener('mouseup', e => {
-  if (!drag) return; const d = drag; drag = null; patcher.classList.remove('panning');
-  if (d.kind === 'pan?') { if (e.button === 0 && !e.target.closest('.tools,.legend,#mini,.tpb,.pmenu')) openBrowser(e.clientX, e.clientY, null); return; }
+  if (!drag) return; const d = drag; drag = null; patcher.classList.remove('panning'); if (!e.target || !e.target.closest) e = { button: e.button, clientX: e.clientX, clientY: e.clientY, target: document.body };
+  if (d.kind === 'pan?') { if (e.button === 0 && !e.target.closest('.tools, #mini, .pmenu, .ti-card')) openAdd(e.clientX, e.clientY, null); return; }
   if (d.kind === 'node') { if (d.moved) snap(); return; }
-  if (d.kind === 'cable') { drawg.innerHTML = ''; for (const p of document.querySelectorAll('.port')) p.classList.remove('can', 'no');
-    if (d.hover) { const r = connect(d.n.id, d.i, d.hover.dataset.id, +d.hover.dataset.i); if (r === true) { buildCable(G.cables[G.cables.length - 1]); snap(); refreshState(); } else if (r === 'cycle') { const t = node(d.hover.dataset.id); t.el.classList.add('shake'); setTimeout(() => t.el.classList.remove('shake'), 400); toast('No feedback loops (yet)'); } }
-    else if (!e.target.closest('.node')) openBrowser(e.clientX, e.clientY, { from: d.n.id, fo: d.i, t: portType(d.n, 'outs', d.i) });
+  if (d.kind === 'cable') { drawg.innerHTML = ''; document.querySelectorAll('.port').forEach(p => p.classList.remove('can', 'no'));
+    if (d.hover) { const h = d.hover, hn = node(h.dataset.id), hk = h.dataset.kind, hi = +h.dataset.i;
+      const r = d.pkind === 'out' ? connect(d.n.id, d.i, hn.id, hk, hi) : connect(hn.id, hi, d.n.id, d.pkind, d.i);
+      if (r === true) { buildCable(G.cables[G.cables.length - 1]); snap(); refreshState(); } else if (r === 'cycle') { hn.el.classList.add('shake'); setTimeout(() => hn.el.classList.remove('shake'), 400); toast('No feedback loops (yet)'); } }
+    else if (!e.target.closest('.node')) openAdd(e.clientX, e.clientY, d.pkind === 'out' ? { from: d.n.id, fo: d.i, t: outType(d.n, d.i) } : { to: d.n.id, kind: d.pkind, ti: d.i, t: inType(d.n, d.pkind, d.i) });
     return; }
-  if (d.kind === 'knob') { d.n.el.querySelector(`.knob[data-i="${d.i}"]`).classList.remove('drag'); if (d.moved) snap(); }
+  if (d.kind === 'knob') { d.ctl.classList.remove('drag'); if (d.moved) snap(); }
 });
 function startCable(e, port) {
-  e.preventDefault(); const n = node(port.dataset.id), i = +port.dataset.i, t = portType(n, 'outs', i);
-  const path = document.createElementNS(SVGNS, 'path'); path.setAttribute('class', 'core draw ' + t); drawg.appendChild(path);
-  for (const p of document.querySelectorAll('.port.in')) { const tn = node(p.dataset.id); const okT = portType(tn, 'ins', +p.dataset.i) === t && tn.id !== n.id; p.classList.toggle('can', okT); p.classList.toggle('no', !okT); }
-  drag = { kind: 'cable', n, i, path, hover: null };
+  e.preventDefault(); const n = node(port.dataset.id), kind = port.dataset.kind, i = +port.dataset.i, t = kind === 'out' ? outType(n, i) : inType(n, kind, i);
+  const path = document.createElementNS(SVGNS, 'path'); path.setAttribute('class', 'core'); drawg.appendChild(path);
+  document.querySelectorAll('.port').forEach(p => { const pn = node(p.dataset.id), pk = p.dataset.kind, pi = +p.dataset.i; let ok;
+    if (kind === 'out') ok = pk !== 'out' && pn !== n && inType(pn, pk, pi) === t; else ok = pk === 'out' && pn !== n && outType(pn, pi) === t;
+    p.classList.toggle('can', !!ok); p.classList.toggle('no', !ok); });
+  drag = { kind: 'cable', n, pkind: kind, i, path, hover: null };
 }
-function startKnob(e, n, i) { e.preventDefault(); drag = { kind: 'knob', n, i, y: e.clientY, v0: n.knobs[i], moved: false }; n.el.querySelector(`.knob[data-i="${i}"]`).classList.add('drag'); }
-function knobPaint(n, i) {
-  const k = n.el.querySelector(`.knob[data-i="${i}"]`); k.querySelector('svg').outerHTML = knobSvg(n.knobs[i]);
-  k.querySelector('.kl').textContent = Math.round(n.knobs[i] * 100) + '%'; clearTimeout(k._t); k._t = setTimeout(() => { k.querySelector('.kl').textContent = DEFS[n.type].knobs[i][0]; }, 900);
-  if (n.type === 'osc' && i === 1 && n.viz) { n.viz.lastPos = -1; }
-  if (n.type === 'filter' || n.type === 'eq') drawCurve(n);
-  if (n.type === 'lfo' || n.type === 'env') drawLfo(n, performance.now() / 1000);
-  refreshState();
+/* knobs — every control drags vertically, double-click resets, the readout shows while you hold it */
+function ctlGet(n, ctl) { const s = ctl.dataset.set, k = +ctl.dataset.k; if (s === 'k' || s === 'u' || s === 'e') return n[s][k]; if (s === 'voices') return (n.voices - 1) / 15; if (s === 'stack') return n.stack / 4; return n[s === 'phase' ? 'ph' : s] || 0; }
+function ctlSet(n, ctl, v) { const s = ctl.dataset.set, k = +ctl.dataset.k; v = Math.max(0, Math.min(1, v)); if (s === 'k' || s === 'u' || s === 'e') n[s][k] = v; else if (s === 'voices') n.voices = 1 + Math.round(v * 15); else if (s === 'stack') n.stack = Math.round(v * 4); else n[s === 'phase' ? 'ph' : s] = v; }
+function startKnob(e, n, ctl) { e.preventDefault(); drag = { kind: 'knob', n, ctl, y: e.clientY, x: e.clientX, v0: ctlGet(n, ctl), moved: false }; ctl.classList.add('drag'); }
+function knobMove(e) { const d = drag, horiz = d.ctl.classList.contains('ch'); const v = d.v0 + (horiz ? (e.clientX - d.x) / 160 : (d.y - e.clientY) / 120); ctlSet(d.n, d.ctl, v); d.moved = true; paintCtl(d.n, d.ctl); }
+function paintCtl(n, ctl) {
+  const s = ctl.dataset.set, k = +ctl.dataset.k;
+  if (ctl.classList.contains('knob')) { const v = s === 'k' ? n.k[k] : n.u[k]; ctl.querySelector('.ring').outerHTML = ringHTML(v, s === 'k' && n.type === 'osc' ? oscKnobTxt(n, k) : String(pct(v))); }
+  else if (ctl.classList.contains('dk')) ctl.querySelector('.dial').innerHTML = knobSVG(pct(n.k[k]));
+  else if (ctl.classList.contains('upill')) ctl.querySelector('.pv').textContent = s === 'voices' ? n.voices : ['Off', '12 (1x)', '12 (2x)', '12+7 (1x)', 'Center-12'][n.stack];
+  else if (ctl.classList.contains('rg')) ctl.style.background = ringBG(n.depth);
+  else if (s === 'rate') ctl.querySelector('.rv').textContent = lfoHz(n).toFixed(2);
+  else if (s === 'phase') ctl.querySelector('.shv').textContent = Math.round((n.ph || 0) * 360) + '°';
+  if (n.type === 'osc' && s === 'k' && k === 0 && n.viz) n.viz.lastPos = -1;
+  if (n.type === 'lfo') drawLfo(n, performance.now() / 1000); if (n.type === 'env') drawEnv(n); if (n.type === 'filter') drawFilter(n, performance.now() / 1000);
 }
-patcher.addEventListener('dblclick', e => { const k = e.target.closest('.knob'); if (!k) return; const n = node(k.closest('.node').dataset.id), i = +k.dataset.i; n.knobs[i] = DEFS[n.type].knobs[i][1]; knobPaint(n, i); snap(); });
-patcher.addEventListener('change', e => { const s = e.target.closest('select'); if (!s) return; const n = node(s.closest('.node').dataset.id); n.sub = +s.value; s.closest('.tp').querySelector('.lbl').textContent = DEFS[n.type].types[n.sub];
-  if (n.type === 'osc') { n.viz.tbl = genTable(n.sub % 3, n.seed); WF.build(n); } if (n.type === 'filter') drawCurve(n); if (n.type === 'lfo') drawLfo(n, 0); snap(); refreshState(); });
+patcher.addEventListener('dblclick', e => { const ctl = e.target.closest(CTRL); if (!ctl) return; const n = node(ctl.closest('.node').dataset.id), d = DEFS[n.type], s = ctl.dataset.set, k = +ctl.dataset.k;
+  if (s === 'k') n.k[k] = d.knobs[k][1]; else if (s === 'u') n.u[k] = d.uni[k][1]; else if (s === 'e') n.e[k] = [0, .06, 0, .45, .7, .35][k]; else if (s === 'voices') n.voices = 1; else if (s === 'stack') n.stack = 0; else if (s === 'depth') n.depth = 1; else if (s === 'rate') n.rate = .32; else n.ph = 0;
+  paintCtl(n, ctl); snap(); });
+patcher.addEventListener('change', e => { const s = e.target.closest('select[data-sel]'); if (!s) return; const n = node(s.closest('.node').dataset.id), w = s.dataset.sel;
+  if (w === 'engine') n.sub = +s.value; else if (w === 'table') { n.tbl = +s.value; } else if (w === 'type') n.sub = +s.value;
+  rebuildNode(n); snap(); });
+function lfoAct(n, a, e) {
+  if (a === 'bpm') { n.sync = true; rebuildNode(n); snap(); } else if (a === 'hz') { n.sync = false; rebuildNode(n); snap(); }
+  else if (a === 'shape') { const m = $('#nmenu'); m.innerHTML = LFO_SHAPES.map((s, i) => `<div class="pi${i === n.shape ? ' cur' : ''}" data-i="${i}"><span class="ic" style="display:inline-flex;width:20px;height:11px">${LFO_ICON(i)}</span>${s}</div>`).join('');
+    placeMenu(m, e.clientX, e.clientY); m.onmousedown = ev => { ev.stopPropagation(); const r = ev.target.closest('.pi'); if (!r) return; n.shape = +r.dataset.i; rebuildNode(n); snap(); closeMenus(); }; }
+  else if (a === 'div') toast('The division ladder opens here');
+  else if (a === 'env') toast('Amp · Filter · Mod envelopes pick here');
+}
+function placeMenu(m, cx, cy) { const r = patcher.getBoundingClientRect(); m.classList.add('on'); m.style.left = Math.max(6, Math.min(cx - r.left, r.width - m.offsetWidth - 6)) + 'px'; m.style.top = Math.max(6, Math.min(cy - r.top, r.height - m.offsetHeight - 6)) + 'px'; }
+
+/* right-click — a node: Extend (a Flow tile) · Duplicate · Presets · Remove. Empty space: the add list. */
 patcher.addEventListener('contextmenu', e => {
+  if (e.target.closest('.tools, #mini, .pmenu, .ti-card, .hit')) { e.preventDefault(); return; }
   const nodeEl = e.target.closest('.node'); e.preventDefault(); closeMenus();
-  if (!nodeEl) { openBrowser(e.clientX, e.clientY, null); return; }
-  const n = node(nodeEl.dataset.id); if (DEFS[n.type].end) return;
+  if (!nodeEl) { openAdd(e.clientX, e.clientY, null); return; }
+  const n = node(nodeEl.dataset.id), d = DEFS[n.type]; if (d.end) return;
   sel = { nodes: new Set([n.id]), cable: null }; refreshState();
-  const m = $('#nmenu'); m.innerHTML = `<div class="ps">${n.name}${n.code ? ' ' + n.code : ''}</div>
-    <div class="pi" data-a="dup">Duplicate</div><div class="pi" data-a="save">Save as my node</div><div class="pi" data-a="presets">Presets ›</div><div class="sepd"></div><div class="pi danger" data-a="rm">Remove</div>`;
-  const r = patcher.getBoundingClientRect(); m.style.left = Math.min(e.clientX - r.left, r.width - 190) + 'px'; m.style.top = Math.min(e.clientY - r.top, r.height - 150) + 'px'; m.classList.add('on');
+  const m = $('#nmenu'); m.innerHTML = `<div class="ps">${d.name}${n.code ? ' ' + n.code : ''}</div>${d.flow ? '<div class="pi" data-a="ext">Extend</div>' : ''}<div class="pi" data-a="dup">Duplicate</div><div class="pi" data-a="presets">Presets ›</div><div class="sepd"></div><div class="pi danger" data-a="rm">Remove</div>`;
+  placeMenu(m, e.clientX, e.clientY);
   m.onmousedown = ev => { ev.stopPropagation(); const a = ev.target.dataset.a; if (!a) return;
-    if (a === 'dup') { const c = addNode(n.type, n.x + 36, n.y + 36, { sub: n.sub, knobs: [...n.knobs], name: n.name }); buildNode(c); c.el.classList.add('landing'); snap(); refreshState(); }
-    if (a === 'save') toast('Saved to My Nodes'); if (a === 'presets') toast('The card\'s own presets open here'); if (a === 'rm') removeNode(n); closeMenus(); };
+    if (a === 'ext') openCard(n);
+    if (a === 'dup') { const c = addNode(n.type, n.x + 36, n.y + 36, { sub: n.sub, tbl: n.tbl, k: [...n.k], u: [...n.u], e: [...n.e], shape: n.shape, depth: n.depth, rate: n.rate, pills: [...n.pills] }); buildNode(c); c.el.classList.add('landing'); snap(); refreshState(); }
+    if (a === 'presets') toast('The module\'s own presets open here'); if (a === 'rm') removeNode(n); closeMenus(); };
 });
 function removeNode(n) { if (DEFS[n.type].end) return; G.nodes = G.nodes.filter(x => x !== n); G.cables = G.cables.filter(c => c.from !== n.id && c.to !== n.id); sel.nodes.delete(n.id); snap(); rebuildAll(); }
 window.addEventListener('keydown', e => {
@@ -796,154 +1003,141 @@ window.addEventListener('keydown', e => {
   const meta = e.metaKey || e.ctrlKey;
   if (meta && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? doRedo() : doUndo(); return; }
   if (e.key === 'Backspace' || e.key === 'Delete') { if (sel.cable) { G.cables = G.cables.filter(c => c.id !== sel.cable); sel.cable = null; snap(); rebuildAll(); } else if (sel.nodes.size) { for (const id of [...sel.nodes]) { const n = node(id); if (n && !DEFS[n.type].end) { G.nodes = G.nodes.filter(x => x !== n); G.cables = G.cables.filter(c => c.from !== n.id && c.to !== n.id); } } sel.nodes.clear(); snap(); rebuildAll(); } return; }
-  if (e.key === 'f') fit(); if (e.key === 'Escape') { closeMenus(); sel = { nodes: new Set(), cable: null }; refreshState(); }
+  if (e.key === 'f') fit(); if (e.key === 'm') $('#mini').classList.toggle('hidden');
+  if (e.key === 'g') { const g = $('#plugin').classList.toggle('glass'); toast(g ? 'The browser glass' : 'The card box'); }
+  if (e.key === 'Escape') { closeMenus(); $('#xcard').classList.remove('open'); sel = { nodes: new Set(), cable: null }; refreshState(); }
 });
 
-/* ═══ the add browser — the two-pane glass, at the click ═══ */
-let tpbCat = 'All', tpbCtx = null;
-function openBrowser(cx, cy, ctx) {
-  tpbCtx = ctx; const b = $('#tpb'), r = patcher.getBoundingClientRect();
-  b.dataset.wx = toWorld(cx, cy).x; b.dataset.wy = toWorld(cx, cy).y;
-  b.style.left = Math.max(6, Math.min(cx - r.left, r.width - 384 - 6)) + 'px'; b.style.top = Math.max(6, Math.min(cy - r.top, r.height - 294 - 6)) + 'px';
-  b.classList.add('on'); $('#tpbq').value = ''; $('#tpbq').focus(); renderBrowser();
+/* ═══ THE ADD LIST — one column, the names, at the click. A drawn cable narrows it to what fits. ═══ */
+let addCtx = null;
+function openAdd(cx, cy, ctx) { addCtx = ctx; const m = $('#addm'); m.dataset.wx = toWorld(cx, cy).x; m.dataset.wy = toWorld(cx, cy).y; $('#addq').value = ''; renderAdd(); placeMenu(m, cx, cy); $('#addq').focus(); }
+function fitsCtx(type) { const d = DEFS[type]; if (!addCtx) return true; const t = addCtx.t;
+  if (addCtx.from) return t === 'm' ? modCount(type) > 0 : d.ins.includes(t); return d.outs.includes(t); }
+function renderAdd() {
+  const q = $('#addq').value.trim().toLowerCase(); let h = '', lastSep = true;
+  for (const it of ADD) { if (!it) { if (!lastSep) { h += '<div class="sepd"></div>'; lastSep = true; } continue; } if (!fitsCtx(it[0]) || (q && !it[1].toLowerCase().includes(q))) continue; h += `<div class="pi" data-k="${it[0]}">${it[1]}</div>`; lastSep = false; }
+  $('#addl').innerHTML = h.replace(/<div class="sepd"><\/div>$/, '') || '<div class="pi dis">— nothing fits here —</div>';
 }
-function renderBrowser() {
-  const q = $('#tpbq').value.trim().toLowerCase();
-  const fits = k => { const d = DEFS[k]; if (tpbCtx && !d.ins.some(p => p.t === tpbCtx.t)) return false; if (tpbCat !== 'All' && d.cat !== tpbCat) return false; return !q || d.name.toLowerCase().includes(q) || (d.types || []).some(t => t.toLowerCase().includes(q)) || d.hint.includes(q); };
-  const counts = {}; for (const k of TYPE_ITEMS) { const d = DEFS[k]; if (tpbCtx && !d.ins.some(p => p.t === tpbCtx.t)) continue; counts[d.cat] = (counts[d.cat] || 0) + 1; counts.All = (counts.All || 0) + 1; }
-  $('#tpbc').innerHTML = CATS.map(c => `<div class="row${c === tpbCat ? ' cur' : ''}" data-c="${c}"><span class="nm">${c}</span><span class="ct">${counts[c] || 0}</span></div>`).join('');
-  const items = TYPE_ITEMS.filter(fits);
-  $('#tpbi').innerHTML = items.length ? items.map(k => `<div class="row" data-k="${k}"><i class="${DEFS[k].outs[0] ? DEFS[k].outs[0].t : 'a'}"></i><span class="nm">${DEFS[k].name}</span><span class="hint">${DEFS[k].hint}</span></div>`).join('') : `<div class="row" style="opacity:.5;cursor:default">— nothing here —</div>`;
+$('#addq').addEventListener('input', renderAdd);
+$('#addm').addEventListener('mousedown', e => { e.stopPropagation(); const r = e.target.closest('.pi[data-k]'); if (!r) return; const m = $('#addm'); addFromList(r.dataset.k, +m.dataset.wx, +m.dataset.wy); });
+function addFromList(type, wx, wy) {
+  const n = addNode(type, Math.round(wx - 20), Math.round(wy - 14)); buildNode(n); n.el.classList.add('landing'); let wired = false;
+  if (addCtx && addCtx.from) { const t = addCtx.t; const r = t === 'm' ? connect(addCtx.from, addCtx.fo, n.id, 'mod', 0) : connect(addCtx.from, addCtx.fo, n.id, 'in', DEFS[type].ins.indexOf(t)); if (r === true) { buildCable(G.cables[G.cables.length - 1]); wired = true; } }
+  else if (addCtx && addCtx.to) { const r = connect(n.id, DEFS[type].outs.indexOf(addCtx.t), addCtx.to, addCtx.kind, addCtx.ti); if (r === true) { buildCable(G.cables[G.cables.length - 1]); wired = true; } }
+  sel = { nodes: new Set([n.id]), cable: null }; closeMenus(); snap(); refreshState(); if (wired) toast(DEFS[type].name + ' added and wired');
 }
-$('#tpbc').addEventListener('mousedown', e => { e.stopPropagation(); const r = e.target.closest('.row'); if (r) { tpbCat = r.dataset.c; renderBrowser(); } });
-$('#tpbi').addEventListener('mousedown', e => { e.stopPropagation(); const r = e.target.closest('.row'); if (!r || !r.dataset.k) return; const b = $('#tpb'); addFromBrowser(r.dataset.k, +b.dataset.wx, +b.dataset.wy); });
-$('#tpbq').addEventListener('input', renderBrowser);
-$('#tpb').addEventListener('mousedown', e => e.stopPropagation());
-$('#tpbx').addEventListener('mousedown', e => { e.stopPropagation(); closeMenus(); });
-function addFromBrowser(type, wx, wy) {
-  const n = addNode(type, Math.round(wx - 20), Math.round(wy - 14)); buildNode(n); n.el.classList.add('landing');
-  // auto-wire (the FFOSSO idea): a cable that was being drawn lands on the new node; otherwise the selected node feeds it when the types match
-  let wired = false;
-  if (tpbCtx) { const ti = DEFS[type].ins.findIndex(p => p.t === tpbCtx.t); if (ti >= 0 && connect(tpbCtx.from, tpbCtx.fo, n.id, ti) === true) { buildCable(G.cables[G.cables.length - 1]); wired = true; } }
-  else if (sel.nodes.size === 1) { const s = node([...sel.nodes][0]); if (s) { const fo = DEFS[s.type].outs.findIndex(p => DEFS[type].ins.some(q => q.t === p.t)); if (fo >= 0) { const ti = DEFS[type].ins.findIndex(q => q.t === DEFS[s.type].outs[fo].t); if (connect(s.id, fo, n.id, ti) === true) { buildCable(G.cables[G.cables.length - 1]); wired = true; } } } }
-  sel = { nodes: new Set([n.id]), cable: null }; closeMenus(); snap(); refreshState(); if (wired) toast(n.name + ' added and wired');
-}
-function closeMenus() { $('#tpb').classList.remove('on'); $('#nmenu').classList.remove('on'); tpbCtx = null; $('#tpbq').blur(); }
+function closeMenus() { $('#addm').classList.remove('on'); $('#nmenu').classList.remove('on'); addCtx = null; $('#addq').blur(); }
 let toastT; function toast(s) { const t = $('#toast'); t.textContent = s; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1400); }
+
+/* ═══ THE EXTENSION CARD — the .ti-card the Flow tiles already pop, beside the node ═══ */
+const CARD = { arp: ['Arp', ['Pattern', 'Play', 'Motion'], [['Rate', '1/16'], ['Gate', '52'], ['Swing', '0'], ['Glide', '15']], [['Vary', '0'], ['Traj', 'UP'], ['Morph', '0']]],
+  chop: ['Chop', ['Pattern', 'Shape'], [['Rate', '1/8'], ['Gate', '50'], ['Vary', '0'], ['Style', 'FWD']], [['Morph', '0'], ['Tail', '20'], ['Mix', '100']]],
+  glitch: ['Glitch', ['Grid', 'FX', 'Motion'], [['Grid', '1/16'], ['Window', '40'], ['Glitch', '35'], ['Repeat', '3']], [['Pitch', '0'], ['Rev', '20'], ['Mix', '100']]],
+  robin: ['Robin', ['Voices', 'Motion'], [['Rate', '1/4'], ['Smooth', '40'], ['Chaos', '20'], ['Dims', '3']], [['Spread', '35'], ['Drift', '10'], ['Mix', '100']]] };
+function hairRing(v) { return `<svg viewBox="0 0 34 34" class="k"><circle class="tr" cx="17" cy="17" r="14"/><path class="va" d="${arcD(17, 17, 14, 128, 128 + 284 * v)}"/></svg>`; }
+function cardHero(type) {
+  if (type === 'arp') return `<svg viewBox="0 0 288 88" preserveAspectRatio="none"><g stroke="rgba(255,255,255,.06)">${Array.from({ length: 16 }, (_, i) => `<line x1="${9 + i * 18}" y1="8" x2="${9 + i * 18}" y2="70"/>`).join('')}</g>${Array.from({ length: 16 }, (_, i) => `<circle cx="${9 + i * 18}" cy="${66 - ((i * 5) % 7) * 9.3}" r="2.6" fill="#ECE8F2" opacity="${i % 4 === 0 ? 1 : .55}"/>`).join('')}<line x1="9" y1="4" x2="9" y2="74" stroke="rgba(255,255,255,.85)"/></svg>`;
+  if (type === 'chop') return `<svg viewBox="0 0 288 88" preserveAspectRatio="none">${[34, 20, 46, 26, 14, 40, 22, 30].map((h, i) => `<rect x="${18 + i * 32}" y="${66 - h}" width="20" height="${h}" rx="2" fill="rgba(183,148,255,.9)"/>`).join('')}<line x1="12" y1="66" x2="276" y2="66" stroke="rgba(236,232,242,.12)"/></svg>`;
+  if (type === 'glitch') return `<svg viewBox="0 0 288 88" preserveAspectRatio="none"><g stroke="rgba(236,232,242,.1)">${[60, 120, 180, 240].map(x => `<line x1="${x}" y1="6" x2="${x}" y2="72"/>`).join('')}</g><rect x="120" y="8" width="60" height="62" rx="3" fill="rgba(139,92,246,.18)" stroke="rgba(183,148,255,.55)"/><path fill="none" stroke="rgba(183,148,255,.95)" stroke-width="1.1" d="M10 39 L20 22 L30 55 L40 30 L52 48 L60 39 L70 28 L82 52 L94 34 L108 44 L120 39 L132 16 L144 60 L156 20 L168 58 L180 24 L196 56 L210 30 L222 39 L236 36 L250 42 L262 33 L278 39"/></svg>`;
+  return `<svg viewBox="0 0 288 88" preserveAspectRatio="none"><path d="M20 60 Q80 20 140 45 T276 32" fill="none" stroke="rgba(183,148,255,.28)"/><path d="M16 30 Q100 70 180 34 T272 58" fill="none" stroke="rgba(183,148,255,.16)"/>${[[42, 50], [96, 34], [150, 44], [206, 30], [250, 56]].map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="2.6" fill="#B794FF"/>`).join('')}</svg>`;
+}
+function openCard(n) {
+  const c = $('#xcard'), C = CARD[n.type], cell = (k, v) => `<div class="cell">${hairRing(0.35 + 0.5 * mulberry(k.length * 31 + n.seed)())}<div class="lb">${k}</div><div class="vl">${v}</div></div>`;
+  c.innerHTML = `<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">${C[0]}</span><span class="pset"><span class="pa">‹</span><span class="pn">Init</span><span class="pa">›</span></span><span class="mix">Mix <b>100%</b></span><span class="pop">Pop Out</span><span class="x">✕</span></div>
+    <div class="b"><div class="hero">${cardHero(n.type)}</div><div class="tabs">${C[1].map((t, i) => `<div class="tab${i ? '' : ' on'}">${t}</div>`).join('')}</div><div class="gboxrow"><div class="gbox"><span class="gbl">${C[1][1]}</span><div class="gr gr4">${C[2].map(k => cell(k[0], k[1])).join('')}</div></div><div class="gbox"><span class="gbl">${C[1][2] || 'Motion'}</span><div class="gr gr3">${C[3].map(k => cell(k[0], k[1])).join('')}</div></div></div></div>`;
+  c.classList.add('open'); const r = patcher.getBoundingClientRect();
+  c.style.left = Math.max(6, Math.min((n.x + n.w) * view.z + view.x + 14, r.width - 322)) + 'px'; c.style.top = Math.max(6, Math.min(n.y * view.z + view.y - 20, r.height - c.offsetHeight - 6)) + 'px';
+  c.querySelector('.x').onmousedown = e => { e.stopPropagation(); c.classList.remove('open'); };
+  c.querySelector('.h').onmousedown = e => { if (e.target.closest('.x, .pop, .mix, .pset')) return; e.preventDefault(); const x0 = e.clientX - c.offsetLeft, y0 = e.clientY - c.offsetTop;
+    const mv = ev => { c.style.left = (ev.clientX - x0) + 'px'; c.style.top = (ev.clientY - y0) + 'px'; }, up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); }; window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up); };
+  c.querySelectorAll('.tab').forEach(t => t.onmousedown = e => { e.stopPropagation(); c.querySelectorAll('.tab').forEach(x => x.classList.remove('on')); t.classList.add('on'); });
+  c.querySelectorAll('.cell').forEach(ce => ce.onmousedown = e => { e.stopPropagation(); e.preventDefault(); const y0 = e.clientY, vl = ce.querySelector('.vl'), v0 = parseFloat(vl.textContent) || 50; const num = !isNaN(parseFloat(vl.textContent)) && !vl.textContent.includes('/');
+    const mv = ev => { if (!num) return; const v = Math.max(0, Math.min(100, v0 + (y0 - ev.clientY) / 2)); vl.textContent = Math.round(v); ce.querySelector('.va').setAttribute('d', arcD(17, 17, 14, 128, 128 + 284 * v / 100)); }, up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); }; window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up); });
+  c.onmousedown = e => e.stopPropagation(); c.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); };
+}
 
 /* ═══ the tools ═══ */
 $('#undo').onmousedown = e => { e.stopPropagation(); doUndo(); };
 $('#redo').onmousedown = e => { e.stopPropagation(); doRedo(); };
 $('#fit').onmousedown = e => { e.stopPropagation(); fit(); };
-$('#arrange').onmousedown = e => { e.stopPropagation(); arrange(); snap(); fit(); };
-$('#minitog').onmousedown = e => { e.stopPropagation(); $('#mini').classList.toggle('hidden'); $('#minitog').classList.toggle('on'); };
-$('#dice').onmousedown = e => { e.stopPropagation(); surprise(); snap(); rebuildAll(); fit(); toast('A random patch — play it'); };
+$('#dice').onmousedown = e => { e.stopPropagation(); surprise(); snap(); fit(); toast('A random patch — play it'); };
 $('#hp').onmousedown = e => { e.stopPropagation(); toggleAudio(); };
-document.querySelectorAll('.tools,.legend').forEach(el => el.addEventListener('mousedown', e => e.stopPropagation()));
-function arrange() {                                       // FL's columns: depth from the sources, stacked
-  const depth = {}; const src = G.nodes.filter(n => !G.cables.some(c => c.to === n.id)); for (const n of G.nodes) depth[n.id] = 0;
-  for (let it = 0; it < 12; it++) for (const c of G.cables) depth[c.to] = Math.max(depth[c.to], depth[c.from] + 1);
+$('.tools').addEventListener('mousedown', e => e.stopPropagation());
+function arrange() {
+  const depth = {}; for (const n of G.nodes) depth[n.id] = 0;
+  for (let it = 0; it < 14; it++) for (const c of G.cables) if (c.kind !== 'mod') depth[c.to] = Math.max(depth[c.to], depth[c.from] + 1);
   const outD = Math.max(...G.nodes.map(n => depth[n.id])); for (const n of G.nodes) if (n.type === 'out') depth[n.id] = outD + 1;
-  const cols = {}; for (const n of G.nodes) (cols[depth[n.id]] = cols[depth[n.id]] || []).push(n);
-  let x = 40; const ks = Object.keys(cols).map(Number).sort((a, b) => a - b);
-  for (const k of ks) { const col = cols[k].sort((a, b) => a.y - b.y); let y = 20; let w = 0; for (const n of col) { n.x = x; n.y = y; y += n.h + 30; w = Math.max(w, n.w); place(n); } x += w + 70; }
-  for (const c of G.cables) layoutCable(c);
+  const cols = {}; for (const n of G.nodes) if (n.type !== 'lfo' && n.type !== 'env') (cols[depth[n.id]] = cols[depth[n.id]] || []).push(n);
+  let x = 0, maxY = 0; const ks = Object.keys(cols).map(Number).sort((a, b) => a - b);
+  for (const k of ks) { const col = cols[k]; let y = 0, w = 0; for (const n of col) { n.x = x; n.y = y; y += n.h + 40; w = Math.max(w, n.w); } maxY = Math.max(maxY, y); x += w + 90; }
+  let mx = 0; for (const n of G.nodes) if (n.type === 'lfo' || n.type === 'env') { n.x = mx; n.y = maxY + 20; mx += n.w + 40; }
+  for (const n of G.nodes) if (n.el) place(n); for (const c of G.cables) if (c.el) layoutCable(c);
 }
 function surprise() {
   G = { nodes: [], cables: [], next: 1 }; const r = Math.random;
-  const mi = addNode('midiin', 0, 0), out = addNode('out', 0, 0);
-  const nOsc = 2 + Math.floor(r() * 3); const oscs = []; const engs = ['Wavetable', 'Sample', 'Granular', 'Resynth', 'FM', 'Modal', 'Harmonic'];
-  for (let i = 0; i < nOsc; i++) { const o = addNode('osc', 0, 0, { sub: Math.floor(r() * engs.length), knobs: [0.5 + r() * 0.4, r(), r() * 0.6, 0.3 + r() * 0.4] }); oscs.push(o);
-    if (r() < 0.45) { const f = addNode(r() < 0.6 ? 'arp' : 'robin', 0, 0, { sub: Math.floor(r() * 3) }); connect(mi.id, 0, f.id, 0); connect(f.id, 0, o.id, 0); } }
-  const sinks = []; const fxKinds = ['glitch', 'chop', 'filter', 'dist', 'chorus', 'delay', 'reverb', 'ott'];
-  for (const o of oscs) { let cur = o; const hops = Math.floor(r() * 2.6); for (let h = 0; h < hops; h++) { const k = fxKinds[Math.floor(r() * fxKinds.length)]; const f = addNode(k, 0, 0, { sub: Math.floor(r() * (DEFS[k].types.length)) }); connect(cur.id, 0, f.id, 0); cur = f; } sinks.push(cur); }
-  let tail = sinks; if (r() < 0.7) { const k = r() < 0.5 ? 'reverb' : 'delay'; const f = addNode(k, 0, 0, { sub: Math.floor(r() * DEFS[k].types.length) }); for (const s of sinks) connect(s.id, 0, f.id, 0); tail = [f]; }
-  for (const s of tail) connect(s.id, 0, out.id, 0);
-  const mods = G.nodes.filter(n => DEFS[n.type].ins.some(p => p.t === 'm')); if (mods.length) { const l = addNode('lfo', 0, 0, { sub: Math.floor(r() * 4) }); const tgt = mods[Math.floor(r() * mods.length)]; connect(l.id, 0, tgt.id, DEFS[tgt.type].ins.findIndex(p => p.t === 'm')); }
-  for (const n of G.nodes) n.el = null;
-  rebuildAll(); arrange();
+  const mi = addNode('midiin', 0, 0), out = addNode('out', 0, 0), nOsc = 2 + Math.floor(r() * 2), oscs = [];
+  for (let i = 0; i < nOsc; i++) { const o = addNode('osc', 0, 0, { sub: Math.floor(r() * ENGINES.length), tbl: Math.floor(r() * TABLES.length), k: [r(), r() * .5, r() * .5, r() * .3, r() * .3] }); oscs.push(o);
+    if (r() < 0.5) { const f = addNode(r() < 0.6 ? 'arp' : 'robin', 0, 0); connect(mi.id, 0, f.id, 'in', 0); connect(f.id, 0, o.id, 'in', 0); } else connect(mi.id, 0, o.id, 'in', 0); }
+  const sinks = [], kinds = ['glitch', 'chop', 'filter', 'dist', 'chorus', 'delay', 'reverb', 'ott', 'eq'];
+  for (const o of oscs) { let curN = o; const hops = Math.floor(r() * 2.6); for (let h = 0; h < hops; h++) { const k = kinds[Math.floor(r() * kinds.length)]; const f = addNode(k, 0, 0, { sub: Math.floor(r() * (DEFS[k].types ? DEFS[k].types.length : 1)) }); connect(curN.id, 0, f.id, 'in', 0); curN = f; } sinks.push(curN); }
+  let tail = sinks; if (r() < 0.7) { const k = r() < 0.5 ? 'reverb' : 'delay'; const f = addNode(k, 0, 0, { sub: Math.floor(r() * DEFS[k].types.length) }); for (const s of sinks) connect(s.id, 0, f.id, 'in', 0); tail = [f]; }
+  for (const s of tail) connect(s.id, 0, out.id, 'in', 0);
+  const mods = G.nodes.filter(n => modCount(n.type) > 0); const l = addNode('lfo', 0, 0, { shape: Math.floor(r() * 5), rate: r(), depth: .5 + r() * .5 }); const tg = mods[Math.floor(r() * mods.length)]; connect(l.id, 0, tg.id, 'mod', Math.floor(r() * modCount(tg.type)));
+  if (r() < 0.6) { const ev = addNode('env', 0, 0); const tg2 = mods[Math.floor(r() * mods.length)]; connect(ev.id, 0, tg2.id, 'mod', Math.floor(r() * modCount(tg2.type))); }
+  for (const n of G.nodes) n.el = null; arrange(); rebuildAll(); arrange(); drawMini();
 }
 
-/* ═══ the mini-map — the .pmenu glass, nodes as outlines, the viewport as the purple frame ═══ */
+/* ═══ the mini-map ═══ */
 function drawMini() {
   const s = $('#minisvg'); if (!G.nodes.length) { s.innerHTML = ''; return; }
-  const b = bounds(); const W = patcher.clientWidth / view.z, H = patcher.clientHeight / view.z, vx = -view.x / view.z, vy = -view.y / view.z;
+  const b = bounds(), W = patcher.clientWidth / view.z, H = patcher.clientHeight / view.z, vx = -view.x / view.z, vy = -view.y / view.z;
   const x0 = Math.min(b.x, vx) - 40, y0 = Math.min(b.y, vy) - 40, x1 = Math.max(b.x + b.w, vx + W) + 40, y1 = Math.max(b.y + b.h, vy + H) + 40;
-  const k = Math.min(118 / (x1 - x0), 72 / (y1 - y0)); const ox = (118 - (x1 - x0) * k) / 2, oy = (72 - (y1 - y0) * k) / 2;
-  const M = (x, y) => [ox + (x - x0) * k, oy + (y - y0) * k];
-  let h = '';
-  for (const c of G.cables) { const a = portPos(node(c.from), 'outs', c.fo), d = portPos(node(c.to), 'ins', c.ti); const [ax, ay] = M(a.x, a.y), [dx, dy] = M(d.x, d.y); h += `<path d="M${ax} ${ay}L${dx} ${dy}" stroke="rgba(183,148,255,.35)" stroke-width=".8" fill="none"/>`; }
+  const k = Math.min(118 / (x1 - x0), 72 / (y1 - y0)), ox = (118 - (x1 - x0) * k) / 2, oy = (72 - (y1 - y0) * k) / 2, M = (x, y) => [ox + (x - x0) * k, oy + (y - y0) * k]; let h = '';
+  for (const c of G.cables) { const a = portPos(node(c.from), 'out', c.fo), d = portPos(node(c.to), c.kind, c.ti); const [ax, ay] = M(a.x, a.y), [dx, dy] = M(d.x, d.y); h += `<path d="M${ax} ${ay}L${dx} ${dy}" stroke="rgba(183,148,255,.35)" stroke-width=".8" fill="none"/>`; }
   for (const n of G.nodes) { const [x, y] = M(n.x, n.y); h += `<rect x="${x}" y="${y}" width="${n.w * k}" height="${n.h * k}" rx="1.5" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.38)" stroke-width=".8"/>`; }
   const [px, py] = M(vx, vy); h += `<rect x="${px}" y="${py}" width="${W * k}" height="${H * k}" rx="2" fill="none" stroke="#B794FF" stroke-width="1"/>`;
   s.innerHTML = h; s._map = { x0, y0, k, ox, oy, W, H };
 }
 $('#mini').addEventListener('mousedown', e => { e.stopPropagation(); const m = $('#minisvg')._map; if (!m) return; const r = $('#mini').getBoundingClientRect(); const wx = (e.clientX - r.left - m.ox) / m.k + m.x0, wy = (e.clientY - r.top - m.oy) / m.k + m.y0; view.x = -(wx - m.W / 2) * view.z; view.y = -(wy - m.H / 2) * view.z; applyView(); });
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   THE HEADPHONE — hear the patch. Built from the same graph the cables draw: oscillators that
-   reach Out sound, an Arp in front of one plays it, filters/glitch/reverb/delay/dist on the path
-   process it. Off by default; a click turns it on.
-   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+/* ═══ THE HEADPHONE — hear the graph the cables draw (off until clicked) ═══ */
 let AC = null, AG = null, audioOn = false;
-function toggleAudio() { audioOn = !audioOn; $('#hp').classList.toggle('on', audioOn); if (audioOn) { if (!AC) { AC = new (window.AudioContext || window.webkitAudioContext)(); } AC.resume(); buildAudio(); } else if (AG) { AG.master.gain.setTargetAtTime(0, AC.currentTime, 0.03); setTimeout(() => { if (!audioOn && AG) { for (const o of AG.oscs) { try { o.osc.stop(); } catch (e) { } } AG = null; } }, 200); } }
+function toggleAudio() { audioOn = !audioOn; $('#hp').classList.toggle('on', audioOn); if (audioOn) { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); AC.resume(); buildAudio(); } else if (AG) { AG.master.gain.setTargetAtTime(0, AC.currentTime, 0.03); setTimeout(() => { if (!audioOn && AG) { for (const o of AG.oscs) { try { o.osc.stop(); } catch (e) { } } AG = null; } }, 200); } }
 function buildAudio() {
   if (!audioOn || !AC) return;
   if (AG) { for (const o of AG.oscs) { try { o.osc.stop(); } catch (e) { } } try { AG.master.disconnect(); } catch (e) { } }
-  const master = AC.createGain(); master.gain.value = 0.0001; master.connect(AC.destination);
-  AG = { master, oscs: [], chains: new Map() };
-  const ok = alive(); const out = G.nodes.find(n => n.type === 'out');
-  const wave = (n) => { const t = n.sub % 3; if (t === 0) return 'sawtooth'; if (t === 1) return 'square'; return 'triangle'; };
-  const nodeAudio = (n) => {                                // the Web Audio for one processing node, cached
-    if (AG.chains.has(n.id)) return AG.chains.get(n.id);
-    let inp, outp;
-    if (n.type === 'filter' || n.type === 'eq') { const f = AC.createBiquadFilter(); f.type = n.sub === 7 ? 'highpass' : 'lowpass'; f.frequency.value = 20 * Math.pow(1000, n.knobs[0]); f.Q.value = 0.5 + n.knobs[1] * 10; inp = outp = f;
-      const lc = G.cables.find(c => c.to === n.id && c.t === 'm' && !c.mute); if (lc && node(lc.from).type === 'lfo') { const l = node(lc.from); const lo = AC.createOscillator(); lo.frequency.value = 0.25 + l.knobs[0] * 3; const lg = AC.createGain(); lg.gain.value = f.frequency.value * 0.8 * l.knobs[1]; lo.connect(lg).connect(f.frequency); lo.start(); AG.oscs.push({ osc: lo, gain: null }); } }
-    else if (n.type === 'glitch' || n.type === 'chop') { const g = AC.createGain(); g.gain.value = 1; inp = outp = g; AG.gates = AG.gates || []; AG.gates.push({ n, g }); }
-    else if (n.type === 'reverb') { const i = AC.createGain(), o = AC.createGain(), wet = AC.createGain(); wet.gain.value = 0.3 + n.knobs[3] * 0.6; i.connect(o);
-      const ds = [0.031, 0.043, 0.057, 0.071]; for (const dl of ds) { const d = AC.createDelay(1); d.delayTime.value = dl * (0.6 + n.knobs[0] * 1.2); const fb = AC.createGain(); fb.gain.value = 0.55 + n.knobs[1] * 0.35; const lp = AC.createBiquadFilter(); lp.frequency.value = 1800 + n.knobs[2] * 6000; i.connect(d); d.connect(lp).connect(fb).connect(d); lp.connect(wet); } wet.connect(o); inp = i; outp = o; }
-    else if (n.type === 'delay') { const i = AC.createGain(), o = AC.createGain(); i.connect(o); const d = AC.createDelay(2); d.delayTime.value = BEAT * (0.25 + n.knobs[0] * 0.5); const fb = AC.createGain(); fb.gain.value = n.knobs[1] * 0.8; const wet = AC.createGain(); wet.gain.value = n.knobs[3]; i.connect(d); d.connect(fb).connect(d); d.connect(wet).connect(o); inp = i; outp = o; }
-    else if (n.type === 'dist') { const ws = AC.createWaveShaper(); const k = 2 + n.knobs[0] * 40, c = new Float32Array(512); for (let i = 0; i < 512; i++) { const x = i / 255.5 - 1; c[i] = Math.tanh(x * k) / Math.tanh(k) * 0.8; } ws.curve = c; inp = outp = ws; }
-    else if (n.type === 'chorus') { const i = AC.createGain(), o = AC.createGain(); i.connect(o); const d = AC.createDelay(0.1); d.delayTime.value = 0.012; const lo = AC.createOscillator(); lo.frequency.value = 0.2 + n.knobs[0] * 2; const lg = AC.createGain(); lg.gain.value = 0.004 * n.knobs[1]; lo.connect(lg).connect(d.delayTime); lo.start(); AG.oscs.push({ osc: lo }); i.connect(d).connect(o); inp = i; outp = o; }
-    else { const g = AC.createGain(); g.gain.value = n.type === 'gain' ? n.knobs[0] : 1; inp = outp = g; }
+  const master = AC.createGain(); master.gain.value = 0.0001; master.connect(AC.destination); AG = { master, oscs: [], chains: new Map(), gates: [] };
+  const ok = alive(); const wave = n => ['sawtooth', 'square', 'triangle', 'sawtooth', 'sine', 'triangle', 'square'][n.sub % 7];
+  const nodeAudio = n => { if (AG.chains.has(n.id)) return AG.chains.get(n.id); let inp, outp;
+    if (n.type === 'filter' || n.type === 'eq') { const f = AC.createBiquadFilter(); f.type = n.sub === 7 ? 'highpass' : 'lowpass'; f.frequency.value = 20 * Math.pow(1000, n.k[0]); f.Q.value = 0.5 + n.k[1] * 10; inp = outp = f;
+      const lc = G.cables.find(c => c.to === n.id && c.kind === 'mod' && c.ti === 0 && !c.mute); if (lc && node(lc.from).type === 'lfo') { const l = node(lc.from), lo = AC.createOscillator(); lo.frequency.value = lfoHz(l); const lg = AC.createGain(); lg.gain.value = f.frequency.value * 0.8 * l.depth; lo.connect(lg).connect(f.frequency); lo.start(); AG.oscs.push({ osc: lo }); } }
+    else if (n.type === 'glitch' || n.type === 'chop') { const g = AC.createGain(); inp = outp = g; AG.gates.push({ n, g }); }
+    else if (n.type === 'reverb') { const i = AC.createGain(), o = AC.createGain(), wet = AC.createGain(); wet.gain.value = 0.3 + n.k[3] * 0.6; i.connect(o); for (const dl of [0.031, 0.043, 0.057, 0.071]) { const d = AC.createDelay(1); d.delayTime.value = dl * (0.6 + n.k[0] * 1.2); const fb = AC.createGain(); fb.gain.value = 0.55 + n.k[1] * 0.35; const lp = AC.createBiquadFilter(); lp.frequency.value = 1800 + n.k[2] * 6000; i.connect(d); d.connect(lp).connect(fb).connect(d); lp.connect(wet); } wet.connect(o); inp = i; outp = o; }
+    else if (n.type === 'delay') { const i = AC.createGain(), o = AC.createGain(); i.connect(o); const d = AC.createDelay(2); d.delayTime.value = BEAT * (0.25 + n.k[0] * 0.5); const fb = AC.createGain(); fb.gain.value = n.k[1] * 0.8; const wet = AC.createGain(); wet.gain.value = n.k[3]; i.connect(d); d.connect(fb).connect(d); d.connect(wet).connect(o); inp = i; outp = o; }
+    else if (n.type === 'dist') { const ws = AC.createWaveShaper(), k = 2 + n.k[0] * 40, c = new Float32Array(512); for (let i = 0; i < 512; i++) { const x = i / 255.5 - 1; c[i] = Math.tanh(x * k) / Math.tanh(k) * 0.8; } ws.curve = c; inp = outp = ws; }
+    else if (n.type === 'chorus') { const i = AC.createGain(), o = AC.createGain(); i.connect(o); const d = AC.createDelay(0.1); d.delayTime.value = 0.012; const lo = AC.createOscillator(); lo.frequency.value = 0.2 + n.k[0] * 2; const lg = AC.createGain(); lg.gain.value = 0.004 * n.k[1]; lo.connect(lg).connect(d.delayTime); lo.start(); AG.oscs.push({ osc: lo }); i.connect(d).connect(o); inp = i; outp = o; }
+    else { const g = AC.createGain(); g.gain.value = n.type === 'gain' ? n.k[0] : 1; inp = outp = g; }
     const r = { inp, outp }; AG.chains.set(n.id, r);
-    // downstream
-    for (const c of G.cables) if (c.from === n.id && c.t === 'a' && !c.mute && ok.has(c.to)) { const t = node(c.to); if (t.type === 'out') outp.connect(master); else if (t.on) outp.connect(nodeAudio(t).inp); else { /* powered off: passthrough */ for (const c2 of G.cables) if (c2.from === t.id && c2.t === 'a') { const t2 = node(c2.to); if (t2.type === 'out') outp.connect(master); else outp.connect(nodeAudio(t2).inp); } } }
-    return r;
-  };
-  for (const n of G.nodes) if ((n.type === 'osc' || n.type === 'synth') && n.on && ok.has(n.id) && notesSource(n)) {
-    const notes = notesSource(n) === 'arp' ? null : [48, 52, 55, 59];
+    for (const c of G.cables) if (c.from === n.id && c.t === 'a' && !c.mute && ok.has(c.to)) { const t = node(c.to); if (t.type === 'out') outp.connect(master); else if (t.on) outp.connect(nodeAudio(t).inp); else for (const c2 of G.cables) if (c2.from === t.id && c2.t === 'a') { const t2 = node(c2.to); if (t2.type === 'out') outp.connect(master); else outp.connect(nodeAudio(t2).inp); } }
+    return r; };
+  for (const n of G.nodes) if (n.type === 'osc' && n.on && ok.has(n.id) && notesSource(n)) { const notes = notesSource(n) === 'arp' ? null : [48, 52, 55, 59];
     for (const nt of (notes || [0])) { const o = AC.createOscillator(); o.type = wave(n); const g = AC.createGain(); g.gain.value = 0; o.connect(g);
       for (const c of G.cables) if (c.from === n.id && c.t === 'a' && !c.mute && ok.has(c.to)) { const t = node(c.to); if (t.type === 'out') g.connect(master); else g.connect(nodeAudio(t).inp); }
       o.start(); AG.oscs.push({ osc: o, gain: g, n, note: nt, arp: !notes }); } }
   master.gain.setTargetAtTime(0.18, AC.currentTime, 0.05);
 }
-function audioTick() {
-  if (!audioOn || !AC || !AG) return; const now = AC.currentTime;
-  for (const o of AG.oscs) { if (!o.gain) continue; const env = (o.arp ? arpEnv() : chordEnv()) * o.n.knobs[0] * (play.on ? 1 : 0); const midi = o.arp ? arpNote() : o.note; o.osc.frequency.setTargetAtTime(440 * Math.pow(2, (midi - 69) / 12), now, 0.004); o.gain.gain.setTargetAtTime(env * (o.arp ? 0.5 : 0.22), now, 0.012); }
-  if (AG.gates) for (const gt of AG.gates) gt.g.gain.setTargetAtTime(glitchGate(gt.n), now, 0.004);
-}
+function audioTick() { if (!audioOn || !AC || !AG) return; const now = AC.currentTime;
+  for (const o of AG.oscs) { if (!o.gain) continue; const env = (o.arp ? arpEnv() : chordEnv()) * 0.85 * (play.on ? 1 : 0), midi = o.arp ? arpNote() : o.note; o.osc.frequency.setTargetAtTime(440 * Math.pow(2, (midi - 69) / 12), now, 0.004); o.gain.gain.setTargetAtTime(env * (o.arp ? 0.5 : 0.22), now, 0.012); }
+  for (const gt of AG.gates) gt.g.gain.setTargetAtTime(glitchGate(gt.n), now, 0.004); }
 
 /* ═══ go ═══ */
 demo(); rebuildAll(); cur = ser(); paintTools();
 requestAnimationFrame(() => { fit(); requestAnimationFrame(frame); });
-window.addEventListener('resize', () => { applyView(); });
+window.addEventListener('resize', applyView);
 </script>
 <style>
-/* cable ink — after the script so the classes it sets are all defined here in one place */
-#cables .cable .halo { fill: none; stroke: #B794FF; stroke-width: 6; }
-#cables .cable .core { fill: none; stroke: #ECE8F2; stroke-width: 1.3; stroke-linecap: round; }
-#cables .cable.n .core { stroke-dasharray: 3 6; stroke-width: 1.5; }
-#cables .cable.m .core { stroke-width: 1; stroke: rgba(236,232,242,.8); }
-#cables .cable.m .halo { stroke-width: 4; }
-#cables .cable .arc { fill: none; stroke: #fff; stroke-width: .8; stroke-linejoin: round; }
-#cables .cable.sel .core { stroke-width: 2; stroke: #fff; }
-#cables .cable.sel .halo { stroke-width: 9; }
-#cables .cable .sp { fill: #fff; }
-#cables .cable .spg { fill: #B794FF; }
-#cables .cable .hnd { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: ns-resize; opacity: 0; transition: opacity .15s; }
-#cables .cable:hover .hnd, #cables .cable.sel .hnd { opacity: 1; }
-#cables .cable.mute .core { stroke-dasharray: 2 4; }
-#cables #drawg .core { fill: none; stroke: #ECE8F2; stroke-width: 1.3; opacity: .8; stroke-dasharray: 4 4; }
+.node.flow.act:hover { border-color: var(--purple-400); }
+.pmenu .pi .ic svg { width: 20px; height: 11px; display: block; }
 </style>
 </body>
 </html>
