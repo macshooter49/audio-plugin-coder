@@ -17675,7 +17675,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // fb537 — restore the page BEFORE replaceState so the editor's first tick already
             // pushes the right one (the ?page=N parse-time apply means the front never paints).
             // Absent property == a blob older than fb537: fall back to 1 (SYN), the new default.
-            uiPage.store (juce::jlimit (0, 4, (int) newState.getProperty ("uiPage", 1)));
+            uiPage.store (juce::jlimit (0, 5, (int) newState.getProperty ("uiPage", 1)));   // tp1 — 5 = the Patcher
             // fb636 bugA — the pooled pairs this patch lights are built BEFORE replaceState publishes its
             // pills to the audio thread (predicted from the tree, after every migration above has edited
             // it), then once more from the live pills as a net for anything the blob left out.

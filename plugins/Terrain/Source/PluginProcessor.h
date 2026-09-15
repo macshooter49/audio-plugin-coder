@@ -1366,7 +1366,7 @@ public:
     // EQ panel open/closed UI state (editor-side only, persists via PluginSettings.json)
     std::atomic<float> eqPanelOpen { 0.f };  // editor UI state, persists via PluginSettings.json
 
-    // Last-viewed UI page for THIS instance (0=front 1=syn 2=eq 3=dly 4=mod). In-memory ONLY —
+    // Last-viewed UI page for THIS instance (0=front 1=syn 2=eq 3=dly 4=mod 5=patcher). In-memory ONLY —
     // deliberately NOT saved in getStateInformation or the settings file: closing/reopening the
     // editor restores the page, while every NEW instance (or project reload) starts on the front page.
     // fb537 — 1 == the SYN page. Was 0 (front/hero): a fresh instance opened on the hero page

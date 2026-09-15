@@ -1280,6 +1280,19 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (args.size() >= 1) audioProcessor.setMacroNamesJson (args[0].toString());
                 complete (juce::var ("ok"));
             })
+            // tp1 — THE PATCHER LAYOUT (positions, LFO number nodes, the view). Same shape as macroNames.
+            .withNativeFunction("getPatcherJson", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const juce::String j = audioProcessor.getPatcherJson();
+                complete (juce::var (j.isNotEmpty() ? j : juce::String ("{}")));
+            })
+            .withNativeFunction("setPatcherJson", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1) audioProcessor.setPatcherJson (args[0].toString());
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("copyOscParams", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2215,7 +2228,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 complete(audioProcessor.eqPanelOpen.load());
             })
-            // Last-viewed page for THIS instance (0=front 1=syn 2=eq 3=dly 4=mod). In-memory only:
+            // Last-viewed page for THIS instance (0=front 1=syn 2=eq 3=dly 4=mod 5=patcher). In-memory only:
             // close/reopen the editor → same page; a brand-new instance always starts on the front page.
             .withNativeFunction("setUiPage", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)

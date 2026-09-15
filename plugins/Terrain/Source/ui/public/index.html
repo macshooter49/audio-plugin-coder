@@ -864,7 +864,7 @@ window.__ctlMenuRows = (function () { var byEl = new WeakMap(), matchers = [];
    loaded in its own native window with ?card=<id>; sniffed synchronously here (before
    any CSS/JS) so the card-only chrome applies from frame one — no full-UI flash. */
 window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod|lfo|crv)/)||[])[1]||'';   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */   /* fb328 — crv = the Distortion curve card. ⚠️ THIS regex is the SECOND card-id whitelist (the first is popOutCardWindow's in C++) — miss it and the popped window boots the FULL UI as a mini Terrain */
-window.__bootPage=+((location.search.match(/[?&]page=([1-4])/)||[])[1]||0);   /* fb514 -- reopen lands on the saved panel: C++ appends ?page=N (processor uiPage atomic) so the panel applies at PARSE time -- the hero never paints, no flash, no reopen CPU spike */
+window.__bootPage=+((location.search.match(/[?&]page=([1-5])/)||[])[1]||0);   /* tp1 — 5 = the Patcher */   /* fb514 -- reopen lands on the saved panel: C++ appends ?page=N (processor uiPage atomic) so the panel applies at PARSE time -- the hero never paints, no flash, no reopen CPU spike */
 /* fb103 — CRISP AT ANY SIZE: the editor's settled pageZoom is pushed here; the
    devicePixelRatio the page sees becomes base×zoom (capped 3 for CPU), so every
    canvas that sizes buffers from clientWidth×dpr re-rasters at TRUE device
@@ -3213,8 +3213,8 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
   display: flex;
   align-items: center;
   padding: 0 16px;
-  background: var(--bg-surface);   /* fb271 — OUTPUT strip = the GRAIN ENGINE panel color exactly (Max: front-page bottom is ONE color = grain). Reverts fb270's lighter --bg-strip. */
-  border-top: 1px solid var(--border);
+  background: transparent;   /* tp1 (Max, 2026-09-14): "make it the same color as everything else … it stands out because it's the old design" — the strip wears the page's own ground */
+  border-top: 1px solid rgba(255,255,255,.075);
   flex-shrink: 0;
   gap: 12px;
 }
@@ -3235,41 +3235,42 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
 }
 .output-icon canvas { display: block; }
 
+/* tp1 — THE OUTPUT SLIDER IS THE HOUSE SLIDER (the osc right-click Volume/Pan glass slider, fb143): a 16px hit zone,
+   a 2px track at .16 white, the purple fill, a 2×9 white BAR for the value and the unity notch above the track.
+   The JS still writes width/left in percent; only the furniture changed. */
 .output-slider-wrap {
   flex: 1;
-  height: 6px;
-  background: var(--border);
-  border-radius: 3px;
-  cursor: pointer;
+  height: 16px;
+  background: transparent;
+  cursor: ew-resize;
   position: relative;
 }
+.output-slider-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); height: 2px; border-radius: 1px; background: rgba(255,255,255,.16); }
+.output-slider-wrap::after  { content: ''; position: absolute; left: 88.5%; top: 2px; width: 1px; height: 4px; background: rgba(255,255,255,.35); pointer-events: none; }   /* unity (0 dB) */
 .output-slider-fill {
   position: absolute;
   left: 0;
-  top: 0;
-  height: 100%;
-  background: var(--purple-500);
-  border-radius: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  background: var(--purple-400);
+  border-radius: 1px;
 }
 .output-slider-thumb {
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  background: var(--bg-surface);
-  border: 2px solid var(--purple-500);
-  border-radius: 50%;
+  width: 2px;
+  height: 9px;
+  background: #fff;
+  border: none;
+  border-radius: 1px;
   transform: translate(-50%, -50%);
-  cursor: grab;
+  cursor: ew-resize;
+  box-shadow: 0 0 4px rgba(255,255,255,.35);
   transition: box-shadow 0.1s;
 }
-.output-slider-thumb:hover {
-  box-shadow: 0 0 0 4px rgba(139,92,246,0.1);
-}
-.output-slider-thumb:active {
-  cursor: grabbing;
-  box-shadow: 0 0 0 6px rgba(139,92,246,0.15);
-}
+.output-slider-thumb:hover { box-shadow: 0 0 6px rgba(255,255,255,.6); }
+.output-slider-thumb:active { cursor: ew-resize; box-shadow: 0 0 6px rgba(255,255,255,.6); }
 
 .output-value {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
@@ -7098,7 +7099,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           <span class="fx-page-label" id="fxPageLabel">TAPE</span>
           <button class="fx-nav-arrow" id="fxNavNext">&#9654;</button>
         </div>
-        <button class="tape-link-btn" id="tapeLinkBtn" title="Link all 3 tape machines in series (Studio → Cassette → Wire)">
+        <button class="tape-link-btn" id="tapeLinkBtn" title="Link all 3 tape machines in series (Reel → Porta → Wire)">
           <canvas id="tape-link-icon" width="22" height="22"></canvas>
         </button>
       </div>
@@ -7526,7 +7527,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">A</span></span><!-- S/N chips removed: SUB is a per-osc box; noise → one shared engine (mid) -->
+              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">01</span></span><!-- S/N chips removed: SUB is a per-osc box; noise → one shared engine (mid) -->
               <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -7869,7 +7870,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">B</span></span><!-- S/N chips removed -->
+              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">02</span></span><!-- S/N chips removed -->
               <button class="swap-btn" type="button" id="osc-b-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -8236,7 +8237,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">C</span></span><!-- S/N chips removed -->
+              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">03</span></span><!-- S/N chips removed -->
               <button class="swap-btn" type="button" id="osc-c-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -8579,7 +8580,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">D</span></span><!-- S/N chips removed -->
+              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">04</span></span><!-- S/N chips removed -->
               <button class="swap-btn" type="button" id="osc-d-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -12132,6 +12133,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           window.__fxAdd=fxAdd; window.__fxAddMenu=fxAddMenu;
           window.__fxrDevs=function(){ return DEVS; };   // fb446 — headless gate hook
           window.__fxrRender=function(){ try{ reRenderKeepSwap(); }catch(e){ render(); } };   // fb446 — headless gate hook
+          /* tp1 — THE PATCHER'S DOORS INTO THE RACK. The canvas adds a card (the add list), removes one (⌫ / Remove),
+             sets a per-osc route (an osc → card cable IS the route pill) and reorders the chain (a card → card cable
+             puts the target right after the source). Every one of them goes through the rack's own functions, so
+             the rank/route/active parameters are written exactly as the rack itself writes them. */
+          window.__fxrAdd=function(core){ try{ fxAdd(core,0,null); return DEVS.length-1; }catch(e){ return -1; } };
+          window.__fxrRemove=function(idx){ try{ fxRemove(idx|0); return true; }catch(e){ return false; } };
+          window.__fxrSetRoute=function(idx,ri,on){ try{ var d=DEVS[idx|0]; if(!d||!d.route) return false; d.route[ri]=on?1:0; if(d.rp&&d.rp[ri]) window.__setSynParam(d.rp[ri], on?1:0);
+            var card=rack.querySelector('.fxr-dev[data-dev="'+(idx|0)+'"] .fxr-r[data-r="'+ri+'"]'); if(card) card.classList.toggle('fxr-on',!!on); return true; }catch(e){ return false; } };
+          window.__fxrReorder=function(order){ try{ var nd=[]; for(var i=0;i<order.length;i++){ var d=DEVS[order[i]|0]; if(d&&nd.indexOf(d)<0) nd.push(d); } for(var j=0;j<DEVS.length;j++) if(nd.indexOf(DEVS[j])<0) nd.push(DEVS[j]); DEVS=nd; fxPushRanks(); render(); return true; }catch(e){ return false; } };
           /* ═══ fb622 — THE RACK MUST REBUILD ITSELF WHEN A PRESET LANDS ═══════════════════════
              Max: "I added a phaser on there and my phaser doesn't show up… the phaser is there, I
              just can't see it." fxrRestoreChain is the parameter-driven rebuild and it already
@@ -17510,7 +17520,8 @@ function applySynPanelOpen(open) {
 function setActivePanel(which, restoring) {
   // which = 'syn' | 'eq' | 'dly' | 'mod' | null
   currentActivePanel = which;   // fb636 — first: a step below that throws must never leave the page believing the front is shown
-  applySynPanelOpen(which === 'syn');
+  applySynPanelOpen(which === 'syn' || which === 'tp');   /* tp1 — the Patcher IS the synth panel, showing the canvas instead of the grid */
+  document.body.classList.toggle('tp-open', which === 'tp');
   applyEqPanelOpen(which === 'eq');
   applyDelayPanelOpen(which === 'dly');
   applyModPanelOpen(which === 'mod');
@@ -17530,19 +17541,19 @@ function setActivePanel(which, restoring) {
   if (typeof saveSettings === 'function') saveSettings();
 }
 // Page codes shared with C++ (uiPage atomic): 0=front, then 1-based index into this list.
-var UI_PAGE_IDS = ['syn', 'eq', 'dly', 'mod'];
+var UI_PAGE_IDS = ['syn', 'eq', 'dly', 'mod', 'tp'];   /* tp1 — 5 = the Patcher (the synth panel showing the canvas instead of the grid) */
 var _uiPageRestored = -1;   // last applied restore (the C++ tick re-pushes until pageReady)
 function restoreUiPage(n) {
   n = n | 0;
   if (n === _uiPageRestored) return;   // idempotent — the restore push repeats every tick
   // fb622 — EQ and DLY have no button any more, and a preset saved with one of them open would
   // otherwise reopen every user into a panel they never chose. Those two pages fall back to SYN.
-  var page = (n >= 1 && n <= 4) ? UI_PAGE_IDS[n - 1] : null;
+  var page = (n >= 1 && n <= 5) ? UI_PAGE_IDS[n - 1] : null;   /* tp1 */
   if (page === 'eq' || page === 'dly') page = 'syn';
   if (typeof setActivePanel === 'function') setActivePanel(page, true);
   _uiPageRestored = n;   // fb636 — only once it has applied (a throw retries on the next push instead of locking the page out)
 }
-  if(!window.__cardOnly&&window.__bootPage>=1&&window.__bootPage<=4){try{restoreUiPage(window.__bootPage);}catch(e){}}   /* fb514 -- parse-time apply: runs before init() registers the front painter, so the front page never boots when reopening onto a panel */
+  if(!window.__cardOnly&&window.__bootPage>=1&&window.__bootPage<=5){try{restoreUiPage(window.__bootPage);}catch(e){}}   /* fb514 -- parse-time apply: runs before init() registers the front painter, so the front page never boots when reopening onto a panel */
 document.getElementById('eq-btn').addEventListener('click', () => {
   setActivePanel(currentActivePanel === 'eq' ? null : 'eq');
 });
@@ -17598,7 +17609,9 @@ setTimeout(function wireOscEnable () {
 // open panel (EQ/DLY/MOD) and vice versa. Without this, the SYN panel
 // would overlay other panels (same z-index, later-in-DOM wins).
 document.getElementById('syn-btn').addEventListener('click', () => {
-  setActivePanel(currentActivePanel === 'syn' ? null : 'syn');
+  /* tp1 — Max: "whenever we open up terrain, it puts us on the synthesizer page. Whenever we click that synth
+     button it will then put us to the patcher." The pill walks synth page → Patcher → synth page. */
+  setActivePanel(currentActivePanel === 'syn' ? 'tp' : 'syn');
 });
 
 // Bridge raw <input type="range"> / <select> elements to the
@@ -26177,37 +26190,32 @@ function drawMasterMixKnob() {
   const ctx = c.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  const cx = size / 2, cy = size / 2, radius = 13;
+  const cx = size / 2, cy = size / 2, radius = 12;
   const startAngle = Math.PI * 0.75;
   const endAngle = Math.PI * 0.75 + Math.PI * 1.5;
   const norm = state.masterMix / 100;
   const valAngle = startAngle + norm * (endAngle - startAngle);
 
-  // Track
+  /* tp1 — THE SYN RING, verbatim (Max: "that's an old output knob … make it sleek, smooth"): the faint 270° track,
+     the white round-capped value arc, and the number inside the ring (fb630's law). No dot. */
   ctx.beginPath();
   ctx.arc(cx, cy, radius, startAngle, endAngle, false);
-  ctx.strokeStyle = currentTheme.knobTrack;
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+  ctx.lineWidth = 2;
   ctx.lineCap = 'round';
   ctx.stroke();
-
-  // Active arc
-  if (norm > 0.005) {
+  if (norm > 0.004) {
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, valAngle, false);
-    ctx.strokeStyle = currentTheme.knobActive;
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+    ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.stroke();
   }
-
-  // Position dot
-  const dotX = cx + Math.cos(valAngle) * radius;
-  const dotY = cy + Math.sin(valAngle) * radius;
-  ctx.beginPath();
-  ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
-  ctx.fillStyle = currentTheme.knobDot;
-  ctx.fill();
+  ctx.fillStyle = 'rgba(197,191,210,0.95)';
+  ctx.font = '300 8.5px -apple-system, "SF Pro Display", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(Math.round(state.masterMix)), cx, cy + 0.8);
 }
 
 function formatMasterMix(val) {
@@ -28983,7 +28991,7 @@ function initFxSuite() {
   });
 
   // ─── Machine Switcher Logic ───
-  var TAPE_MACHINES = ['STUDIO', 'CASSETTE', 'WIRE'];
+  var TAPE_MACHINES = ['REEL', 'PORTA', 'WIRE'];   /* tp2 — renamed (Max): the rack's Tape card already owns Studio and Cassette; the hero's reel-to-reel, the porta four-track, the wire recorder */
 
   function cycleMachine(dir) {
     state.tapeMachine = (state.tapeMachine + dir + 3) % 3;
@@ -33237,7 +33245,9 @@ restoreThemeFromBackend();
         try{ if(ms2)mst=ms2.getNormalisedValue(); }catch(e){}
         slot.sum+=a.depth*mst*lv; live=true; } });
     return (found&&live)?out:null; };
-  window.__tiAddRoute=function(env,lfo,dest){ var el=elForDest(dest); if(env)addEnvAssign(env,dest,el); else addAssign(lfo,dest,el); };   /* fb194 — probe surface */
+  window.__tiAddRoute=function(env,lfo,dest){ var el=elForDest(dest); if(env)addEnvAssign(env,dest,el); else addAssign(lfo,dest,el); };
+  window.__tiRemoveRoute=function(tag,dest){ for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcTag(a)===tag){ removeAssign(a); return true; } } return false; };   /* tp1 — the Patcher cuts a cable */
+  window.__tiElForDest=function(dest){ return elForDest(dest); };   /* tp1 — the Patcher lands a mod cable on the knob's own surface */   /* fb194 — probe surface */
   window.__tiAddNoteRoute=function(dest){ addNoteAssign(dest, elForDest(dest)); return assigns.length; };   /* fb559 — probe surface: KEY is the only source that holds still for a whole note, which is what makes it the one you can measure a CONNECTION CURVE with */
   /* fb453 — PRUNE A DELETED DEVICE'S ROUTES. The rack calls this from fxRemove() with the
      device's 12-wide destination block. Without it the NEXT card to take that (kind, instance)
@@ -34384,6 +34394,11 @@ restoreThemeFromBackend();
       for(var i=0;i<kl.length;i++) kl[i].textContent=labs[i]||'';
       if(exp) exp.style.display='block';
       refreshKnobs(); }
+    /* tp1 — the Patcher reads and writes the chain: a cable into a tile puts it in the chain, cutting it takes it out. */
+    window.__flowChain=function(){ return chain.slice(); };
+    window.__flowSetChain=function(arr){ try{ var nc=[]; (arr||[]).forEach(function(m){ if(CHOICES.indexOf(m)>0&&nc.indexOf(m)<0) nc.push(m); });
+      nc.forEach(function(m){ if(chain.indexOf(m)<0) pushMixFull(m); }); chain=nc; if(chain.length&&chain.indexOf(displayMode)<0) displayMode=chain[chain.length-1];
+      writeChain(); renderChain(); return true; }catch(e){ return false; } };
     // tile click — add to the chain, or click again to remove (cards still open on right-click)
     Array.prototype.forEach.call(modes.querySelectorAll('.flow-mode'),function(t){ t.addEventListener('click',function(){
       var m=t.getAttribute('data-mode'), pos=chain.indexOf(m);
@@ -41862,5 +41877,623 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   window.__tiPresets = { rescan, openBrowser, load, state: S, askRename };   /* the gate hook (fb635: + askRename) */
 })();
 </script>
+<style id="tp-styles">
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   tp1/tp2 — THE TERRAIN PATCHER (2026-09-14). The synth page's own modules on a canvas with cables.
+   The nodes ARE the live devices (moved into the canvas while the page is open, moved home when it
+   closes), wearing the browser menu's glass. Ports are circles; a modulation dot sits under every
+   knob; cables are the routing parameters drawn as lines. Mockup: Design/patcher-mockup.html.
+   tp2 (Max's second read): no header on the tape modules, numbered oscillators, FFOSSO-style names
+   when zoomed out, the two-pane browser, undo/redo, the Randomizer node, the dice.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+body.tp-open #syn-panel > .ti-syn-page { display: none; }
+#syn-panel #tp-page { display: none; position: absolute; left: 0; right: 0; top: 0; bottom: 48px; overflow: hidden; cursor: default; }
+body.tp-open #syn-panel #tp-page { display: block; }
+body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left: 0; right: 0; bottom: 0; z-index: 31; }
+#tp-page.panning { cursor: grabbing; }
+#tp-page .tp-grid { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1.2px); background-size: 26px 26px; }
+#tp-page .tp-world { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+#tp-page .tp-zoom { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+#tp-page .tp-cables { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+#tp-page .tp-cables .hit { pointer-events: stroke; stroke: transparent; stroke-width: 14; fill: none; cursor: pointer; }
+#tp-page .tp-nodes { position: absolute; left: 0; top: 0; }
+
+/* the node — the glass box every module wears here */
+#tp-page .tp-node { position: absolute; }
+#tp-page .tp-node > .tp-box { position: absolute; inset: 0; border-radius: 13px; pointer-events: none; z-index: 0;
+  background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.11); box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); transition: border-color .15s; }
+#tp-page .tp-node:hover > .tp-box { border-color: rgba(255,255,255,.28); }
+#tp-page .tp-node.tp-sel > .tp-box { border-color: var(--purple-400); }
+#tp-page .tp-node > .tp-body { position: relative; z-index: 1; }
+#tp-page .tp-node.off > .tp-body { opacity: .38; }
+#tp-page .tp-node > .tp-body > .device { position: relative; width: 100%; height: 100%; background: transparent !important; border-color: transparent !important; box-shadow: none !important; flex: none; margin: 0; }
+#tp-page .tp-node > .tp-body > .device.osc { display: flex; }
+#tp-page .tp-node > .tp-body > .device.osc.osc-hidden { display: flex; }
+#tp-page .tp-node > .tp-body > .device.mod #mod-engine { background: transparent; }
+#tp-page .tp-node > .tp-body > .device.envs .env-canvas, #tp-page .tp-node > .tp-body > .device.envs .env-shelf { background: transparent; }
+#tp-page .tp-node > .tp-body > .fxr-dev { position: relative; height: 100%; width: 100%; flex: none; background: transparent; border-color: transparent; border-radius: 13px; }
+#tp-page .tp-node > .tp-body > .fxr-dev .fxr-route { display: none; }
+#tp-page .tp-node > .tp-body > .fxr-dev .fxr-rightcol { justify-content: flex-end; }
+#tp-page .tp-node > .tp-body > .flow-vis { position: relative; width: 100%; height: 100%; }
+#tp-page .tp-node > .tp-body > .voice-meta { position: relative; width: 100%; height: 100%; padding: 8px 10px; box-sizing: border-box; }
+/* the tape machines and the tape loop, without the hero's header */
+#tp-page .tp-node > .tp-body > #fxPageTape { position: relative; display: flex !important; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 26px 8px 6px; box-sizing: border-box; }
+#tp-page #fxPageTape .machine-nav-arrow { display: none; }
+#tp-page .tp-node > .tp-body > #tape-loop-content { position: relative; display: flex !important; width: 100%; height: 100%; padding: 10px 8px 6px; box-sizing: border-box; }
+#tp-page .tp-machines { position: absolute; left: 12px; top: 8px; z-index: 3; display: flex; gap: 6px; }
+#tp-page .tp-pill { height: 16px; padding: 0 9px; border: 1px solid rgba(88,88,128,.5); border-radius: 9px; font-size: 9px; letter-spacing: .04em; font-weight: 300; color: #9B93B0; display: flex; align-items: center; cursor: pointer; line-height: 1; }
+#tp-page .tp-pill:hover { color: #fff; }
+#tp-page .tp-pill.on { border-color: var(--purple-400); color: #fff; text-shadow: 0 0 3px rgba(255,255,255,.35); }
+#tp-page .tp-pwr { position: absolute; right: 10px; top: 9px; z-index: 4; width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--purple-400); background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.5); cursor: pointer; }
+#tp-page .tp-node.off .tp-pwr { background: transparent; border-color: #6B6080; box-shadow: none; }
+/* the FLOW tiles: their own law */
+#tp-page .flow-modes { display: contents !important; }
+#tp-page .flow-mode { position: absolute !important; top: auto !important; width: 113px; height: 65px; min-height: 0; margin: 0; }
+#tp-page .flow-mode.tp-sel { box-shadow: 0 0 0 2px rgba(183,148,255,.35); }
+/* MIDI In · Out · the LFO numbers · the Randomizer — the nodes that are not a module */
+#tp-page .tp-end { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 12px 10px 14px; }
+#tp-page .tp-keys { display: flex; gap: 1.5px; align-items: flex-end; height: 26px; }
+#tp-page .tp-keys i { display: block; width: 8px; height: 26px; border-radius: 0 0 2px 2px; background: rgba(255,255,255,.14); transition: background .08s; }
+#tp-page .tp-keys i.bk { width: 5.5px; height: 15px; background: rgba(255,255,255,.28); margin: 0 -2.75px; z-index: 1; position: relative; }
+#tp-page .tp-keys i.on { background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.7); }
+#tp-page .tp-scope { flex: 1; align-self: stretch; position: relative; }
+#tp-page .tp-scope svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#tp-page .tp-scope .gl { stroke: rgba(139,92,246,.14); stroke-width: .5; }
+#tp-page .tp-scope .ln { fill: none; stroke: #ECE8F2; stroke-width: 1.7; filter: drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5)); }
+#tp-page .tp-mtr { display: flex; gap: 4px; align-items: flex-end; align-self: stretch; }
+#tp-page .tp-mtr b { display: block; width: 5px; height: 100%; background: rgba(255,255,255,.1); border-radius: 2px; position: relative; overflow: hidden; }
+#tp-page .tp-mtr b i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--purple-400); border-radius: 2px; }
+#tp-page .tp-lfon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: rgba(255,255,255,.55); text-shadow: 0 1px 3px rgba(0,0,0,.9); cursor: grab; }
+#tp-page .tp-node.live .tp-lfon { color: #fff; }
+#tp-page .tp-lfon::after { content: ''; position: absolute; left: 9px; right: 9px; bottom: 6px; height: 1px; background: var(--purple-400); opacity: 0; transition: opacity .15s; }
+#tp-page .tp-node.live .tp-lfon::after { opacity: 1; }
+#tp-page .tp-rnd { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; color: rgba(255,255,255,.75); transition: color .15s; }
+#tp-page .tp-rnd:hover, #tp-page .tp-node.live .tp-rnd { color: #fff; }
+#tp-page .tp-rnd svg { width: 38px; height: 26px; display: block; }
+#tp-page .tp-rnd.fire svg { filter: drop-shadow(0 0 6px rgba(183,148,255,.95)); }
+#tp-page .tp-rnd .lv { position: absolute; bottom: 5px; left: 0; right: 0; text-align: center; font-size: 6.5px; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(255,255,255,.35); }
+
+/* the FFOSSO read: past a zoom the module simplifies to its name */
+#tp-page .tp-name { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; text-align: center; padding: 0 10px; pointer-events: none;
+  font-size: 30px; font-weight: 600; letter-spacing: .5px; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,.6); }
+#tp-page.lod .tp-node:not(.tile) .tp-name { display: flex; }
+#tp-page.lod .tp-node:not(.tile) > .tp-body { opacity: .14; }
+#tp-page.lod .tp-node.off > .tp-body { opacity: .07; }
+#tp-page.lod .tp-node[data-kind="lfon"] .tp-name, #tp-page.lod .tp-node[data-kind="rnd"] .tp-name { font-size: 20px; }
+
+/* ports — circles, no words; the legal ones light while you drag */
+#tp-page .tp-port { position: absolute; width: 18px; height: 18px; display: grid; place-items: center; cursor: crosshair; z-index: 6; }
+#tp-page .tp-port.in { left: -9px; } #tp-page .tp-port.out { right: -9px; } #tp-page .tp-port.mod { bottom: -9px; } #tp-page .tp-port.top { top: -9px; }
+#tp-page .tp-port i { display: block; width: 9px; height: 9px; border-radius: 50%; background: #16141f; border: 1.4px solid rgba(255,255,255,0.45); transition: border-color .12s, box-shadow .12s, background .12s, opacity .12s; }
+#tp-page .tp-port.top i { width: 7px; height: 7px; opacity: .55; }
+#tp-page .tp-port.live i { background: var(--purple-400); border-color: var(--purple-400); box-shadow: 0 0 7px rgba(183,148,255,.75); opacity: 1; }
+#tp-page .tp-port.can i { border-color: var(--purple-400); box-shadow: 0 0 0 3px rgba(183,148,255,.22), 0 0 8px rgba(183,148,255,.6); background: rgba(183,148,255,.35); opacity: 1; }
+#tp-page .tp-port.no i { opacity: .22; }
+#tp-page .tp-port:hover i { border-color: #fff; }
+
+/* cables — thin white lines; the purple spike is the signal */
+#tp-page .tp-cables .cable .core { fill: none; stroke: #ECE8F2; stroke-width: 1.3; stroke-linecap: round; opacity: .5; transition: opacity .2s; }
+#tp-page .tp-cables .cable.m .core, #tp-page .tp-cables .cable.r .core { stroke-width: 1; }
+#tp-page .tp-cables .cable.r .core { stroke-dasharray: 3 5; }
+#tp-page .tp-cables .cable.hot .core { opacity: .85; }
+#tp-page .tp-cables .cable.sel .core { stroke: #fff; stroke-width: 2; opacity: 1; }
+#tp-page .tp-cables .cable.fixed .core { opacity: .3; }
+#tp-page .tp-cables .cable .spk { fill: none; stroke: var(--purple-400); stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(183,148,255,.9)); opacity: 0; }
+#tp-page .tp-cables .drawg .core { fill: none; stroke: #ECE8F2; stroke-width: 1.3; opacity: .7; stroke-dasharray: 4 4; }
+
+/* the chrome: the 13px glyph cluster — undo · redo · fit · tidy · dice */
+#tp-page .tp-tools { position: absolute; top: 10px; right: 14px; display: flex; align-items: center; gap: 13px; z-index: 12; }
+#tp-page .tp-tools .g { display: flex; align-items: center; justify-content: center; padding: 2px 1px; cursor: pointer; color: rgba(255,255,255,.5); transition: color .12s; }
+#tp-page .tp-tools .g:hover { color: #fff; }
+#tp-page .tp-tools .g.dis { color: rgba(255,255,255,.16); cursor: default; }
+#tp-page .tp-tools .g svg { width: 13px; height: 13px; display: block; }
+#tp-page .tp-tools .sep { width: 1px; height: 14px; background: rgba(88,88,128,.5); }
+#tp-page .tp-mini { position: absolute; right: 14px; bottom: 10px; width: 118px; height: 72px; z-index: 12; border-radius: 9px; border: 1px solid rgba(255,255,255,0.11); background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06); overflow: hidden; cursor: pointer; }
+#tp-page .tp-mini.hidden { display: none; }
+#tp-page .tp-mini svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* the glass menus — absolute inside the page (never body: #syn-panel scopes the CSS) */
+#tp-page .tp-menu { position: absolute; z-index: 310; display: none; min-width: 176px; max-width: 206px; background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.11); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); padding: 5px; color: #fff; font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif; }
+#tp-page .tp-menu.on { display: block; }
+#tp-page .tp-menu .ps { font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255,255,255,.30); padding: 6px 9px 3px; }
+#tp-page .tp-menu .pi { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 6px; cursor: pointer; font-size: 9.5px; letter-spacing: .5px; color: rgba(255,255,255,.5); transition: .1s; font-weight: 400; }
+#tp-page .tp-menu .pi:hover { color: rgba(255,255,255,.86); background: rgba(255,255,255,0.05); }
+#tp-page .tp-menu .pi.cur { color: #fff; background: rgba(255,255,255,0.07); }
+#tp-page .tp-menu .pi.cur::before { content: '•'; color: #fff; font-size: 9px; line-height: 1; flex: none; }
+#tp-page .tp-menu .pi.danger:hover { color: #f43f5e; }
+#tp-page .tp-menu .pi.dis { opacity: .3; cursor: default; }
+#tp-page .tp-menu .sepd { height: 1px; background: rgba(255,255,255,.08); margin: 4px 6px; }
+/* the add browser — two panes: categories, then the names. Nothing else. */
+#tp-page .tp-add { min-width: 0; max-width: none; width: 384px; height: 294px; padding: 0; display: none; flex-direction: column; overflow: hidden; }
+#tp-page .tp-add.on { display: flex; }
+#tp-page .tp-add .head { display: flex; align-items: center; height: 31px; padding: 0 9px 0 14px; border-bottom: 1px solid rgba(255,255,255,0.07); flex: none; gap: 6px; }
+#tp-page .tp-add .head svg { width: 10px; height: 10px; color: rgba(255,255,255,.5); flex: none; }
+#tp-page .tp-add input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #fff; font-size: 10px; letter-spacing: .3px; font-family: inherit; height: 22px; }
+#tp-page .tp-add input::placeholder { color: rgba(255,255,255,.30); }
+#tp-page .tp-add .x { display: flex; align-items: center; justify-content: center; padding: 2px 1px; cursor: pointer; color: rgba(255,255,255,.5); }
+#tp-page .tp-add .x:hover { color: #fff; } #tp-page .tp-add .x svg { width: 13px; height: 13px; color: inherit; }
+#tp-page .tp-add .panes { flex: 1; min-height: 0; display: flex; }
+#tp-page .tp-add .cats { width: 124px; flex: none; border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; padding: 6px 0; scrollbar-width: none; }
+#tp-page .tp-add .items { flex: 1; min-width: 0; overflow-y: auto; padding: 6px 4px; scrollbar-width: none; }
+#tp-page .tp-add .cats::-webkit-scrollbar, #tp-page .tp-add .items::-webkit-scrollbar { display: none; }
+#tp-page .tp-add .row { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px 0 14px; cursor: pointer; font-size: 10px; color: rgba(255,255,255,.5); transition: .1s; border-radius: 6px; margin: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tp-page .tp-add .row:hover { color: rgba(255,255,255,.86); background: rgba(255,255,255,0.05); }
+#tp-page .tp-add .row.cur { color: #fff; background: rgba(255,255,255,0.07); }
+#tp-page .tp-add .row.cur::before { content: '•'; color: #fff; font-size: 9px; line-height: 1; flex: none; margin-left: -8px; margin-right: 1px; }
+#tp-page .tp-add .row.dis { opacity: .3; cursor: default; }
+#tp-page .tp-toast { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); padding: 6px 12px; border-radius: 8px; background: rgba(22,20,34,0.72); border: 1px solid rgba(255,255,255,0.11); font-size: 9.5px; letter-spacing: .5px; color: rgba(255,255,255,.78); z-index: 320; opacity: 0; transition: opacity .2s; pointer-events: none; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+#tp-page .tp-toast.on { opacity: 1; }
+</style>
+
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   tp1/tp2 — THE TERRAIN PATCHER (2026-09-14). Max: "It's time to build this thing."
+   The synth page's own modules on a canvas, with cables. Nothing here is a copy of a module: while
+   the page is open the live devices are MOVED into the canvas (osc 01-04, the filter, the envelopes,
+   the LFO engine, the four FLOW tiles, the resonator, the tape machines, the tape loop, every FX
+   card, the voice column) and moved home when it closes. The cables are the routing the engine
+   already has, drawn as lines:
+     osc → filter        = SYN_OSC_x_F1MIX / F2MIX (the F1/F2 send)
+     osc → effect        = the card's per-osc route (SYN_<fx>_SRC_x)
+     effect → effect     = the rack order (the float _RANK)
+     MIDI In → Arp/Robin, audio → Chop/Glitch = the FLOW chain (FLOW_CHAIN_1..4)
+     LFO n / Env → knob  = the mod matrix (synModJson)
+     the dry path → Resonator → Tape → Tape Loop = the master inserts, while switched on
+     Randomizer → module = a canvas-only cable (patcherJson): press it and the modules it holds re-roll
+   so every patch ever saved opens on its own graph with nothing migrated; the only thing saved on top
+   is where the modules sit (patcherJson). Every write goes through the module's own door
+   (__fxrSetRoute, __flowSetChain, __tiAddRoute, __setSynParam) — the rack, the tiles and the matrix
+   keep writing their parameters exactly as they always did.
+   tp2 — Max's second read: no header on the tape modules, numbered oscillators (01…), FFOSSO-style
+   names when zoomed out, the two-pane browser back, undo/redo, the Randomizer node, the dice.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+(function(){
+  if (window.__cardOnly) return; if (window.__tpInit) return; window.__tpInit = 1;
+  var NF = function(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } };
+  var ST = function(){ try{ return (typeof state!=='undefined')?state:null; }catch(e){ return null; } };
+  var page=null, world=null, zoomEl=null, cg=null, drawg=null, nodesEl=null, addM=null, nMenu=null, toastEl=null, miniEl=null;
+  var isOpen=false, built=false, view={x:0,y:0,z:0.6}, nodes=[], cables=[], sel=null, drag=null, raf=0, shims={}, addCtx=null, addCat='All', suppressClick=false, syncT=0, applying=false, prevTapeTab=null;
+  var layout={v:1,pos:{},lfos:[],view:null,rnd:{on:false,targets:[],level:'medium'},aim:'anything'};
+  var SIZES={osc:[332,140],filter:[332,140],env:[332,96],lfo:[448,96],flow:[113,65],reso:[200,140],fx:[272,134],voice:[178,150],midi:[124,62],out:[176,86],lfon:[34,34],tape:[410,190],tapeloop:[410,200],rnd:[64,64]};
+  var FXNAMES={reverb:'Reverb',delay:'Delay',saturate:'Distortion',granular:'Granular',flt:'Filter',cho:'Chorus',fla:'Flanger',pha:'Phaser',tape:'Tape',eqz:'Equalizer',wid:'Widen',cmp:'Compress',ott:'Multiband',bod:'Bode',utl:'Utility',spl:'Splitter'};
+  var FXLIST=['reverb','delay','saturate','granular','tape','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];
+  var OSC=['a','b','c','d'], FLOWS=['arp','drift','chop','glitch'], FLOWNAME={arp:'Arp',drift:'Robin',chop:'Chop',glitch:'Glitch'}, FLOWP={arp:'FLOW_ARP',drift:'FLOW_DRF',chop:'FLOW_SEQ',glitch:'FLOW_GLI'};
+  var MACHINES=['REEL','PORTA','WIRE'];
+  var IC={ fit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
+    tidy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+    undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>',
+    redo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>',
+    dice:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>',
+    mag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>',
+    x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>',
+    mtn:'<svg viewBox="0 0 38 26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 23 L10 9 L15 16 L21 4 L28 15 L31 11 L36 23 Z"/><path d="M15 16 L18 12" opacity=".5"/></svg>' };
+  var SVGNS='http://www.w3.org/2000/svg';
+  function shim(id,def){ if(!shims[id]&&window.__synSliderShim) shims[id]=window.__synSliderShim(id,def==null?0:def); return shims[id]; }
+  function pv(id,def){ var s=shim(id,def); try{ return s?s.getNormalisedValue():(def||0); }catch(e){ return def||0; } }
+  function setP(id,v){ v=Math.max(0,Math.min(1,+v||0)); try{ var s=shim(id,0); if(s) s.setNormalisedValue(v); else if(window.__setSynParam) window.__setSynParam(id,v); }catch(e){} }
+  function readP(id){ var g=NF('getSynParam'); if(!g) return Promise.resolve(pv(id)); try{ var nat=Promise.resolve(g(id)).then(function(v){ v=parseFloat(v); return isNaN(v)?pv(id):v; }).catch(function(){ return pv(id); }); var late=new Promise(function(res){ setTimeout(function(){ res(pv(id)); },300); }); return Promise.race([nat,late]); }catch(e){ return Promise.resolve(pv(id)); } }   /* a page with no backend never answers — the shim's value stands in after 300 ms */
+  function $(s,r){ return (r||page||document).querySelector(s); }
+  function toast(s){ if(!toastEl)return; toastEl.textContent=s; toastEl.classList.add('on'); clearTimeout(toastEl._t); toastEl._t=setTimeout(function(){ toastEl.classList.remove('on'); },1500); }
+  var rnd=Math.random, pick=function(a){ return a[Math.floor(rnd()*a.length)]; }, between=function(a,b){ return a+rnd()*(b-a); };
+  /* a CHOICE is written as index/(N-1) with N asked of the backend (fb373's law: the cardinality is the parameter's, never a guess); the fallback is the enum's own count */
+  function choiceNorm(id,idx,fallbackN){ var n=0; try{ n=window.__paramCardinality?window.__paramCardinality(id):0; }catch(e){} if(!(n>1)) n=fallbackN||2; return Math.max(0,Math.min(1,idx/(n-1))); }
+  function oscNum(o){ return '0'+(OSC.indexOf(o)+1); }
+  function nodeName(n){ if(n.kind==='osc') return 'Oscillator '+oscNum(n.sub); if(n.kind==='fx') return FXNAMES[n.core]||'Effect'; if(n.kind==='lfon') return 'LFO '+n.sub; if(n.kind==='flow') return FLOWNAME[n.sub];
+    return {midi:'MIDI In',out:'Out',filter:'Filter',env:'Envelope',lfo:'LFO',reso:'Resonator',tape:'Tape',tapeloop:'Tape Loop',voice:'Voice',rnd:'Randomizer'}[n.kind]||n.kind; }
+
+  /* ── the page (built once, inside #syn-panel so every device keeps its CSS) ── */
+  function build(){ if(built) return; var sp=document.getElementById('syn-panel'); if(!sp) return; built=true;
+    page=document.createElement('div'); page.id='tp-page';
+    page.innerHTML='<div class="tp-grid"></div><div class="tp-world"><div class="tp-zoom"><svg class="tp-cables"><g class="cg"></g><g class="drawg"></g></svg><div class="tp-nodes"></div></div></div>'
+      +'<div class="tp-tools"><span class="g dis" data-t="undo" title="Undo">'+IC.undo+'</span><span class="g dis" data-t="redo" title="Redo">'+IC.redo+'</span><span class="g" data-t="fit" title="Fit everything in view">'+IC.fit+'</span><span class="g" data-t="tidy" title="Tidy the canvas">'+IC.tidy+'</span><span class="sep"></span><span class="g" data-t="dice" title="A new preset — right-click to aim it">'+IC.dice+'</span></div>'
+      +'<div class="tp-mini"><svg viewBox="0 0 118 72" preserveAspectRatio="none"></svg></div>'
+      +'<div class="tp-menu tp-add"><div class="head">'+IC.mag+'<input placeholder="Search" spellcheck="false"><span class="x">'+IC.x+'</span></div><div class="panes"><div class="cats"></div><div class="items"></div></div></div>'
+      +'<div class="tp-menu tp-nmenu"></div><div class="tp-toast"></div>';
+    sp.appendChild(page);
+    world=page.querySelector('.tp-world'); zoomEl=page.querySelector('.tp-zoom'); cg=page.querySelector('.cg'); drawg=page.querySelector('.drawg'); nodesEl=page.querySelector('.tp-nodes');
+    addM=page.querySelector('.tp-add'); nMenu=page.querySelector('.tp-nmenu'); toastEl=page.querySelector('.tp-toast'); miniEl=page.querySelector('.tp-mini');
+    bind(); }
+
+  /* ── the layout blob (positions, the LFO numbers, the randomizer's cables, the view, the aim) ── */
+  function loadLayout(cb){ var g=NF('getPatcherJson'), done=false;
+    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ layout={v:1,pos:o.pos||{},lfos:o.lfos||[],view:o.view||null,rnd:o.rnd||{on:false,targets:[],level:'medium'},aim:o.aim||'anything'}; } }catch(e){} }
+    function first(){ if(done) return; done=true; cb(); }
+    if(g){ try{ Promise.resolve(g()).then(function(s){ parse(s); if(done) applyLate(); else first(); }).catch(first); }catch(e){ first(); } setTimeout(first,300); }
+    else { var s=null; try{ s=localStorage.getItem('tpLayout'); }catch(e){} parse(s); first(); } }
+  var saveT=0; function saveLayout(){ clearTimeout(saveT); saveT=setTimeout(function(){ try{ var s=JSON.stringify(layout); var f=NF('setPatcherJson'); if(f) f(s); else localStorage.setItem('tpLayout',s); }catch(e){} },250); }
+  function applyLate(){ if(!isOpen) return; try{ nodes.forEach(function(n){ var p=layout.pos[n.key]; if(p){ n.x=p[0]; n.y=p[1]; place(n); } });
+    (layout.lfos||[]).forEach(function(k){ lfonNode(k,true); }); if(layout.rnd&&layout.rnd.on) rndNode(true); cables.forEach(layoutCable); if(layout.view){ view.x=layout.view.x; view.y=layout.view.y; view.z=layout.view.z||0.6; applyView(); } sync(); }catch(e){} }
+
+  /* ── nodes ── */
+  function nodeByKey(k){ for(var i=0;i<nodes.length;i++) if(nodes[i].key===k) return nodes[i]; return null; }
+  function nodeOf(el){ if(!el||!el.closest) return null; var w=el.closest('.tp-node, .tp-tile'); if(!w) return null; return nodeByKey(w.dataset.key); }
+  function defaultPos(n){ var k=n.kind;
+    if(k==='midi') return [0,300]; if(k==='out') return [1540,300]; if(k==='voice') return [0,40];
+    if(k==='osc') return [380, OSC.indexOf(n.sub)*176];
+    if(k==='filter') return [780,60]; if(k==='env') return [780,240]; if(k==='reso') return [780,380];
+    if(k==='flow') return n.sub==='arp'?[190,220]:n.sub==='drift'?[190,400]:n.sub==='chop'?[1400,740]:[1560,740];
+    if(k==='fx') return [1180+Math.floor(n.idx/4)*300, (n.idx%4)*168];
+    if(k==='lfo') return [0,720]; if(k==='lfon') return [470+((n.sub-1)%10)*44,751];
+    if(k==='tape') return [500,900]; if(k==='tapeloop') return [940,900]; if(k==='rnd') return [190,580];
+    return [0,0]; }
+  function place(n){ n.wrap.style.left=n.x+'px'; n.wrap.style.top=n.y+'px'; }
+  function mkNode(key,kind,el,extra){ var sz=SIZES[kind], n={key:key,kind:kind,el:el,w:sz[0],h:sz[1],ports:[]}; if(extra) for(var q in extra) n[q]=extra[q];
+    var p=layout.pos[key], d=defaultPos(n); n.x=p?p[0]:d[0]; n.y=p?p[1]:d[1];
+    if(kind==='flow'){ n.wrap=el; el.classList.add('tp-tile'); el.dataset.key=key; }
+    else { var wrap=document.createElement('div'); wrap.className='tp-node'; wrap.dataset.key=key; wrap.dataset.kind=kind; wrap.style.width=n.w+'px'; wrap.style.height=n.h+'px';
+      wrap.innerHTML='<div class="tp-box"></div><div class="tp-body"></div><div class="tp-name">'+nodeName(n)+'</div>'; n.wrap=wrap; n.body=wrap.querySelector('.tp-body'); n.body.style.width=n.w+'px'; n.body.style.height=n.h+'px';
+      if(el){ n.home={parent:el.parentNode,next:el.nextSibling}; n.body.appendChild(el); } nodesEl.appendChild(wrap); }
+    place(n); nodes.push(n); addSidePorts(n); return n; }
+  function addPort(n,kind,i,x,y,t){ var p=document.createElement('div'); p.className='tp-port '+kind; p.dataset.kind=kind; p.dataset.i=i; p.dataset.key=n.key; p.dataset.t=t||'a'; p.innerHTML='<i></i>';
+    if(kind==='mod'){ p.style.left=(x-9)+'px'; } else if(kind==='top'){ p.style.left=(n.w/2-9)+'px'; } else { p.style.top=(n.h/2-9)+'px'; }
+    p.addEventListener('click',function(e){ e.stopPropagation(); }); n.wrap.appendChild(p); n.ports.push({el:p,kind:kind,i:i,x:x,y:y}); return p; }
+  var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a'],top:1},filter:{ins:['a'],outs:['a'],top:1},reso:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a'],top:1},env:{outs:['m']},lfon:{outs:['m'],top:1},voice:{},lfo:{top:1},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']}};
+  function sideSpec(n){ if(n.kind==='flow') return (n.sub==='arp'||n.sub==='drift')?{ins:['n'],outs:['n'],top:1}:{ins:['a'],outs:['a'],top:1}; return SIDE[n.kind]||{}; }
+  function addSidePorts(n){ var sp=sideSpec(n); (sp.ins||[]).forEach(function(t,i){ addPort(n,'in',i,0,n.h/2,t); }); (sp.outs||[]).forEach(function(t,i){ addPort(n,'out',i,n.w,n.h/2,t); }); if(sp.top) addPort(n,'top',0,n.w/2,0,'r'); }
+  function offsetIn(el,root){ var x=0,y=0,e=el; while(e&&e!==root){ x+=e.offsetLeft; y+=e.offsetTop; e=e.offsetParent; } return {x:x,y:y}; }
+  function modTargets(n){ var out=[]; if(!n.el) return out; var dev=n.el;
+    if(n.kind==='osc'){ dev.querySelectorAll('.osc-knobs .knob[data-syn]').forEach(function(k){ if(k.offsetParent===null) return; var g=window.__ctlDestAt?window.__ctlDestAt(k):null; if(g&&g.dest!=null) out.push({el:k,dest:g.dest}); }); }
+    else if(n.kind==='filter'){ var slot=document.getElementById('filter-pill-2'); var s2=slot&&slot.classList.contains('act')?1:0; var T={cut:[0,1],res:[54,55],env:[56,57],drv:[58,59]};
+      dev.querySelectorAll('.fk-em canvas').forEach(function(c){ var t=c.getAttribute('data-em'); if(T[t]) out.push({el:c.parentElement,dest:T[t][s2]}); }); }
+    else if(n.kind==='fx'){ dev.querySelectorAll('.fxr-knobs .fxr-knob[data-mod-dest]').forEach(function(k){ out.push({el:k,dest:+k.getAttribute('data-mod-dest')}); }); }
+    else if(n.kind==='tape'||n.kind==='tapeloop'){ dev.querySelectorAll('[data-mod-dest]').forEach(function(k){ if(k.offsetParent===null) return; out.push({el:k,dest:+k.getAttribute('data-mod-dest')}); }); }
+    return out; }
+  function modDots(n){ var tg=modTargets(n), sig=tg.map(function(t){return t.dest;}).join(','); if(n.modSig===sig) return; n.modSig=sig;
+    n.ports.filter(function(p){return p.kind==='mod';}).forEach(function(p){ p.el.remove(); }); n.ports=n.ports.filter(function(p){return p.kind!=='mod';}); n.mods=[];
+    tg.forEach(function(t,i){ var o=offsetIn(t.el,n.wrap); var x=o.x+t.el.offsetWidth/2; var p=addPort(n,'mod',i,x,n.h,'m'); p.dataset.dest=t.dest; n.mods.push({dest:t.dest,el:t.el,port:p,x:x}); }); }
+  function modPortFor(n,dest){ if(!n.mods) return null; for(var i=0;i<n.mods.length;i++) if(n.mods[i].dest===dest) return n.mods[i]; return null; }
+  function portPos(n,kind,i){ if(kind==='out') return {x:n.x+n.w,y:n.y+n.h/2}; if(kind==='in') return {x:n.x,y:n.y+n.h/2}; if(kind==='top') return {x:n.x+n.w/2,y:n.y}; var m=n.mods&&n.mods[i]; return {x:n.x+(m?m.x:n.w/2),y:n.y+n.h}; }
+
+  /* ── adopt the live modules ── */
+  var homes={};
+  function adoptAll(){ nodes=[]; nodesEl.innerHTML='';
+    var q=function(s){ return document.querySelector(s); };
+    mkNode('midi','midi',null).body.innerHTML='<div class="tp-end"><div class="tp-keys">'+'wbwbwwbwbwbw'.split('').map(function(k){return '<i class="'+(k==='b'?'bk':'')+'"></i>';}).join('')+'</div></div>';
+    var vm=q('#syn-panel .voice-meta'); if(vm) mkNode('voice','voice',vm);
+    OSC.forEach(function(o){ var d=q('#osc-'+o+'-device'); if(!d) return; var n=mkNode('osc-'+o,'osc',d,{sub:o}); n.wasHidden=d.classList.contains('osc-hidden'); d.classList.remove('osc-hidden'); if(n.wasHidden&&window.__oscFaceHeal){ try{ window.__oscFaceHeal(o); }catch(e){} } });
+    var fd=q('#filter-device'); if(fd) mkNode('filter','filter',fd);
+    var ev=q('#syn-panel .device.envs'); if(ev) mkNode('env','env',ev);
+    var lf=q('#syn-panel .device.mod'); if(lf) mkNode('lfo','lfo',lf);
+    var fm=document.getElementById('flow-modes'); if(fm){ homes.flowModes={parent:fm.parentNode,next:fm.nextSibling}; nodesEl.appendChild(fm);
+      FLOWS.forEach(function(m){ var t=fm.querySelector('.flow-mode[data-mode="'+m+'"]'); if(t) mkNode('flow-'+m,'flow',t,{sub:m}); }); }
+    var rv=q('#flow-device .flow-vis'); if(rv) mkNode('reso','reso',rv);
+    /* the tape machines (the hero's TAPE page, no header) and the tape loop deck, each on its own */
+    var tpg=document.getElementById('fxPageTape'); if(tpg){ var tn=mkNode('tape','tape',tpg); var pills=document.createElement('div'); pills.className='tp-machines'; pills.innerHTML=MACHINES.map(function(m,i){ return '<span class="tp-pill" data-m="'+i+'">'+m+'</span>'; }).join(''); tn.wrap.appendChild(pills);
+      var pw=document.createElement('span'); pw.className='tp-pwr'; pw.title='Tape on / off'; pw.dataset.tg='tape-toggle'; tn.wrap.appendChild(pw); }
+    var tlc=document.getElementById('tape-loop-content'); if(tlc){ var ln=mkNode('tapeloop','tapeloop',tlc); var pw2=document.createElement('span'); pw2.className='tp-pwr'; pw2.title='Tape loop on / off'; pw2.dataset.tg='loop-toggle'; ln.wrap.appendChild(pw2);
+      var S=ST(); if(S){ prevTapeTab=S.tapeSubTab; S.tapeSubTab='loop'; } }   /* the reel painter only draws on the LOOP tab */
+    try{ if(window._fxSizeFn) setTimeout(window._fxSizeFn,60); setTimeout(function(){ window.dispatchEvent(new Event('resize')); },80); }catch(e){}
+    adoptFx();
+    (layout.lfos||[]).forEach(function(k){ lfonNode(k,true); });
+    if(layout.rnd&&layout.rnd.on) rndNode(true);
+    mkNode('out','out',null).body.innerHTML='<div class="tp-end"><div class="tp-scope"><svg viewBox="0 0 120 66" preserveAspectRatio="none"><g class="gl"><path d="M30 0V66M60 0V66M90 0V66M0 33H120"/></g><path class="ln" d="M0 33H120"/></svg></div><div class="tp-mtr"><b><i></i></b><b><i></i></b></div></div>';
+    nodes.forEach(function(n){ if(n.kind==='osc'||n.kind==='filter'||n.kind==='fx') modDots(n); }); }
+  var adopting=false;
+  function adoptFx(){ if(adopting) return; adopting=true; try{ var rack=document.getElementById('fxr-rack'); var devs=window.__fxrDevs?window.__fxrDevs():[]; var keep={};
+    if(rack&&devs.some(function(d,i){ return d&&!rack.querySelector('.fxr-dev[data-dev="'+i+'"]')&&!nodeByKey('fx-'+d.core+'-'+d.inst); })){ try{ if(window.__fxrRender) window.__fxrRender(); }catch(e){} }
+    devs.forEach(function(d,i){ if(!d) return; var key='fx-'+d.core+'-'+d.inst; keep[key]=1; var n=nodeByKey(key);
+      var fresh=rack?rack.querySelector('.fxr-dev[data-dev="'+i+'"]'):null;
+      if(!n){ if(!fresh) return; n=mkNode(key,'fx',fresh,{idx:i,core:d.core,inst:d.inst}); n.home=null; }
+      else { n.idx=i; if(fresh){ n.body.innerHTML=''; n.body.appendChild(fresh); n.el=fresh; n.modSig=null; } }
+      modDots(n); });
+    nodes.slice().forEach(function(n){ if(n.kind==='fx'&&!keep[n.key]) dropNode(n); }); } finally { adopting=false; } }
+  function lfonNode(k,silent){ var key='lfon-'+k, n=nodeByKey(key); if(n) return n; n=mkNode(key,'lfon',null,{sub:k}); n.body.innerHTML='<div class="tp-lfon">'+k+'</div>';
+    if(layout.lfos.indexOf(k)<0){ layout.lfos.push(k); if(!silent) saveLayout(); } return n; }
+  function rndNode(silent){ var n=nodeByKey('rnd'); if(n) return n; n=mkNode('rnd','rnd',null); n.body.innerHTML='<div class="tp-rnd" title="Press to re-roll every module cabled to it — right-click for how far">'+IC.mtn+'<span class="lv"></span></div>';
+    layout.rnd=layout.rnd||{on:false,targets:[],level:'medium'}; layout.rnd.on=true; if(!silent) saveLayout(); paintRnd(); return n; }
+  function paintRnd(){ var n=nodeByKey('rnd'); if(!n) return; var lv=n.wrap.querySelector('.lv'); if(lv) lv.textContent=(layout.rnd&&layout.rnd.level)||'medium'; n.wrap.classList.toggle('live',!!(layout.rnd&&layout.rnd.targets.length)); }
+  function dropNode(n){ var i=nodes.indexOf(n); if(i>=0) nodes.splice(i,1); if(n.kind==='flow') return; n.wrap.remove(); }
+  function returnAll(){ nodes.slice().reverse().forEach(function(n){
+      if(n.kind==='osc'){ if(n.wasHidden) n.el.classList.add('osc-hidden'); }
+      if(n.kind==='flow'){ n.el.classList.remove('tp-tile','tp-sel'); n.el.style.left=''; n.el.style.top=''; n.ports.forEach(function(p){ p.el.remove(); }); return; }
+      if(n.kind==='fx') return;
+      if(n.el&&n.home&&n.home.parent){ try{ n.home.parent.insertBefore(n.el, n.home.next&&n.home.next.parentNode===n.home.parent?n.home.next:null); }catch(e){ n.home.parent.appendChild(n.el); } } });
+    var fm=document.getElementById('flow-modes'); if(fm&&homes.flowModes){ try{ homes.flowModes.parent.insertBefore(fm, homes.flowModes.next&&homes.flowModes.next.parentNode===homes.flowModes.parent?homes.flowModes.next:null); }catch(e){ homes.flowModes.parent.appendChild(fm); } }
+    var S=ST(); if(S&&prevTapeTab!=null){ S.tapeSubTab=prevTapeTab; prevTapeTab=null; }
+    nodes=[]; cables=[]; nodesEl.innerHTML=''; cg.innerHTML='';
+    try{ if(window.__fxrRender) window.__fxrRender(); }catch(e){} try{ window.dispatchEvent(new Event('resize')); }catch(e){} }
+
+  /* ── the cables — derived from the parameters every pass ── */
+  function curFilterSlot(){ var p=document.getElementById('filter-pill-2'); return p&&p.classList.contains('act')?2:1; }
+  function resoEngaged(){ var it=document.querySelector('#reso-menu .rm-item[data-e="1"]'); return !!(it&&it.classList.contains('on')); }
+  function toggleOn(id){ var b=document.getElementById(id); return !!(b&&!b.classList.contains('off')); }
+  function derive(){ var out=[], seen={}; var midi=nodeByKey('midi'), outN=nodeByKey('out'); if(!midi||!outN) return out;
+    function add(a,ak,ai,b,bk,bi,t,edit,fixed){ var id=a.key+'.'+ak+ai+'>'+b.key+'.'+bk+bi; if(seen[id]) return; seen[id]=1; out.push({id:id,from:a,fk:ak,fi:ai,to:b,tk:bk,ti:bi,t:t,edit:edit||null,fixed:!!fixed}); }
+    var chain=window.__flowChain?window.__flowChain():[]; var noteT=chain.filter(function(m){return m==='arp'||m==='drift';}), audioT=chain.filter(function(m){return m==='chop'||m==='glitch';});
+    var src=midi; noteT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(!t) return; add(src,'out',0,t,'in',0,'n',{flow:m}); src=t; });
+    var oscs=OSC.map(function(o){return nodeByKey('osc-'+o);}).filter(Boolean);
+    oscs.forEach(function(o){ add(src,'out',0,o,'in',0,'n',null,true); });
+    var masterHead=outN, prev=null; audioT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(!t) return; if(!prev) masterHead=t; else add(prev,'out',0,t,'in',0,'a',{flow:m}); prev=t; }); if(prev) add(prev,'out',0,outN,'in',0,'a',null,true);
+    var ins=[]; var rs=nodeByKey('reso'), tp=nodeByKey('tape'), tl=nodeByKey('tapeloop');
+    if(rs&&resoEngaged()) ins.push(rs); if(tp&&toggleOn('tape-toggle')) ins.push(tp); if(tl&&toggleOn('loop-toggle')) ins.push(tl);
+    for(var ii=0;ii<ins.length;ii++) add(ins[ii],'out',0,ii+1<ins.length?ins[ii+1]:masterHead,'in',0,'a',null,true);
+    var dryHead=ins.length?ins[0]:masterHead;
+    var devs=window.__fxrDevs?window.__fxrDevs():[]; var fxN=devs.map(function(d){ return d?nodeByKey('fx-'+d.core+'-'+d.inst):null; });
+    for(var i=0;i<fxN.length;i++){ if(!fxN[i]) continue; var nx=null; for(var j=i+1;j<fxN.length;j++){ if(fxN[j]){ nx=fxN[j]; break; } } if(nx) add(fxN[i],'out',0,nx,'in',0,'a',{fxorder:1}); else add(fxN[i],'out',0,masterHead,'in',0,'a',null,true); }
+    var flt=nodeByKey('filter');
+    oscs.forEach(function(o,xi){ var filtered=(pv('SYN_OSC_'+o.sub.toUpperCase()+'_F1MIX')>0.001)||(pv('SYN_OSC_'+o.sub.toUpperCase()+'_F2MIX')>0.001); var stage=o;
+      if(filtered&&flt){ add(o,'out',0,flt,'in',0,'a',{fmix:o.sub}); stage=flt; }
+      var first=-1; for(var k=0;k<devs.length;k++){ if(devs[k]&&devs[k].route&&devs[k].route[xi]===1&&fxN[k]){ first=k; break; } }
+      if(first>=0) add(stage,'out',0,fxN[first],'in',0,'a',{route:{dev:first,osc:xi}}); else add(stage,'out',0,dryHead,'in',0,'a',{dry:o.sub}); });
+    var routes=window.__tiRoutes?window.__tiRoutes():[]; var env=nodeByKey('env');
+    routes.forEach(function(r){ var m=/^lfo(\d+)$/.exec(r.s), e=/^env(\d+)$/.exec(r.s); if(!m&&!e) return; var sN=m?lfonNode(+m[1],true):env; if(!sN) return;
+      var el=window.__tiElForDest?window.__tiElForDest(r.d):null; if(!el||!el.closest) return; var tn=nodeOf(el); if(!tn) return; var mp=modPortFor(tn,r.d); if(!mp) return;
+      add(sN,'out',0,tn,'mod',tn.mods.indexOf(mp),'m',{mod:r.s,dest:r.d}); });
+    var rn=nodeByKey('rnd'); if(rn&&layout.rnd) layout.rnd.targets.forEach(function(k){ var t=nodeByKey(k); if(t&&sideSpec(t).top) add(rn,'out',0,t,'top',0,'r',{rnd:k}); });
+    return out; }
+  function cablePath(a,b,kind){ if(kind==='mod'){ var dx=Math.max(40,Math.abs(b.x-a.x)*0.35), dy=Math.max(36,Math.abs(b.y-a.y)*0.5); return 'M'+a.x+' '+a.y+' C'+(a.x+dx)+' '+a.y+', '+b.x+' '+(b.y+dy)+', '+b.x+' '+b.y; }
+    if(kind==='top'){ var dx1=Math.max(40,Math.abs(b.x-a.x)*0.35), dy1=Math.max(36,Math.abs(b.y-a.y)*0.5); return 'M'+a.x+' '+a.y+' C'+(a.x+dx1)+' '+a.y+', '+b.x+' '+(b.y-dy1)+', '+b.x+' '+b.y; }
+    var dx2=Math.max(46,Math.abs(b.x-a.x)*0.45); return 'M'+a.x+' '+a.y+' C'+(a.x+dx2)+' '+a.y+', '+(b.x-dx2)+' '+b.y+', '+b.x+' '+b.y; }
+  function layoutCable(c){ var a=portPos(c.from,c.fk,c.fi), b=portPos(c.to,c.tk,c.ti), d=cablePath(a,b,c.tk); c.core.setAttribute('d',d); c.spk.setAttribute('d',d); c.hit.setAttribute('d',d); try{ c.len=c.core.getTotalLength(); }catch(e){ c.len=100; } c.spk.setAttribute('stroke-dasharray','16 '+(c.len+60)); }
+  function syncCables(){ var want=derive(), byId={}; cables.forEach(function(c){ byId[c.id]=c; }); var next=[];
+    want.forEach(function(w){ var c=byId[w.id]; if(c){ c.from=w.from; c.to=w.to; c.fi=w.fi; c.ti=w.ti; c.edit=w.edit; c.fixed=w.fixed; delete byId[w.id]; }
+      else { c=w; var g=document.createElementNS(SVGNS,'g'); g.setAttribute('class','cable '+c.t+(c.fixed?' fixed':'')); g.setAttribute('data-id',c.id); c.el=g; var mk=function(cls){ var e=document.createElementNS(SVGNS,'path'); e.setAttribute('class',cls); g.appendChild(e); return e; };
+        c.core=mk('core'); c.spk=mk('spk'); c.hit=mk('hit'); c.s=null; c.lvl=0; cg.appendChild(g);
+        c.hit.addEventListener('mousedown',function(e){ e.stopPropagation(); closeMenus(); sel={cable:c.id}; paintSel(); });
+        c.hit.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); sel={cable:c.id}; paintSel(); openNodeMenu(e.clientX,e.clientY,null,c); }); }
+      c.el.classList.toggle('fixed',!!c.fixed); next.push(c); layoutCable(c); });
+    for(var id in byId){ byId[id].el.remove(); if(sel&&sel.cable===id) sel=null; }
+    cables=next; paintSel(); paintState(); drawMini(); }
+  function layoutCablesOf(n){ cables.forEach(function(c){ if(c.from===n||c.to===n) layoutCable(c); }); }
+  function paintState(){ var S=ST();
+    nodes.forEach(function(n){ if(n.kind==='lfon'){ n.wrap.classList.toggle('live',cables.some(function(c){return c.from===n;})); }
+      if(n.kind==='tape'){ n.wrap.classList.toggle('off',!toggleOn('tape-toggle')); var m=S?S.tapeMachine|0:0; n.wrap.querySelectorAll('.tp-pill').forEach(function(p,i){ p.classList.toggle('on',i===m); }); }
+      if(n.kind==='tapeloop'){ n.wrap.classList.toggle('off',!toggleOn('loop-toggle')); } });
+    paintRnd(); }
+  function sync(){ if(!isOpen) return; try{ nodes.forEach(function(n){ if(n.kind==='osc'||n.kind==='filter'||n.kind==='fx'||n.kind==='tape'||n.kind==='tapeloop') modDots(n); }); syncCables(); }catch(e){ try{ console.warn('[tp] sync',e); }catch(_){} } }
+  function soon(){ clearTimeout(syncT); syncT=setTimeout(sync,40); }
+
+  /* ── writes — a drawn cable becomes the parameter it stands for ── */
+  function connect(a,ak,ai,b,bk,bi){
+    var t=(ak==='out')?a.ports.filter(function(p){return p.kind==='out';})[ai].el.dataset.t:null;
+    if(a.kind==='rnd'){ if(bk!=='top') return false; layout.rnd.targets=layout.rnd.targets.filter(function(k){return k!==b.key;}).concat([b.key]); saveLayout(); return true; }
+    if(bk==='top') return false;
+    if(bk==='mod'){ var mp=b.mods&&b.mods[bi]; if(!mp) return false; if(a.kind==='lfon'){ if(window.__tiAddRoute) window.__tiAddRoute(0,a.sub,mp.dest); return true; } if(a.kind==='env'){ var en=window.__envCurNum?window.__envCurNum():1; if(window.__tiAddRoute) window.__tiAddRoute(en||1,0,mp.dest); return true; } return false; }
+    if(t==='n'){ if(b.kind==='flow'){ var ch=window.__flowChain?window.__flowChain():[]; if(ch.indexOf(b.sub)<0){ ch.push(b.sub); window.__flowSetChain&&window.__flowSetChain(ch); } return true; } if(b.kind==='osc'){ toast('Every oscillator already takes the notes'); return true; } return false; }
+    if(t==='a'){
+      if(b.kind==='filter'&&a.kind==='osc'){ setP('SYN_OSC_'+a.sub.toUpperCase()+'_F'+curFilterSlot()+'MIX',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} return true; }
+      if(b.kind==='fx'){ var oscIdx=[]; if(a.kind==='osc') oscIdx=[OSC.indexOf(a.sub)]; else if(a.kind==='filter'||a.kind==='reso'||a.kind==='tape'||a.kind==='tapeloop') oscIdx=OSC.map(function(o,i){ return (a.kind!=='filter'||pv('SYN_OSC_'+o.toUpperCase()+'_F1MIX')>0.001||pv('SYN_OSC_'+o.toUpperCase()+'_F2MIX')>0.001)?i:-1; }).filter(function(i){return i>=0;});
+        if(oscIdx.length){ oscIdx.forEach(function(i){ window.__fxrSetRoute&&window.__fxrSetRoute(b.idx,i,1); }); return true; }
+        if(a.kind==='fx'){ var devs=window.__fxrDevs?window.__fxrDevs():[]; var order=[]; for(var i=0;i<devs.length;i++) order.push(i); order.splice(order.indexOf(b.idx),1); order.splice(order.indexOf(a.idx)+1,0,b.idx); window.__fxrReorder&&window.__fxrReorder(order); return true; }
+        if(a.kind==='flow'){ toast('Chop and Glitch run after the rack'); return true; } return false; }
+      if(b.kind==='flow'){ var ch2=window.__flowChain?window.__flowChain():[]; if(ch2.indexOf(b.sub)<0){ ch2.push(b.sub); window.__flowSetChain&&window.__flowSetChain(ch2); } return true; }
+      if(b.kind==='reso'){ toast('The resonator hears every oscillator — engage it on the tile'); return true; }
+      if(b.kind==='tape'||b.kind==='tapeloop'){ toast('Everything runs through it while it is on'); return true; }
+      if(b.kind==='out'){ toast('It already reaches Out'); return true; } }
+    return false; }
+  function cut(c){ var e=c.edit; if(!e){ toast('The engine draws that one'); return; }
+    if(e.fmix){ setP('SYN_OSC_'+e.fmix.toUpperCase()+'_F1MIX',0); setP('SYN_OSC_'+e.fmix.toUpperCase()+'_F2MIX',0); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(x){} }
+    else if(e.route){ window.__fxrSetRoute&&window.__fxrSetRoute(e.route.dev,e.route.osc,0); }
+    else if(e.flow){ var ch=window.__flowChain?window.__flowChain():[]; window.__flowSetChain&&window.__flowSetChain(ch.filter(function(m){return m!==e.flow;})); }
+    else if(e.mod){ window.__tiRemoveRoute&&window.__tiRemoveRoute(e.mod,e.dest); }
+    else if(e.rnd){ layout.rnd.targets=layout.rnd.targets.filter(function(k){return k!==e.rnd;}); saveLayout(); }
+    else if(e.fxorder){ toast('Cable a card onto another to reorder'); return; }
+    else if(e.dry){ toast('An oscillator with no effect goes straight to Out'); return; }
+    commit(); soon(); }
+
+  /* ── history — undo / redo of everything the canvas edits (the DAW's own undo keeps the knobs) ── */
+  var hist={undo:[],redo:[],cur:null}, tracked={};
+  function snapshot(){ var devs=(window.__fxrDevs?window.__fxrDevs():[]).map(function(d){ return d?{core:d.core,inst:d.inst,route:(d.route||[]).slice()}:null; }).filter(Boolean);
+    var fm={}; OSC.forEach(function(o){ fm[o]=[pv('SYN_OSC_'+o.toUpperCase()+'_F1MIX'),pv('SYN_OSC_'+o.toUpperCase()+'_F2MIX')]; });
+    var params={}; for(var id in tracked) params[id]=pv(id);
+    return {devs:devs,fm:fm,chain:window.__flowChain?window.__flowChain():[],mod:(window.__tiRoutes?window.__tiRoutes():[]).map(function(r){return {s:r.s,d:r.d};}),lfos:layout.lfos.slice(),pos:JSON.parse(JSON.stringify(layout.pos)),rnd:JSON.parse(JSON.stringify(layout.rnd||{on:false,targets:[],level:'medium'})),params:params}; }
+  function commit(){ if(applying) return; if(hist.cur) hist.undo.push(hist.cur); hist.cur=snapshot(); if(hist.undo.length>60) hist.undo.shift(); hist.redo=[]; paintTools(); }
+  function track(ids,cb){ var fresh=ids.filter(function(id){ return !(id in tracked); }); if(!fresh.length){ cb(); return; }
+    Promise.all(fresh.map(readP)).then(function(vals){ fresh.forEach(function(id,i){ tracked[id]=1; var v=vals[i]; shim(id,v); [hist.cur].concat(hist.undo,hist.redo).forEach(function(S){ if(S&&S.params&&!(id in S.params)) S.params[id]=v; }); }); cb(); }).catch(cb); }
+  function apply(S){ applying=true; try{
+    var devs=window.__fxrDevs?window.__fxrDevs():[];
+    for(var i=devs.length-1;i>=0;i--){ var d=devs[i]; if(d&&!S.devs.some(function(x){return x.core===d.core&&x.inst===d.inst;})) window.__fxrRemove&&window.__fxrRemove(i); }
+    S.devs.forEach(function(x){ var now=window.__fxrDevs?window.__fxrDevs():[]; if(!now.some(function(d){return d&&d.core===x.core&&d.inst===x.inst;})) window.__fxrAdd&&window.__fxrAdd(x.core); });
+    var now2=window.__fxrDevs?window.__fxrDevs():[]; var order=[]; S.devs.forEach(function(x){ for(var i=0;i<now2.length;i++){ var d=now2[i]; if(d&&d.core===x.core&&d.inst===x.inst){ order.push(i); x.route.forEach(function(v,ri){ window.__fxrSetRoute&&window.__fxrSetRoute(i,ri,v); }); break; } } });
+    if(order.length) window.__fxrReorder&&window.__fxrReorder(order);
+    OSC.forEach(function(o){ if(S.fm[o]){ setP('SYN_OSC_'+o.toUpperCase()+'_F1MIX',S.fm[o][0]); setP('SYN_OSC_'+o.toUpperCase()+'_F2MIX',S.fm[o][1]); } }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){}
+    window.__flowSetChain&&window.__flowSetChain(S.chain);
+    var mods=window.__tiRoutes?window.__tiRoutes():[]; mods.forEach(function(r){ if(!S.mod.some(function(m){return m.s===r.s&&m.d===r.d;})) window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
+    S.mod.forEach(function(m){ if(!mods.some(function(r){return r.s===m.s&&r.d===m.d;})){ var lm=/^lfo(\d+)$/.exec(m.s), em=/^env(\d+)$/.exec(m.s); if(lm) window.__tiAddRoute&&window.__tiAddRoute(0,+lm[1],m.d); else if(em) window.__tiAddRoute&&window.__tiAddRoute(+em[1],0,m.d); } });
+    for(var id in S.params) setP(id,S.params[id]); try{ if(window.__fxrRender) window.__fxrRender(); }catch(e){}
+    layout.lfos=S.lfos.slice(); layout.pos=JSON.parse(JSON.stringify(S.pos)); layout.rnd=JSON.parse(JSON.stringify(S.rnd));
+    nodes.slice().forEach(function(n){ if(n.kind==='lfon'&&layout.lfos.indexOf(n.sub)<0) dropNode(n); if(n.kind==='rnd'&&!layout.rnd.on) dropNode(n); });
+    layout.lfos.forEach(function(k){ lfonNode(k,true); }); if(layout.rnd.on) rndNode(true);
+    nodes.forEach(function(n){ var p=layout.pos[n.key]; if(p){ n.x=p[0]; n.y=p[1]; place(n); } });
+    saveLayout(); } finally { applying=false; } sync(); setTimeout(sync,120); }
+  function undo(){ if(!hist.undo.length) return; hist.redo.push(hist.cur); hist.cur=hist.undo.pop(); apply(hist.cur); paintTools(); }
+  function redo(){ if(!hist.redo.length) return; hist.undo.push(hist.cur); hist.cur=hist.redo.pop(); apply(hist.cur); paintTools(); }
+  function paintTools(){ if(!page) return; page.querySelector('.g[data-t="undo"]').classList.toggle('dis',!hist.undo.length); page.querySelector('.g[data-t="redo"]').classList.toggle('dis',!hist.redo.length); }
+
+  /* ── THE RANDOMIZER — the mountains. Re-rolls every module cabled to it, never the pitch. ── */
+  var LV={light:.15,medium:.35,heavy:.7,wild:1}, CHP={light:0,medium:.35,heavy:.8,wild:1}, HOT={light:.2,medium:.35,heavy:.6,wild:1};
+  function rv(cur,lvl,hot,choice){ if(choice) return rnd()<CHP[lvl]?rnd():cur; var L=LV[lvl], cap=hot?HOT[lvl]:1, v=(L<0.5)?cur+(rnd()*2-1)*L:rnd()*cap; return Math.max(0,Math.min(cap,v)); }
+  function oscEngine(n){ var c=n.el.classList; return c.contains('engine-fm')?'fm':c.contains('engine-sample')?'sample':c.contains('engine-granular')?'granular':c.contains('engine-geode')?'geode':c.contains('engine-harm')?'harm':c.contains('engine-modal')?'modal':'wt'; }
+  var RND_OSC={
+    common:[['PAN',0,'pan'],['UNISON',1,'hot'],['UDETUNE',1,'hot'],['UWIDTH'],['UBLEND']],   /* unison is capped by the level: 16 voices is a CPU decision, not a roll */
+    wt:[['WT_PRESET',1,'c'],['WT_FRAME'],['WARP_MODE',1,'c'],['WARP_AMOUNT'],['WARP2_MODE',1,'c'],['WARP2_AMT'],['SPECTRAL_TYPE',1,'c'],['SPECTRAL_AMT'],['FOLD_SHAPE',1,'c'],['FOLD_AMT',1,'hot'],['FRAME_SPREAD',1,'hot']],
+    fm:[['WT_PRESET',1,'c'],['WT_FRAME'],['FM_ALGO',1,'c'],['FM_DEPTH1',1,'hot'],['FM_DEPTH2',1,'hot'],['FM_FB',1,'hot'],['FM_STRIKE'],['FM_AGE',1,'hot'],['FM_RUST',1,'hot'],['FM_GALE',1,'hot'],['FM_BEND',1,'hot'],['FM_STORM',1,'hot'],['FM_RATIO1',1,'wild'],['FM_RATIO2',1,'wild']],
+    harm:[['HARM_MODE',1,'c'],['HARM_SCULPT',1,'c'],['HARM_HUE'],['HARM_COUNT'],['HARM_LEAN'],['HARM_FAN'],['HARM_GRIT',1,'hot'],['HARM_BRAID'],['HARM_CARVE'],['HARM_CHURN'],['HARM_ROOT'],['HARM_SHINE'],['HARM_WILT'],['HARM_FIZZ',1,'hot']],
+    modal:[['MODAL_FAMILY',1,'c'],['MODAL_FORM',1,'c'],['MODAL_HARD'],['MODAL_POS'],['MODAL_DECAY'],['MODAL_MATERIAL'],['MODAL_BREATH'],['MODAL_BLOOM'],['MODAL_HALO'],['MODAL_AGE'],['MODAL_BODY'],['MODAL_STRETCH',1,'wild']],
+    sample:[['SAMPLE_SCAN'],['SAMPLE_STRETCH',1,'hot'],['SAMPLE_FORMANT',1,'hot'],['SAMPLE_SPRAY',1,'hot'],['SAMPLE_XFADE'],['SAMPLE_AIR'],['SAMPLE_WARPMODE',1,'c'],['SAMPLE_WARP',1,'hot']],
+    granular:[['GRAIN_DENSITY'],['GRAIN_SIZE'],['GRAIN_SPRAY'],['GRAIN_SHAPE'],['GRAIN_POSITION'],['GRAIN_PSPRAY',1,'hot'],['GRAIN_WIDTH'],['GRAIN_DIR',1,'c'],['GRAIN_SKEW']],
+    geode:[['GEODE_CREEP'],['GEODE_FOSSIL'],['GEODE_SIEVE',1,'hot'],['GEODE_CUT'],['GEODE_DISTILL',1,'hot'],['GEODE_HAZE',1,'hot'],['GEODE_FORMANT'],['GEODE_TILT'],['GEODE_SILT',1,'hot'],['GEODE_POSITION'],['GEODE_FRACTURE',1,'hot']] };
+  function rollList(n,lvl){ var L=[], k=n.kind;
+    if(k==='osc'){ var X='SYN_OSC_'+n.sub.toUpperCase()+'_'; RND_OSC.common.concat(RND_OSC[oscEngine(n)]||RND_OSC.wt).forEach(function(r){ var tag=r[2]||''; if(tag==='wild'&&lvl!=='wild') return; L.push({id:X+r[0],hot:tag==='hot',c:tag==='c',pan:tag==='pan'}); }); }
+    else if(k==='lfon'||k==='lfo'){ var num=k==='lfon'?n.sub:(window.__lfoCurTab?window.__lfoCurTab():1)||1; L.push({id:'LFO'+num+'_SHAPE',c:1},{id:'LFO'+num+'_RATE'},{id:'LFO'+num+'_DEPTH'}); }
+    else if(k==='flow'){ var P=FLOWP[n.sub]; ['RATE','GATE','VARY','MORPH'].forEach(function(s){ L.push({id:P+'_'+s}); }); L.push({id:P+'_TRAJ',c:1}); }
+    else if(k==='fx'){ var devs=window.__fxrDevs?window.__fxrDevs():[]; var d=devs[n.idx]; if(d&&d.knobs) d.knobs.slice(0,3).forEach(function(kn){ if(kn.p) L.push({id:kn.p,hot:/DRIVE|FEEDBACK|FDBK|SAT/i.test(kn.p)}); }); }
+    else if(k==='filter'){ var s=curFilterSlot(); L.push({id:'SYN_FILTER'+s+'_CUT',lo:.25,hi:.9},{id:'SYN_FILTER'+s+'_RES',cap:.6},{id:'SYN_FILTER'+s+'_DRV',hot:1}); if(lvl==='heavy'||lvl==='wild') L.push({id:'SYN_FILTER'+s+'_TYPE',c:1}); }
+    return L; }
+  function roll(list,lvl,done){ var ids=list.map(function(r){return r.id;}); track(ids,function(){
+    list.forEach(function(r){ var cur=pv(r.id), v;
+      if(r.pan) v=Math.max(0,Math.min(1,cur+(rnd()*2-1)*LV[lvl]*0.3)); else if(r.lo!=null) v=between(r.lo,r.hi); else if(r.cap!=null) v=Math.min(r.cap,rv(cur,lvl,false,false)); else v=rv(cur,lvl,!!r.hot,!!r.c);
+      setP(r.id,v); });
+    try{ if(window.__fxrRender) window.__fxrRender(); }catch(e){} commit(); soon(); if(done) done(); }); }
+  function randomizeTargets(){ var lvl=layout.rnd.level||'medium', tg=layout.rnd.targets.map(nodeByKey).filter(Boolean); if(!tg.length){ toast('Cable the mountains to what you want re-rolled'); return; }
+    var list=[]; tg.forEach(function(n){ list=list.concat(rollList(n,lvl)); }); var g=nodeByKey('rnd'); if(g){ var el=g.wrap.querySelector('.tp-rnd'); el.classList.add('fire'); setTimeout(function(){ el.classList.remove('fire'); },500); }
+    roll(list,lvl,function(){ toast(tg.length+(tg.length>1?' modules':' module')+' re-rolled · '+lvl); }); }
+
+  /* ── THE DICE — a whole new preset, built to be played (the oscillators' own parameters, a filter, envelopes, one movement, some space) ── */
+  var AIMS=['anything','keys','pads','bass','leads','plucks','textures'];
+  var ENV={keys:[.05,.45,.6,.35],pads:[.45,.55,.85,.65],bass:[.02,.35,.7,.2],leads:[.06,.35,.85,.3],plucks:[.0,.3,.0,.25],textures:[.55,.6,.9,.8]};
+  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything') aim=pick(AIMS.slice(1)); var tool=page.querySelector('.g[data-t="dice"]'); tool.classList.add('dis');
+    var on=OSC.slice(0,aim==='bass'?1+Math.floor(rnd()*2):2+Math.floor(rnd()*2)), list=[], ids=[];
+    function P(id,v){ list.push([id,v]); ids.push(id); }
+    var step=0, steps=[
+      function(){ toast('Sculpting the oscillators…'); OSC.forEach(function(o,i){ var X='SYN_OSC_'+o.toUpperCase()+'_', isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); if(!isOn) return;
+          var fm=rnd()<(aim==='bass'?.45:.3), harm=aim==='textures'&&rnd()<.35; P(X+'ENGINE', choiceNorm(X+'ENGINE', harm?5:fm?4:0, 7));   /* Engine enum: WT 0 · SAMP 1 · GRAN 2 · SPEC 3 · FM 4 · HARM 5 · MODAL 6 */
+          P(X+'LEVEL',.78); P(X+'PAN',.5+(i%2?1:-1)*between(.05,.2)); P(X+'WT_PRESET',rnd()); P(X+'WT_FRAME',rnd()); P(X+'WARP_MODE',rnd()); P(X+'WARP_AMOUNT',between(0,.5)); P(X+'WARP2_MODE',rnd()<.5?0:rnd()); P(X+'WARP2_AMT',between(0,.35));
+          P(X+'SPECTRAL_TYPE',rnd()); P(X+'SPECTRAL_AMT',between(0,.4)); P(X+'FOLD_SHAPE',rnd()); P(X+'FOLD_AMT',between(0,aim==='bass'?.3:.2)); P(X+'FRAME_SPREAD',between(0,.12));
+          P(X+'UNISON',aim==='pads'||aim==='leads'?between(.15,.45):aim==='bass'?between(0,.12):between(0,.3)); P(X+'UDETUNE',between(.15,.45)); P(X+'UWIDTH',between(.3,.85)); P(X+'UBLEND',between(.3,.7));
+          if(fm){ P(X+'FM_DEPTH1',between(.1,.45)); P(X+'FM_DEPTH2',between(0,.3)); P(X+'FM_FB',between(0,.25)); P(X+'FM_STRIKE',between(0,.5)); P(X+'FM_AGE',between(0,.3)); }
+          if(harm){ P(X+'HARM_MODE',rnd()); P(X+'HARM_HUE',rnd()); P(X+'HARM_COUNT',between(.3,.9)); P(X+'HARM_LEAN',between(.3,.7)); P(X+'HARM_GRIT',between(0,.3)); P(X+'HARM_SHINE',between(0,.5)); } }); },
+      function(){ toast('Shaping the filter…'); OSC.forEach(function(o){ var X='SYN_OSC_'+o.toUpperCase()+'_'; P(X+'F1MIX',on.indexOf(o)>=0?1:0); P(X+'F2MIX',0); });
+          var ti=pick(aim==='bass'||aim==='leads'?[0,0,4,5]:[0,5,0]); var R=window.__fltRoster; P('SYN_FILTER1_TYPE',R?R.norm(ti):0); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65]}[aim];
+          P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',between(.1,.35)); P('SYN_FILTER1_DRV',0); P('SYN_FILTER1_ENV',.5+between(.15,.35)); P('SYN_FILTER_ROUTING',0); },
+      function(){ toast('Setting the envelopes…'); var e=ENV[aim]; P('SYN_ENV_AMP_A',e[0]+between(-.02,.02)); P('SYN_ENV_AMP_D',e[1]); P('SYN_ENV_AMP_S',e[2]); P('SYN_ENV_AMP_R',e[3]); P('SYN_ENV_AMP_DLY',0); P('SYN_ENV_AMP_H',0);
+          P('SYN_ENV_FLT_A',Math.max(0,e[0]-.02)); P('SYN_ENV_FLT_D',Math.max(.1,e[1]-.1)); P('SYN_ENV_FLT_S',Math.max(0,e[2]-.3)); P('SYN_ENV_FLT_R',e[3]); },
+      function(){ toast('Adding movement…'); P('LFO1_SHAPE',choiceNorm('LFO1_SHAPE',rnd()<.7?0:1,7)); P('LFO1_RATE',between(.15,.4)); P('LFO1_DEPTH',between(.35,.6)); P('LFO1_SYNC',0);
+          (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
+          var k=document.querySelector('#osc-'+on[0]+'-device .knob[data-syn="SYN_OSC_'+on[0].toUpperCase()+'_WT_FRAME"]'); var g=k&&window.__ctlDestAt?window.__ctlDestAt(k):null; window.__tiAddRoute&&window.__tiAddRoute(0,1,g&&g.dest!=null?g.dest:0);
+          var chain=[]; if(rnd()<(aim==='textures'?.45:.28)) chain.push('glitch'); if((aim==='plucks'||aim==='keys')&&rnd()<.4) chain.push('arp'); window.__flowSetChain&&window.__flowSetChain(chain);
+          if(chain.indexOf('glitch')>=0){ P('FLOW_GLI_RATE',between(.3,.6)); P('FLOW_GLI_GATE',between(.3,.6)); P('FLOW_GLI_VARY',between(0,.4)); P('FLOW_GLI_MORPH',between(0,.4)); P('FLOW_GLI_BLEND',between(.3,.6)); } },
+      function(){ toast('Adding space…'); var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
+          var ri=window.__fxrAdd?window.__fxrAdd('reverb'):-1; devs=window.__fxrDevs?window.__fxrDevs():[]; var d=devs[ri]; if(d){ on.forEach(function(o){ window.__fxrSetRoute&&window.__fxrSetRoute(ri,OSC.indexOf(o),1); }); if(d.knobs){ P(d.knobs[0].p,between(.4,.7)); P(d.knobs[1].p,between(.4,.65)); P(d.knobs[2].p,between(.4,.6)); P(d.knobs[3].p,between(.22,.38)); } }
+          if(rnd()<.35){ var di=window.__fxrAdd?window.__fxrAdd('delay'):-1; devs=window.__fxrDevs?window.__fxrDevs():[]; var dd=devs[di]; if(dd){ on.forEach(function(o){ window.__fxrSetRoute&&window.__fxrSetRoute(di,OSC.indexOf(o),1); }); if(dd.knobs){ P(dd.knobs[0].p,between(.3,.6)); P(dd.knobs[1].p,between(.25,.5)); P(dd.knobs[2].p,between(.4,.6)); P(dd.knobs[3].p,between(.15,.28)); } } } },
+      function(){ track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){} adoptFx(); commit(); sync(); tool.classList.remove('dis'); toast('A new '+(aim==='anything'?'preset':aim+' preset')+' — play it'); }); } ];
+    (function next(){ var f=steps[step++]; if(!f) return; f(); setTimeout(next,260); })(); }
+
+  /* ── view — scroll pans, ⌃/⌘ scroll or a pinch zooms about the cursor; zoomed out the modules read as names ── */
+  function applyView(){ if(!world) return; world.style.transform='translate('+view.x+'px,'+view.y+'px)'; zoomEl.style.zoom=view.z; $('.tp-grid').style.backgroundSize=(26*view.z)+'px '+(26*view.z)+'px'; $('.tp-grid').style.backgroundPosition=view.x+'px '+view.y+'px'; page.classList.toggle('lod',view.z<0.55); drawMini(); }
+  function bounds(){ var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; nodes.forEach(function(n){ x0=Math.min(x0,n.x); y0=Math.min(y0,n.y); x1=Math.max(x1,n.x+n.w); y1=Math.max(y1,n.y+n.h); }); return {x:x0,y:y0,w:x1-x0,h:y1-y0}; }
+  function fit(){ if(!nodes.length) return; var b=bounds(), W=page.clientWidth, H=page.clientHeight, pad=34; var z=Math.min(1.2,(W-pad*2)/b.w,(H-pad*2-30)/b.h); view.z=Math.max(0.2,z); view.x=(W-b.w*view.z)/2-b.x*view.z; view.y=(H-b.h*view.z)/2-b.y*view.z+8; applyView(); saveView(); }
+  var viewT=0; function saveView(){ clearTimeout(viewT); viewT=setTimeout(function(){ layout.view={x:view.x,y:view.y,z:view.z}; saveLayout(); },400); }
+  function toWorld(cx,cy){ var r=page.getBoundingClientRect(); return {x:(cx-r.left-view.x)/view.z, y:(cy-r.top-view.y)/view.z}; }
+
+  /* ── the frame — the purple spike on every cable that carries signal ── */
+  var lastT=0; function frame(ts){ if(!isOpen){ raf=0; return; } var t=ts/1000, dt=lastT?Math.min(0.05,t-lastT):0.016; lastT=t;
+    try{ var M=window.__tiMot||null, live=!!(M&&M.live), e=M?(M.e==null?1:M.e):0, aud=live?Math.max(0.15,e):0;
+      cables.forEach(function(c){ var L=0; if(c.t==='a') L=aud; else if(c.t==='n') L=live?1:0; else if(c.t==='r') L=0; else { var s=c.from; if(s.kind==='lfon'){ var v=window.__mvLfoValAt?window.__mvLfoValAt(s.sub-1):0; L=live?0.35+0.65*Math.abs(v||0):0; } else L=live?e:0; }
+        c.lvl+=(L-c.lvl)*(L>c.lvl?0.45:0.1); var Lv=c.lvl, on=live&&Lv>0.04; c.el.classList.toggle('hot',Lv>0.08);
+        if(c.s==null) c.s=-16-Math.random()*(c.len||100); if(on) c.s+=dt*(c.t==='m'?70+40*Lv:150+280*Lv); if(c.s>(c.len||100)+16) c.s=-16-(c.t==='m'?50:0);
+        c.spk.setAttribute('stroke-dashoffset',(-c.s).toFixed(1)); c.spk.setAttribute('opacity',on?(0.3+0.7*Lv).toFixed(2):'0'); });
+      cables.forEach(function(c){ var a=c.from.ports.filter(function(p){return p.kind===c.fk;})[c.fi], b=(c.tk==='mod')?(c.to.mods&&c.to.mods[c.ti]&&{el:c.to.mods[c.ti].port}):c.to.ports.filter(function(p){return p.kind===c.tk;})[c.ti]; if(a) a.el.classList.toggle('live',c.lvl>0.08); if(b&&b.el) b.el.classList.toggle('live',c.lvl>0.08); });
+      var midi=nodeByKey('midi'); if(midi){ var held=[0,4,7,11]; midi.wrap.querySelectorAll('.tp-keys i').forEach(function(k,i){ k.classList.toggle('on',live&&held.indexOf(i)>=0); }); }
+      var o=nodeByKey('out'); if(o){ var d=''; for(var i=0;i<=60;i++){ var x=i/60; d+=(i?'L':'M')+(x*120).toFixed(1)+' '+(33-(Math.sin(x*31.4+t*9)*0.6+Math.sin(x*62.8+t*5)*0.4)*26*aud).toFixed(1)+' '; } o.wrap.querySelector('.ln').setAttribute('d',d); o.wrap.querySelectorAll('.tp-mtr i').forEach(function(b,i){ b.style.height=Math.round(100*Math.min(1,aud*(i?0.92:1)))+'%'; }); }
+    }catch(x){}
+    raf=requestAnimationFrame(frame); }
+
+  /* ── interaction ── */
+  var CONTROL='canvas, svg, input, select, button, textarea, .knob, .knob-ring, .fk-em, .fxr-dial, .fxr-knob, .fxr-pill, .fxr-r, .fxr-type, .fxr-preset, .fxr-swap, .fxr-x, .fxr-pwr, .fxr-snd, .swap-btn, .osc-letter, .engine-wrap, .preset-wrap, .samp-sel, .uni-voices, .uni-stack, .uni-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .gk-arrow, .bl-arrow, .set-prev, .sel, .blend-pill, .ft-pill, .filt-exp, .flt-nav, .dd-trigger, .mv-c, .mv-seg, .mv-tabs, .mv-dep, .env-shelf, .env-sel, .env-hud-row, .voice-toggle, .voice-row, .vm-macro, .reso-menu, .filt-bg, .osc-display, .samp-disp, .env-canvas, .mv-scope, .vis-stage, .fxr-core, .tp-port, .device-label, .tape-progress-track, .tape-deck-glass, .knobs-container, .tape-fx-knobs, .fx-knob-group, .tp-pill, .tp-pwr, .tp-rnd';
+  function bind(){
+    page.addEventListener('mousedown',function(e){   /* CAPTURE: a module's own handler may stop the bubble (the osc guards do); the canvas must still see the press */
+      if(e.target.closest('.tp-tools, .tp-mini, .tp-menu')) return;
+      var port=e.target.closest('.tp-port'); if(port){ if(e.button===0){ closeMenus(); startCable(e,port); } return; }
+      var n=nodeOf(e.target); closeMenus();
+      if(n){ if(e.button!==0) return; var isCtl=!e.altKey&&e.target.closest(CONTROL); sel={node:n.key}; paintSel(); if(n.kind!=='flow') nodesEl.appendChild(n.wrap);
+        if(isCtl&&n.kind!=='flow') return;
+        var w0=toWorld(e.clientX,e.clientY); drag={kind:'node',n:n,w0:w0,x0:n.x,y0:n.y,moved:false,tile:n.kind==='flow',ctl:!!isCtl}; if(!isCtl) e.preventDefault(); return; }
+      if(e.button===0){ sel=null; paintSel(); drag={kind:'pan?',x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; } },true);
+    window.addEventListener('mousemove',function(e){ if(!drag||!isOpen) return;
+      if(drag.kind==='pan?'&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>4){ drag.kind='pan'; page.classList.add('panning'); }
+      if(drag.kind==='pan'){ view.x=drag.vx+e.clientX-drag.x; view.y=drag.vy+e.clientY-drag.y; applyView(); return; }
+      if(drag.kind==='node'){ var w=toWorld(e.clientX,e.clientY), dx=w.x-drag.w0.x, dy=w.y-drag.w0.y; if(!drag.moved&&Math.hypot(dx,dy)*view.z>4){ drag.moved=true; suppressClick=true; } if(!drag.moved) return;
+        if(drag.ctl) return; var n=drag.n; n.x=Math.round(drag.x0+dx); n.y=Math.round(drag.y0+dy); place(n); layoutCablesOf(n); e.preventDefault(); return; }
+      if(drag.kind==='cable'){ var w2=toWorld(e.clientX,e.clientY), p=portPos(drag.n,drag.pk,drag.pi); drag.path.setAttribute('d',drag.pk==='out'?cablePath(p,w2,drag.t==='r'?'top':'in'):cablePath(w2,p,drag.pk));
+        var tgt=e.target.closest&&e.target.closest('.tp-port'); drag.hover=tgt&&tgt.classList.contains('can')?tgt:null; } },true);
+    window.addEventListener('mouseup',function(e){ if(!drag||!isOpen) return; var d=drag; drag=null; page.classList.remove('panning');
+      if(d.kind==='pan?'){ var tg=(e.target&&e.target.closest)?e.target:null; if(e.button===0&&(!tg||!tg.closest('.tp-tools, .tp-mini, .tp-menu, .tp-node, .tp-tile'))) openAdd(e.clientX,e.clientY,null); return; }
+      if(d.kind==='pan'){ saveView(); return; }
+      if(d.kind==='node'){ if(d.moved&&!d.ctl){ layout.pos[d.n.key]=[d.n.x,d.n.y]; saveLayout(); commit(); drawMini(); } setTimeout(function(){ suppressClick=false; },0); return; }
+      if(d.kind==='cable'){ drawg.innerHTML=''; page.querySelectorAll('.tp-port').forEach(function(p){ p.classList.remove('can','no'); });
+        if(d.hover){ var hn=nodeByKey(d.hover.dataset.key), hk=d.hover.dataset.kind, hi=+d.hover.dataset.i; var ok=(d.pk==='out')?connect(d.n,'out',d.pi,hn,hk,hi):connect(hn,'out',hi,d.n,d.pk,d.pi); if(ok){ commit(); soon(); } else toast('That does not fit'); }
+        else if(!(e.target&&e.target.closest&&e.target.closest('.tp-node, .tp-tile'))){ openAdd(e.clientX,e.clientY,{n:d.n,pk:d.pk,pi:d.pi,t:d.t}); } } },true);
+    page.addEventListener('click',function(e){ if(suppressClick){ e.stopPropagation(); e.preventDefault(); return; }
+      var pill=e.target.closest('.tp-pill'); if(pill){ e.stopPropagation(); setMachine(+pill.dataset.m); return; }
+      var pw=e.target.closest('.tp-pwr'); if(pw){ e.stopPropagation(); var b=document.getElementById(pw.dataset.tg); if(b) b.click(); soon(); return; }
+      if(e.target.closest('.tp-rnd')){ e.stopPropagation(); randomizeTargets(); return; } },true);
+    page.addEventListener('wheel',function(e){ e.preventDefault(); if(e.ctrlKey||e.metaKey){ var r=page.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top, k=Math.max(0.8,Math.min(1.25,Math.exp(-e.deltaY*0.006))), nz=Math.max(0.2,Math.min(2,view.z*k)); view.x=mx-(mx-view.x)*(nz/view.z); view.y=my-(my-view.y)*(nz/view.z); view.z=nz; }
+      else if(e.shiftKey&&!e.deltaX) view.x-=e.deltaY; else { view.x-=e.deltaX; view.y-=e.deltaY; } applyView(); saveView(); },{passive:false});
+    page.addEventListener('contextmenu',function(e){ if(e.target.closest('.tp-mini, .tp-menu, .hit')) { e.preventDefault(); return; }
+      var tool=e.target.closest('.tp-tools .g'); if(tool){ e.preventDefault(); if(tool.dataset.t==='dice') openAimMenu(e.clientX,e.clientY); return; }
+      var n=nodeOf(e.target); if(n&&n.kind==='flow') return;   /* the tile's own right-click opens its card */
+      e.preventDefault(); closeMenus(); if(!n){ openAdd(e.clientX,e.clientY,null); return; } if(n.kind!=='rnd'&&e.target.closest(CONTROL)&&!e.altKey) return; sel={node:n.key}; paintSel(); openNodeMenu(e.clientX,e.clientY,n,null); });
+    page.querySelector('.tp-tools').addEventListener('mousedown',function(e){ e.stopPropagation(); var g=e.target.closest('.g'); if(!g||e.button!==0) return; var t=g.dataset.t; if(t==='fit') fit(); if(t==='tidy') tidy(); if(t==='undo') undo(); if(t==='redo') redo(); if(t==='dice'&&!g.classList.contains('dis')) generate(); });
+    miniEl.addEventListener('mousedown',function(e){ e.stopPropagation(); var m=miniEl._map; if(!m) return; var r=miniEl.getBoundingClientRect(); var wx=(e.clientX-r.left-m.ox)/m.k+m.x0, wy=(e.clientY-r.top-m.oy)/m.k+m.y0; view.x=-(wx-m.W/2)*view.z; view.y=-(wy-m.H/2)*view.z; applyView(); saveView(); });
+    addM.addEventListener('mousedown',function(e){ e.stopPropagation(); var c=e.target.closest('.cats .row'); if(c){ addCat=c.dataset.c; renderAdd(); return; } if(e.target.closest('.x')){ closeMenus(); return; } var r=e.target.closest('.items .row'); if(!r||r.classList.contains('dis')){ if(r&&r.dataset.note) toast(r.dataset.note); return; } addFromList(r.dataset.k,+addM.dataset.wx,+addM.dataset.wy); });
+    addM.querySelector('input').addEventListener('input',renderAdd);
+    nMenu.addEventListener('mousedown',function(e){ e.stopPropagation(); });
+    window.addEventListener('keydown',function(e){ if(!isOpen) return; if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')){ if(e.key==='Escape') closeMenus(); return; }
+      var meta=e.metaKey||e.ctrlKey; if(meta&&(e.key==='z'||e.key==='Z')){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
+      if(e.key==='Backspace'||e.key==='Delete'){ if(sel&&sel.cable){ var c=cables.filter(function(x){return x.id===sel.cable;})[0]; if(c) cut(c); e.preventDefault(); } else if(sel&&sel.node){ var n=nodeByKey(sel.node); if(n) removeNode(n); e.preventDefault(); } return; }
+      if(e.key==='f'||e.key==='F') fit(); if(e.key==='m'||e.key==='M') miniEl.classList.toggle('hidden'); if(e.key==='Escape'){ closeMenus(); sel=null; paintSel(); } });
+  }
+  function setMachine(i){ var S=ST(); if(!S) return; var cur=S.tapeMachine|0, steps=((i-cur)%3+3)%3, b=document.getElementById('machNext'); for(var k=0;k<steps&&b;k++) b.click(); paintState(); }
+  function startCable(e,port){ e.preventDefault(); e.stopPropagation(); var n=nodeByKey(port.dataset.key), pk=port.dataset.kind, pi=+port.dataset.i, t=port.dataset.t||'a';
+    var path=document.createElementNS(SVGNS,'path'); path.setAttribute('class','core'); drawg.appendChild(path);
+    page.querySelectorAll('.tp-port').forEach(function(p){ var pn=nodeByKey(p.dataset.key), pk2=p.dataset.kind, ok; if(pk==='out') ok=pk2!=='out'&&pn!==n&&(p.dataset.t||'a')===t; else ok=pk2==='out'&&pn!==n&&(p.dataset.t||'a')===t; p.classList.toggle('can',!!ok); p.classList.toggle('no',!ok); });
+    drag={kind:'cable',n:n,pk:pk,pi:pi,t:t,path:path,hover:null}; }
+  function paintSel(){ nodes.forEach(function(n){ var on=!!(sel&&sel.node===n.key); (n.kind==='flow'?n.el:n.wrap).classList.toggle('tp-sel',on); }); cables.forEach(function(c){ c.el.classList.toggle('sel',!!(sel&&sel.cable===c.id)); }); }
+  function removeNode(n){ if(n.kind==='fx'){ window.__fxrRemove&&window.__fxrRemove(n.idx); commit(); soon(); return; }
+    if(n.kind==='lfon'){ if(cables.some(function(c){return c.from===n;})){ toast('Cut its cables first'); return; } layout.lfos=layout.lfos.filter(function(k){return k!==n.sub;}); dropNode(n); saveLayout(); commit(); sync(); return; }
+    if(n.kind==='rnd'){ layout.rnd.on=false; layout.rnd.targets=[]; dropNode(n); saveLayout(); commit(); sync(); return; }
+    toast('That module is part of the synth'); }
+  function placeMenu(m,cx,cy){ var r=page.getBoundingClientRect(); m.classList.add('on'); m.style.left=Math.max(6,Math.min(cx-r.left,r.width-m.offsetWidth-6))+'px'; m.style.top=Math.max(6,Math.min(cy-r.top,r.height-m.offsetHeight-6))+'px'; }
+  function closeMenus(){ if(addM){ addM.classList.remove('on'); try{ addM.querySelector('input').blur(); }catch(e){} } if(nMenu) nMenu.classList.remove('on'); addCtx=null; }
+  function openNodeMenu(cx,cy,n,c){ var h='';
+    if(c){ h='<div class="ps">Cable</div><div class="pi danger" data-a="cut">Cut</div>'; }
+    else if(n.kind==='rnd'){ var lv=layout.rnd.level||'medium'; h='<div class="ps">Randomizer · how far</div>'+['light','medium','heavy','wild'].map(function(l){ return '<div class="pi'+(l===lv?' cur':'')+'" data-lv="'+l+'">'+l.charAt(0).toUpperCase()+l.slice(1)+'</div>'; }).join('')+'<div class="sepd"></div><div class="pi danger" data-a="rm">Remove</div>'; }
+    else { h='<div class="ps">'+nodeName(n)+'</div>'+((n.kind==='fx'||n.kind==='lfon')?'<div class="pi danger" data-a="rm">Remove</div>':'<div class="pi dis">Part of the synth</div>'); }
+    nMenu.innerHTML=h; placeMenu(nMenu,cx,cy);
+    nMenu.onmousedown=function(ev){ ev.stopPropagation(); var lv=ev.target.dataset.lv; if(lv){ layout.rnd.level=lv; saveLayout(); paintRnd(); closeMenus(); return; } var a=ev.target.dataset.a; if(!a) return; if(a==='cut'&&c) cut(c); if(a==='rm'&&n) removeNode(n); closeMenus(); }; }
+  function openAimMenu(cx,cy){ var cur=layout.aim||'anything'; nMenu.innerHTML='<div class="ps">The dice · aim it</div>'+AIMS.map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+a.charAt(0).toUpperCase()+a.slice(1)+'</div>'; }).join(''); placeMenu(nMenu,cx,cy);
+    nMenu.onmousedown=function(ev){ ev.stopPropagation(); var a=ev.target.dataset.aim; if(!a) return; layout.aim=a; saveLayout(); closeMenus(); toast('The dice aims at '+a); }; }
+  /* the add browser — two panes, names only */
+  var CATS=['All','Oscillators','Filters','Modulators','Flow','Effects'];
+  function catalog(){ var it=[]; it.push({k:'osc',n:'Oscillator',cat:'Oscillators',dis:true,note:'Unlimited oscillators land with the graph engine'});
+    it.push({k:'flt',n:'Filter',cat:'Filters'});
+    for(var i=1;i<=10;i++) it.push({k:'lfo'+i,n:'LFO '+i,cat:'Modulators',dis:!!nodeByKey('lfon-'+i),note:'Already on the canvas'});
+    it.push({k:'rnd',n:'Randomizer',cat:'Modulators',dis:!!nodeByKey('rnd'),note:'Already on the canvas'});
+    FLOWS.forEach(function(m){ it.push({k:'flow-'+m,n:FLOWNAME[m],cat:'Flow',dis:true,note:'Already on the canvas'}); });
+    FXLIST.forEach(function(k){ it.push({k:k,n:FXNAMES[k],cat:'Effects'}); }); return it; }
+  function fitsCtx(it){ if(!addCtx) return true; var t=addCtx.t, out=addCtx.pk==='out'; if(t==='r') return out?it.k!=='rnd'&&it.k!=='osc'&&it.k.indexOf('lfo')!==0&&it.k.indexOf('flow')!==0:it.k==='rnd';
+    if(t==='m') return out?false:it.k.indexOf('lfo')===0; if(t==='a') return it.cat==='Effects'||it.cat==='Filters'; return false; }
+  function openAdd(cx,cy,ctx){ addCtx=ctx; var w=toWorld(cx,cy); addM.dataset.wx=w.x; addM.dataset.wy=w.y; addM.querySelector('input').value=''; renderAdd(); placeMenu(addM,cx,cy); try{ addM.querySelector('input').focus(); }catch(e){} }
+  function renderAdd(){ var q=addM.querySelector('input').value.trim().toLowerCase(), all=catalog().filter(fitsCtx);
+    addM.querySelector('.cats').innerHTML=CATS.map(function(c){ return '<div class="row'+(c===addCat?' cur':'')+'" data-c="'+c+'">'+c+'</div>'; }).join('');
+    var items=all.filter(function(it){ return (addCat==='All'||it.cat===addCat)&&(!q||it.n.toLowerCase().indexOf(q)>=0); });
+    addM.querySelector('.items').innerHTML=items.length?items.map(function(it){ return '<div class="row'+(it.dis?' dis':'')+'" data-k="'+it.k+'"'+(it.note?' data-note="'+it.note+'"':'')+'>'+it.n+'</div>'; }).join(''):'<div class="row dis">— nothing fits here —</div>'; }
+  function addFromList(k,wx,wy){ var n=null;
+    if(k.indexOf('lfo')===0){ n=lfonNode(+k.slice(3)); n.x=Math.round(wx-17); n.y=Math.round(wy-17); place(n); layout.pos[n.key]=[n.x,n.y]; if(addCtx&&addCtx.pk==='mod') connect(n,'out',0,addCtx.n,'mod',addCtx.pi); }
+    else if(k==='rnd'){ n=rndNode(); n.x=Math.round(wx-32); n.y=Math.round(wy-32); place(n); layout.pos[n.key]=[n.x,n.y]; if(addCtx&&addCtx.pk==='top') connect(n,'out',0,addCtx.n,'top',0); }
+    else { var idx=window.__fxrAdd?window.__fxrAdd(k):-1; if(idx<0){ toast('No free slot for '+FXNAMES[k]); closeMenus(); return; } adoptFx(); var devs=window.__fxrDevs?window.__fxrDevs():[]; var d=devs[idx]; n=d?nodeByKey('fx-'+d.core+'-'+d.inst):null;
+      if(n){ n.x=Math.round(wx-20); n.y=Math.round(wy-14); place(n); layout.pos[n.key]=[n.x,n.y]; if(addCtx&&addCtx.pk==='out'&&addCtx.t==='a') connect(addCtx.n,'out',addCtx.pi,n,'in',0); if(addCtx&&addCtx.pk==='out'&&addCtx.t==='r') connect(addCtx.n,'out',0,n,'top',0); } }
+    saveLayout(); closeMenus(); commit(); soon(); }
+  function tidy(){ nodes.forEach(function(n){ var d=defaultPos(n); n.x=d[0]; n.y=d[1]; place(n); layout.pos[n.key]=[n.x,n.y]; }); cables.forEach(layoutCable); saveLayout(); commit(); fit(); }
+  function drawMini(){ if(!miniEl) return; var s=miniEl.querySelector('svg'); if(!nodes.length){ s.innerHTML=''; return; }
+    var b=bounds(), W=page.clientWidth/view.z, H=page.clientHeight/view.z, vx=-view.x/view.z, vy=-view.y/view.z;
+    var x0=Math.min(b.x,vx)-40, y0=Math.min(b.y,vy)-40, x1=Math.max(b.x+b.w,vx+W)+40, y1=Math.max(b.y+b.h,vy+H)+40;
+    var k=Math.min(118/(x1-x0),72/(y1-y0)), ox=(118-(x1-x0)*k)/2, oy=(72-(y1-y0)*k)/2, M=function(x,y){ return [ox+(x-x0)*k, oy+(y-y0)*k]; }, h='';
+    cables.forEach(function(c){ var a=portPos(c.from,c.fk,c.fi), d=portPos(c.to,c.tk,c.ti), A=M(a.x,a.y), D=M(d.x,d.y); h+='<path d="M'+A[0]+' '+A[1]+'L'+D[0]+' '+D[1]+'" stroke="rgba(183,148,255,.35)" stroke-width=".8" fill="none"/>'; });
+    nodes.forEach(function(n){ var P=M(n.x,n.y); h+='<rect x="'+P[0]+'" y="'+P[1]+'" width="'+(n.w*k)+'" height="'+(n.h*k)+'" rx="1.5" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.38)" stroke-width=".8"/>'; });
+    var V=M(vx,vy); h+='<rect x="'+V[0]+'" y="'+V[1]+'" width="'+(W*k)+'" height="'+(H*k)+'" rx="2" fill="none" stroke="#B794FF" stroke-width="1"/>'; s.innerHTML=h; miniEl._map={x0:x0,y0:y0,k:k,ox:ox,oy:oy,W:W,H:H}; }
+
+  /* ── open / close ── */
+  function openPage(){ build(); if(!page||isOpen) return; isOpen=true;
+    loadLayout(function(){ if(!isOpen) return; try{ adoptAll(); }catch(e){ try{ console.warn('[tp] adopt',e); }catch(_){} }
+      if(layout.view){ view.x=layout.view.x; view.y=layout.view.y; view.z=layout.view.z||0.6; applyView(); } else fit();
+      sync(); setTimeout(sync,120); setTimeout(sync,900); hist={undo:[],redo:[],cur:null}; setTimeout(function(){ hist.cur=snapshot(); paintTools(); },200); if(!raf) raf=requestAnimationFrame(frame); }); }
+  function closePage(){ if(!isOpen) return; isOpen=false; closeMenus(); try{ returnAll(); }catch(e){ try{ console.warn('[tp] return',e); }catch(_){} } if(raf){ cancelAnimationFrame(raf); raf=0; } lastT=0; }
+  window.__tpOpen=openPage; window.__tpClose=closePage; window.__tpNodes=function(){ return nodes.map(function(n){ return {key:n.key,x:n.x,y:n.y}; }); }; window.__tpCables=function(){ return cables.map(function(c){ return c.id; }); }; window.__tpSync=sync; window.__tpDrag=function(){ return drag?{kind:drag.kind,moved:!!drag.moved,ctl:!!drag.ctl}:null; };
+  window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpRoll=randomizeTargets; window.__tpLayout=function(){ return layout; };
+  window.addEventListener('tipanelchange',function(e){ var p=e.detail&&e.detail.panel; if(p==='tp') openPage(); else closePage(); });
+  function watchRack(){ var rack=document.getElementById('fxr-rack'); if(rack&&window.MutationObserver){ new MutationObserver(function(){ if(isOpen&&!adopting){ adoptFx(); soon(); } }).observe(rack,{childList:true}); return true; } return false; }
+  if(!watchRack()) document.addEventListener('DOMContentLoaded',watchRack);
+  setInterval(function(){ if(isOpen) sync(); },700);
+  if(document.body&&document.body.classList.contains('tp-open')) setTimeout(openPage,0);
+  else document.addEventListener('DOMContentLoaded',function(){ if(document.body.classList.contains('tp-open')) setTimeout(openPage,0); });
+})();
+</script>
+
+
 </body>
 </html>
