@@ -359,6 +359,9 @@ inline constexpr const char* const kOsc_PAN[kOscCount] = { SYN_OSC_A_PAN, SYN_OS
 inline constexpr const char* const kOsc_OCT[kOscCount] = { SYN_OSC_A_OCT, SYN_OSC_B_OCT, SYN_OSC_C_OCT, SYN_OSC_D_OCT, SYN_OSC_E_OCT, SYN_OSC_F_OCT, SYN_OSC_G_OCT, SYN_OSC_H_OCT };
 inline constexpr const char* const kOsc_SEMI[kOscCount] = { SYN_OSC_A_SEMI, SYN_OSC_B_SEMI, SYN_OSC_C_SEMI, SYN_OSC_D_SEMI, SYN_OSC_E_SEMI, SYN_OSC_F_SEMI, SYN_OSC_G_SEMI, SYN_OSC_H_SEMI };
 inline constexpr const char* const kOsc_CENT[kOscCount] = { SYN_OSC_A_CENT, SYN_OSC_B_CENT, SYN_OSC_C_CENT, SYN_OSC_D_CENT, SYN_OSC_E_CENT, SYN_OSC_F_CENT, SYN_OSC_G_CENT, SYN_OSC_H_CENT };
+inline constexpr const char* const kOsc_FOLD_SHAPE[kOscCount] = { SYN_OSC_A_FOLD_SHAPE, SYN_OSC_B_FOLD_SHAPE, SYN_OSC_C_FOLD_SHAPE, SYN_OSC_D_FOLD_SHAPE, SYN_OSC_E_FOLD_SHAPE, SYN_OSC_F_FOLD_SHAPE, SYN_OSC_G_FOLD_SHAPE, SYN_OSC_H_FOLD_SHAPE };
+inline constexpr const char* const kOsc_WVAR[kOscCount] = { SYN_OSC_A_WVAR, SYN_OSC_B_WVAR, SYN_OSC_C_WVAR, SYN_OSC_D_WVAR, SYN_OSC_E_WVAR, SYN_OSC_F_WVAR, SYN_OSC_G_WVAR, SYN_OSC_H_WVAR };
+inline constexpr const char* const kOsc_W2VAR[kOscCount] = { SYN_OSC_A_W2VAR, SYN_OSC_B_W2VAR, SYN_OSC_C_W2VAR, SYN_OSC_D_W2VAR, SYN_OSC_E_W2VAR, SYN_OSC_F_W2VAR, SYN_OSC_G_W2VAR, SYN_OSC_H_W2VAR };
 inline constexpr char kOscLetter[kOscCount] = { 'A','B','C','D','E','F','G','H' };
 inline constexpr int kFlowIdCount = 167;   // the Flow cards' instance-1 constants (Arp / Seq=Chop macros / Chop / Glitch)
 inline constexpr const char* const kFlowIds[kFlowIdCount] = {

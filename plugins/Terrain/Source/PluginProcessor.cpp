@@ -1193,20 +1193,16 @@ void TerrainAudioProcessor::spectralDisplay (int osc, float& amtOut, int& typeOu
                                                         float& loOut, float& hiOut) const noexcept
 {
     osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
-    static const char* const SA[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
-                                       ParameterIDs::SYN_OSC_C_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
-    static const char* const ST[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE, ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
-                                       ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE, ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE };
+    const auto* SA = ParameterIDs::kOsc_SPECTRAL_AMT;   // tp20b — 8 wide
+    const auto* ST = ParameterIDs::kOsc_SPECTRAL_TYPE;   // tp20b — 8 wide
     const float eff = spectralEffAmt_[osc].load (std::memory_order_relaxed);
     amtOut  = (eff >= 0.0f) ? eff : rawParam (SA[osc])->load();
     typeOut = (int) rawParam (ST[osc])->load();
     // fb467 — the partial WINDOW is part of the state a bake was taken under, exactly as the
     // amount and the type are. Leave it out and moving Lo/Hi re-morphs the table while the
     // waterfall keeps drawing the old one, forever (fb459's stale-table failure).
-    static const char* const SL[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
-                                       ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
-    static const char* const SH[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, ParameterIDs::SYN_OSC_B_SPECTRAL_HI,
-                                       ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
+    const auto* SL = ParameterIDs::kOsc_SPECTRAL_LO;   // tp20b — 8 wide
+    const auto* SH = ParameterIDs::kOsc_SPECTRAL_HI;   // tp20b — 8 wide
     const float eLo = specLoEff_[osc].load (std::memory_order_relaxed);
     const float eHi = specHiEff_[osc].load (std::memory_order_relaxed);
     loOut = (eLo >= 0.0f) ? eLo : rawParam (SL[osc])->load();
@@ -1226,22 +1222,14 @@ tw::SynthVoice::WtDisp TerrainAudioProcessor::wtDispEffective (int osc) const no
                  wtWarp2ModeVis_[osc].load (std::memory_order_relaxed),
                  wtFoldShapeVis_[osc].load (std::memory_order_relaxed) };
 
-    static const char* const WF [4] = { ParameterIDs::SYN_OSC_A_WT_FRAME,   ParameterIDs::SYN_OSC_B_WT_FRAME,
-                                        ParameterIDs::SYN_OSC_C_WT_FRAME,   ParameterIDs::SYN_OSC_D_WT_FRAME };
-    static const char* const WM [4] = { ParameterIDs::SYN_OSC_A_WARP_MODE,  ParameterIDs::SYN_OSC_B_WARP_MODE,
-                                        ParameterIDs::SYN_OSC_C_WARP_MODE,  ParameterIDs::SYN_OSC_D_WARP_MODE };
-    static const char* const WA [4] = { ParameterIDs::SYN_OSC_A_WARP_AMOUNT,ParameterIDs::SYN_OSC_B_WARP_AMOUNT,
-                                        ParameterIDs::SYN_OSC_C_WARP_AMOUNT,ParameterIDs::SYN_OSC_D_WARP_AMOUNT };
-    static const char* const W2M[4] = { ParameterIDs::SYN_OSC_A_WARP2_MODE, ParameterIDs::SYN_OSC_B_WARP2_MODE,
-                                        ParameterIDs::SYN_OSC_C_WARP2_MODE, ParameterIDs::SYN_OSC_D_WARP2_MODE };
-    static const char* const W2A[4] = { ParameterIDs::SYN_OSC_A_WARP2_AMT,  ParameterIDs::SYN_OSC_B_WARP2_AMT,
-                                        ParameterIDs::SYN_OSC_C_WARP2_AMT,  ParameterIDs::SYN_OSC_D_WARP2_AMT };
-    static const char* const FS [4] = { ParameterIDs::SYN_OSC_A_FOLD_SHAPE, ParameterIDs::SYN_OSC_B_FOLD_SHAPE,
-                                        ParameterIDs::SYN_OSC_C_FOLD_SHAPE, ParameterIDs::SYN_OSC_D_FOLD_SHAPE };
-    static const char* const FA [4] = { ParameterIDs::SYN_OSC_A_FOLD_AMT,   ParameterIDs::SYN_OSC_B_FOLD_AMT,
-                                        ParameterIDs::SYN_OSC_C_FOLD_AMT,   ParameterIDs::SYN_OSC_D_FOLD_AMT };
-    static const char* const BL [4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
-                                        ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
+    const auto* WF = ParameterIDs::kOsc_WT_FRAME;   // tp20b — 8 wide
+    const auto* WM = ParameterIDs::kOsc_WARP_MODE;   // tp20b — 8 wide
+    const auto* WA = ParameterIDs::kOsc_WARP_AMOUNT;   // tp20b — 8 wide
+    const auto* W2M = ParameterIDs::kOsc_WARP2_MODE;   // tp20b — 8 wide
+    const auto* W2A = ParameterIDs::kOsc_WARP2_AMT;   // tp20b — 8 wide
+    const auto* FS = ParameterIDs::kOsc_FOLD_SHAPE;   // tp20b — 8 wide
+    const auto* FA = ParameterIDs::kOsc_FOLD_AMT;   // tp20b — 8 wide
+    const auto* BL = ParameterIDs::kOsc_FRAME_SPREAD;   // tp20b — 8 wide
     return { rawParam (WF[osc])->load(),  rawParam (WA[osc])->load(),
              rawParam (W2A[osc])->load(), rawParam (FA[osc])->load(),
              rawParam (BL[osc])->load(),
@@ -1340,10 +1328,8 @@ juce::String TerrainAudioProcessor::getWarpCurveJson (int osc, int slot)
 {
     osc  = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     slot = juce::jlimit (0, 1, slot);
-    static const char* const WV [4] = { ParameterIDs::SYN_OSC_A_WVAR,  ParameterIDs::SYN_OSC_B_WVAR,
-                                        ParameterIDs::SYN_OSC_C_WVAR,  ParameterIDs::SYN_OSC_D_WVAR };
-    static const char* const W2V[4] = { ParameterIDs::SYN_OSC_A_W2VAR, ParameterIDs::SYN_OSC_B_W2VAR,
-                                        ParameterIDs::SYN_OSC_C_W2VAR, ParameterIDs::SYN_OSC_D_W2VAR };
+    const auto* WV = ParameterIDs::kOsc_WVAR;   // tp20b — 8 wide
+    const auto* W2V = ParameterIDs::kOsc_W2VAR;   // tp20b — 8 wide
     const auto  D    = wtDispEffective (osc);
     const int   mode = slot == 0 ? D.warpMode : D.warp2Mode;
     const float amt  = juce::jlimit (0.0f, 1.0f, slot == 0 ? D.warpAmt : D.warp2Amt);
@@ -1487,8 +1473,7 @@ juce::String TerrainAudioProcessor::getWarpCurveJson (int osc, int slot)
 int TerrainAudioProcessor::wtTableStamp (int osc) noexcept
 {
     osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
-    static const char* const WTPS[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                         ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const auto* WTPS = ParameterIDs::kOsc_WT_PRESET;   // tp20b — 8 wide
     const MorphSlot& ms = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
     const tw::Wavetable* wt = wavetableForDisplay (osc, ms, (int) *apvts.getRawParameterValue (WTPS[osc]));
     if (wt == nullptr) return 0;
@@ -1506,8 +1491,7 @@ int TerrainAudioProcessor::wtTableStamp (int osc) noexcept
 int TerrainAudioProcessor::getOscNumFrames (int osc) noexcept
 {
     osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
-    static const char* const WTPS[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                         ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const auto* WTPS = ParameterIDs::kOsc_WT_PRESET;   // tp20b — 8 wide
     const MorphSlot& ms = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
     const tw::Wavetable* wt = wavetableForDisplay (osc, ms, (int) *apvts.getRawParameterValue (WTPS[osc]));
     return wt == nullptr ? 0 : juce::jmax (1, wt->getNumFrames());
@@ -1520,8 +1504,7 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
     // and it was not true: it read import -> bank and never consulted the MORPH slot, so everything
     // SPECTRAL was invisible. The voice resolves through wavetableForOsc(); this is its read-only
     // message-thread twin, same preference order, without forging the audio thread's buffer claim.
-    static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                        ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const auto* WTP = ParameterIDs::kOsc_WT_PRESET;   // tp20b — 8 wide
     const MorphSlot& mslot = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
     const int wtPresetIdx = (int) *apvts.getRawParameterValue (WTP[osc]);
     wavetableBank.ensureBuilt (wtPresetIdx);   // fb496 — message thread; no-op once built
@@ -1547,8 +1530,7 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
     //     all move the picture. Drawing the raw table would have been a flat placeholder wearing
     //     a waterfall's clothes, which this project's display law forbids.
     {
-        static const char* const ENGH[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
-                                             ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+        const auto* ENGH = ParameterIDs::kOsc_ENGINE;   // tp20b — 8 wide
         const bool harmTableView = ((int) *apvts.getRawParameterValue (ENGH[osc]) == (int) tw::SynthVoice::Engine::HARM)
                                 && (harmDisplayParams_[(size_t) osc].mainMode == 6);
         const tw::HarmTableSource::Grid* wg = harmTable_[(size_t) osc].live.load (std::memory_order_acquire);
@@ -1645,8 +1627,7 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
     // sitting on top of it, and Max's "whatever the ratio does, I need to actually see it move
     // the table" was structurally impossible. The operator stage is shared now (FmOperators.h),
     // so the picture runs the very code the voice runs.
-    static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
-                                        ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+    const auto* ENG = ParameterIDs::kOsc_ENGINE;   // tp20b — 8 wide
     const bool doFm = ((int) *apvts.getRawParameterValue (ENG[osc])) == (int) tw::SynthVoice::Engine::FM;
     const tw::FmOps::Params fmP = fmDisplayParams_[(size_t) osc];
     const bool doFold = D.foldAmt > 1.0e-6f;
@@ -1784,15 +1765,13 @@ juce::String TerrainAudioProcessor::getOscLfoWaveJson (int osc)
     const tw::Wavetable* wt = pin.wt;
     if (wt == nullptr)
     {
-        static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                            ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+        const auto* WTP = ParameterIDs::kOsc_WT_PRESET;   // tp20b — 8 wide
         const int bankPreset = (int) *apvts.getRawParameterValue (WTP[osc]);
         wavetableBank.ensureBuilt (bankPreset);   // fb496 — message thread; this BAKES into an
         wt = wavetableBank.getTable (bankPreset); //   LFO shape, so never take the Sine fallback
     }
     if (wt == nullptr) return "{}";
-    static const char* const WTF[4] = { ParameterIDs::SYN_OSC_A_WT_FRAME, ParameterIDs::SYN_OSC_B_WT_FRAME,
-                                        ParameterIDs::SYN_OSC_C_WT_FRAME, ParameterIDs::SYN_OSC_D_WT_FRAME };
+    const auto* WTF = ParameterIDs::kOsc_WT_FRAME;   // tp20b — 8 wide
     const float framePos = juce::jlimit (0.0f, 1.0f, (float) *apvts.getRawParameterValue (WTF[osc]));
     const int N = 256;
     juce::MemoryOutputStream out;
@@ -15039,8 +15018,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             const tw::Wavetable* wt = importSlot_[o].live.load (std::memory_order_seq_cst);   // fb636 M2 — the grace fence's audio half
             if (wt == nullptr)
             {
-                static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                                    ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+                const auto* WTP = ParameterIDs::kOsc_WT_PRESET;   // tp20b — 8 wide
                 wt = wavetableBank.getTable ((int) rawParam (WTP[o])->load());   // fb490 — cached, no string lookup
             }
             if (wt == nullptr) { wtAudCtr_ = 0; wtAudFade_ = 0; }

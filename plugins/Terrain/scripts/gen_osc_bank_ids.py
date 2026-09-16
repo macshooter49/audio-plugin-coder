@@ -46,7 +46,10 @@ hdr.append('inline constexpr const char* const kOscRemapTo[kOscRemapCount] = {')
 hdr += ['    ' + ', '.join(to[i:i+4]) + ',' for i in range(0, len(to), 4)]; hdr.append('};')
 TABLES = ['ENGINE','ENABLE','WT_PRESET','WT_FRAME','HARM_TABLE','HARM_MODE','SPECTRAL_TYPE','SPECTRAL_AMT','SPECTRAL_LO','SPECTRAL_HI',
           'URANGE','PHASE','LEVEL','MUTE','SOLO','F1MIX','F2MIX','SAMPLE_LOOP_MODE','SAMPLE_LOOP_START','SAMPLE_LOOP_END','WARP_MODE',
-          'WARP_AMOUNT','WARP2_MODE','WARP2_AMT','FOLD_AMT','FRAME_SPREAD','PHASE_MODE','PAN','OCT','SEMI','CENT']
+          'WARP_AMOUNT','WARP2_MODE','WARP2_AMT','FOLD_AMT','FRAME_SPREAD','PHASE_MODE','PAN','OCT','SEMI','CENT',
+          # tp20b — the three the display path needs and the first pass missed. Their absence is what
+          # left wtDispEffective/getWarpCurveJson indexing hand-written [4] tables with an index up to 7.
+          'FOLD_SHAPE','WVAR','W2VAR']
 for n in TABLES:
     if n in names:
         hdr.append(f'inline constexpr const char* const kOsc_{n}[kOscCount] = {{ ' + ', '.join(f'SYN_OSC_{L}_{n}' for L in 'ABCDEFGH') + ' };')
