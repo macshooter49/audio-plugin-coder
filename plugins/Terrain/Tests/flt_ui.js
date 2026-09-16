@@ -86,7 +86,7 @@ const P=require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
     if(pill) pill.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:200,clientY:300}));
     const panes=[...document.querySelectorAll('.tpb-pane')];
     out.twoPaneOpened = panes.length>=2;
-    const inp=[...document.querySelectorAll('input')].filter(i=>/Search 94/.test(i.placeholder||''));
+    const inp=[...document.querySelectorAll('input')].filter(i=>/Search 119/.test(i.placeholder||''));
     out.hasSearch = inp.length>0;
     if(inp.length){
       const items0=panes[1]?panes[1].children.length:0;

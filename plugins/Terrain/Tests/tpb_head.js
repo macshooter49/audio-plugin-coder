@@ -36,7 +36,7 @@ const CASES = [
     onImport: 1, onAudition: 1, onDelete: 1 },
   { key: 'sample',  importLabel: '＋ Import Sample', onImport: 1, onAudition: 1, onDelete: 1 },
   { key: 'noise',   importLabel: '＋ Import Noise',  onImport: 1, onAudition: 1, onDelete: 1 },
-  { key: 'filter',  searchPlaceholder: 'Search 118 filters…' },
+  { key: 'filter',  searchPlaceholder: 'Search 119 filters…' },
   { key: 'warp',    importIcon: true, importTitle: 'Extend', onImport: 1,
     searchPlaceholder: 'Search 40 warp modes…' },
   { key: 'mods',    multi: true, searchPlaceholder: 'Search modulators…' },
@@ -384,7 +384,7 @@ const CASES = [
     if (window.__tpbClose) { try { window.__tpbClose(); } catch (e) {} }
     const cats = [ { label: 'Ladder',  items: [{ name: 'Ladder LP 24', pick(){} }, { name: 'Acid 303', pick(){} }] },
                    { label: 'Vintage', items: [{ name: 'Acid Scream', pick(){} }, { name: 'SEM Notch', pick(){} }] } ];
-    const p = window.openTwoPaneBrowser({ clientX: 300, clientY: 200 }, { cats, openCat: 0, searchPlaceholder: 'Search 118 filters…' });
+    const p = window.openTwoPaneBrowser({ clientX: 300, clientY: 200 }, { cats, openCat: 0, searchPlaceholder: 'Search 119 filters…' });
     const inp = p.querySelector('input');
     const rows = () => [].slice.call(p.querySelectorAll('div'))
       .filter(d => /^(Ladder LP 24|Acid 303|Acid Scream|SEM Notch)$/.test(d.textContent.trim())).map(d => d.textContent.trim());

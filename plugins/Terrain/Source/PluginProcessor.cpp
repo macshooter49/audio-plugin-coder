@@ -2699,6 +2699,20 @@ const tw::WavetableSpec* TerrainAudioProcessor::oscSourceSpec (int oscIdx, int p
 // thread's job, see HarmTableSource::blend). Double-buffered with the same retire cooldown as
 // MorphSlot: audioReadingIdx only refreshes at block start, so a buffer the audio thread has
 // "left" can still be in use for up to a full block.
+juce::String TerrainAudioProcessor::getFilterTableCurveCsv (int slot) const
+{
+    const int si = juce::jlimit (0, 1, slot);
+    const auto* c = fltTable_[si].live.load (std::memory_order_acquire);
+    if (c == nullptr) return {};
+    const float frame = apvts.getRawParameterValue (si == 0 ? ParameterIDs::SYN_FILTER1_TBL_FRAME
+                                                            : ParameterIDs::SYN_FILTER2_TBL_FRAME)->load();
+    float db[tw::FilterTableSource::kBands] = {};
+    tw::FilterTableSource::blend (*c, frame, 1.0f, db);   // UNSCALED: the drawing applies RESONANCE itself, so the picture tracks that knob live
+    juce::String out;
+    for (int k = 0; k < tw::FilterTableSource::kBands; ++k) { if (k) out << ","; out << juce::String (db[k], 2); }
+    return out;
+}
+
 // ══ tp22 — THE FILTER TABLE's bake. MESSAGE THREAD (timerCallback). Gated on the chosen table, so it
 //    runs once per selection and never again; the audio thread only ever dereferences `live`.
 void TerrainAudioProcessor::rebuildFilterTableIfNeeded (int slotIdx)

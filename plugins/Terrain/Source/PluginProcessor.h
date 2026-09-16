@@ -1083,6 +1083,10 @@ public:
     juce::String  getConvIRRawJson     (int inst = 1) const;                  // fb311 — {name,n,L,R} (base64 float) for embedding in a preset
     void          setConvIRRawFromJson (const juce::String& json, int inst = 1);   // fb311 — restore the EXACT one-shot from a preset
     void          setConvIRAsset       (const juce::String& b64,  int inst = 1);   // fb621 — the FLAC envelope, resampled to the live rate
+    /** tp22 — the published curve for ONE main filter, at its CURRENT frame, as CSV of band dB.
+     *  The drawn response reads this so the picture is the DSP's own numbers and not a lookalike
+     *  (the house law: a filter's curve mirrors the DSP and moves with the knobs, never a placeholder). */
+    juce::String      getFilterTableCurveCsv (int slot) const;
     juce::String      getArpFeedJson (int inst = 0) const;              // playhead/fire/wave snapshot (rAF-polled) · tp20 inst
     juce::String      getChopFeedJson (int inst = 0) const;             // fb106: Ribbon playhead/slice/wet snapshot · tp20 inst
     void              requestChopWipe (int inst = 0) noexcept { chopWipeReq_[juce::jlimit (0, wc::kFlowInstances - 1, inst)].store (true); }   // Wipe button → audio thread
@@ -2208,6 +2212,7 @@ private:
     std::unique_ptr<tw::HarmTableSource::Grid> fltBakeGrid_;       // message thread only — the intermediate
     std::unique_ptr<tw::WavetableSpec>         fltBakeSpec_;       // heap: a spec is ~229 KB (the MSVC stack law)
     void rebuildFilterTableIfNeeded (int slot);                    // message thread (timerCallback)
+
     // fb589 — THE ADDITIVE WATERFALL. Its own engine instance, deliberately NOT the editor's
     // harmDispEng_[]: that one is mid-flight every 60 Hz tick baking the bars, and a 16-row HUE
     // sweep would be walking through its state. One instance serves all four oscillators because
