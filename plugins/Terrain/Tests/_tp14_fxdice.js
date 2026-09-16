@@ -7,9 +7,9 @@ const puppeteer = require('puppeteer-core'); const sleep = ms => new Promise(r =
   await p.goto('file://' + process.argv[2] + '?page=1', { waitUntil: 'load' }); await sleep(1500);
   await p.evaluate(() => { if (window.setActivePanel) window.setActivePanel('syn'); else document.getElementById('syn-btn').click(); window.__setLog = []; const o = window.__setSynParam; window.__setSynParam = function (id, v) { window.__setLog.push(id); return o.apply(this, arguments); }; });
   await sleep(700);
-  const R = { row: await p.evaluate(() => { const r = document.getElementById('fxr-dice'); if (!r) return null; const c = r.getBoundingClientRect(), rk = document.querySelector('.fxr-clip').getBoundingClientRect();
-    return { visible: c.height > 0 && c.width > 0, aboveChain: c.bottom <= rk.top + 1, label: (r.querySelector('.fxr-dice-lvl') || {}).textContent, text: (r.querySelector('.fxr-dice-t') || {}).textContent }; }), rolls: [] };
-  for (const lvl of ['light', 'medium', 'heavy', 'wild']) {
+  // tp16 — the row above the rack is GONE: both rolls live in the Patcher's dice menu now (Tests/_tp16_menu.js proves the menu).
+  const R = { rowGone: await p.evaluate(() => !document.getElementById('fxr-dice')), rolls: [] };
+  for (const lvl of ['light', 'medium', 'heavy', 'wild', 'crazy']) {
     const before = await p.evaluate(() => ({ routes: (window.__tiRoutes() || []).length }));
     await p.evaluate(l => { window.__setLog.length = 0; window.__fxrDice(l); }, lvl); await sleep(900);
     R.rolls.push(await p.evaluate((l, bf) => {
@@ -22,9 +22,5 @@ const puppeteer = require('puppeteer-core'); const sleep = ms => new Promise(r =
         routed: D.map(d => (d.route || []).join('')).join(' ') };
     }, lvl, before));
   }
-  // the picker
-  R.menu = await p.evaluate(() => { const el = document.querySelector('#fxr-dice .fxr-dice-lvl'); const r = el.getBoundingClientRect();
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + 4, clientY: r.top + 4 }));
-    const m = document.querySelector('.syn-ctx-menu.act'); return m ? [...m.querySelectorAll('.syn-ctx-item')].map(x => x.textContent.trim()).join(',') : 'no menu'; });
   R.errs = errs; console.log(JSON.stringify(R, null, 1)); await b.close();
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

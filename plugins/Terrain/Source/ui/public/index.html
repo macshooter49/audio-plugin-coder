@@ -9241,15 +9241,6 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         #syn-panel .voice-meta.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on{ border-color:rgba(255,255,255,.42); color:var(--text-primary); }
         #syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
         #syn-panel .fxr-macros-pane{ flex-direction:column; justify-content:center; }
-        /* tp14 — the RANDOMIZE CHAIN row: one thin line above the rack, the page's own ink and type. */
-        #syn-panel .fxr-dice{ flex:none; display:flex; align-items:center; gap:8px; height:13px; margin:0 0 3px 1px; font-size:9px; letter-spacing:.5px; color:rgba(255,255,255,.42); user-select:none; }
-        #syn-panel .fxr-dice-go{ display:flex; align-items:center; gap:5px; cursor:pointer; transition:color .12s; }
-        #syn-panel .fxr-dice-go svg{ width:11px; height:11px; }
-        #syn-panel .fxr-dice-go:hover{ color:rgba(255,255,255,.92); }
-        #syn-panel .fxr-dice.rolling .fxr-dice-go{ color:var(--purple-400); }
-        #syn-panel .fxr-dice-sep{ color:rgba(255,255,255,.22); }
-        #syn-panel .fxr-dice-lvl{ cursor:pointer; padding:0 6px; height:13px; line-height:13px; border:1px solid rgba(255,255,255,.14); border-radius:7px; color:rgba(255,255,255,.55); transition:color .12s,border-color .12s; }
-        #syn-panel .fxr-dice-lvl:hover{ color:#fff; border-color:rgba(255,255,255,.4); }
         #syn-panel .fxr-clip{ flex:1; min-width:0; min-height:0; overflow-x:auto; overflow-y:hidden; display:flex; scrollbar-width:none; }   /* fb637 — min-height:0: the last link in the chain. Its overflow-y:hidden is the blade that actually cut the cards' bottom line off, and without this it was handed a height bigger than the space that existed. */
         #syn-panel .fxr-clip::-webkit-scrollbar{ display:none; }   /* fb268 — NO visible slider; shift+scroll / two-finger trackpad pans the chain */
         #syn-panel .fxr-rack{ display:flex; gap:9px; align-items:stretch; padding:0; min-height:0; }   /* fb272 — drop 2px side pad so the first device left edge lands at x=14 (edge-to-edge with the modules above) */
@@ -9546,18 +9537,6 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         <div class="ribbon-row rr-new">
           <div class="rr-left">
             <!-- fb269 — Effects/Macros pill retired; the rack IS the left column (macros moved to the voice-column 'Macros' button on the right). -->
-            <!-- tp14 — RANDOMIZE CHAIN (Max): purely effects, at a reach you pick. Above the chain, outside #fxr-rack so render() cannot wipe it. -->
-            <div class="fxr-dice" id="fxr-dice">
-              <span class="fxr-dice-go" data-act="roll" title="Roll a new effect chain — effects only, nothing else is touched">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/></svg>
-                <span class="fxr-dice-t">Randomize chain</span></span>
-              <span class="fxr-dice-lvl" data-act="lvl" title="How far it goes">Medium</span>
-              <span class="fxr-dice-sep">·</span>
-              <span class="fxr-dice-go" data-act="mroll" title="Roll new modulation — envelopes, LFOs, macros, key, velocity and their routes. Nothing else is touched.">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-9 6 9 9 0s6-9 9 0"/></svg>
-                <span class="fxr-dice-t">Randomize modulation</span></span>
-              <span class="fxr-dice-lvl" data-act="mlvl" title="How far the modulation goes">Heavy</span>
-            </div>
             <div class="fxr-clip"><div class="fxr-rack" id="fxr-rack"></div></div>
           </div>
 
@@ -12181,23 +12160,25 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              envelope, no LFO, no mod route. The chain still ends in a compressor at its defaults (the house rule),
              and the compressor is never given a setting. Reach: Light · Medium · Heavy · Wild, kept in localStorage. */
           (function(){
-            var LV=['light','medium','heavy','wild'], lvl='medium';
+            var LV=['light','medium','heavy','wild','crazy'], lvl='medium';
             try{ var st=localStorage.getItem('fxrDiceLvl'); if(LV.indexOf(st)>=0) lvl=st; }catch(e){}
             var rnd=Math.random, pick=function(a){ return a[Math.floor(rnd()*a.length)]; }, bt=function(a,b){ return a+rnd()*(b-a); };
             var POOL={ light:['reverb','delay','cho','eqz','wid','tape'],
                        medium:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod'],
                        heavy:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'],
-                       wild:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'] };
-            var CNT={light:[1,2],medium:[2,3],heavy:[3,4],wild:[4,5]};
+                       wild:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'],
+                       crazy:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'] };
+            var CNT={light:[1,2],medium:[2,3],heavy:[3,4],wild:[4,5],crazy:[5,6]};
             var MIXR={reverb:[.2,.45],delay:[.18,.4],cho:[.3,.6],pha:[.3,.55],fla:[.25,.5],wid:[.4,.85],tape:[.4,.85],saturate:[.25,.6],ott:[.25,.5],eqz:[.85,1],granular:[.2,.45],bod:[.25,.5],flt:[.7,1],utl:[.8,1]};
             var HOTC=/saturate|ott|bod|flt/;
             function norm(p,i,n){ var c=0; try{ c=window.__paramCardinality?window.__paramCardinality(p):0; }catch(e){} if(!(c>1)) c=n||2; return Math.max(0,Math.min(1,i/(c-1))); }
             function setP(p,v){ if(p) try{ window.__setSynParam(p,Math.max(0,Math.min(1,v))); }catch(e){} }
-            function setType(idx,type){ try{ var card=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]'), sel=card&&card.querySelector('.fxr-type-native'); if(!sel) return;
+            /* tp16 — document-wide, NOT rack-scoped: with the Patcher open the rack's cards live on ITS canvas,
+               and a rack.querySelector would quietly find nothing and set no types at all. */
+            function setType(idx,type){ try{ var card=document.querySelector('.fxr-dev[data-dev="'+idx+'"]'), sel=card&&card.querySelector('.fxr-type-native'); if(!sel) return;
               for(var i=0;i<sel.options.length;i++){ if(sel.options[i].textContent.trim()===type||sel.options[i].value===type){ sel.selectedIndex=i; sel.dispatchEvent(new Event('change',{bubbles:true})); return; } } }catch(e){} }
             function roll(){
-              var row=document.getElementById('fxr-dice'); if(row) row.classList.add('rolling');
-              var big=(lvl==='heavy'||lvl==='wild'), hi=lvl==='wild'?.95:lvl==='heavy'?.85:lvl==='medium'?.7:.55, lo=lvl==='light'?.25:.08;
+              var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'), hi=lvl==='crazy'?1:lvl==='wild'?.95:lvl==='heavy'?.85:lvl==='medium'?.7:.55, lo=lvl==='light'?.25:.08;
               for(var i=DEVS.length-1;i>=0;i--) window.__fxrRemove(i);
               var pool=(POOL[lvl]||POOL.medium).slice(), n=Math.round(bt(CNT[lvl][0],CNT[lvl][1])), picked=[];
               while(picked.length<n&&pool.length){ var c=pick(pool); pool.splice(pool.indexOf(c),1); picked.push(c); }
@@ -12214,18 +12195,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                   (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]&&rnd()<(big?.85:.5)) setP(kn[2], bt(lo, hot?.6:hi)); }); }
               });
               setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },300);
-              setTimeout(function(){ if(row) row.classList.remove('rolling'); },420);
             }
-            function paintLvl(){ var el=document.querySelector('#fxr-dice .fxr-dice-lvl'); if(el) el.textContent=lvl.charAt(0).toUpperCase()+lvl.slice(1); }
-            function lvlMenu(x,y){ if(!window.__synShowMenu) { lvl=LV[(LV.indexOf(lvl)+1)%LV.length]; try{ localStorage.setItem('fxrDiceLvl',lvl); }catch(e){} paintLvl(); return; }
-              window.__synShowMenu('', LV.map(function(l){ return { label:l.charAt(0).toUpperCase()+l.slice(1), isChecked:(l===lvl),
-                onPick:function(){ lvl=l; try{ localStorage.setItem('fxrDiceLvl',l); }catch(e){} paintLvl(); } }; }), x, y, {cls:'ctl'}); }
-            function bind(){ var row=document.getElementById('fxr-dice'); if(!row){ setTimeout(bind,300); return; } paintLvl(); paintMLvl();
-              row.addEventListener('click',function(e){ var a=e.target.closest('[data-act]'); if(!a) return; e.preventDefault(); e.stopPropagation();
-                var act=a.dataset.act;
-                if(act==='lvl') lvlMenu(e.clientX,e.clientY); else if(act==='mlvl') mlvlMenu(e.clientX,e.clientY); else if(act==='mroll') mroll(); else roll(); });
-              row.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); lvlMenu(e.clientX,e.clientY); }); }
-            window.__fxrDice=function(l){ if(LV.indexOf(l)>=0){ lvl=l; paintLvl(); } roll(); };   /* headless gate hook */
+            window.__fxrDice=function(l){ if(LV.indexOf(l)>=0) lvl=l; roll(); return lvl; };   /* tp16 — the Patcher's dice menu calls this with ITS reach */
             window.__fxrDiceLvl=function(){ return lvl; };
 
             /* ══ tp15 — RANDOMIZE MODULATION (Max: "envelopes and LFOs … of course macros, keys, the modulation section") ══
@@ -12259,7 +12230,6 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               return S; }
             function tagOf(S){ return S.lfo?'lfo'+S.lfo:S.env?'env'+S.env:S.mac?'mac'+S.mac:S.vel?'vel':S.note?'key':S.whl?'whl':S.at?'at':S.bend?'bend':S.rnd?'rnd'+S.rnd:S.fol?'fol'+S.fol:'alt'; }
             function mroll(){
-              var row=document.getElementById('fxr-dice'); if(row) row.classList.add('rolling');
               var R=MR[mlvl]||MR.heavy, big=(mlvl==='wild'||mlvl==='crazy');
               (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
               for(var n=1;n<=R.lfo;n++){ var L='LFO'+n+'_', sh=rnd()<R.wide?Math.floor(rnd()*11):pick([0,0,1,2]);
@@ -12277,15 +12247,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 var t=window.__tiAddSrc?window.__tiAddSrc(sc,d):null; if(!t) continue;
                 var dep=bt(R.dep[0],R.dep[1])*(rnd()<.3?-1:1);
                 if(window.__tiSetDepth) window.__tiSetDepth(t,d,dep); made++; }
-              setTimeout(function(){ if(row) row.classList.remove('rolling'); },420);
               return made; }
-            function paintMLvl(){ var el=document.querySelector('#fxr-dice [data-act="mlvl"]'); if(el) el.textContent=mlvl.charAt(0).toUpperCase()+mlvl.slice(1); }
-            function mlvlMenu(x,y){ if(!window.__synShowMenu){ mlvl=MLV[(MLV.indexOf(mlvl)+1)%MLV.length]; try{ localStorage.setItem('fxrModLvl',mlvl); }catch(e){} paintMLvl(); return; }
-              window.__synShowMenu('', MLV.map(function(l){ return { label:l.charAt(0).toUpperCase()+l.slice(1), isChecked:(l===mlvl),
-                onPick:function(){ mlvl=l; try{ localStorage.setItem('fxrModLvl',l); }catch(e){} paintMLvl(); } }; }), x, y, {cls:'ctl'}); }
-            window.__modDice=function(l){ if(MLV.indexOf(l)>=0){ mlvl=l; paintMLvl(); } return mroll(); };   /* headless gate hook */
+            window.__modDice=function(l){ if(MLV.indexOf(l)>=0) mlvl=l; var r=mroll(); return r; };   /* tp16 — the Patcher's dice menu calls this with ITS reach */
             window.__modDiceLvl=function(){ return mlvl; };
-            if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind); else bind();   /* tp15 — LAST: bind() paints both reach chips, and `mlvl` is declared above only in source order */
           })();
           window.__fxrSetRoute=function(idx,ri,on){ try{ var d=DEVS[idx|0]; if(!d||!d.route) return false; d.route[ri]=on?1:0; if(d.rp&&d.rp[ri]) window.__setSynParam(d.rp[ri], on?1:0);
             var card=rack.querySelector('.fxr-dev[data-dev="'+(idx|0)+'"] .fxr-r[data-r="'+ri+'"]'); if(card) card.classList.toggle('fxr-on',!!on); return true; }catch(e){ return false; } };
@@ -42715,7 +42679,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      light) the level — the gate. Modal is the one sample engine the dice may pick (keys / plucks / textures), with a
      one-shot from the library and sane hardness / decay / material. NO DEAD NODES: everything the dice leaves on the
      canvas is on and in the path, then the canvas tidies itself so the nodes move. */
-  var AIMS=['anything','keys','pads','bass','leads','plucks','textures','percussion'], LEVELS=['light','medium','heavy','wild'];
+  var AIMS=['anything','keys','pads','bass','leads','plucks','textures','percussion'], LEVELS=['light','medium','heavy','wild','crazy'];   /* tp16 — Max: "how come the other menu gets crazy" — ONE reach, and it goes all the way */
   var ENV={keys:[.05,.45,.6,.35],pads:[.45,.55,.85,.65],bass:[.02,.35,.7,.2],leads:[.06,.35,.85,.3],plucks:[.0,.3,.0,.25],textures:[.55,.6,.9,.8],percussion:[.0,.22,.0,.18]};
   /* the REACH — how far every section goes. uni = unison VOICES (never above 7, Max: "anything above is a CPU eater"); lfo/env/fx = how many;
      types = chance a card leaves its default type; back = chance its back panel rolls; fxMod = share of LFOs aimed at effect knobs;
@@ -42723,7 +42687,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var REACH={ light:{uni:[1,2],fold:[0,.1],warp:[0,.3],w2:.5,spec:0,fm:[.05,.3],modal:.15,fx:[1,2],lfo:[2,3],env:[1,2],gate:.15,gli:.1,drv:[0,0],res:[.05,.25],mix:.8,tape:0,f2:.15,types:.45,back:.35,fxMod:.25,depth:[.12,.35],wideLfo:.15,subset:.25,fast:.05,wide:.25},   /* tp13 — Max: "you're going easy" */
               medium:{uni:[1,4],fold:[0,.25],warp:[0,.5],w2:.5,spec:.35,fm:[.1,.45],modal:.22,fx:[2,3],lfo:[3,5],env:[2,3],gate:.3,gli:.28,drv:[0,.2],res:[.1,.35],mix:1,tape:.25,f2:.45,types:.75,back:.65,fxMod:.5,depth:[.2,.55],wideLfo:.5,subset:.45,fast:.2,wide:.6},
               heavy:{uni:[2,6],fold:[0,.45],warp:[.1,.7],w2:.7,spec:.6,fm:[.2,.6],modal:.3,fx:[3,4],lfo:[5,7],env:[3,4],gate:.5,gli:.5,drv:[.1,.4],res:[.15,.5],mix:1.15,tape:.4,f2:.8,types:.95,back:.9,fxMod:.75,depth:[.3,.85],wideLfo:.9,subset:.6,fast:.45,wide:.95},
-              wild:{uni:[3,7],fold:[.1,.7],warp:[.2,1],w2:.85,spec:.9,fm:[.3,.8],modal:.4,fx:[4,5],lfo:[7,10],env:[3,5],gate:.65,gli:.7,drv:[.2,.6],res:[.2,.65],mix:1.3,tape:.55,f2:.95,types:1,back:1,fxMod:.9,depth:[.35,1],wideLfo:1,subset:.7,fast:.6,wide:1} };
+              wild:{uni:[3,7],fold:[.1,.7],warp:[.2,1],w2:.85,spec:.9,fm:[.3,.8],modal:.4,fx:[4,5],lfo:[7,10],env:[3,5],gate:.65,gli:.7,drv:[.2,.6],res:[.2,.65],mix:1.3,tape:.55,f2:.95,types:1,back:1,fxMod:.9,depth:[.35,1],wideLfo:1,subset:.7,fast:.6,wide:1},
+              crazy:{uni:[4,7],fold:[.2,.9],warp:[.35,1],w2:1,spec:1,fm:[.45,1],modal:.55,fx:[5,6],lfo:[9,10],env:[4,5],gate:.8,gli:.85,drv:[.3,.8],res:[.3,.8],mix:1.4,tape:.7,f2:1,types:1,back:1,fxMod:1,depth:[.45,1],wideLfo:1,subset:.85,fast:.75,wide:1} };   /* tp16 — past wild: every filter exotic, both filters, 9-10 LFOs, the deepest routes */
   var FXPOOL={ pads:['reverb','delay','cho','pha','wid','fla','tape','granular','eqz'], keys:['reverb','delay','cho','tape','pha','eqz','wid'], bass:['saturate','ott','delay','eqz','tape','bod','cho'],
                leads:['delay','reverb','saturate','cho','pha','fla','wid','bod'], plucks:['delay','reverb','cho','pha','granular','wid'], textures:['reverb','granular','delay','fla','pha','tape','wid','bod','saturate'], percussion:['reverb','delay','saturate','eqz','bod','cho'] };
   var FXMORE=['bod','fla','granular','saturate','pha','cho','wid','eqz','ott','delay','reverb','tape'];   /* heavy / wild reach past the aim's own pool */
@@ -42752,14 +42717,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       if(!pool.length) pool=(drums?DRUMCATS:MELODIC).filter(has); else if(!drums&&rnd()<.2) pool=MELODIC.filter(has);
       if(!pool.length) return; var c=pick(pool); window.__sampLoadPath(o, d.path+'/'+c+'/'+pick(d.cats[c])); }); }
   function modalSample(o){ oneShot(o,'keys',false); }
-  var SAMPR={light:.25,medium:.4,heavy:.5,wild:.6}, BLENDR={light:.15,medium:.35,heavy:.6,wild:.8};
+  var SAMPR={light:.25,medium:.4,heavy:.5,wild:.6,crazy:.75}, BLENDR={light:.15,medium:.35,heavy:.6,wild:.8,crazy:1};
   /* tp12b — HARD RULE (Max): EVERY oscillator this plugin summons sits at PHASE 180°, and it is the ALIGNED mode (0 =
      the note starts at PHASE/360 every time), never Random — a random 180 is not 180. PHASE_AMT is ignored by that mode
      (resolvePhase case 0) and stays at 100. */
   function phase180(X,P){ P(X+'PHASE', .5); P(X+'PHASE_AMT', 1); P(X+'PHASE_MODE', choiceNorm(X+'PHASE_MODE', 0, 4)); }
   /* the sample engines' own knobs, rolled (Max: "loop them, reverse them, chop them, stretch them, formant-shift them"). SCAN is −1..+1 (0.75
      normalised = 1x forward; below the middle plays BACKWARDS); FORMANT −1..+1 (0.5 = none). */
-  function rollSample(X,eng,aim,lvl,P){ var big=(lvl==='heavy'||lvl==='wild'), wild=lvl==='wild', S=X+'SAMPLE_';   /* eng: 1 = Sample · 3 = Resynth (Granular is off the table, tp13) */
+  function rollSample(X,eng,aim,lvl,P){ var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'), wild=(lvl==='wild'||lvl==='crazy'), S=X+'SAMPLE_';   /* eng: 1 = Sample · 3 = Resynth (Granular is off the table, tp13) */
     var lm=pick(big?[0,1,2,3,4,2,1]:[0,0,1,4,2]); if(aim==='pads'||aim==='textures') lm=pick([1,3,4,2,1]); if(aim==='plucks'||aim==='percussion') lm=pick([0,0,4,2]);
     P(S+'LOOP_MODE', choiceNorm(S+'LOOP_MODE', lm, 5));   /* One-Shot · Forward · Reverse · Ping-Pong · Tailed */
     var st=between(0, big?.35:.12); P(S+'START', st); P(S+'END', rnd()<(big?.45:.2)?between(Math.min(.95,st+.25),1):1);   /* chop the window */
@@ -42821,7 +42786,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) P(kp, between(lo, hot?Math.min(hi,.6):hi)); } }
     if(d.back&&rnd()<Math.max(.35,R.back)){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
       (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]) P(kn[2], between(lo, hot?.6:hi)); }); } }
-  function rollModule(n,lvl,R,P){ var big=(lvl==='heavy'||lvl==='wild');
+  function rollModule(n,lvl,R,P){ var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
     if(n.kind==='osc'){ var aim=layout.aim||'anything'; if(aim==='anything') aim=pick(AIMS.slice(1));
       rollOsc(n.sub,oscList().indexOf(n.sub),aim,lvl,R,function(id,v){ if(/_UDETUNE$/.test(id)) return; P(id,v); }); return; }
     if(n.kind==='filter'){ var sl=curFilterSlot(), F='SYN_FILTER'+sl+'_', Ro=window.__fltRoster, NF1=27; try{ var ck=Ro&&Ro.check?Ro.check():null; if(ck&&ck.count>1) NF1=ck.count; }catch(e){}
@@ -42854,8 +42819,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      1–7 LFOs of any shape / rate / sync / phase aimed at the oscillators, the filters AND the effect knobs, with real depths
      (each LFO's own master stays at full — the old dice wrote it near zero); envelopes 2, 4 and 5 shaped and routed (filter,
      wavetable, effects, LFO rate); Glitch fully re-rolled on heavy / wild; no dead nodes; the canvas tidies itself. */
-  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything') aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'); var tool=page.querySelector('.g[data-t="dice"]'); tool.classList.add('dis');
-    var pool=oscList(); var nOn=(aim==='bass'||aim==='percussion')?(1+(rnd()<.35?1:0)):(2+(rnd()<(lvl==='light'?.2:.45)?1:0)); if(big&&rnd()<.35) nOn++; if(lvl==='wild'&&rnd()<.3) nOn++; nOn=Math.min(Math.min(4,pool.length),nOn);
+  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything') aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'); var tool=page.querySelector('.g[data-t="dice"]'); tool.classList.add('dis');
+    var pool=oscList(); var nOn=(aim==='bass'||aim==='percussion')?(1+(rnd()<.35?1:0)):(2+(rnd()<(lvl==='light'?.2:.45)?1:0)); if(big&&rnd()<.35) nOn++; if((lvl==='wild'||lvl==='crazy')&&rnd()<.3) nOn++; nOn=Math.min(Math.min(4,pool.length),nOn);
     var on=shuffle(pool).slice(0,nOn).sort(function(a,b){ return pool.indexOf(a)-pool.indexOf(b); }), list=[], ids=[], fxAdded=[], f2On=false;
     function P(id,v){ list.push([id,v]); ids.push(id); }
     function span(r){ return between(r[0],r[1]); }
@@ -42864,7 +42829,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     /* tp13 — Max: "you're going easy on the filter types, we have like 100, 200 filters." The musical shortlist is now the
        exception, not the rule: light keeps it 3 times in 4, medium 1 in 3, heavy/wild almost never — the rest is all 118. */
     function ftype(musical){ var ti=musical?pick(aim==='bass'||aim==='leads'?[0,0,4,5]:[0,5,0,1]):Math.floor(rnd()*NF1); return Ro&&Ro.norm?Ro.norm(ti):ti/(NF1-1); }
-    function ftypeR(){ var musicalOdds=lvl==='light'?.75:lvl==='medium'?.35:.08; return ftype(rnd()<musicalOdds); }
+    function ftypeR(){ var musicalOdds=lvl==='light'?.75:lvl==='medium'?.35:lvl==='crazy'?.02:.08; return ftype(rnd()<musicalOdds); }
     var step=0, steps=[
       function(){ toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); phase180(X,P); if(!isOn) return;   /* tp12b — 180° on ALL of them, on or off */ rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
           blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); },
@@ -42886,7 +42851,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           P('SYN_ENV_FLT_A',Math.max(0,e[0]-.02+between(-.03,.1))); P('SYN_ENV_FLT_D',between(.15,big?.8:.55)); P('SYN_ENV_FLT_S',between(0,big?.8:.5)); P('SYN_ENV_FLT_R',e[3]);
           P('SYN_ENV_FLT_CA',between(-.6,.6)); P('SYN_ENV_FLT_CD',between(-.6,.6));
           ['M1','M2'].forEach(function(m){ P('SYN_ENV_'+m+'_A',between(0,big?.7:.4)); P('SYN_ENV_'+m+'_D',between(.1,.8)); P('SYN_ENV_'+m+'_S',between(0,1)); P('SYN_ENV_'+m+'_R',between(.1,.7));
-            P('SYN_ENV_'+m+'_CA',between(-.8,.8)); P('SYN_ENV_'+m+'_CD',between(-.8,.8)); P('SYN_ENV_'+m+'_LOOP',(lvl==='wild'&&rnd()<.4)?1:0); }); },
+            P('SYN_ENV_'+m+'_CA',between(-.8,.8)); P('SYN_ENV_'+m+'_CD',between(-.8,.8)); P('SYN_ENV_'+m+'_LOOP',((lvl==='wild'||lvl==='crazy')&&rnd()<.4)?1:0); }); },
       function(){ toast('Building the effects…'); var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
           var fp=(FXPOOL[aim]||FXPOOL.pads).slice(); if(big) FXMORE.forEach(function(k){ if(fp.indexOf(k)<0) fp.push(k); });
           var count=ispan(R.fx), picked=[]; if((aim==='pads'||aim==='keys'||aim==='textures')&&rnd()<.7){ picked.push('reverb'); }
@@ -42898,7 +42863,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             var d=(window.__fxrDevs?window.__fxrDevs():[])[ri]; if(!d) return; fxAdded.push({core:d.core,inst:d.inst});
             if(last) return;
             if(d.types&&d.types.length>1&&rnd()<R.types){ var tys=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(tys.length) setFxType(ri,pick(tys)); d=(window.__fxrDevs?window.__fxrDevs():[])[ri]||d; }
-            var hot=HOT.test(core), hi=lvl==='wild'?.95:lvl==='heavy'?.85:.7, lo=lvl==='light'?.3:.1;
+            var hot=HOT.test(core), hi=lvl==='crazy'?1:lvl==='wild'?.95:lvl==='heavy'?.85:.7, lo=lvl==='light'?.3:.1;
             if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(!kp) continue; var top=hot?Math.min(hi,.6):hi; if(core==='delay'&&k===1) top=Math.min(top,.7); P(kp, between(lo,top)); }
               var mk=d.knobs[3]; if(mk&&mk.p){ var mr=FXMIX[core]||[.25,.5]; P(mk.p, Math.min(.95, between(mr[0],mr[1])*R.mix*(aim==='pads'&&core==='reverb'?1.25:1))); } }
             if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
@@ -42928,12 +42893,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(tapeOn&&lfoN<10){ var tt=take('tape'); if(tt){ lfoN++; P('LFO'+lfoN+'_SHAPE',choiceNorm('LFO'+lfoN+'_SHAPE',pick([0,1,2]),11)); P('LFO'+lfoN+'_SYNC',rnd()<.5?1:0); P('LFO'+lfoN+'_RATE',between(.05,.35)); P('LFO'+lfoN+'_DEPTH',1); P('LFO'+lfoN+'_PHASE',rnd());
               (function(nn){ route('lfo'+nn,function(d){ window.__tiAddRoute&&window.__tiAddRoute(0,nn,d); },tt.d,between(.2,.6)); })(lfoN); } }   /* tp12 — an LFO rides the tape machine (Max: "not enough LFO on the tape") */
           if(big&&lfoN>=2&&rnd()<.7) route('lfo'+lfoN,function(d){ window.__tiAddRoute&&window.__tiAddRoute(0,lfoN,d); },673,between(.25,.8));   /* an LFO speeding LFO 1 up and down */
-          if(lvl==='wild'&&lfoN>=3&&rnd()<.5) route('lfo'+lfoN,function(d){ window.__tiAddRoute&&window.__tiAddRoute(0,lfoN,d); },683,between(.2,.7));   /* tp13 — and one bending LFO 1's phase */
+          if((lvl==='wild'||lvl==='crazy')&&lfoN>=3&&rnd()<.5) route('lfo'+lfoN,function(d){ window.__tiAddRoute&&window.__tiAddRoute(0,lfoN,d); },683,between(.2,.7));   /* tp13 — and one bending LFO 1's phase */
           var nE=ispan(R.env);
           route('env2',function(d){ window.__tiAddRoute&&window.__tiAddRoute(2,0,d); },0,between(.08,big?.45:.25)*(rnd()<.15?-1:1));   /* the filter envelope ON the cutoff — a real, visible route */
           if(f2On&&nE>=2) route('env2',function(d){ window.__tiAddRoute&&window.__tiAddRoute(2,0,d); },1,between(.08,.35));
           [4,5].slice(0,Math.max(0,nE-1)).forEach(function(en){ var t=(fxAdded.length&&rnd()<R.fxMod)?take('fx'):take(null); if(t) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },t.d,dep());
-            if(lvl==='wild'&&lfoN&&rnd()<.4) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },11+1,between(.3,.8)); });   /* wild: an envelope swells LFO 1's depth */
+            if((lvl==='wild'||lvl==='crazy')&&lfoN&&rnd()<.4) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },11+1,between(.3,.8)); });   /* wild: an envelope swells LFO 1's depth */
           var chain=[]; if((aim==='plucks'||aim==='keys')&&rnd()<.4) chain.push('arp'); if(aim==='pads'&&rnd()<.2) chain.push('drift'); if(rnd()<(aim==='textures'?Math.max(R.gli,.45):R.gli)) chain.push('glitch'); window.__flowSetChain&&window.__flowSetChain(chain);
           if(chain.indexOf('glitch')>=0){ try{ if(window.__tiDiceMode) window.__tiDiceMode('gli',big); }catch(e){} }   /* Glitch re-rolled whole — every lane, grid and effect; wide on heavy / wild */
           setToggle('tape-toggle',tapeOn); if(tapeOn) setMachine(tapeMach); setToggle('loop-toggle',false); },
@@ -43082,9 +43047,26 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     nMenu.onmousedown=function(ev){ ev.stopPropagation();
       var a=ev.target.dataset.a; if(!a) return; if(a==='cut'&&c) cut(c); if(a==='rm'&&n) removeNode(n);
       if(a==='pwr'&&n&&n.kind==='fx'){ var dv=(window.__fxrDevs?window.__fxrDevs():[])[n.idx]; if(dv){ dv.on=!dv.on; if(dv.pwrP) setP(dv.pwrP,dv.on?1:0); try{ if(window.__fxrRender) window.__fxrRender(); }catch(e){} commit(); soon(); } } if(a==='ext'&&n){ setFlowExt(n,!n.ext); commit(); } closeMenus(); }; }
+  /* tp16 — Max: "I wanted the random effect chain and the random modulation to be in THIS menu." They are, and they
+     obey the ONE reach above them — the same Light · Medium · Heavy · Wild · CRAZY the dice itself uses. */
+  function rollRack(which){ var lvl=layout.dlevel||'medium';
+    if(which==='fx'){ if(!window.__fxrDice){ toast('The rack is not ready'); return; }
+      toast('A new effect chain · '+lvl); window.__fxrDice(lvl);
+      setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){}
+        try{ adoptFx(); syncPresence(); sync(); commit(); glideTidy(); }catch(e){} },520); }
+    else { if(!window.__modDice){ toast('The modulation is not ready'); return; }
+      toast('New modulation · '+lvl); window.__modDice(lvl);
+      setTimeout(function(){ try{ sync(); commit(); }catch(e){} },300); } }
   function openAimMenu(cx,cy){ closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
-    nMenu.innerHTML=AIMS.map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+cap(a)+'</div>'; }).join('')+'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join(''); placeMenu(nMenu,cx,cy);
-    nMenu.onmousedown=function(ev){ ev.stopPropagation(); var a=ev.target.dataset.aim, l=ev.target.dataset.dl; if(a){ layout.aim=a; saveLayout(); closeMenus(); toast('The dice aims at '+a); } if(l){ layout.dlevel=l; saveLayout(); closeMenus(); toast('The dice reaches '+l); } }; }
+    nMenu.innerHTML=AIMS.map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+cap(a)+'</div>'; }).join('')
+      +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('')
+      +'<div class="sepd"></div><div class="pi" data-act="fx">Randomize chain</div><div class="pi" data-act="mod">Randomize modulation</div>';
+    placeMenu(nMenu,cx,cy);
+    nMenu.onmousedown=function(ev){ ev.stopPropagation(); var t=ev.target&&ev.target.closest?ev.target.closest('[data-aim],[data-dl],[data-act]'):null; if(!t) return;
+      var a=t.dataset.aim, l=t.dataset.dl, act=t.dataset.act;
+      if(a){ layout.aim=a; saveLayout(); closeMenus(); toast('The dice aims at '+a); }
+      if(l){ layout.dlevel=l; saveLayout(); closeMenus(); toast('The dice reaches '+l); }
+      if(act){ closeMenus(); rollRack(act); } }; }
   /* the add browser — two panes, names only: All · Oscillators · Filters · Flow · Tape · Effects */
   var CATS=['All','Oscillators','Filters','Flow','Tape','Effects'];
   function catalog(){ var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');

@@ -8,8 +8,7 @@ const puppeteer = require('puppeteer-core'); const sleep = ms => new Promise(r =
   await p.evaluate(() => { if (window.setActivePanel) window.setActivePanel('syn'); try { window.__fxrAdd('reverb'); window.__fxrAdd('cmp'); } catch (e) {}
     window.__setLog = []; const o = window.__setSynParam; window.__setSynParam = function (id, v) { window.__setLog.push(id); return o.apply(this, arguments); }; });
   await sleep(900);
-  const R = { row: await p.evaluate(() => { const r = document.getElementById('fxr-dice'); const m = r && r.querySelector('[data-act="mroll"]'), l = r && r.querySelector('[data-act="mlvl"]');
-    return { hasMod: !!m, text: m ? m.textContent.trim() : null, lvl: l ? l.textContent : null }; }), rolls: [] };
+  const R = { rowGone: await p.evaluate(() => !document.getElementById('fxr-dice')), rolls: [] };
   for (const lvl of ['light', 'medium', 'heavy', 'wild', 'crazy']) {
     await p.evaluate(l => { window.__setLog.length = 0; window.__modDice(l); }, lvl); await sleep(700);
     R.rolls.push(await p.evaluate(l => {
