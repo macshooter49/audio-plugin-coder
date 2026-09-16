@@ -12185,9 +12185,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var rnd=Math.random, pick=function(a){ return a[Math.floor(rnd()*a.length)]; }, bt=function(a,b){ return a+rnd()*(b-a); };
             var POOL={ light:['reverb','delay','cho','eqz','wid','tape'],
                        medium:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod'],
-                       heavy:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'],
-                       wild:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'],
-                       crazy:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'] };
+                       heavy:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','utl'],
+                       wild:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','utl'],
+                       crazy:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','utl'] };
             var CNT={light:[1,2],medium:[2,3],heavy:[3,4],wild:[4,5],crazy:[5,6]};
             var MIXR={reverb:[.2,.45],delay:[.18,.4],cho:[.3,.6],pha:[.3,.55],fla:[.25,.5],wid:[.4,.85],tape:[.4,.85],saturate:[.25,.6],ott:[.25,.5],eqz:[.85,1],granular:[.2,.45],bod:[.25,.5],flt:[.7,1],utl:[.8,1]};
             var HOTC=/saturate|ott|bod|flt/;
@@ -42863,11 +42863,16 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
               heavy:{uni:[2,6],fold:[0,.45],warp:[.1,.7],w2:.7,spec:.6,fm:[.2,.6],modal:.3,fx:[3,4],lfo:[5,7],env:[3,4],gate:.5,gli:.5,drv:[.1,.4],res:[.15,.5],mix:1.15,tape:.4,f2:.8,types:.95,back:.9,fxMod:.75,depth:[.3,.85],wideLfo:.9,subset:.6,fast:.45,wide:.95,flow:[2,3]},
               wild:{uni:[3,7],fold:[.1,.7],warp:[.2,1],w2:.85,spec:.9,fm:[.3,.8],modal:.4,fx:[4,5],lfo:[7,10],env:[3,5],gate:.65,gli:.7,drv:[.2,.6],res:[.2,.65],mix:1.3,tape:.55,f2:.95,types:1,back:1,fxMod:.9,depth:[.35,1],wideLfo:1,subset:.7,fast:.6,wide:1,flow:[2,4]},
               crazy:{uni:[4,7],fold:[.2,.9],warp:[.35,1],w2:1,spec:1,fm:[.45,1],modal:.55,fx:[5,6],lfo:[9,10],env:[4,5],gate:.8,gli:.85,drv:[.3,.8],res:[.3,.8],mix:1.4,tape:.7,f2:1,types:1,back:1,fxMod:1,depth:[.45,1],wideLfo:1,subset:.85,fast:.75,wide:1,flow:[3,5]} };   /* tp16 — past wild: every filter exotic, both filters, 9-10 LFOs, the deepest routes */
-  var FXPOOL={ pads:['reverb','delay','cho','pha','wid','fla','tape','granular','eqz'], keys:['reverb','delay','cho','tape','pha','eqz','wid'], bass:['saturate','ott','delay','eqz','tape','bod','cho'],
-               leads:['delay','reverb','saturate','cho','pha','fla','wid','bod'], plucks:['delay','reverb','cho','pha','granular','wid'], textures:['reverb','granular','delay','fla','pha','tape','wid','bod','saturate'] };
-  var FXMORE=['bod','fla','granular','saturate','pha','cho','wid','eqz','ott','delay','reverb','tape'];   /* heavy / wild reach past the aim's own pool */
+  var FXPOOL={ pads:['reverb','delay','cho','pha','wid','fla','tape','eqz'], keys:['reverb','delay','cho','tape','pha','eqz','wid'], bass:['saturate','ott','delay','eqz','tape','bod','cho'],
+               leads:['delay','reverb','saturate','cho','pha','fla','wid','bod'], plucks:['delay','reverb','cho','pha','wid'], textures:['reverb','delay','fla','pha','tape','wid','bod','saturate'] };
+  var FXMORE=['bod','fla','saturate','pha','cho','wid','eqz','ott','delay','reverb','tape'];   /* tp24 — Max: "granulizer is off the dice" (the RACK effect; the dice never gets it right) */   /* heavy / wild reach past the aim's own pool */
   var FXMIX={reverb:[.25,.45],delay:[.2,.4],cho:[.3,.6],pha:[.3,.55],fla:[.25,.5],wid:[.4,.8],tape:[.4,.8],saturate:[.3,.7],cmp:[.5,1],ott:[.3,.6],eqz:[.8,1],granular:[.25,.5],bod:[.25,.55]};
   var HOT=/saturate|ott|cmp|bod/;
+  /* tp24 — GRANULIZER IS OFF THE DICE. Max: "stop putting the granulizer within the dice — I'm talking about the
+     granulizer effect in the effect rack ... the dice doesn't get it right. Not one bit. Granulizer has to be from
+     what WE do." It is off every pool above; this is the guard that keeps a future pool edit from re-admitting it. */
+  var FX_NEVER_DICE={granular:1};
+  function diceableFx(list){ return (list||[]).filter(function(k){ return !FX_NEVER_DICE[k]; }); }
   function destOfKnob(sel){ try{ var k=document.querySelector(sel); var g=k&&window.__ctlDestAt?window.__ctlDestAt(k):null; return (g&&g.dest!=null)?g.dest:null; }catch(e){ return null; } }
   function knobDest(p){ try{ if(window.__knobDest){ var d=window.__knobDest(p); if(d!=null) return d; } }catch(e){} return destOfKnob('#syn-panel .knob[data-syn="'+p+'"]'); }
   function uniNorm(v){ v=Math.max(1,Math.min(7,Math.round(v))); return (v-1)/15; }   /* SYN_OSC_x_UNISON is int 1..16 — the dice never goes past 7 */
@@ -43048,7 +43053,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           ['M1','M2'].forEach(function(m){ P('SYN_ENV_'+m+'_A',between(0,big?.7:.4)); P('SYN_ENV_'+m+'_D',between(.1,.8)); P('SYN_ENV_'+m+'_S',between(0,1)); P('SYN_ENV_'+m+'_R',between(.1,.7));
             P('SYN_ENV_'+m+'_CA',between(-.8,.8)); P('SYN_ENV_'+m+'_CD',between(-.8,.8)); P('SYN_ENV_'+m+'_LOOP',((lvl==='wild'||lvl==='crazy')&&rnd()<.4)?1:0); }); },
       function(){ toast('Building the effects…'); var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
-          var fp=(FXPOOL[aim]||FXPOOL.pads).slice(); if(big) FXMORE.forEach(function(k){ if(fp.indexOf(k)<0) fp.push(k); });
+          var fp=diceableFx((FXPOOL[aim]||FXPOOL.pads).slice()); if(big) diceableFx(FXMORE).forEach(function(k){ if(fp.indexOf(k)<0) fp.push(k); });
           var count=ispan(R.fx), picked=[]; if((aim==='pads'||aim==='keys'||aim==='textures')&&rnd()<.7){ picked.push('reverb'); }
           shuffle(fp).forEach(function(k){ if(picked.length<count&&picked.indexOf(k)<0) picked.push(k); });
           picked.push('cmp');   /* every chain the dice builds ends in a compressor, default settings (Max) */
