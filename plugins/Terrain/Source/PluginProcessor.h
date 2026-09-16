@@ -1192,6 +1192,9 @@ public:
     //  half, exactly like velVis_ — and for the same reason, UNGATED (the audio path reads them).
     wc::GlobalModSources globalSrc_;
     std::atomic<float> macroBaseVis_[wc::kNumMacros] {};   // fb565 — the macro KNOB's own value (the parameter) for the Macros view's face; globalSrc_.macro is the MODULATED one
+    float              tapeSlotEff_[3] {};     // tp11 — audio thread only: the tape machine's knobs after their routes (raw units)
+    bool               tapeSlotRouted_[3] {};  // tp11 — a route reaches that slot (else the knob's own value rides)
+    int                tapeSlotMach_ = -1;     // tp11 — the machine those slots were resolved for
     bool               macroModded_[wc::kNumMacros] {};    // fb565 — audio thread only: the last global pass found a route INTO this macro
     float              macroSm_[wc::kNumMacros] {};        // fb575 — audio thread only: the macro base after its 15 ms one-pole (every path glides: the mouse, the wheel, host automation)
     std::atomic<float> macroCcT_[wc::kNumMacros] { -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };   // fb575 — a learned CC's value for this macro, stored by the audio thread the block it arrives; −1 = none (applyPendingMidiCc releases it once the parameter carries it)

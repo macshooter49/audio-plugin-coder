@@ -253,6 +253,11 @@ enum class ModDest : int
     //    lambdas) under the same Linear01 ownership law as every other knob, and the result is
     //    what every "Macro n" SOURCE reads (globalSrc_.macro). Generated Linear01 × 1.0 rows.
     MacroDest1, MacroDest2, MacroDest3, MacroDest4, MacroDest5, MacroDest6, MacroDest7, MacroDest8, MacroDest9,
+    // ── tp11 · THE TAPE MACHINE'S THREE KNOBS (Max: "we need the new modulation on the tape modes"). Slot k is the
+    //    k-th knob of the machine that is selected (Studio Sculpt/Weave/Tilt · Cassette Wow/Saturation/Hiss · Wire
+    //    Wow/Saturation/Hiss), resolved in the processor's GLOBAL pass. Appended at the tail (saved routes store ints);
+    //    generated Linear01 x 1.0 rows (makeDestInfo's tail loop). index.html's createFxKnob stamps 1887..1889.
+    TapeSlot1, TapeSlot2, TapeSlot3,
     NumDests
 };
 
@@ -267,7 +272,7 @@ static_assert ((int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiA == 1850,
 static_assert ((int) ModDest::UniRangeA == 1854 && (int) ModDest::UniWarpA  == 1858
             && (int) ModDest::WarpVarA  == 1862 && (int) ModDest::Warp2VarA == 1866
             && (int) ModDest::PhaseOffA == 1870 && (int) ModDest::PhaseAmtA == 1874
-            && (int) ModDest::MacroDest1 == 1878 && (int) ModDest::NumDests == 1887,
+            && (int) ModDest::MacroDest1 == 1878 && (int) ModDest::TapeSlot1 == 1887 && (int) ModDest::NumDests == 1890,
     "fb522 - the JS mod-dest menu mirrors these ints (index.html KNOBDEST); a shift here re-points every saved overpass route. NumDests was 1854 before this block was appended. "
     "fb565 - index.html stamps the Macros view from window.__MACRO_DEST=1878 (ModDest::MacroDest1); Tests/mod_source_gate.py reads both");
 

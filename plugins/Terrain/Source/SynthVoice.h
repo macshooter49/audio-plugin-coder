@@ -3415,6 +3415,7 @@ class SynthVoice : public juce::SynthesiserVoice
         {
             exG_[0] = a; exG_[1] = b; exG_[2] = c; exG_[3] = d; exG_[4] = sub; exG_[5] = noise;
             exAny_ = (a + b + c + d + sub + noise) > 0.0f;
+            for (int k = 0; k < 6; ++k) exKeep_[k] = 1.0f - juce::jlimit (0.0f, 1.0f, exG_[k]);   // tp12 — see exKeep_
         }
 
         void renderNextBlock (juce::AudioBuffer<float>& out,
@@ -6148,8 +6149,10 @@ class SynthVoice : public juce::SynthesiserVoice
                 const float oDL = (sD_L - subMono3) * gDL, oDR = (sD_R - subMono3) * gDR;
                 const float subBL = subMono0 * gAL + subMono1 * gBL + subMono2 * gCL + subMono3 * gDL;   // Sub source (idx 4)
                 const float subBR = subMono0 * gAR + subMono1 * gBR + subMono2 * gCR + subMono3 * gDR;
-                scratchL[i] = busCo1_[0]*oAL + busCo1_[1]*oBL + busCo1_[2]*oCL + busCo1_[3]*oDL + busCo1_[4]*subBL;
-                scratchR[i] = busCo1_[0]*oAR + busCo1_[1]*oBR + busCo1_[2]*oCR + busCo1_[3]*oDR + busCo1_[4]*subBR;
+                // tp12 — a source the rack pulls stays OUT of the main buses (exKeep_ = 0); the sends below still take the full oAL…
+                const float xkA = exKeep_[0], xkB = exKeep_[1], xkC = exKeep_[2], xkD = exKeep_[3], xkS = exKeep_[4], xkN = exKeep_[5];
+                scratchL[i] = busCo1_[0]*xkA*oAL + busCo1_[1]*xkB*oBL + busCo1_[2]*xkC*oCL + busCo1_[3]*xkD*oDL + busCo1_[4]*xkS*subBL;
+                scratchR[i] = busCo1_[0]*xkA*oAR + busCo1_[1]*xkB*oBR + busCo1_[2]*xkC*oCR + busCo1_[3]*xkD*oDR + busCo1_[4]*xkS*subBR;
                 // NOISE ENGINE — compute the contribution once, then ROUTE it into F1/F2/dry per the N pill (fb63).
                 float noiseAddL = 0.0f, noiseAddR = 0.0f;
                 if (noiseOn_ || noiseForce_)   // fb64 — also generate when noise is a BLEND SOURCE (even if its own output is off)
@@ -6216,11 +6219,11 @@ class SynthVoice : public juce::SynthesiserVoice
                         noiseAddR = mid - side;
                     }
                 }
-                scratchL[i] += noiseAddL * noiseCo1_;   scratchR[i] += noiseAddR * noiseCo1_;   // → Filter 1 bus
-                busB2L[i]   = busCo2_[0]*oAL + busCo2_[1]*oBL + busCo2_[2]*oCL + busCo2_[3]*oDL + busCo2_[4]*subBL + noiseAddL * noiseCo2_;
-                busB2R[i]   = busCo2_[0]*oAR + busCo2_[1]*oBR + busCo2_[2]*oCR + busCo2_[3]*oDR + busCo2_[4]*subBR + noiseAddR * noiseCo2_;
-                busDryL[i]  = busCoD_[0]*oAL + busCoD_[1]*oBL + busCoD_[2]*oCL + busCoD_[3]*oDL + busCoD_[4]*subBL + noiseAddL * noiseCoD_;
-                busDryR[i]  = busCoD_[0]*oAR + busCoD_[1]*oBR + busCoD_[2]*oCR + busCoD_[3]*oDR + busCoD_[4]*subBR + noiseAddR * noiseCoD_;
+                scratchL[i] += noiseAddL * noiseCo1_ * xkN;   scratchR[i] += noiseAddR * noiseCo1_ * xkN;   // → Filter 1 bus
+                busB2L[i]   = busCo2_[0]*xkA*oAL + busCo2_[1]*xkB*oBL + busCo2_[2]*xkC*oCL + busCo2_[3]*xkD*oDL + busCo2_[4]*xkS*subBL + noiseAddL * noiseCo2_ * xkN;
+                busB2R[i]   = busCo2_[0]*xkA*oAR + busCo2_[1]*xkB*oBR + busCo2_[2]*xkC*oCR + busCo2_[3]*xkD*oDR + busCo2_[4]*xkS*subBR + noiseAddR * noiseCo2_ * xkN;
+                busDryL[i]  = busCoD_[0]*xkA*oAL + busCoD_[1]*xkB*oBL + busCoD_[2]*xkC*oCL + busCoD_[3]*xkD*oDL + busCoD_[4]*xkS*subBL + noiseAddL * noiseCoD_ * xkN;
+                busDryR[i]  = busCoD_[0]*xkA*oAR + busCoD_[1]*xkB*oBR + busCoD_[2]*xkC*oCR + busCoD_[3]*xkD*oDR + busCoD_[4]*xkS*subBR + noiseAddR * noiseCoD_ * xkN;
                 // fb287 — PER-OSC REVERB SEND (no-bleed, POST-FILTER): build the send BUSES here (the routed
                 // oscillators only, split by the SAME per-osc filter routing busCo1/2/D as the audible path),
                 // then run them through the dedicated send-filters in the filter loop below → the reverb hears
@@ -7349,6 +7352,13 @@ class SynthVoice : public juce::SynthesiserVoice
         float*                  exSendL_ = nullptr;
         float*                  exSendR_ = nullptr;
         float                   exG_[6] = { 0, 0, 0, 0, 0, 0 };
+        // tp12 — THE RACK IS AN INSERT BY CONSTRUCTION (Max: "the effects are the last thing in the chain … it's only filtering
+        //  the signal going into the filter"). A source the rack PULLS (an insert-mode tap, exG_ = 1) never enters the main
+        //  F1 / F2 / dry buses: its only way out is the rack, fed by the post-filter send mirrors. Before, it rode the main
+        //  filter and was SUBTRACTED at the master by a base-rate mirror — and the Ladder family runs 2x OVERSAMPLED, whose
+        //  half-band converters shift the phase toward the top: the subtraction cancelled the lows and left the filtered
+        //  highs untouched, so a rack LP after a Ladder cut nothing (measured −2.8 dB vs 94 dB on SVF). No subtraction now.
+        float                   exKeep_[6] = { 1, 1, 1, 1, 1, 1 };
         bool                    exAny_ = false;
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)

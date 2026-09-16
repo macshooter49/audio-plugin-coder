@@ -1,0 +1,26 @@
+const puppeteer = require('puppeteer-core');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--no-sandbox'] });
+  const p = await b.newPage(); await p.setViewport({ width: 820, height: 656, deviceScaleFactor: 2 });
+  const errs = []; p.on('pageerror', e => errs.push('PAGEERROR ' + e.message));
+  const out = process.argv[3];
+  await p.evaluateOnNewDocument(() => { try { localStorage.setItem('tpLayout', JSON.stringify({ v: 3, pos: { 'osc-a': [999, 999] }, view: { x: 5, y: 5, z: 0.9 } })); } catch (e) {} });
+  await p.goto('file://' + process.argv[2] + '?page=1', { waitUntil: 'load' }); await sleep(1500);
+  await p.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); ['c', 'd'].forEach(o => document.getElementById('osc-' + o + '-device').classList.add('osc-off')); ['a', 'b'].forEach(o => document.getElementById('osc-' + o + '-device').classList.remove('osc-off')); try { window.__fxrAdd('reverb'); window.__fxrAdd('delay'); window.__flowSetChain(['arp', 'glitch']); } catch (e) {} document.getElementById('tape-toggle').click(); document.getElementById('loop-toggle').click(); document.getElementById('syn-btn').click(); });
+  await sleep(1800);
+  const R = {};
+  R.nodes = await p.evaluate(() => window.__tpNodes().map(n => n.key));
+  R.oscPosReset = await p.evaluate(() => { const n = window.__tpNodes().find(n => n.key === 'osc-a'); return [n.x, n.y]; });
+  R.overlaps = await p.evaluate(() => { const ns = window.__tpNodes(), o = []; for (let i = 0; i < ns.length; i++) for (let j = i + 1; j < ns.length; j++) { const a = ns[i], c = ns[j]; if (a.x < c.x + c.w && c.x < a.x + a.w && a.y < c.y + c.h && c.y < a.y + a.h) o.push(a.key + '/' + c.key); } return o; });
+  R.layers = await p.evaluate(() => { let n = 0; const ex = []; document.querySelectorAll('#tp-page .tp-world *').forEach(e => { const cs = getComputedStyle(e); if ((cs.backdropFilter && cs.backdropFilter !== 'none') || (cs.webkitBackdropFilter && cs.webkitBackdropFilter !== 'none') || cs.willChange !== 'auto') { n++; if (ex.length < 3) ex.push(e.className); } }); return { n, ex }; });
+  R.xButtons = await p.evaluate(() => document.querySelectorAll('#tp-page .tp-x').length);
+  const probe = () => p.evaluate(() => { const z = window.__tpView().z, dpr = window.devicePixelRatio; const q = s => document.querySelector(s); const pick = (s, frameSel) => { const c = q(s); if (!c) return null; const f = frameSel ? q(frameSel) : c.parentElement; return { layoutW: c.offsetWidth, frameW: f ? f.offsetWidth : null, bmpRatio: +(c.width / (c.offsetWidth * dpr * Math.max(1, z))).toFixed(2) }; };
+    return { z: +z.toFixed(2), wave: pick('#osc-wave-a', '#osc-a-device .osc-display'), filt: pick('#tp-page .filt-bg canvas'), topo: pick('#reso-cv'), pos: window.__tpNodes().map(n => n.key + '@' + n.x + ',' + n.y).join(' ') }; });
+  await p.evaluate(() => window.__tpSetView(20, 20, 1)); await sleep(700); R.z1 = await probe();
+  await p.evaluate(() => window.__tpSetView(-200, -50, 2)); await sleep(900); R.z2 = await probe(); await p.screenshot({ path: out + '-z2.png' });
+  await p.evaluate(() => window.__tpSetView(30, 30, 0.4)); await sleep(900); R.z04 = await probe(); await p.screenshot({ path: out + '-z04.png' });
+  R.posStable = R.z1.pos === R.z2.pos && R.z2.pos === R.z04.pos;
+  await p.evaluate(() => window.__tpFit()); await sleep(400); await p.screenshot({ path: out + '-fit.png' });
+  R.errs = errs; console.log(JSON.stringify(R, null, 1)); await b.close();
+})().catch(e => { console.error('FAIL', e); process.exit(1); });

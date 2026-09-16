@@ -1,0 +1,22 @@
+const puppeteer = require('puppeteer-core'); const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--no-sandbox'] });
+  const p = await b.newPage(); await p.setViewport({ width: 820, height: 656, deviceScaleFactor: 1 }); const errs = []; p.on('pageerror', e => errs.push(e.message));
+  await p.evaluateOnNewDocument(() => { try { localStorage.removeItem('tpLayout'); } catch (e) {} });
+  await p.goto('file://' + process.argv[2] + '?page=1', { waitUntil: 'load' }); await sleep(1500);
+  await p.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); const t = document.getElementById('tape-toggle'); if (t && t.classList.contains('off')) t.click(); });
+  await p.evaluate(() => window.setActivePanel('tp')); await sleep(2000); await p.evaluate(() => window.__tpFit()); await sleep(300);
+  await p.evaluate(() => { window.__tiAddRoute(0, 1, 1887); window.__tpSync(); }); await sleep(500);
+  const R = {};
+  R.streak = await p.evaluate(() => { const g = document.querySelector('#tp-page .tp-node[data-key="tape"] .fx-knob-group[data-mod-dest="1887"]'); if (!g) return 'no knob'; const gr = g.getBoundingClientRect();
+    const s = [...document.querySelectorAll('.smu-rail')].filter(e => e.getClientRects().length).map(e => e.getBoundingClientRect()).find(r => r.left >= gr.left - 4 && r.right <= gr.right + 4 && r.top >= gr.top - 2 && r.top <= gr.bottom + 16);
+    return s ? 'under the knob ' + Math.round(s.width) + 'px' : 'none'; });
+  const k = await p.evaluate(() => { const g = document.querySelector('#tp-page .tp-node[data-key="tape"] .fx-knob-group[data-mod-dest="1888"] canvas'); const r = g.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  R.oldBefore = await p.evaluate(() => { const o = document.getElementById('mod-ctx-menu'); return !!(o && o.classList.contains('open')); });
+  await p.evaluate(() => { const o = document.getElementById('mod-ctx-menu'); if (!o) return; const add = o.classList.add.bind(o.classList); o.classList.add = function (c) { if (c === 'open') window.__oldOpenStack = new Error().stack.split('\n').slice(1, 6).join(' | '); return add(c); }; });
+  await p.mouse.click(k.x, k.y, { button: 'right' }); await sleep(300);
+  R.oldOpenStack = await p.evaluate(() => window.__oldOpenStack || null);
+  R.menu = await p.evaluate(() => { const nu = [...document.querySelectorAll('.syn-ctx-menu')].find(m => m.getClientRects().length && getComputedStyle(m).display !== 'none' && getComputedStyle(m).visibility !== 'hidden'); const old = document.getElementById('mod-ctx-menu');
+    return { newMenu: !!nu, newRows: nu ? [...nu.querySelectorAll('div')].map(d => d.textContent.trim()).filter(Boolean).slice(0, 6) : null, oldMenuOpen: !!(old && old.classList.contains('open')) }; });
+  R.errs = errs; console.log(JSON.stringify(R, null, 1)); await b.close();
+})().catch(e => { console.error('FAIL', e); process.exit(1); });

@@ -59,6 +59,29 @@ static juce::File terrainDataDir()
     return fresh;
 }
 
+// tp12 — THE FACTORY ONE-SHOT LIBRARY (Max: "these are factory sounds … everybody has these one shots inside of
+// Terrain"). Resources/Samples/<Category>/<Name>.flac ships INSIDE the bundle exactly like the wavetable bank (CMake
+// copies it; the up-walk from the executable finds it for the .vst3, the .component, the standalone and the Windows
+// layout). The data directory's Samples folder is the fallback for a dev tree without a built bundle.
+static juce::File sampleFactoryRoot()
+{
+    static const juce::File bundled = []
+    {
+        auto p = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
+        for (int up = 0; up < 5 && p.exists(); ++up)
+        {
+            const auto a = p.getChildFile ("Resources").getChildFile ("Samples");
+            if (a.isDirectory()) return a;
+            const auto b = p.getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Samples");
+            if (b.isDirectory()) return b;
+            p = p.getParentDirectory();
+        }
+        return juce::File();
+    }();
+    if (bundled.isDirectory()) return bundled;
+    return terrainDataDir().getChildFile ("Samples");
+}
+
 // fb602 — LEGACY ROOTS, accessor-unified but LOCATION FROZEN. Shipped builds read these
 // exact paths and moving them would strand the owner's files, so terrainDataDir() does NOT
 // swallow them; these two just kill the 5x / 3x copy-paste of the same literal.
@@ -1731,6 +1754,31 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     for (auto& sub : root.findChildFiles (juce::File::findDirectories, false))
                     {
                         auto found = sub.findChildFiles (juce::File::findFiles, false, "*.ogg;*.wav;*.aif;*.aiff;*.flac");
+                        found.sort();
+                        juce::Array<juce::var> files;
+                        for (auto& f : found) files.add (f.getFileName());
+                        if (files.size() > 0) { cats->setProperty (sub.getFileName(), files); total += files.size(); }
+                    }
+                juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                obj->setProperty ("path",   root.getFullPathName());
+                obj->setProperty ("exists", root.isDirectory());
+                obj->setProperty ("total",  total);
+                obj->setProperty ("cats",   juce::var (cats.get()));
+                complete (juce::var (juce::JSON::toString (juce::var (obj.get()))));
+            })
+            .withNativeFunction("scanSampleFactory", [](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // tp12 — the factory ONE-SHOT library for the sample engines (Sample · Granular · Resynth · Modal):
+                // { path, exists, total, cats:{Category:[files]} } — the same shape as scanNoiseFactory, so the browser
+                // and the dice read it the same way. Textures (the CC0 Freesound set) is one of its categories.
+                auto root = sampleFactoryRoot();
+                juce::DynamicObject::Ptr cats = new juce::DynamicObject();
+                int total = 0;
+                if (root.isDirectory())
+                    for (auto& sub : root.findChildFiles (juce::File::findDirectories, false))
+                    {
+                        auto found = sub.findChildFiles (juce::File::findFiles, false, "*.flac;*.wav;*.aif;*.aiff;*.ogg");
                         found.sort();
                         juce::Array<juce::var> files;
                         for (auto& f : found) files.add (f.getFileName());
@@ -7150,7 +7198,7 @@ void TerrainUiCore::timerCallback()
         const bool audible = audioProcessor.oscScopeNv.load (std::memory_order_relaxed) > 0
                           || audioProcessor.oscScopeORms.load (std::memory_order_relaxed) > 1.0e-4f;
         if (audible) eqQuietTicks_ = 0; else if (eqQuietTicks_ < 1000) ++eqQuietTicks_;
-        const bool wantedNow = (pg == 1 || pg == 2 || fltExtOpen_.load (std::memory_order_relaxed));
+        const bool wantedNow = (pg == 1 || pg == 2 || pg == 5 || fltExtOpen_.load (std::memory_order_relaxed));   // tp11 — 5 = the Patcher: its filter shows the spectrum too (it froze there)
         if (wantedNow && ! eqWantedPrev_ && eqQuietTicks_ > 60) eqQuietTicks_ = 60;   // flip edge: ~30 pushes
         eqWantedPrev_ = wantedNow;
         const bool spectrumLive = eqQuietTicks_ < 90;
@@ -7164,7 +7212,7 @@ void TerrainUiCore::timerCallback()
         const auto  seqPost = audioProcessor.analyzerPost.frameSeq();
         // fb342 review — fltExtOpen_ ORs in: the floating .filt-ext overlay outlives page
         // switches, and its spectrum must stay live on ANY page (fb311).
-        const bool  wanted  = (pg == 1 || pg == 2 || fltExtOpen_.load (std::memory_order_relaxed));
+        const bool  wanted  = (pg == 1 || pg == 2 || pg == 5 || fltExtOpen_.load (std::memory_order_relaxed));   // tp11 — the Patcher
         const bool  fresh   = (seqPre != eqPushSeqPre_ || seqPost != eqPushSeqPost_);
         const float* preBins  = audioProcessor.analyzerPre.readLatest();
         const float* postBins = audioProcessor.analyzerPost.readLatest();

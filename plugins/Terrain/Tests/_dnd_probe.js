@@ -1,0 +1,41 @@
+const puppeteer = require('puppeteer-core');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--no-sandbox'] });
+  const p = await b.newPage(); await p.setViewport({ width: 820, height: 656, deviceScaleFactor: 2 });
+  const errs = []; p.on('pageerror', e => errs.push('PAGEERROR ' + e.message));
+  await p.goto('file://' + process.argv[2] + '?page=1', { waitUntil: 'load' }); await sleep(1500);
+  await p.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); document.getElementById('osc-a-device').classList.remove('osc-off'); });
+  const clear = () => p.evaluate(() => (window.__tiRoutes ? window.__tiRoutes() : []).forEach(r => window.__tiRemoveRoute(r.s, r.d)));
+  const R = {};
+  async function tryDrop(label, targetSel) {
+    const src = await p.evaluate(() => { const t = document.querySelector('#mod-engine .mv-tabs .t[data-tab="1"]') || document.querySelector('#mod-engine .mv-tabs .t'); if (!t) return null; const r = t.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    const dst = await p.evaluate(s => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width }; }, targetSel);
+    if (!src || !dst) return { src, dst };
+    await clear(); await sleep(60);
+    const before = await p.evaluate(() => (window.__tiRoutes ? window.__tiRoutes() : []).length);
+    await p.mouse.move(src.x, src.y); await p.mouse.down(); await p.mouse.move(src.x + 10, src.y + 10, { steps: 3 }); await p.mouse.move(dst.x, dst.y, { steps: 12 }); await sleep(80);
+    const mid = await p.evaluate(s => ({ dragging: document.body.classList.contains('sm-dragging'), targets: document.querySelectorAll('.sm-target').length, onTarget: !!document.querySelector(s + '.sm-target, ' + s + ' .sm-target') || !!(document.querySelector(s) && document.querySelector(s).closest('.sm-target')), under: (e => e ? e.tagName + '.' + String(e.className && e.className.baseVal != null ? e.className.baseVal : e.className).slice(0, 40) : null)(document.elementFromPoint(0, 0)) }), targetSel);
+    const underPt = await p.evaluate((x, y) => { const e = document.elementFromPoint(x, y); return e ? e.tagName + '.' + String(e.className && e.className.baseVal != null ? e.className.baseVal : e.className).slice(0, 50) + ' in ' + (e.closest('.knob, .fk-em') ? 'knob' : '-') : null; }, dst.x, dst.y);
+    await p.mouse.up(); await sleep(200);
+    const after = await p.evaluate(() => (window.__tiRoutes ? window.__tiRoutes() : []).map(r => r.s + '>' + r.d));
+    return { mid, underPt, before, after };
+  }
+  const WT = '#osc-a-device .knob[data-syn="SYN_OSC_A_WT_FRAME"]', CUT = '#syn-panel .device.filter .fk-em canvas[data-em="cut"]';
+  R.fresh_wt = await tryDrop('wt', WT);
+  R.fresh_cut = await tryDrop('cut', CUT);
+  await p.evaluate(() => document.getElementById('syn-btn').click()); await sleep(1500);
+  await p.evaluate(() => document.getElementById('syn-btn').click()); await sleep(900);
+  R.after_wt = await tryDrop('wt', WT);
+  R.after_cut = await tryDrop('cut', CUT);
+  await p.evaluate(() => document.getElementById('syn-btn').click()); await sleep(1600);
+  await p.evaluate(() => window.__tpFit()); await sleep(500);
+  R.patcher_vis = await p.evaluate(() => { const on = s => { const e = document.querySelector(s); if (!e) return 'none'; const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width)].join(','); }; return { tab: on('#mod-engine .mv-tabs .t'), wt: on('#osc-a-device .knob[data-syn="SYN_OSC_A_WT_FRAME"]'), cut: on('#syn-panel .device.filter .fk-em canvas[data-em="cut"]') }; });
+  R.patcher_wt = await tryDrop('wt', WT);
+  R.patcher_cut = await tryDrop('cut', CUT);
+  await p.evaluate(() => { const n = window.__tpNodes().find(n => n.key === 'filter'); const l = window.__tpNodes().find(n => n.key === 'lfo'); window.__tpSetView(-(n.x - 10) * 0.8, -(n.y - 20) * 0.8, 0.8); }); await sleep(400);
+  R.patcher_cut_lfoVisible = await p.evaluate(() => { const t = document.querySelector('#mod-engine .mv-tabs .t'); const r = t.getBoundingClientRect(); return r.x > 0 && r.y > 0 && r.x < 820 && r.y < 656; });
+  await p.evaluate(() => document.getElementById('syn-btn').click()); await sleep(900);
+  R.targetsList = await p.evaluate(() => { const out = []; document.querySelectorAll('#osc-a-device .knob[data-syn="SYN_OSC_A_WT_FRAME"], #syn-panel .device.filter .fk-em').forEach(e => { const r = e.getBoundingClientRect(); out.push(e.className + ' ' + Math.round(r.x) + ',' + Math.round(r.y) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' vis=' + (e.checkVisibility ? e.checkVisibility({ checkVisibilityCSS: true, opacityProperty: true }) : '?')); }); return out; });
+  R.errs = errs; console.log(JSON.stringify(R, null, 1)); await b.close();
+})().catch(e => { console.error('FAIL', e); process.exit(1); });

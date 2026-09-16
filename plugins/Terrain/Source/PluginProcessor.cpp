@@ -10482,6 +10482,28 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             macroModded_[k] = routed;
             if (routed) globalSrc_.macro[k].store (ownM (macroBaseVis_[k].load (std::memory_order_relaxed), d, 0.0f, 1.0f), std::memory_order_relaxed);
         }
+        // tp11 — THE TAPE MACHINE JOINS THE MATRIX. Its three knobs are routed as SLOTS of the machine that is
+        // selected (Studio 0 · Cassette 1 · Wire 2, the TAPE_MACHINE choice order), normalised into 0..1 so a route
+        // moves them by fraction of the knob under the same ownership law as every Linear01 dest; the per-block
+        // smoother targets below read the result. No route = the knob's own value, byte-identical to before.
+        {
+            static const char* const kTapeIds[3][3] = {
+                { ParameterIDs::STUDIO_SCULPT, ParameterIDs::STUDIO_WEAVE,    ParameterIDs::STUDIO_TILT },
+                { ParameterIDs::WOW_FLUTTER,   ParameterIDs::SATURATION,      ParameterIDs::HISS },
+                { ParameterIDs::WIRE_WOW,      ParameterIDs::WIRE_SATURATION, ParameterIDs::WIRE_HISS } };
+            const int mach = juce::jlimit (0, 2, (int) std::lround (rawParam (ParameterIDs::TAPE_MACHINE)->load()));
+            tapeSlotMach_ = mach;
+            for (int k = 0; k < 3; ++k)
+            {
+                const int d = (int) wc::ModDest::TapeSlot1 + k;
+                const bool routed = (envOwnW[d] > 0.0f || modSums[d] != 0.0f);
+                tapeSlotRouted_[k] = routed;
+                if (! routed) continue;
+                const float lo = (mach == 0 && k == 2) ? -100.0f : 0.0f, hi = 100.0f;   // Studio Tilt is bipolar
+                const float n  = (rawParam (kTapeIds[mach][k])->load() - lo) / (hi - lo);
+                tapeSlotEff_[k] = lo + ownM (n, d, 0.0f, 1.0f) * (hi - lo);
+            }
+        }
         // fb252 — SPECTRAL MOD: publish the effective (base + LFO/env) spectral amount per osc so the
         // message-thread morph rebuild (rebuildMorphIfNeeded reads spectralEffAmt_) follows modulation.
         // mdP applies the same ownership law as every other Linear01 dest (LFO additive via modSums, env
@@ -12262,8 +12284,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         float* dsR = dlyRouteActive_  ? delaySendBuf_.getWritePointer (1) : nullptr;
         float* dtL = dstRouteActive_ ? distortionSendBuf_.getWritePointer (0) : nullptr;
         float* dtR = dstRouteActive_ ? distortionSendBuf_.getWritePointer (1) : nullptr;
-        float* exL = exUnionAny_ ? routedDryBuf_.getWritePointer (0) : nullptr;
-        float* exR = exUnionAny_ ? routedDryBuf_.getWritePointer (1) : nullptr;
+        // tp12 — the exclusion bus is no longer built or subtracted: a pulled source never enters the voice's main
+        //  buses (SynthVoice exKeep_), so there is nothing to take back out. exUnionG_ still travels (R.ex) — it is the mask.
+        float* exL = nullptr;
+        float* exR = nullptr;
 
         // ══ fb495 — BROADCAST ONLY WHAT CHANGED ═══════════════════════════════════════════════
         // See the cache declaration in PluginProcessor.h for the measurement. Every input the loop
@@ -12909,15 +12933,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     smoothedFreeze.setTargetValue(rawParam (ParameterIDs::FREEZE)->load());
     smoothedMix.setTargetValue(rawParam (ParameterIDs::MIX)->load());
     smoothedGrainFilter.setTargetValue(rawParam (ParameterIDs::GRAIN_FILTER)->load());
-    smoothedWowFlutter.setTargetValue(rawParam (ParameterIDs::WOW_FLUTTER)->load());
-    smoothedSaturation.setTargetValue(rawParam (ParameterIDs::SATURATION)->load());
-    smoothedHiss.setTargetValue(rawParam (ParameterIDs::HISS)->load());
-    smoothedStudioSculpt.setTargetValue (rawParam (ParameterIDs::STUDIO_SCULPT)->load());
-    smoothedStudioWeave .setTargetValue (rawParam (ParameterIDs::STUDIO_WEAVE) ->load());
-    smoothedStudioTilt  .setTargetValue (rawParam (ParameterIDs::STUDIO_TILT)  ->load());
-    smoothedWireWow .setTargetValue (rawParam (ParameterIDs::WIRE_WOW)       ->load());
-    smoothedWireSat .setTargetValue (rawParam (ParameterIDs::WIRE_SATURATION)->load());
-    smoothedWireHiss.setTargetValue (rawParam (ParameterIDs::WIRE_HISS)      ->load());
+    // tp11 — a routed slot of the SELECTED machine takes its modulated value (resolved in the global pass above)
+    auto tapeT = [this] (const char* pid, int mach, int k) -> float
+    { return (tapeSlotRouted_[k] && tapeSlotMach_ == mach) ? tapeSlotEff_[k] : rawParam (pid)->load(); };
+    smoothedWowFlutter.setTargetValue (tapeT (ParameterIDs::WOW_FLUTTER, 1, 0));
+    smoothedSaturation.setTargetValue (tapeT (ParameterIDs::SATURATION,  1, 1));
+    smoothedHiss.setTargetValue       (tapeT (ParameterIDs::HISS,        1, 2));
+    smoothedStudioSculpt.setTargetValue (tapeT (ParameterIDs::STUDIO_SCULPT, 0, 0));
+    smoothedStudioWeave .setTargetValue (tapeT (ParameterIDs::STUDIO_WEAVE,  0, 1));
+    smoothedStudioTilt  .setTargetValue (tapeT (ParameterIDs::STUDIO_TILT,   0, 2));
+    smoothedWireWow .setTargetValue (tapeT (ParameterIDs::WIRE_WOW,        2, 0));
+    smoothedWireSat .setTargetValue (tapeT (ParameterIDs::WIRE_SATURATION, 2, 1));
+    smoothedWireHiss.setTargetValue (tapeT (ParameterIDs::WIRE_HISS,       2, 2));
     smoothedOutputGain.setTargetValue(rawParam (ParameterIDs::OUTPUT_GAIN)->load());
     smoothedMasterMix.setTargetValue(rawParam (ParameterIDs::MASTER_MIX)->load());
 
@@ -14057,11 +14084,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {                                    // no exclusion subtract, zero chain iterations, zero
                                              // claims. Skips a 960-byte stack zero-init per sample.
             const float sc = outputGain * kVoiceToFxPad;
-            if (exUnionAny_)
-            {
-                leftChannel[i] -= (exDryL != nullptr ? exDryL[i] : 0.0f) * sc;
-                if (rightChannel != nullptr) rightChannel[i] -= (exDryR != nullptr ? exDryR[i] : 0.0f) * sc;
-            }
+            juce::ignoreUnused (exDryL, exDryR);   // tp12 — no exclusion subtract: the pulled sources never reached the mix (SynthVoice exKeep_)
             // fb636 — NOT zero-filled per sample any more (960 bytes x 48,000/s). Every slot writes pendL[c]/pendR[c]
             //  at the end of its iteration, and every read is of an EARLIER slot (the feed mask: j < c; a lane's
             //  previous device: pv < c) or, after the loop, of a slot < nSlots — so no read ever sees an unwritten

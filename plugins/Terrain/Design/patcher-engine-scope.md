@@ -66,3 +66,24 @@ Each step gets its own perceptual/golden test before the next, and Max hears it 
   hero — where should the mod panel live once the hero is gone (over the synth page? over the canvas?).
 - **Environment vs preset in the browser.** A patch saved from the Patcher carries `nodes` and shows as an environment.
   Should a patch that never opened the Patcher also count (every patch is a graph now), or only patched ones?
+
+## Measured 2026-09-15 (the tp6 session) — what "oscillators E–Z" actually touches
+Counted before any engine work, so the next session starts from facts, not the plan:
+- **The voice is not `osc[4]`; it is four NAMED oscillators.** `SynthVoice.h` (8,794 lines) carries `engine_ / engineB_ / engineC_ / engineD_`,
+  `harmEngA_..D_`, `sampleEngB_[…]`, `granEngB_`, `lvlSmA_..D_`, `uPhaseIncA_..D_`, `warpModeB_`, `warp2AmountA_..D_` — **383 `…B_` members alone** —
+  and the bus mix is written out per letter (`busCo1_[0]*oAL + busCo1_[1]*oBL + …` at six sends × three buses). 148 `[4]` sites on top.
+- **The processor reads oscillator parameters by name**: 691 `SYN_OSC_…` references, 62 `static const char* const X[4] = { A, B, C, D }` tables,
+  115 `[4]` sites. `ParameterIDs.hpp`: 153 / 149 / 149 / 149 hand-written constants for A / B / C / D.
+- **The editor holds one relay per parameter**: 552 `synOsc…Relay` members in `PluginEditor.h`, 483 `withOptionsFrom(...)`, 885 `mkO(...)` lines.
+- **The page holds four hand-written devices** (343 lines each) and 46 `['a','b','c','d']` / `{a:0,…}` sites; the mod-matrix destinations are a fixed table.
+- 32 voices (`kNumVoices`), unison up to 16 per oscillator.
+
+**Two ways to build it, both multi-session:**
+1. *Refactor the voice into `Osc osc[kNumOsc]`* (the scope's original plan): every named member becomes a field of one struct, every per-letter
+   expression becomes a loop. Bit-identical audio must be proven on the golden bank after the refactor and again after widening. Cleanest, biggest.
+2. *Voice banks*: a bank = one more set of the existing four-oscillator voices (E–H, I–L, …) driven by the same MIDI and summed at the bus, each bank
+   fed its own gathered parameter struct. Bank 0 is untouched (golden by construction); a bank whose four oscillators are all off costs nothing.
+   Needs a table-driven gather (the 691 references → `oscParam(bank, o, name)`), relays as vectors, generated parameter blocks, per-bank filters,
+   `_SRC_x` route params for the new letters, mod-destination table growth, and the page's devices cloned per letter. Faster to land, more RAM.
+Either way the order stays: parameters + gather → voice → relays → page devices → mod/FX routes → golden run → Max hears it.
+**The Patcher is ready for it**: it lists oscillators from `window.__oscPool` (falls back to A–D) and adopts any that report on.

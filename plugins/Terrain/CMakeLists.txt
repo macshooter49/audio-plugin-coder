@@ -96,6 +96,33 @@ else()
     message(WARNING "Terrain: ${TERRAIN_WT_BANK} is MISSING — this build will ship with NO factory wavetables")
 endif()
 
+#  tp12 — THE FACTORY ONE-SHOT LIBRARY rides in the same seat: Resources/Samples/<Category>/<Name>.flac (Max's own kits,
+#  tuned to C, trimmed, normalised; Textures = the CC0 Freesound set). ~1 GB, so it is NOT in git (.gitignore) — it is
+#  built by scripts/build-sample-library.py from the source kits. Found at runtime by sampleFactoryRoot()'s up-walk.
+set(TERRAIN_SAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Samples")
+if (IS_DIRECTORY "${TERRAIN_SAMPLES}")
+    foreach(_fmt VST3 AU Standalone)
+        if (TARGET Terrain_${_fmt})
+            if (APPLE)
+                set(_dst "$<TARGET_BUNDLE_CONTENT_DIR:Terrain_${_fmt}>/Resources/Samples")
+            elseif (WIN32 AND _fmt STREQUAL "VST3")
+                set(_dst "$<TARGET_FILE_DIR:Terrain_${_fmt}>/../Resources/Samples")
+            else()
+                set(_dst "")
+            endif()
+            if (NOT _dst STREQUAL "")
+                add_custom_command(TARGET Terrain_${_fmt} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E rm -rf "${_dst}"
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory "${TERRAIN_SAMPLES}" "${_dst}"
+                    COMMENT "Terrain: installing the factory one-shot library into the ${_fmt} bundle")
+            endif()
+        endif()
+    endforeach()
+    message(STATUS "Terrain: factory one-shot library found — it will be copied into each bundle")
+else()
+    message(WARNING "Terrain: Resources/Samples is missing — the sample engines will ship with NO factory one-shots")
+endif()
+
 #  fb619 — THE FACTORY PRESET BANKS ride in the same seat: Resources/Banks/<Bank>/<Name>.terrain, found at
 #  runtime by the same bundle up-walk wtFactoryRoot() uses (banksFactoryRoot()). Terra is the first.
 set(TERRAIN_BANKS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Banks")
