@@ -61,24 +61,32 @@ const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed
 const pick = a => a[Math.floor(rnd() * a.length)];
 
 // ── 1 · THE ENGINE CHOICE — the shipped expression, run ──────────────────────────────────────
-const engineSrc = span("var crazy=(lvl==='crazy');", "/* Sample 1 · Granular 2 · Resynth 3 — CRAZY only */");
+// read whatever `seng` is actually assigned — anchoring on the VALUE would make a changed value
+// invisible to this gate (it did, once).
+const engineSrc = (() => {
+  const i = SRC.indexOf("var modal=((aim==='keys'");
+  const j = SRC.indexOf('var seng=', i);
+  const k = SRC.indexOf(';', j);
+  if (i < 0 || j < 0 || k < 0) throw new Error('engine block anchors not found');
+  return SRC.slice(i, k + 1);
+})();
 const chooseEngine = new Function('aim', 'lvl', 'R', 'rnd', 'pick', 'SAMPR',
   engineSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return { modal:modal, samp:samp, fm:fm, harm:harm, seng:seng, engine: modal?6:samp?seng:harm?5:fm?4:0 };');
 
-const SAMPLE_FAMILY = new Set([1, 2, 3]);   // Sample · Granular · Resynth
 const seen = {}; LEVELS.forEach(l => seen[l] = new Set());
 for (const lvl of LEVELS)
   for (const aim of SOUND_AIMS)
     for (let n = 0; n < 4000; n++)
       seen[lvl].add(chooseEngine(aim, lvl, REACH[lvl], rnd, pick, SAMPR).engine);
 
-for (const lvl of LEVELS.filter(l => l !== 'crazy')) {
-  const leaked = [...seen[lvl]].filter(e => SAMPLE_FAMILY.has(e));
-  chk(leaked.length === 0, `[1] ${lvl}: no sample-based engine is ever chosen`,
-      leaked.length ? `leaked engine index(es): ${leaked.join(', ')} (1=Sample 2=Granular 3=Resynth)` : '');
+// tp24 — Max: "only the sampler engine, not granular, not resynth."
+for (const lvl of LEVELS) {
+  const banned = [...seen[lvl]].filter(e => e === 2 || e === 3);
+  chk(banned.length === 0, `[1] ${lvl}: Granular and Resynth are never chosen`,
+      banned.length ? `engine index(es) ${banned.join(', ')} leaked` : '');
 }
-chk([...seen.crazy].some(e => SAMPLE_FAMILY.has(e)), '[1] crazy: the sample engines DO come back',
-    `crazy saw engines: ${[...seen.crazy].sort().join(', ')}`);
+chk(LEVELS.every(l => seen[l].has(1)), '[1] the SAMPLE engine is available at every reach (Max gave it another shot)',
+    LEVELS.map(l => `${l}:${[...seen[l]].sort().join('/')}`).join('  '));
 for (const e of [0, 4, 5, 6]) {
   const name = { 0: 'Wavetable', 4: 'FM', 5: 'Additive', 6: 'Modal' }[e];
   chk([...seen.medium].includes(e), `[1] the synthesis pool still reaches ${name} at medium`);
@@ -120,11 +128,13 @@ chk(/\(core==='delay'&&k===1\)\?Math\.min\(hi,\.20\)/.test(SRC),
 
 // ── 4 · PERCUSSION IS GONE ───────────────────────────────────────────────────────────────────
 chk(!AIMS.includes('percussion'), '[4] percussion is not an aim any more');
+// Count mentions in CODE, not in prose: strip the comments first. Counting "expected" comment
+// phrases instead made the test fail the moment a new note mentioned the word.
 const diceRegion = SRC.slice(SRC.indexOf('var AIMS=['), SRC.indexOf('function openAimMenu'));
-const leftovers = (diceRegion.match(/percussion/g) || []).length;
-const inComment = (diceRegion.match(/PERCUSSION IS GONE|went with percussion/g) || []).length;
-chk(leftovers === inComment, '[4] no live percussion branch survives in the dice',
-    `${leftovers} mentions, ${inComment} of them the note explaining its removal`);
+const codeOnly = diceRegion.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+const leftovers = (codeOnly.match(/percussion/gi) || []).length;
+chk(leftovers === 0, '[4] no live percussion branch survives in the dice',
+    leftovers ? `${leftovers} mention(s) in executable code` : '');
 
 // ── 5 · THE MENU ─────────────────────────────────────────────────────────────────────────────
 chk(/var DTARGETS=\['fx','modulation'\]/.test(SRC), '[5] FX and Modulation are dice TARGETS');
@@ -162,6 +172,39 @@ chk(maxLen <= 8, '[6] the chain stays sane', `longest: ${maxLen}`);
 chk(/__tiDiceMode\)\s*window\.__tiDiceMode\(cardPidOf\(m\),big\)/.test(SRC),
     '[6] every instance is diced on ITS OWN card (glitch 2 is not glitch 1 again)');
 chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — routed to something of their own');
+
+
+// ── 7 · THE ONE-SHOT WHITELIST IS THE MEASUREMENT, NOT A HAND LIST ───────────────────────────
+{
+  const csvPath = require('path').join(__dirname, 'fixtures', 'oneshot_tuning.csv');
+  const rows = fs.readFileSync(csvPath, 'utf8').trim().split('\n').slice(1).map(l => {
+    const m = /^"([^"]+)",([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)$/.exec(l);
+    return m ? { path: m[1], cents: parseFloat(m[5]), uncertain: m[7].trim() === '1' } : null;
+  }).filter(Boolean);
+  const wantByCat = {};
+  for (const r of rows) {
+    if (r.uncertain || Math.abs(r.cents) > 15) continue;
+    const [c, n] = [r.path.slice(0, r.path.indexOf('/')), r.path.slice(r.path.indexOf('/') + 1)];
+    (wantByCat[c] = wantByCat[c] || []).push(n);
+  }
+  const baked = eval('(' + lift(/var TUNED_ONESHOTS=\{/).replace(/^var TUNED_ONESHOTS=/, '') + ')');
+  const wantTotal = Object.values(wantByCat).reduce((a, v) => a + v.length, 0);
+  const gotTotal = Object.values(baked).reduce((a, v) => a + v.length, 0);
+  chk(gotTotal === wantTotal, `[7] the baked list is exactly the measured set (${gotTotal} vs ${wantTotal})`);
+  let mismatch = null;
+  for (const c of Object.keys(wantByCat)) {
+    const a = [...wantByCat[c]].sort().join('|'), b = [...(baked[c] || [])].sort().join('|');
+    if (a !== b) mismatch = c;
+  }
+  chk(mismatch === null, '[7] and category-for-category, file-for-file', mismatch ? `first mismatch:  ${mismatch}` : '');
+  const anyOff = rows.some(r => !r.uncertain && Math.abs(r.cents) > 15);
+  chk(anyOff, '[7] the CSV really does contain off-pitch files (a whitelist that excludes nothing is not one)');
+  const flat = new Set(Object.values(baked).flat());
+  chk(flat.size === gotTotal, '[7] no duplicate names inside the baked list');
+  chk(/window\.__sampLoadPath\(o, d\.path\+'\/'\+c\+'\/'\+pick\(files\)\)/.test(SRC),
+      '[7] oneShot loads from the FILTERED list, never from the raw scan');
+  chk(!/DRUMCATS/.test(SRC), '[7] the drum path is gone entirely (Max: "we\'re not using drums")');
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
