@@ -3050,6 +3050,11 @@ class SynthVoice : public juce::SynthesiserVoice
             if (routeSnap_ != nullptr && routesSeen_ != routeSnap_->version.load (std::memory_order_acquire)) pullRoutes (*routeSnap_);
             if (filterTypePending1_) { filterTypePending1_ = false; applyFilterType1 (filterType1_); }   // fb631 — the deferred reset, now free
             if (filterTypePending2_) { filterTypePending2_ = false; applyFilterType2 (filterType2_); }
+            // tp21 — the note decides its own filter path from the drive/resonance it is born with.
+            //  Per NOTE, not per block: see the latch at the render site. A note that needs the 2×
+            //  gets it from its first sample; one that does not can still be upgraded into it later.
+            osOsLatch_ = filterSlot_.oversamplingWanted  (drv01_,  baseRes01_)
+                      || filterSlot2_.oversamplingWanted (drv012_, baseRes012_);
 
             // ── LEGATO retarget: slide pitch to the new note, retrigger NOTHING ──
             // Armed by UnisonSynth::beginLegatoRetarget() just before startVoice().
@@ -6414,8 +6419,24 @@ class SynthVoice : public juce::SynthesiserVoice
 
                 float* sL = scratch_.getWritePointer (0);
                 float* sR = scratch_.getWritePointer (1);
-                const bool oversample = filterSlot_.needsOversampling()
-                                     || filterSlot2_.needsOversampling();
+                // ══ tp21 — the 2× runs when the filter is actually being DRIVEN (see FilterSlot::
+                //    oversamplingWanted). The choice LATCHES for the life of the note and only ever moves
+                //    UPWARD: a note that starts clean stays on the cheap path, and a drive knob (or an LFO
+                //    on it) pushed past the threshold mid-note upgrades ONCE and stays upgraded. That
+                //    direction is the whole click story — entering the 2× costs a ~2-sample group-delay
+                //    step and up to 0.5 dB at the moment the user is pushing drive and the sound is
+                //    changing anyway, while LEAVING it mid-note (which would step the same way for no
+                //    gain on an already-running note) simply never happens. A modulated drive therefore
+                //    latches on its first crossing instead of chattering at the LFO rate.
+                //    ⚠️ If the TYPE leaves the oversampled family the latch drops immediately — otherwise
+                //    an SVF picked mid-note would keep running through converters it has never used, and
+                //    that is not this change's business.
+                const bool osEligible = filterSlot_.needsOversampling() || filterSlot2_.needsOversampling();
+                const bool osWant     = filterSlot_.oversamplingWanted  (drv01_,  baseRes01_)
+                                     || filterSlot2_.oversamplingWanted (drv012_, baseRes012_);
+                if (! osEligible)              osOsLatch_ = false;
+                else if (osWant && ! osOsLatch_) { osOsLatch_ = true; resetOversamplers(); }   // rest state = what a zero input would have produced (fb603's law for bus2)
+                const bool oversample = osOsLatch_;
                 // Coefficient sample rate doubles when oversampling so the
                 // filter's prewarp + ZDF math sees the upsampled Nyquist.
                 const double coefSr = oversample ? sr * 2.0 : sr;
@@ -7246,6 +7267,7 @@ class SynthVoice : public juce::SynthesiserVoice
         HalfBandUp2x            osUp2L_, osUp2R_;      // bus2 (F2 / parallel routing)
         HalfBandDown2x          osDnL_,  osDnR_;
         /** Clear every 2× converter — note-on, type swap, and the NaN guard. */
+        bool osOsLatch_ = false;   // tp21 — is THIS note running the 2x path? (latched at note-on, upgrade-only)
         void resetOversamplers() noexcept
         { osUp1L_.reset(); osUp1R_.reset(); osUp2L_.reset(); osUp2R_.reset(); osDnL_.reset(); osDnR_.reset(); }
 

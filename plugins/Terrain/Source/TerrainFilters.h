@@ -2994,6 +2994,29 @@ public:
             || type_ == Type::RING_X2     || type_ == Type::BODE_DOWN;
     }
 
+    // ══ tp21 — THE 2× IS FOR DISTORTION, SO ASK WHETHER THERE IS ANY ═══════════════════════════
+    //  needsOversampling() above answers "could this TYPE ever need it". That is the right question
+    //  for the converter-reset bookkeeping (SynthVoice::applyFilterType1) and for FilterFxEngine's
+    //  coefficient rate, and both still ask it. It is the WRONG question for the per-block audio
+    //  path, which ran the core twice on a Ladder sitting at drive 0 — a filter behaving so nearly
+    //  linearly that e47f140 measured 0.10 % THD on it. Tests/filter_alias_ab.cpp drove the real
+    //  slot through the real half-band across (type × cut × res × drive) and measured what the 2×
+    //  actually removes:
+    //    · below drive 0.30 EVERY oversampled type keeps its aliasing under −57 dB, and most sit
+    //      below −120 dB. The SVF — which has never oversampled and ships that way — reaches
+    //      −51.1 dB at its own worst setting, so by this product's own standard those cells were
+    //      already inaudible and the second run bought nothing at all.
+    //    · the two paths do differ, by a LEVEL of up to 0.5 dB (gain-matching the spectra drops the
+    //      residual to −41…−108 dB, so it is a level, not a shape). That difference is the price,
+    //      it is written down, and it is why the choice LATCHES per note rather than chasing a knob.
+    //  The threshold is the measurement's floor with margin, and RES forces the 2× above 0.90
+    //  because the grid stopped there: past its last measured point this keeps the old behaviour
+    //  rather than guessing.
+    static constexpr float kOsDriveOn = 0.22f;   // measured clean to 0.30 on every type
+    static constexpr float kOsResOn   = 0.90f;   // the grid's last resonance — beyond it, no claim
+    bool oversamplingWanted (float drv01, float res01) const noexcept
+    { return needsOversampling() && (drv01 > kOsDriveOn || res01 > kOsResOn); }
+
     /** Set the OB-X / SEM morph (0=LP, .5=Notch, 1=HP). Wired for when a
      *  morph knob exists; until then OB-X uses the default (LP-voiced SEM). */
     void setMorph (float m01) noexcept { morph_ = juce::jlimit (0.0f, 1.0f, m01); }
