@@ -9241,6 +9241,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         #syn-panel .voice-meta.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on{ border-color:rgba(255,255,255,.42); color:var(--text-primary); }
         #syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
         #syn-panel .fxr-macros-pane{ flex-direction:column; justify-content:center; }
+        /* tp14 — the RANDOMIZE CHAIN row: one thin line above the rack, the page's own ink and type. */
+        #syn-panel .fxr-dice{ flex:none; display:flex; align-items:center; gap:8px; height:13px; margin:0 0 3px 1px; font-size:9px; letter-spacing:.5px; color:rgba(255,255,255,.42); user-select:none; }
+        #syn-panel .fxr-dice-go{ display:flex; align-items:center; gap:5px; cursor:pointer; transition:color .12s; }
+        #syn-panel .fxr-dice-go svg{ width:11px; height:11px; }
+        #syn-panel .fxr-dice-go:hover{ color:rgba(255,255,255,.92); }
+        #syn-panel .fxr-dice.rolling .fxr-dice-go{ color:var(--purple-400); }
+        #syn-panel .fxr-dice-sep{ color:rgba(255,255,255,.22); }
+        #syn-panel .fxr-dice-lvl{ cursor:pointer; padding:0 6px; height:13px; line-height:13px; border:1px solid rgba(255,255,255,.14); border-radius:7px; color:rgba(255,255,255,.55); transition:color .12s,border-color .12s; }
+        #syn-panel .fxr-dice-lvl:hover{ color:#fff; border-color:rgba(255,255,255,.4); }
         #syn-panel .fxr-clip{ flex:1; min-width:0; min-height:0; overflow-x:auto; overflow-y:hidden; display:flex; scrollbar-width:none; }   /* fb637 — min-height:0: the last link in the chain. Its overflow-y:hidden is the blade that actually cut the cards' bottom line off, and without this it was handed a height bigger than the space that existed. */
         #syn-panel .fxr-clip::-webkit-scrollbar{ display:none; }   /* fb268 — NO visible slider; shift+scroll / two-finger trackpad pans the chain */
         #syn-panel .fxr-rack{ display:flex; gap:9px; align-items:stretch; padding:0; min-height:0; }   /* fb272 — drop 2px side pad so the first device left edge lands at x=14 (edge-to-edge with the modules above) */
@@ -9537,6 +9546,18 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         <div class="ribbon-row rr-new">
           <div class="rr-left">
             <!-- fb269 — Effects/Macros pill retired; the rack IS the left column (macros moved to the voice-column 'Macros' button on the right). -->
+            <!-- tp14 — RANDOMIZE CHAIN (Max): purely effects, at a reach you pick. Above the chain, outside #fxr-rack so render() cannot wipe it. -->
+            <div class="fxr-dice" id="fxr-dice">
+              <span class="fxr-dice-go" data-act="roll" title="Roll a new effect chain — effects only, nothing else is touched">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/></svg>
+                <span class="fxr-dice-t">Randomize chain</span></span>
+              <span class="fxr-dice-lvl" data-act="lvl" title="How far it goes">Medium</span>
+              <span class="fxr-dice-sep">·</span>
+              <span class="fxr-dice-go" data-act="mroll" title="Roll new modulation — envelopes, LFOs, macros, key, velocity and their routes. Nothing else is touched.">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-9 6 9 9 0s6-9 9 0"/></svg>
+                <span class="fxr-dice-t">Randomize modulation</span></span>
+              <span class="fxr-dice-lvl" data-act="mlvl" title="How far the modulation goes">Heavy</span>
+            </div>
             <div class="fxr-clip"><div class="fxr-rack" id="fxr-rack"></div></div>
           </div>
 
@@ -12154,6 +12175,118 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              the rank/route/active parameters are written exactly as the rack itself writes them. */
           window.__fxrAdd=function(core){ try{ fxAdd(core,0,null); return DEVS.length-1; }catch(e){ return -1; } };
           window.__fxrRemove=function(idx){ try{ fxRemove(idx|0); return true; }catch(e){ return false; } };
+          /* ══ tp14 — RANDOMIZE CHAIN (Max: "a randomized effect chain … purely effects") ══════════════════════════
+             PURELY EFFECTS: it builds the rack — which devices, their types, their front knobs, their back panels,
+             their per-oscillator routes and the order — and touches NOTHING else. No oscillator, no filter, no
+             envelope, no LFO, no mod route. The chain still ends in a compressor at its defaults (the house rule),
+             and the compressor is never given a setting. Reach: Light · Medium · Heavy · Wild, kept in localStorage. */
+          (function(){
+            var LV=['light','medium','heavy','wild'], lvl='medium';
+            try{ var st=localStorage.getItem('fxrDiceLvl'); if(LV.indexOf(st)>=0) lvl=st; }catch(e){}
+            var rnd=Math.random, pick=function(a){ return a[Math.floor(rnd()*a.length)]; }, bt=function(a,b){ return a+rnd()*(b-a); };
+            var POOL={ light:['reverb','delay','cho','eqz','wid','tape'],
+                       medium:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod'],
+                       heavy:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'],
+                       wild:['reverb','delay','cho','fla','pha','eqz','wid','tape','saturate','bod','ott','flt','granular','utl'] };
+            var CNT={light:[1,2],medium:[2,3],heavy:[3,4],wild:[4,5]};
+            var MIXR={reverb:[.2,.45],delay:[.18,.4],cho:[.3,.6],pha:[.3,.55],fla:[.25,.5],wid:[.4,.85],tape:[.4,.85],saturate:[.25,.6],ott:[.25,.5],eqz:[.85,1],granular:[.2,.45],bod:[.25,.5],flt:[.7,1],utl:[.8,1]};
+            var HOTC=/saturate|ott|bod|flt/;
+            function norm(p,i,n){ var c=0; try{ c=window.__paramCardinality?window.__paramCardinality(p):0; }catch(e){} if(!(c>1)) c=n||2; return Math.max(0,Math.min(1,i/(c-1))); }
+            function setP(p,v){ if(p) try{ window.__setSynParam(p,Math.max(0,Math.min(1,v))); }catch(e){} }
+            function setType(idx,type){ try{ var card=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]'), sel=card&&card.querySelector('.fxr-type-native'); if(!sel) return;
+              for(var i=0;i<sel.options.length;i++){ if(sel.options[i].textContent.trim()===type||sel.options[i].value===type){ sel.selectedIndex=i; sel.dispatchEvent(new Event('change',{bubbles:true})); return; } } }catch(e){} }
+            function roll(){
+              var row=document.getElementById('fxr-dice'); if(row) row.classList.add('rolling');
+              var big=(lvl==='heavy'||lvl==='wild'), hi=lvl==='wild'?.95:lvl==='heavy'?.85:lvl==='medium'?.7:.55, lo=lvl==='light'?.25:.08;
+              for(var i=DEVS.length-1;i>=0;i--) window.__fxrRemove(i);
+              var pool=(POOL[lvl]||POOL.medium).slice(), n=Math.round(bt(CNT[lvl][0],CNT[lvl][1])), picked=[];
+              while(picked.length<n&&pool.length){ var c=pick(pool); pool.splice(pool.indexOf(c),1); picked.push(c); }
+              picked.push('cmp');   /* the chain ends in a compressor, at its defaults, untouched (Max) */
+              picked.forEach(function(core,pi){
+                var ri=window.__fxrAdd(core); if(ri<0) return; var last=(pi===picked.length-1);
+                for(var r=0;r<6;r++) window.__fxrSetRoute(ri,r,(last||!big||rnd()>.35||r>3)?1:(rnd()<.6?1:0));   /* it hears everything; heavy/wild may drop an oscillator */
+                var d=DEVS[ri]; if(!d||last) return;
+                if(d.types&&d.types.length>1&&rnd()<(big?.9:.55)){ var ty=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(ty.length) setType(ri,pick(ty)); d=DEVS[ri]||d; }
+                var hot=HOTC.test(core);
+                if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) setP(kp, bt(lo, hot?Math.min(hi,.6):hi)); }
+                  var mk=d.knobs[3], mr=MIXR[core]||[.25,.5]; if(mk&&mk.p) setP(mk.p, Math.min(.95, bt(mr[0],mr[1]))); }
+                if(d.back&&rnd()<(big?.9:.55)){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) setP(b.p, norm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
+                  (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]&&rnd()<(big?.85:.5)) setP(kn[2], bt(lo, hot?.6:hi)); }); }
+              });
+              setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },300);
+              setTimeout(function(){ if(row) row.classList.remove('rolling'); },420);
+            }
+            function paintLvl(){ var el=document.querySelector('#fxr-dice .fxr-dice-lvl'); if(el) el.textContent=lvl.charAt(0).toUpperCase()+lvl.slice(1); }
+            function lvlMenu(x,y){ if(!window.__synShowMenu) { lvl=LV[(LV.indexOf(lvl)+1)%LV.length]; try{ localStorage.setItem('fxrDiceLvl',lvl); }catch(e){} paintLvl(); return; }
+              window.__synShowMenu('', LV.map(function(l){ return { label:l.charAt(0).toUpperCase()+l.slice(1), isChecked:(l===lvl),
+                onPick:function(){ lvl=l; try{ localStorage.setItem('fxrDiceLvl',l); }catch(e){} paintLvl(); } }; }), x, y, {cls:'ctl'}); }
+            function bind(){ var row=document.getElementById('fxr-dice'); if(!row){ setTimeout(bind,300); return; } paintLvl(); paintMLvl();
+              row.addEventListener('click',function(e){ var a=e.target.closest('[data-act]'); if(!a) return; e.preventDefault(); e.stopPropagation();
+                var act=a.dataset.act;
+                if(act==='lvl') lvlMenu(e.clientX,e.clientY); else if(act==='mlvl') mlvlMenu(e.clientX,e.clientY); else if(act==='mroll') mroll(); else roll(); });
+              row.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); lvlMenu(e.clientX,e.clientY); }); }
+            window.__fxrDice=function(l){ if(LV.indexOf(l)>=0){ lvl=l; paintLvl(); } roll(); };   /* headless gate hook */
+            window.__fxrDiceLvl=function(){ return lvl; };
+
+            /* ══ tp15 — RANDOMIZE MODULATION (Max: "envelopes and LFOs … of course macros, keys, the modulation section") ══
+               PURELY MODULATION: it rolls the ENVELOPES, the LFOs, the MACRO values and the ROUTES that carry them — every
+               family the matrix has (LFO · Env · Macro · Key · Velocity · Wheel · Aftertouch · Bend · Random · Alt · Follower).
+               It never writes an oscillator, filter or effect knob, never pitch, never detune, never the phase (the 180 law),
+               and never aims anything at the compressor. Reach: Light · Medium · Heavy · Wild · CRAZY. */
+            var MLV=['light','medium','heavy','wild','crazy'], mlvl='heavy';
+            try{ var ms=localStorage.getItem('fxrModLvl'); if(MLV.indexOf(ms)>=0) mlvl=ms; }catch(e){}
+            var MR={ light:{n:[3,5],lfo:2,env:[2,3],dep:[.10,.30],wide:.1,mac:0,exotic:0,fast:.05,loop:0},
+                     medium:{n:[6,9],lfo:3,env:[2,4],dep:[.15,.45],wide:.35,mac:.45,exotic:.15,fast:.15,loop:.1},
+                     heavy:{n:[10,14],lfo:5,env:[3,5],dep:[.20,.65],wide:.7,mac:.7,exotic:.35,fast:.3,loop:.25},
+                     wild:{n:[15,22],lfo:7,env:[4,5],dep:[.25,.85],wide:.9,mac:.85,exotic:.55,fast:.45,loop:.4},
+                     crazy:{n:[24,34],lfo:10,env:[5,5],dep:[.30,1],wide:1,mac:1,exotic:.8,fast:.6,loop:.6} };
+            var ENVPF=['AMP','FLT','PIT','M1','M2'];
+            var OSCSFX=['WT_FRAME','WARP_AMOUNT','WARP2_AMT','FOLD_AMT','SPECTRAL_AMT','SPECTRAL_LO','SPECTRAL_HI','WVAR','W2VAR','PAN','LEVEL','UWIDTH','UBLEND','SUB_WEIGHT','SUB_HEAT','SAMPLE_SCAN','SAMPLE_FORMANT','SAMPLE_STRETCH','SAMPLE_SPRAY','SAMPLE_WARP','SAMPLE_START','SAMPLE_AIR','WSLOT1_DEPTH','WSLOT2_DEPTH','WSLOT3_DEPTH','WSLOT4_DEPTH','FM_DEPTH1','FM_DEPTH2','FM_FB','HARM_COUNT','HARM_SHINE','MODAL_MATERIAL','MODAL_DECAY','MODAL_BODY'];   /* no COARSE/OCT/SEMI/CENT/URANGE/UDETUNE/PHASE: pitch, detune and the 180 stay out of it */
+            function mdests(){ var out=[];
+              ['A','B','C','D'].forEach(function(o){ OSCSFX.forEach(function(k){ var d=window.__knobDest?window.__knobDest('SYN_OSC_'+o+'_'+k):null; if(d!=null) out.push(d); }); });
+              [0,1,54,55,56,57,58,59,60,61,62,63,340,341,342,343,344,345].forEach(function(d){ out.push(d); });   /* both filter slots, front and back */
+              (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d){ if(!d||d.core==='cmp') return; for(var k=0;k<12;k++){ var dd=window.__fxModDest?window.__fxModDest(d.core,d.inst,k):null; if(dd!=null) out.push(dd); } });
+              [1887,1888,1889].forEach(function(d){ out.push(d); });   /* the tape machine's three knobs */
+              for(var n=0;n<10;n++){ out.push(12+n); out.push(673+n); out.push(683+n); }   /* an LFO's own amount, rate and phase */
+              for(var e=1;e<=5;e++) for(var q=0;q<6;q++) out.push(481+(e-1)*6+q);   /* every envelope's Dly/Atk/Hld/Dec/Sus/Rel */
+              for(var m=0;m<9;m++) out.push((window.__MACRO_DEST||1878)+m);   /* the macros themselves */
+              return out; }
+            function srcPool(R){ var S=[]; var nl=R.lfo; for(var i=1;i<=nl;i++) S.push({lfo:i});
+              for(var e=2;e<=5;e++) S.push({env:e});
+              if(rnd()<R.mac) for(var m=1;m<=9;m++) S.push({mac:m});
+              if(rnd()<R.exotic+0.25){ S.push({vel:1}); S.push({note:1}); }
+              if(rnd()<R.exotic){ S.push({whl:1}); S.push({at:1}); S.push({bend:1}); S.push({alt:1}); for(var r=1;r<=4;r++) S.push({rnd:r}); for(var f=1;f<=7;f++) S.push({fol:f}); }
+              return S; }
+            function tagOf(S){ return S.lfo?'lfo'+S.lfo:S.env?'env'+S.env:S.mac?'mac'+S.mac:S.vel?'vel':S.note?'key':S.whl?'whl':S.at?'at':S.bend?'bend':S.rnd?'rnd'+S.rnd:S.fol?'fol'+S.fol:'alt'; }
+            function mroll(){
+              var row=document.getElementById('fxr-dice'); if(row) row.classList.add('rolling');
+              var R=MR[mlvl]||MR.heavy, big=(mlvl==='wild'||mlvl==='crazy');
+              (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
+              for(var n=1;n<=R.lfo;n++){ var L='LFO'+n+'_', sh=rnd()<R.wide?Math.floor(rnd()*11):pick([0,0,1,2]);
+                setP(L+'SHAPE', norm(L+'SHAPE',sh,11)); var sy=rnd()<.5; setP(L+'SYNC', sy?1:0);
+                if(sy) setP(L+'DIV', rnd()); else setP(L+'RATE', rnd()<R.fast?bt(.45,.9):bt(.05,.4));
+                setP(L+'PHASE', rnd()); setP(L+'DEPTH', 1); }
+              var nE=Math.round(bt(R.env[0],R.env[1]));
+              for(var ei=0;ei<nE;ei++){ var e2=(mlvl==='light'||mlvl==='medium')?ei+2:(ei+1), E='SYN_ENV_'+(ENVPF[Math.min(4,e2-1)]||'M1')+'_', amp=(e2===1);
+                setP(E+'A', bt(0, amp?.35:(big?.8:.5))); setP(E+'D', bt(.1, big?.9:.7)); setP(E+'S', bt(amp?.4:0, 1)); setP(E+'R', bt(.1, big?.85:.6));
+                setP(E+'CA', bt(-.8,.8)); setP(E+'CD', bt(-.8,.8)); if(!amp&&rnd()<R.loop) setP(E+'LOOP',1); }
+              if(R.mac>0) for(var mi=1;mi<=9;mi++) if(rnd()<R.mac) setP('SYN_MACRO_'+mi, bt(.15,.9));
+              var pool=mdests(), S=srcPool(R), want=Math.round(bt(R.n[0],R.n[1])), used={}, made=0, guard=0;
+              while(made<want&&guard++<400){ var d=pool[Math.floor(rnd()*pool.length)], sc=S[Math.floor(rnd()*S.length)];
+                var key=tagOf(sc)+'>'+d; if(used[key]) continue; used[key]=1;
+                var t=window.__tiAddSrc?window.__tiAddSrc(sc,d):null; if(!t) continue;
+                var dep=bt(R.dep[0],R.dep[1])*(rnd()<.3?-1:1);
+                if(window.__tiSetDepth) window.__tiSetDepth(t,d,dep); made++; }
+              setTimeout(function(){ if(row) row.classList.remove('rolling'); },420);
+              return made; }
+            function paintMLvl(){ var el=document.querySelector('#fxr-dice [data-act="mlvl"]'); if(el) el.textContent=mlvl.charAt(0).toUpperCase()+mlvl.slice(1); }
+            function mlvlMenu(x,y){ if(!window.__synShowMenu){ mlvl=MLV[(MLV.indexOf(mlvl)+1)%MLV.length]; try{ localStorage.setItem('fxrModLvl',mlvl); }catch(e){} paintMLvl(); return; }
+              window.__synShowMenu('', MLV.map(function(l){ return { label:l.charAt(0).toUpperCase()+l.slice(1), isChecked:(l===mlvl),
+                onPick:function(){ mlvl=l; try{ localStorage.setItem('fxrModLvl',l); }catch(e){} paintMLvl(); } }; }), x, y, {cls:'ctl'}); }
+            window.__modDice=function(l){ if(MLV.indexOf(l)>=0){ mlvl=l; paintMLvl(); } return mroll(); };   /* headless gate hook */
+            window.__modDiceLvl=function(){ return mlvl; };
+            if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind); else bind();   /* tp15 — LAST: bind() paints both reach chips, and `mlvl` is declared above only in source order */
+          })();
           window.__fxrSetRoute=function(idx,ri,on){ try{ var d=DEVS[idx|0]; if(!d||!d.route) return false; d.route[ri]=on?1:0; if(d.rp&&d.rp[ri]) window.__setSynParam(d.rp[ri], on?1:0);
             var card=rack.querySelector('.fxr-dev[data-dev="'+(idx|0)+'"] .fxr-r[data-r="'+ri+'"]'); if(card) card.classList.toggle('fxr-on',!!on); return true; }catch(e){ return false; } };
           window.__fxrReorder=function(order){ try{ var nd=[]; for(var i=0;i<order.length;i++){ var d=DEVS[order[i]|0]; if(d&&nd.indexOf(d)<0) nd.push(d); } for(var j=0;j<DEVS.length;j++) if(nd.indexOf(DEVS[j])<0) nd.push(DEVS[j]); DEVS=nd; fxPushRanks(); render(); return true; }catch(e){ return false; } };
@@ -33320,6 +33453,7 @@ restoreThemeFromBackend();
   window.__tiRemoveRoute=function(tag,dest){ for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcTag(a)===tag){ removeAssign(a); return true; } } return false; };   /* tp1 — the Patcher cuts a cable */
   window.__knobDest=function(p){ return KNOBDEST.hasOwnProperty(p)?KNOBDEST[p]:null; };   /* tp7 — the dice aims at a knob by its parameter, visible or not */
   window.__tiSetDepth=function(tag,dest,depth){ for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcTag(a)===tag){ a.depth=Math.max(-1,Math.min(1,+depth||0)); markTargets(); push(); return true; } } return false; };   /* tp7 — the dice sets each route's amount */
+  window.__tiAddSrc=function(S,dest){ if(!S||dest==null) return null; var a=addRoute(S,dest,elForDest(dest)); return a?srcTag(a):null; };   /* tp15 — ONE door for every family (lfo/env/mac/vel/key/whl/at/bend/rnd/alt/fol): the modulation dice needs macros and keys, which __tiAddRoute cannot express */
   window.__tiElForDest=function(dest){ return elForDest(dest); };   /* tp1 — the Patcher lands a mod cable on the knob's own surface */   /* fb194 — probe surface */
   window.__tiAddNoteRoute=function(dest){ addNoteAssign(dest, elForDest(dest)); return assigns.length; };   /* fb559 — probe surface: KEY is the only source that holds still for a whole note, which is what makes it the one you can measure a CONNECTION CURVE with */
   /* fb453 — PRUNE A DELETED DEVICE'S ROUTES. The rack calls this from fxRemove() with the
