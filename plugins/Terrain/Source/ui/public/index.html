@@ -12229,7 +12229,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               if(rnd()<R.exotic){ S.push({whl:1}); S.push({at:1}); S.push({bend:1}); S.push({alt:1}); for(var r=1;r<=4;r++) S.push({rnd:r}); for(var f=1;f<=7;f++) S.push({fol:f}); }
               return S; }
             function tagOf(S){ return S.lfo?'lfo'+S.lfo:S.env?'env'+S.env:S.mac?'mac'+S.mac:S.vel?'vel':S.note?'key':S.whl?'whl':S.at?'at':S.bend?'bend':S.rnd?'rnd'+S.rnd:S.fol?'fol'+S.fol:'alt'; }
-            function mroll(){
+            function mroll(){ if(window.__tiBatchBegin) window.__tiBatchBegin(); try{
               var R=MR[mlvl]||MR.heavy, big=(mlvl==='wild'||mlvl==='crazy');
               (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
               for(var n=1;n<=R.lfo;n++){ var L='LFO'+n+'_', sh=rnd()<R.wide?Math.floor(rnd()*11):pick([0,0,1,2]);
@@ -12247,7 +12247,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 var t=window.__tiAddSrc?window.__tiAddSrc(sc,d):null; if(!t) continue;
                 var dep=bt(R.dep[0],R.dep[1])*(rnd()<.3?-1:1);
                 if(window.__tiSetDepth) window.__tiSetDepth(t,d,dep); made++; }
-              return made; }
+              return made; } finally { if(window.__tiBatchEnd) window.__tiBatchEnd(); } }
             window.__modDice=function(l){ if(MLV.indexOf(l)>=0) mlvl=l; var r=mroll(); return r; };   /* tp16 — the Patcher's dice menu calls this with ITS reach */
             window.__modDiceLvl=function(){ return mlvl; };
           })();
@@ -33134,7 +33134,17 @@ restoreThemeFromBackend();
   window.__tiHideModMeter = hideAtt;
 
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
-  var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
+  /* tp19 — BATCHED PUSHES. A dice roll removes every route and adds up to 32, and every one of those used to
+     serialise the WHOLE matrix, push it to native and re-walk the DOM (markTargets). fb640 already found JUCE's
+     quadratic escape of a big JSON string once. That flood starves the message thread — and the pool-builder
+     timer with it, which is what left the routed rack devices dark (SynthVoice tp19). Inside a batch, pushes
+     and walks are deferred; the roll ends with ONE of each. */
+  var __tiBatchDepth=0, __tiPushDirty=false, __tiMarkDirty=false;
+  window.__tiBatchBegin=function(){ __tiBatchDepth++; };
+  window.__tiBatchEnd=function(){ if(__tiBatchDepth>0) __tiBatchDepth--; if(__tiBatchDepth) return;
+    var p=__tiPushDirty, m=__tiMarkDirty; __tiPushDirty=__tiMarkDirty=false; if(m) markTargets(); if(p) push(); };
+  var pushFn=null; function push(){ if(__tiBatchDepth){ __tiPushDirty=true; return; }   /* tp19 — deferred to __tiBatchEnd */
+    try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
     lastLocalEdit=Date.now();   /* fb524 — the mirror's prune stands down while a local edit is still in flight */
     if(window.__cardOnly&&!restoredOnce) return;   /* fb524 — a card's assigns are a MIRROR: pushing before the first getSynthMod lands would write an empty matrix over a live one */
     var arr=assigns.map(function(a){ var o={s:encodeSrc(a),d:a.dest,v:+a.depth.toFixed(4)};   /* fb563 — one codec (encodeSrc / decodeSrc) for the encoder, the decoder and the popped card */
@@ -33391,7 +33401,8 @@ restoreThemeFromBackend();
     if(assigns.length>=128)return; var a={note:1,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function addFollowAssign(k,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].fol===k&&assigns[i].dest===dest) return;
     if(assigns.length>=128)return; var a={fol:k,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
-  function markTargets(){ document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
+  function markTargets(){ if(__tiBatchDepth){ __tiMarkDirty=true; return; }   /* tp19 */
+    document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
   function routeFor(el){ var sm=window.__selMod||{}, first=null, hit=null;   /* fb188 — the underline's depth drag edits the SELECTED modulator's route here, else the first */
     assigns.forEach(function(a){ if(curEl(a)!==el)return; if(!first)first=a;
       if(srcKey(a)===srcKey(sm))hit=a; });   /* fb262 — velocity joins the selected-source test · fb552 followers too */
@@ -42868,7 +42879,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
               var mk=d.knobs[3]; if(mk&&mk.p){ var mr=FXMIX[core]||[.25,.5]; P(mk.p, Math.min(.95, between(mr[0],mr[1])*R.mix*(aim==='pads'&&core==='reverb'?1.25:1))); } }
             if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
               (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]) P(kn[2], between(lo, hot?.6:hi)); }); } }); },
-      function(){ toast('Wiring the modulation…'); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
+      function(){ toast('Wiring the modulation…'); if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
           var dpool=[];
           var tapeOn=rnd()<Math.max(R.tape,big?.45:0)&&(aim==='pads'||aim==='keys'||aim==='textures'||aim==='bass'||big), tapeMach=Math.floor(rnd()*3);   /* tp12 — decided first: its knobs come up and join the targets */
           if(tapeOn){ rollTape(lvl,P); [1887,1888,1889].forEach(function(d){ dpool.push({d:d,k:'tape'}); }); }
@@ -42901,7 +42912,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             if((lvl==='wild'||lvl==='crazy')&&lfoN&&rnd()<.4) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },11+1,between(.3,.8)); });   /* wild: an envelope swells LFO 1's depth */
           var chain=[]; if((aim==='plucks'||aim==='keys')&&rnd()<.4) chain.push('arp'); if(aim==='pads'&&rnd()<.2) chain.push('drift'); if(rnd()<(aim==='textures'?Math.max(R.gli,.45):R.gli)) chain.push('glitch'); window.__flowSetChain&&window.__flowSetChain(chain);
           if(chain.indexOf('glitch')>=0){ try{ if(window.__tiDiceMode) window.__tiDiceMode('gli',big); }catch(e){} }   /* Glitch re-rolled whole — every lane, grid and effect; wide on heavy / wild */
-          setToggle('tape-toggle',tapeOn); if(tapeOn) setMachine(tapeMach); setToggle('loop-toggle',false); },
+          setToggle('tape-toggle',tapeOn); if(tapeOn) setMachine(tapeMach); setToggle('loop-toggle',false); if(window.__tiBatchEnd) window.__tiBatchEnd(); },
       function(){ track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); pool.forEach(function(o){ var d=oscDev(o); if(d) d.classList.toggle('osc-off',on.indexOf(o)<0); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){}
           setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },350);   /* the cards read back the knobs the dice wrote */
           adoptFx(); syncPresence(); sync(); commit(); glideTidy(); tool.classList.remove('dis'); toast('A new '+aim+' preset · '+lvl+' — play it'); }); } ];

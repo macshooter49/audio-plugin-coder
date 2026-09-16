@@ -1,0 +1,217 @@
+diff --git a/plugins/Terrain/Source/ParameterIDs.hpp b/plugins/Terrain/Source/ParameterIDs.hpp
+index 557d9c5..ccdfbde 100644
+--- a/plugins/Terrain/Source/ParameterIDs.hpp
++++ b/plugins/Terrain/Source/ParameterIDs.hpp
+@@ -1330,7 +1330,17 @@ namespace ParameterIDs
+     constexpr char SYN_BOD_TYPE[]   = "SYN_BOD_TYPE";    constexpr char SYN_BOD_POWER[]  = "SYN_BOD_POWER";
+     constexpr char SYN_BOD_ACTIVE[] = "SYN_BOD_ACTIVE";  constexpr char SYN_BOD_RANK[]   = "SYN_BOD_RANK";
+ 
+-    constexpr int  kFxInstances = 6;                  // per device type (1 legacy + 5 extra)
++    constexpr int  kFxInstances = 8;                  // tp18 — per device type (1 legacy + 7 extra). Max: "infinite everything".
++    //  WHY 8 AND NOT MORE: kChainMax = kFxKinds * this = 16 * 8 = 128, which is exactly
++    //  FxChainTopology::kMaxSlots — and that ceiling is the WIDTH OF SlotMask, the per-slot
++    //  bitmask over upstream slots. 12 would need a 192-bit SlotMask and a rewrite of the
++    //  topology's feed/consumed/eff logic; raising the number alone builds green and is
++    //  silent UB (FxChainTopology.h says so in three places). 8 fits every ceiling as it is:
++    //  kPoolSends = 3*kFxExtra + 13*8 = 125 <= 128, so poolBuilt_ still holds in two words.
++    //  Widening this is APPEND-ONLY by construction: instance 1 keeps its bare IDs and 2..n take a digit,
++    //  so every saved patch and automation lane stays valid. What does NOT follow automatically: the mod
++    //  matrix (SynthModConfig.h appends a SECOND block rather than restriding the first), kGrnSendBase
++    //  (= 3 * kFxExtra, not a literal), RouteSnapshot::kPools, and FX_MAXINST in index.html.
+     constexpr char SYN_FX_RANK_SUFFIX[]   = "_RANK";
+     constexpr char SYN_FX_ACTIVE_SUFFIX[] = "_ACTIVE";
+     // Legacy instance-1 chain membership (the three shipped devices).
+diff --git a/plugins/Terrain/Source/PluginProcessor.cpp b/plugins/Terrain/Source/PluginProcessor.cpp
+index fa7b9d7..27fdc0e 100644
+--- a/plugins/Terrain/Source/PluginProcessor.cpp
++++ b/plugins/Terrain/Source/PluginProcessor.cpp
+@@ -21,6 +21,13 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
+ #include <string_view>
+ #include "PresetCarries.h" // fb632 — what a preset carries, counted where it is played (the file, the sheet, the heal)
+ 
++//  tp18 — THE POOL WIDTH AND THE MOD MATRIX MOVE TOGETHER. kFxModInstsTotal cannot name
++//  ParameterIDs::kFxInstances (ParameterIDs.hpp includes SynthModConfig.h), so the agreement is
++//  asserted here, where both are visible. Widen one without the other and instances past the
++//  mod matrix get no destinations — a silent half-feature, which is worse than a build error.
++static_assert (wc::kFxModInstsTotal == ParameterIDs::kFxInstances,
++               "tp18 - SynthModConfig.h kFxModInstsTotal must equal ParameterIDs::kFxInstances");
++
+ static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
+ #include "ParametricEQ.h"
+ #include <cmath>
+@@ -8118,7 +8125,7 @@ void TerrainAudioProcessor::cacheFxModRefs()
+     // Bounds are the ARRAY's own dimensions (PluginProcessor.h asserts kFxInstances == kFxModInsts),
+     // so a bumped constant cannot leave the loop and the table disagreeing.
+     for (int k = 0; k < wc::kFxModKinds; ++k)
+-      for (int i = 0; i < wc::kFxModInsts; ++i)
++      for (int i = 0; i < wc::kFxModInstsTotal; ++i)
+         for (int n = 0; n < wc::kFxModKnobs; ++n)
+         {
+             fxModRef_[k][i][n] = nullptr;
+@@ -8132,15 +8139,15 @@ void TerrainAudioProcessor::cacheFxModRefs()
+             if (ref != nullptr) ++resolved;
+         }
+     fxModRefsResolved_ = resolved;
+-    jassert (resolved == kFxModLive * wc::kFxModInsts);   // 184 x 6 = 1,104
++    jassert (resolved == kFxModLive * wc::kFxModInstsTotal);   // tp18 — 184 x 8
+ 
+     // fb457 — the reverse table the viz feed walks: every live cell as (parameter, destination),
+     // sorted by parameter so publishFxModEff() can binary-search a slot and then step across the
+     // aliases that share it. Built HERE, on the message thread, so the audio thread never allocates.
+     fxEffByPtr_.clear();
+-    fxEffByPtr_.reserve ((size_t) (kFxModLive * wc::kFxModInsts));
++    fxEffByPtr_.reserve ((size_t) (kFxModLive * wc::kFxModInstsTotal));
+     for (int k = 0; k < wc::kFxModKinds; ++k)
+-      for (int i = 0; i < wc::kFxModInsts; ++i)
++      for (int i = 0; i < wc::kFxModInstsTotal; ++i)
+         for (int n = 0; n < wc::kFxModKnobs; ++n)
+           if (fxModRef_[k][i][n] != nullptr)
+             fxEffByPtr_.push_back ({ (const void*) fxModRef_[k][i][n], wc::fxModDest (k, i, n) });
+diff --git a/plugins/Terrain/Source/PluginProcessor.h b/plugins/Terrain/Source/PluginProcessor.h
+index 5d8683a..a8f211c 100644
+--- a/plugins/Terrain/Source/PluginProcessor.h
++++ b/plugins/Terrain/Source/PluginProcessor.h
+@@ -2565,7 +2565,11 @@ private:
+     // the fb350 POOL LAW applied structurally. One code path for every instance means a per-block
+     // engine call can never exist for instance 1 and not for a duplicate — the bug class simply
+     // cannot be written here. Granular is new, so there is no historical instance-1 ID to protect.
+-    static constexpr int kGrnSendBase  = 15;
++    static constexpr int kGrnSendBase  = 3 * kFxExtra;   // tp18 — WAS the literal 15 (= 3 kinds x 5 extras).
++    //  🚨 delay + distortion + reverb pool only 2..n, so they occupy 3 * kFxExtra slots. At kFxInstances 6
++    //  that is 15 and the literal was right; at 12 it is 33, and a literal 15 would have laid granular
++    //  straight on top of reverb's sends. The top-end static_asserts below cannot see that overlap —
++    //  they only check the LAST base still fits — so this had to become arithmetic, not a number.
+     static constexpr int kTpeSendBase  = kGrnSendBase + ParameterIDs::kFxInstances;    // 21 — fb365 tape
+     static constexpr int kFltSendBase  = kTpeSendBase + ParameterIDs::kFxInstances;    // 27 — fb377 filter
+     static_assert (kFltSendBase + ParameterIDs::kFxInstances
+@@ -2987,8 +2991,8 @@ private:
+     // 🚨 EVERY bound comes from the SAME constant cacheFxModRefs() loops on. Hand-typed 16/6/12
+     //    here would let a bumped constant walk this array off its end with no diagnostic, and this
+     //    codebase has bumped exactly this class of constant before (kMaxSlots 96->128, fb444).
+-    std::atomic<float>* fxModRef_[wc::kFxModKinds][wc::kFxModInsts][wc::kFxModKnobs] {};
+-    static_assert (ParameterIDs::kFxInstances == wc::kFxModInsts,
++    std::atomic<float>* fxModRef_[wc::kFxModKinds][wc::kFxModInstsTotal][wc::kFxModKnobs] {};   // tp18 — as deep as the POOL
++    static_assert (ParameterIDs::kFxInstances == wc::kFxModInstsTotal,
+                    "fb453 - the rack's instance count and the destination block's must agree: "
+                    "fxModDest() reserves kFxModInsts slots per kind, and cacheFxModRefs() walks "
+                    "one row per plugin instance. Bump one without the other and either the array "
+diff --git a/plugins/Terrain/Source/SynthModConfig.h b/plugins/Terrain/Source/SynthModConfig.h
+index ff93f51..bc50a06 100644
+--- a/plugins/Terrain/Source/SynthModConfig.h
++++ b/plugins/Terrain/Source/SynthModConfig.h
+@@ -258,7 +258,14 @@ enum class ModDest : int
+     //    Wow/Saturation/Hiss), resolved in the processor's GLOBAL pass. Appended at the tail (saved routes store ints);
+     //    generated Linear01 x 1.0 rows (makeDestInfo's tail loop). index.html's createFxKnob stamps 1887..1889.
+     TapeSlot1, TapeSlot2, TapeSlot3,
+-    NumDests
++    // tp18 — THE APPENDED FX BLOCK (rack instances 7..12). The FIRST block (FxModBase..FxModEnd)
++    //  is FROZEN. Re-striding it — which is what raising kFxModInsts would do — moves every
++    //  destination above it and re-points every route in every saved patch, exactly as the
++    //  asserts below warn. So the new instances land HERE, past everything that already has a
++    //  number, and fxModDest() branches on the instance index. Nothing below moves by one.
++    FxMod2Base,
++    FxMod2End = FxMod2Base + 16 * 6 * 12,
++    NumDests  = FxMod2End
+ };
+ 
+ static_assert ((int) ModDest::DstMorph == 693,
+@@ -272,19 +279,34 @@ static_assert ((int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiA == 1850,
+ static_assert ((int) ModDest::UniRangeA == 1854 && (int) ModDest::UniWarpA  == 1858
+             && (int) ModDest::WarpVarA  == 1862 && (int) ModDest::Warp2VarA == 1866
+             && (int) ModDest::PhaseOffA == 1870 && (int) ModDest::PhaseAmtA == 1874
+-            && (int) ModDest::MacroDest1 == 1878 && (int) ModDest::TapeSlot1 == 1887 && (int) ModDest::NumDests == 1890,
++            && (int) ModDest::MacroDest1 == 1878 && (int) ModDest::TapeSlot1 == 1887
++            && (int) ModDest::FxMod2Base == 1890 && (int) ModDest::NumDests == 3042,
+     "fb522 - the JS mod-dest menu mirrors these ints (index.html KNOBDEST); a shift here re-points every saved overpass route. NumDests was 1854 before this block was appended. "
+     "fb565 - index.html stamps the Macros view from window.__MACRO_DEST=1878 (ModDest::MacroDest1); Tests/mod_source_gate.py reads both");
+ 
+ inline constexpr int kFxModKinds = 16, kFxModInsts = 6, kFxModKnobs = 12;
++//  tp18 — kFxModInsts is the width of ONE block and must never change; kFxModInstsTotal is how
++//  many instances exist. Instances 0..5 address the frozen first block, 6..11 the appended one.
++//  A LITERAL, deliberately: ParameterIDs.hpp includes THIS file, so naming it here is a cycle.
++//  PluginProcessor.cpp sees both and static_asserts them equal — the codebase's own idiom for
++//  "these constants move together", enforced by the compiler instead of by memory.
++inline constexpr int kFxModInstsTotal = 8;
++static_assert (kFxModInstsTotal <= 2 * kFxModInsts,
++               "tp18 - a THIRD fx mod block is needed before kFxInstances passes 12");
+ inline constexpr int fxModDest (int kind, int inst, int knob) noexcept
+-{ return (int) ModDest::FxModBase + (kind * kFxModInsts + inst) * kFxModKnobs + knob; }
++{ return inst < kFxModInsts
++       ? (int) ModDest::FxModBase  + (kind * kFxModInsts + inst)                 * kFxModKnobs + knob
++       : (int) ModDest::FxMod2Base + (kind * kFxModInsts + (inst - kFxModInsts)) * kFxModKnobs + knob; }
+ inline constexpr bool isFxModDest (int d) noexcept
+-{ return d >= (int) ModDest::FxModBase && d < (int) ModDest::FxModEnd; }   // fb467 — FxModEnd, NOT NumDests
++{ return (d >= (int) ModDest::FxModBase  && d < (int) ModDest::FxModEnd)        // fb467 — FxModEnd, NOT NumDests
++      || (d >= (int) ModDest::FxMod2Base && d < (int) ModDest::FxMod2End); }    // tp18 — instances 7..12
+ struct FxModAddr { int kind, inst, knob; };
+ inline constexpr FxModAddr fxModDecode (int d) noexcept
+-{ const int o = d - (int) ModDest::FxModBase;
+-  return FxModAddr { o / (kFxModInsts * kFxModKnobs), (o / kFxModKnobs) % kFxModInsts, o % kFxModKnobs }; }
++{ const bool second = d >= (int) ModDest::FxMod2Base;
++  const int o = d - (second ? (int) ModDest::FxMod2Base : (int) ModDest::FxModBase);
++  return FxModAddr { o / (kFxModInsts * kFxModKnobs),
++                     ((o / kFxModKnobs) % kFxModInsts) + (second ? kFxModInsts : 0),
++                     o % kFxModKnobs }; }
+ 
+ // How a normalized modulation sum is converted to the parameter's real units.
+ enum class ModDomain : int { Semitone = 0, Linear01, Bipolar };
+diff --git a/plugins/Terrain/Source/SynthVoice.h b/plugins/Terrain/Source/SynthVoice.h
+index c25f68f..333bd83 100644
+--- a/plugins/Terrain/Source/SynthVoice.h
++++ b/plugins/Terrain/Source/SynthVoice.h
+@@ -139,7 +139,7 @@ namespace tw
+ //    sides are the audio thread; the version is what tells a voice it is behind.
+ struct RouteSnapshot
+ {
+-    static constexpr int kPools = 93;
++    static constexpr int kPools = 125;   // tp18 — must equal kPoolSends (static_assert below)
+     float hall[6] {}, dly[6] {}, dst[6] {}, ex[6] {};
+     float* rsL = nullptr; float* rsR = nullptr; float* dsL = nullptr; float* dsR = nullptr;
+     float* dtL = nullptr; float* dtR = nullptr; float* exL = nullptr; float* exR = nullptr;
+@@ -3369,7 +3369,7 @@ class SynthVoice : public juce::SynthesiserVoice
+         // The filter pair is heap-allocated ON DEMAND (message thread) the first time that
+         // instance is routed, so an unrouted instance costs nothing: eager members would be
+         // 10 extra FilterSlot PAIRS x 96 voices.
+-        static constexpr int kPoolSends = 93;              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape · fb377 — + 6 filter · fb413 — + 6 chorus + 6 flanger + 6 phaser · fb426 — + 6 equalizer + 6 widen + 6 compress + 6 ott · fb444 — + 6 bode + 6 utility + 6 splitter
++        static constexpr int kPoolSends = 125;   // tp18 — 3*kFxExtra (21) + 13 kinds * kFxInstances (104). Was 93 at 6 instances; <= 128 keeps poolBuilt_ at two words.              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape · fb377 — + 6 filter · fb413 — + 6 chorus + 6 flanger + 6 phaser · fb426 — + 6 equalizer + 6 widen + 6 compress + 6 ott · fb444 — + 6 bode + 6 utility + 6 splitter
+                                                            // ⚠️ must equal PluginProcessor::kPoolSendCount
+         void setPoolSendTarget (int s, float* L, float* R) noexcept
+         { if ((unsigned) s < kPoolSends) { poolSend_[s].L = L; poolSend_[s].R = R; } }
+diff --git a/plugins/Terrain/Source/ui/public/index.html b/plugins/Terrain/Source/ui/public/index.html
+index c800f56..3a570e4 100644
+--- a/plugins/Terrain/Source/ui/public/index.html
++++ b/plugins/Terrain/Source/ui/public/index.html
+@@ -10487,7 +10487,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
+           // `||1`: one card works and duplication does not, which is the fb381 FX_PREFIX bug one
+           // registry over. The fx3 UI gate now asks for EIGHT of each and requires exactly six
+           // back, so a missing entry here cannot pass.
+-          var FX_MAXINST={reverb:6,delay:6,saturate:6,granular:6,tape:6,flt:6,cho:6,fla:6,pha:6,eqz:6,wid:6,cmp:6,ott:6,bod:6,utl:6,spl:6};   // fb352 — reverb duplicates too: its engines
++          var FX_MAXINST={reverb:8,delay:8,saturate:8,granular:8,tape:8,flt:8,cho:8,fla:8,pha:8,eqz:8,wid:8,cmp:8,ott:8,bod:8,utl:8,spl:8};   /* tp18 — the pool doubled; ParameterIDs::kFxInstances is the truth and this mirrors it */   // fb352 — reverb duplicates too: its engines
+ 
+           var DEV_TEMPLATES=[
+             {name:'Reverb',core:'reverb',type:'Hall',types:['Hall','Room','Plate','Spring','Digital','Vintage','Basin','Shimmer','Convolution'],preset:'Cave',code:'rt 2.4s',on:false,pwrP:'SYN_RVB_POWER',tp:'SYN_RVB_TYPE',rp:['SYN_RVB_SRC_A','SYN_RVB_SRC_B','SYN_RVB_SRC_C','SYN_RVB_SRC_D','SYN_RVB_SRC_SUB','SYN_RVB_SRC_NOISE'],
+@@ -10813,16 +10813,21 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
+              Splitter/Type combination can leave a back cell DEAD (fb447) — gets NO attribute, so
+              a hole is never a drop target. */
+           var FXMOD_BASE=694, FXMOD_KINDS=16, FXMOD_INSTS=6, FXMOD_KNOBS=12, FXMOD_FRONT=4;   /* knobs 0..3 are the front dials */
++          /* tp18 — instances 7..12 address an APPENDED block at 1890 (ModDest::FxMod2Base). The first
++             block is frozen: re-striding it would re-point every saved route. Mirrors SynthModConfig.h. */
++          var FXMOD2_BASE=1890, FXMOD_INSTS_TOTAL=8;
+           var FXMOD_KIND={reverb:0,delay:1,saturate:2,granular:3,tape:4,flt:5,cho:6,fla:7,pha:8,
+                           eqz:9,wid:10,cmp:11,ott:12,bod:13,utl:14,spl:15};
+           function fxModDest(core,inst,knob){ var k=FXMOD_KIND[core]; if(k==null) return null;
+-            var i=(inst||1)-1; if(i<0||i>=FXMOD_INSTS||!(knob>=0&&knob<FXMOD_KNOBS)) return null;
+-            return FXMOD_BASE+(k*FXMOD_INSTS+i)*FXMOD_KNOBS+knob; }
++            var i=(inst||1)-1; if(i<0||i>=FXMOD_INSTS_TOTAL||!(knob>=0&&knob<FXMOD_KNOBS)) return null;
++            return (i<FXMOD_INSTS) ? FXMOD_BASE +(k*FXMOD_INSTS+i)*FXMOD_KNOBS+knob
++                                   : FXMOD2_BASE+(k*FXMOD_INSTS+(i-FXMOD_INSTS))*FXMOD_KNOBS+knob; }
+           /* the attribute, or nothing at all — dead/absent cells must not become droppable */
+           function fxModAttr(core,inst,knob,dead){ if(dead) return '';
+             var d=fxModDest(core,inst,knob); return d==null?'':(' data-mod-dest="'+d+'"'); }
+           window.__fxModDest=fxModDest;   // headless gate hook
+-          function fxModIsDest(d){ return d>=FXMOD_BASE && d<FXMOD_BASE+FXMOD_KINDS*FXMOD_INSTS*FXMOD_KNOBS; }   /* mirrors isFxModDest() in SynthModConfig.h */
++          function fxModIsDest(d){ var w=FXMOD_KINDS*FXMOD_INSTS*FXMOD_KNOBS;
++            return (d>=FXMOD_BASE && d<FXMOD_BASE+w) || (d>=FXMOD2_BASE && d<FXMOD2_BASE+w); }   /* mirrors isFxModDest() in SynthModConfig.h — tp18: both blocks */
+           /* ═══ fb453 — THE KNOB'S VALUE, FROM THE RACK'S OWN MODEL ══════════════════════════════
+              The underline's depth territory is anchored at (1−depth)·knobValue, so the mark needs
+              the dial's 0..1 value every frame. It cannot come from Juce.getSliderState(): the rack

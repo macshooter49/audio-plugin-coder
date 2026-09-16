@@ -3524,6 +3524,28 @@ class SynthVoice : public juce::SynthesiserVoice
                 { poolF1[nPoolAct] = P.flt1.load (std::memory_order_acquire); poolF2[nPoolAct] = P.flt2.load (std::memory_order_acquire);
                   poolAct[nPoolAct++] = ps; }
             }
+            // tp19 — THE PULL FOLLOWS THE SEND. Max: "it's almost like a gate in the blockage." Since tp12 a
+            //  source the rack pulls leaves the main buses outright (exKeep_), and setExclusionRoutes derived
+            //  that from the processor's PILL union — lit the instant a route pill lights. But a pooled send only
+            //  comes on once the message thread has built its filter pair (poolOn, fb631), and the tape/granular
+            //  pairs wait for their engine on top. In that window the source was gone and nothing returned it:
+            //  one timer tick in a DAW, forever in a host with no message loop, and forever when the message thread
+            //  is starved (a dice roll pushing the whole matrix 32 times). Measured on the installed AU: Multiband
+            //  and Widen ROUTED and POWERED ON rendered -180 dBFS until the timer ran. So the pull is derived HERE,
+            //  per block, from the sends that are RUNNING this block — a lit pool pair, or a live legacy send — and
+            //  capped by the processor's union so it can never pull MORE than before. An unbuilt pair is a bypass:
+            //  the source plays dry until the send can take it (fb351: a device that is not processing must not
+            //  break the chain). With every send lit this is byte-identical to the union.
+            {
+                float lit[6] = { 0, 0, 0, 0, 0, 0 };
+                for (int pq = 0; pq < nPoolAct; ++pq)
+                { const auto& P = poolSend_[poolAct[pq]]; for (int k = 0; k < 6; ++k) lit[k] = std::max (lit[k], P.g[k]); }
+                if (sendActive)    for (int k = 0; k < 6; ++k) lit[k] = std::max (lit[k], rvbG_[k]);
+                if (dlySendActive) for (int k = 0; k < 6; ++k) lit[k] = std::max (lit[k], dlyG_[k]);
+                if (dstSendActive) for (int k = 0; k < 6; ++k) lit[k] = std::max (lit[k], dstG_[k]);
+                for (int k = 0; k < 6; ++k)
+                    exKeep_[k] = 1.0f - juce::jlimit (0.0f, 1.0f, std::min (exG_[k], lit[k]));
+            }
             // Per-block routing coefficients (independent + dry-bypass model): each source
             // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
             // → dry if in neither. Multiply-by-0/1 keeps the per-sample sum branchless.
