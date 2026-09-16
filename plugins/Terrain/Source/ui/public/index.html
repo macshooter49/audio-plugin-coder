@@ -42368,7 +42368,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function oscDev(o){ return q('#osc-'+o+'-device'); }
   function oscOn(o){ var d=oscDev(o); return !!(d&&!d.classList.contains('osc-off')); }
   function setOscOn(o,on){ var d=oscDev(o); setP(OX(o)+'ENABLE',on?1:0); if(d) d.classList.toggle('osc-off',!on);
-    if(on){ setP(OX(o)+'PHASE',.5); setP(OX(o)+'PHASE_AMT',1); setP(OX(o)+'PHASE_MODE',choiceNorm(OX(o)+'PHASE_MODE',2,4)); } }   /* tp12 — a created oscillator starts at 180° with 100 % random phase (Max) */
+    if(on) phase180(OX(o),setP); }   /* tp12b — a created oscillator sits at 180°, aligned (Max) */
   function adoptAll(){ if(nodes.length){ try{ returnAll(); }catch(e){} } nodes=[]; nodesEl.innerHTML=''; measureHome();
     mkNode('midi','midi',null).body.innerHTML='<div class="tp-end tp-viz"><div class="tp-keys">'+'wbwbwwbwbwbw'.split('').map(function(k){return '<i class="'+(k==='b'?'bk':'')+'"></i>';}).join('')+'</div></div>';
     oscList().forEach(function(o){ if(oscOn(o)) adoptOsc(o); });
@@ -42614,6 +42614,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       if(!pool.length) return; var c=pick(pool); window.__sampLoadPath(o, d.path+'/'+c+'/'+pick(d.cats[c])); }); }
   function modalSample(o){ oneShot(o,'percussion',true); }
   var SAMPR={light:.25,medium:.4,heavy:.5,wild:.6}, BLENDR={light:.15,medium:.35,heavy:.6,wild:.8};
+  /* tp12b — HARD RULE (Max): EVERY oscillator this plugin summons sits at PHASE 180°, and it is the ALIGNED mode (0 =
+     the note starts at PHASE/360 every time), never Random — a random 180 is not 180. PHASE_AMT is ignored by that mode
+     (resolvePhase case 0) and stays at 100. */
+  function phase180(X,P){ P(X+'PHASE', .5); P(X+'PHASE_AMT', 1); P(X+'PHASE_MODE', choiceNorm(X+'PHASE_MODE', 0, 4)); }
   /* the sample engines' own knobs, rolled (Max: "loop them, reverse them, chop them, stretch them, formant-shift them"). SCAN is −1..+1 (0.75
      normalised = 1x forward; below the middle plays BACKWARDS); FORMANT −1..+1 (0.5 = none). */
   function rollSample(X,eng,aim,lvl,P){ var big=(lvl==='heavy'||lvl==='wild'), wild=lvl==='wild', S=X+'SAMPLE_';
@@ -42645,7 +42649,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var perc=aim==='percussion', modal=perc?rnd()<.85:((aim==='keys'||aim==='plucks'||aim==='textures')&&rnd()<R.modal), samp=!modal&&rnd()<(SAMPR[lvl]||.4)*(aim==='bass'?.6:1), fm=!modal&&!samp&&rnd()<(aim==='bass'?.45:.3), harm=!modal&&!samp&&aim==='textures'&&rnd()<.35;   /* percussion = the Modal engine, struck */
     var seng=!samp?0:(aim==='pads'||aim==='textures')?pick([1,2,2,3,3]):(aim==='plucks'||aim==='keys'||aim==='bass')?pick([1,1,1,2,3]):pick([1,1,2,3]);   /* tp12 — Sample 1 · Granular 2 · Resynth 3, each with one of Max's one-shots */
     P(X+'ENGINE', choiceNorm(X+'ENGINE', modal?6:samp?seng:harm?5:fm?4:0, 7));
-    P(X+'PHASE', .5); P(X+'PHASE_AMT', 1); P(X+'PHASE_MODE', choiceNorm(X+'PHASE_MODE', 2, 4));   /* tp12 — Max: every randomized oscillator at 180° with 100 % random phase (Mode = Random) */   /* Engine enum: WT 0 · SAMP 1 · GRAN 2 · SPEC 3 · FM 4 · HARM 5 · MODAL 6 */
+    phase180(X,P);   /* tp12b — HARD RULE (Max): 180°, ALIGNED — "I shouldn't see an oscillator that isn't 180" */   /* Engine enum: WT 0 · SAMP 1 · GRAN 2 · SPEC 3 · FM 4 · HARM 5 · MODAL 6 */
     P(X+'LEVEL',.78); P(X+'PAN',.5+(i%2?1:-1)*between(.05,.2)); P(X+'WT_PRESET',rnd()); P(X+'WT_FRAME',rnd());
     P(X+'WARP_MODE',rnd()); P(X+'WARP_AMOUNT',between(R.warp[0],R.warp[1])); P(X+'WARP2_MODE',rnd()<R.w2?rnd():0); P(X+'WARP2_AMT',between(R.warp[0],R.warp[1])*0.7);
     P(X+'SPECTRAL_TYPE',rnd()); P(X+'SPECTRAL_AMT',between(0,.4)); if(rnd()<R.spec){ P(X+'SPECTRAL_LO',between(0,.3)); P(X+'SPECTRAL_HI',between(.5,1)); }
@@ -42715,7 +42719,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var Ro=window.__fltRoster, NF1=27; try{ var ck=Ro&&Ro.check?Ro.check():null; if(ck&&ck.count>1) NF1=ck.count; }catch(e){}
     function ftype(musical){ var ti=musical?pick(aim==='bass'||aim==='leads'?[0,0,4,5]:[0,5,0,1]):Math.floor(rnd()*NF1); return Ro&&Ro.norm?Ro.norm(ti):ti/(NF1-1); }
     var step=0, steps=[
-      function(){ toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); if(!isOn) return; rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
+      function(){ toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); phase180(X,P); if(!isOn) return;   /* tp12b — 180° on ALL of them, on or off */ rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
           blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); },
       function(){ toast('Shaping the filters…'); f2On=rnd()<R.f2;
           P('SYN_FILTER1_TYPE',ftype(!big||rnd()<.35)); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65],percussion:[.45,.8]}[aim];

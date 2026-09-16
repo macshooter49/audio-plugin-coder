@@ -4367,7 +4367,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_A_PHASE_MODE, 1 },
         "Synth OSC A Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+               // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
+               // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
+               // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.
+               // fb532's note, kept because it is still the reason Phase and Rand are reachable at all:
+               // fb532 — DEFAULT WAS RANDOM, and that is what makes a fresh patch actually PHASE.
                // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
                // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
                // the measured start phase marched CONTINUOUSLY across a Phase sweep
@@ -4583,7 +4588,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PHASE_MODE, 1 },
         "Synth OSC B Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+               // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
+               // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
+               // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.
+               // fb532's note, kept because it is still the reason Phase and Rand are reachable at all:
+               // fb532 — DEFAULT WAS RANDOM, and that is what makes a fresh patch actually PHASE.
                // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
                // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
                // the measured start phase marched CONTINUOUSLY across a Phase sweep
@@ -4771,7 +4781,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PHASE_MODE, 1 },
         "Synth OSC C Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+               // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
+               // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
+               // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.
+               // fb532's note, kept because it is still the reason Phase and Rand are reachable at all:
+               // fb532 — DEFAULT WAS RANDOM, and that is what makes a fresh patch actually PHASE.
                // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
                // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
                // the measured start phase marched CONTINUOUSLY across a Phase sweep
@@ -4959,7 +4974,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PHASE_MODE, 1 },
         "Synth OSC D Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+               // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
+               // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
+               // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.
+               // fb532's note, kept because it is still the reason Phase and Rand are reachable at all:
+               // fb532 — DEFAULT WAS RANDOM, and that is what makes a fresh patch actually PHASE.
                // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
                // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
                // the measured start phase marched CONTINUOUSLY across a Phase sweep
