@@ -87,3 +87,14 @@ Counted before any engine work, so the next session starts from facts, not the p
    `_SRC_x` route params for the new letters, mod-destination table growth, and the page's devices cloned per letter. Faster to land, more RAM.
 Either way the order stays: parameters + gather → voice → relays → page devices → mod/FX routes → golden run → Max hears it.
 **The Patcher is ready for it**: it lists oscillators from `window.__oscPool` (falls back to A–D) and adopts any that report on.
+
+## Built 2026-09-16 (tp20) — what landed, and how
+- **Oscillators E–H** landed as **voice banks** (the second way above): a second `UnisonSynth` of unmodified voices, the one
+  block gather run once per bank through a pointer-keyed id remap (`rawParamB`, `OscBankIds.h`, generated), a mirrored
+  mod-destination block at `OscBank2Base = 1890`, per-bank change gates and route snapshot, 10-bit rack source masks.
+  Bank 0 is bit-identical by construction; the bank is built lazily when an E–H oscillator is switched on. Parameters are
+  CLONED from oscillator B through a tap on `createParameterLayout`. The page adopts E–H onto the Patcher canvas.
+- **Arp / Chop / Glitch × 4** landed; the chain is 16 slots of (kind, instance). **Robin stays one** — it is the voice
+  allocator's brain (per-oscillator note stages = voice groups, step 4, still open).
+- Still open from the list above: the compiled bus graph / per-branch buses (step 1), cable level + mute (2), voice
+  groups (4), feedback and Terrain FX's patcher (5); the rack 6→8 (`Design/pool-widening-tp18.patch`).

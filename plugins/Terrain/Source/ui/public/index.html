@@ -866,7 +866,7 @@ window.__ctlMenuRows = (function () { var byEl = new WeakMap(), matchers = [];
 /* fb82 — POPPED-CARD BOOT FLAG. A popped-out FLOW extension card is this SAME page
    loaded in its own native window with ?card=<id>; sniffed synchronously here (before
    any CSS/JS) so the card-only chrome applies from frame one — no full-UI flash. */
-window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod|lfo|crv)/)||[])[1]||'';   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */   /* fb328 — crv = the Distortion curve card. ⚠️ THIS regex is the SECOND card-id whitelist (the first is popOutCardWindow's in C++) — miss it and the popped window boots the FULL UI as a mini Terrain */
+window.__cardOnly=(location.search.match(/[?&]card=((?:arp|chop|gli)[2-4]?|rbn|mod|lfo|crv)/)||[])[1]||'';   /* tp20 — an instance digit rides along */   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */   /* fb328 — crv = the Distortion curve card. ⚠️ THIS regex is the SECOND card-id whitelist (the first is popOutCardWindow's in C++) — miss it and the popped window boots the FULL UI as a mini Terrain */
 window.__bootPage=+((location.search.match(/[?&]page=([1-5])/)||[])[1]||0);   /* tp1 — 5 = the Patcher */   /* fb514 -- reopen lands on the saved panel: C++ appends ?page=N (processor uiPage atomic) so the panel applies at PARSE time -- the hero never paints, no flash, no reopen CPU spike */
 /* fb103 — CRISP AT ANY SIZE: the editor's settled pageZoom is pushed here; the
    devicePixelRatio the page sees becomes base×zoom (capped 3 for CPU), so every
@@ -5185,6 +5185,10 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .osc-slot { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 #syn-panel .osc-slot > .device.osc { flex: 1; min-height: 0; }
 #syn-panel .device.osc.osc-hidden { display: none; }
+#syn-panel .osc-pool-home { display: none; }                                   /* tp20 — E–H live on the Patcher canvas only */
+#syn-panel .fxr-r.fxr-pool { display: none; }                                  /* tp20 — the rack's E–H pills show once the pool is awake */
+body.tp-pool-awake #syn-panel .fxr-r.fxr-pool { display: flex; }
+.tp-inst { position: absolute; right: 3px; top: 2px; font-size: 9px; font-weight: 600; opacity: .75; pointer-events: none; }   /* tp20 — a Flow instance badge */
 /* PURE TRANSPARENT oscillators — dissolve the card; everything floats on the panel like the filter/LFO/FLOW. */
 #syn-panel .device.osc { background: transparent; border-color: transparent; box-shadow: none; }
 /* + (back-panel) button: glyph only, no box — scoped to oscillators so the filter's own + is untouched. */
@@ -8853,6 +8857,20 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         </div>
 
 
+        <!-- tp20 — THE OSCILLATOR POOL: E–H are clones of B's device, minted at parse time and parked here
+             (display:none). The Patcher adopts one onto its canvas the moment it is switched on; the synth
+             page keeps its A/B and C/D slots as they were. -->
+        <div id="osc-pool-home" class="osc-pool-home"></div>
+        <script>
+        (function(){ try{ var src=document.getElementById('osc-b-device'), home=document.getElementById('osc-pool-home'); if(!src||!home) return;
+          var html=src.outerHTML;
+          ['e','f','g','h'].forEach(function(L){ var U=L.toUpperCase();
+            var h=html.replace(/SYN_OSC_B_/g,'SYN_OSC_'+U+'_').replace(/osc-b-/g,'osc-'+L+'-').replace(/data-osc="b"/g,'data-osc="'+L+'"')
+                      .replace(/data-oscl="b"/g,'data-oscl="'+L+'"').replace(/data-slot="ab"/g,'data-slot="pool"').replace(/>B<\/text>/g,'>'+U+'</text>');
+            home.insertAdjacentHTML('beforeend',h); });
+          window.__oscPoolDevices=['e','f','g','h']; }catch(e){ try{ console.warn('[tp20] pool devices', e); }catch(_){} } })();
+        </script>
+
         <!-- Row 2: FILTER · FLOW -->
         <div class="row-filter-vl">
           <div class="device filter" id="filter-device">
@@ -10887,6 +10905,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var t=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core===core) t=DEV_TEMPLATES[i];
             if(!t) return null;
             var c=JSON.parse(JSON.stringify(t));            // deep clone: instances never share state
+            if(c.rp&&c.rp.length===6&&c.route&&c.route.length===6){   /* tp20 — the E–H pills, derived from the A pill's id */
+              ['E','F','G','H'].forEach(function(L){ c.rp.push(c.rp[0].replace(/_SRC_A$/,'_SRC_'+L)); c.route.push(0); }); }
             var base=FX_PREFIX[core], pre=instPrefix(core,inst);
             if(pre!==base) reIdDeep(c,base,pre);
             c.inst=inst; c.pfx=pre;
@@ -12265,7 +12285,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              stayed in memory — so neither mechanism fired on a preset load. */
           window.__fxrRestoreChain=function(){ try{ fxrRestoreChain(); }catch(e){} };
           window.__fltTick=fltTick; window.__fxDevs=function(){ return DEVS; };   // fb382 — headless gate hooks
-          var RLBL=['A','B','C','D','S','N'];
+          var RLBL=['A','B','C','D','S','N','E','F','G','H'];   /* tp20 — 6..9 = bank 1 (shown while the pool is awake) */
           // fb281 — TYPE-AWARE reverb back panel. Same 8 APVTS slots per type, relabeled + own Character/2nd
           // dropdown. Room repurposes Mod Rate→Reflections & Mod Mode→Shape (matches the RoomReverb mapping).
           var RVB_PIDS=['SYN_RVB_PREDELAY','SYN_RVB_DIFFUSE','SYN_RVB_MODDEPTH','SYN_RVB_MODRATE','SYN_RVB_HIDAMP','SYN_RVB_LOWDECAY','SYN_RVB_LOWCUT','SYN_RVB_WIDTH'];
@@ -12779,7 +12799,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                Splitter's twelve lane glyphs are state only (the lane menu drives them). */
             var coreN=(d.core==='utl')?3:(d.core==='spl'?12:0);   /* fb450 — three lamps */
             var pills=d.pills.slice(coreN).map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
-            var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
+            var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+(i>=6?' fxr-pool':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
             /* ═══ fb415 — 🔑 THE FIRST-SLOT LAW (Max, HARD RULE) ═══════════════════════════
                SEND APPEARS ON THE FIRST DEVICE IN THE CHAIN AND NOWHERE ELSE. Max: "it only
                needs to be on the first effect... everything after every effect gets added, it
@@ -14489,6 +14509,60 @@ if (
     getNativeFunction: getNativeFunction,
     getSliderState: getSliderState,
   };
+})();
+</script>
+
+<script>
+/* ══ tp20 — THE POOL'S PAGE SEAMS ═════════════════════════════════════════════════════════════════
+   Oscillators E–H (a second voice bank) and the Flow cards' instances 2..4 exist in the engine as appended
+   parameters with NO WebSliderRelay (fb82: a relay serves one WebView; the relay list is already 1,300
+   long). Their knobs ride the POOL SLIDER STATE below: the same interface a relay state has, backed by ONE
+   batched native read (getSynParams, every 700 ms while the UI is awake) and setSynParam writes. Every
+   binder in this file asks window.Juce.getSliderState(id) — so the wrapper here is the one seam. */
+var OSC_LETTERS = ['a','b','c','d','e','f','g','h'];
+window.__oscPool = OSC_LETTERS.slice();                                     /* the Patcher lists oscillators from here */
+window.__oscBank = function(o){ return 'efgh'.indexOf(String(o||'').toLowerCase()) >= 0 ? 1 : 0; };
+window.__oscBankLetters = function(o){ return window.__oscBank(o) ? ['e','f','g','h'] : OSC_LETTERS; };
+window.__oscBankIndex = function(o){ var i = 'abcdefgh'.indexOf(String(o||'').toLowerCase()); return i < 0 ? -1 : i % 4; };
+window.OSCBANK2_BASE = 1890; window.FLOWINST_BASE = 3780; window.FLOW_SPAN = 473; window.FLOW_TIME_DEST = 8;   /* mirrors SynthModConfig.h (static_assert-pinned) */
+window.__oscDestOf = function(o, legacyDest){ return window.__oscBank(o) ? window.OSCBANK2_BASE + legacyDest : legacyDest; };
+window.__flowInstDest = function(inst, d){ inst = inst|0; if (inst <= 1 || d < window.FLOW_TIME_DEST || d >= 481) return d; return window.FLOWINST_BASE + (inst - 2) * window.FLOW_SPAN + (d - window.FLOW_TIME_DEST); };
+(function(){
+  var real = window.Juce.getSliderState, pool = {}, ids = [], gf = null, sf = null, cf = null;
+  var RX = [/^SYN_OSC_[E-H]_/, /^FLOW_(ARP|SEQ|CHOP|GLI)[2-4]_/, /^FLOW_CHAIN_(INST_\d+|1\d|[5-9])$/, /^SYN_[A-Z0-9]+_SRC_[E-H]$/];
+  function isPool(id){ id = String(id||''); for (var i = 0; i < RX.length; i++) if (RX[i].test(id)) return true; return false; }
+  window.__isPoolParam = isPool;
+  function nf(n){ try{ return window.Juce.getNativeFunction(n); }catch(e){ return null; } }
+  function fire(st){ for (var i = 0; i < st.__ls.length; i++){ try{ st.__ls[i](); }catch(e){} } }
+  function mk(id){
+    var st = { __id:id, __v:0, __ls:[], __card:0, __seen:false,
+      getNormalisedValue:function(){ return st.__v; },
+      setNormalisedValue:function(n){ n = Math.max(0, Math.min(1, +n || 0)); st.__v = n; st.__seen = true; sf = sf || nf('setSynParam'); if (sf){ try{ sf(id, n); }catch(e){} } fire(st); if (/_ENABLE$/.test(id)) poolAwakeSync(); },
+      getScaledValue:function(){ var c = st.__card || (window.__paramCardinality ? window.__paramCardinality(id) : 0); return c > 1 ? st.__v * (c - 1) : st.__v; },
+      valueChangedEvent:{ addListener:function(f){ st.__ls.push(f); } },
+      sliderDragStarted:function(){}, sliderDragEnded:function(){},
+      properties:{ start:0, end:1, interval:0, skew:1, numSteps:0 } };
+    pool[id] = st; ids.push(id);
+    cf = cf || nf('getParamCardinality');
+    if (cf){ try{ Promise.resolve(cf(id)).then(function(c){ c = c|0; if (c > 1){ st.__card = c; st.properties.numSteps = c; window.__cardinalityCache = window.__cardinalityCache || {}; window.__cardinalityCache[id] = c; } }).catch(function(){}); }catch(e){} }
+    return st; }
+  window.Juce.getSliderState = function(id){ return isPool(id) ? (pool[id] || mk(id)) : real(id); };
+  window.__poolSliderState = function(id){ return pool[id] || mk(id); };
+  var busy = false;
+  function poll(){
+    if (busy || !ids.length) return; gf = gf || nf('getSynParams'); if (!gf) return; busy = true;
+    var list = ids.slice();
+    try{ Promise.resolve(gf(list.join(','))).then(function(res){ busy = false;
+      var parts = String(res || '').split(','); if (parts.length !== list.length) return;
+      for (var i = 0; i < list.length; i++){ var st = pool[list[i]], nv = parseFloat(parts[i]); if (!st || isNaN(nv)) continue;
+        if (!st.__seen || Math.abs(nv - st.__v) > 0.0005){ st.__v = nv; st.__seen = true; fire(st); } }
+      poolAwakeSync(); }).catch(function(){ busy = false; }); }catch(e){ busy = false; } }
+  /* the pool is AWAKE when any E–H oscillator is on: the rack's E–H pills show, the browser stops hinting */
+  function poolAwakeSync(){ var awake = false; ['E','F','G','H'].forEach(function(L){ var st = pool['SYN_OSC_' + L + '_ENABLE']; if (st && st.__v > 0.5) awake = true; });
+    try{ document.body.classList.toggle('tp-pool-awake', awake); }catch(e){} }
+  window.__poolAwakeSync = poolAwakeSync;
+  var t = 0; setInterval(function(){ t++; if (window.__uiParked) return; if ((t & 3) && window.__tiRest && window.__tiRest()) return; poll(); }, 700);
+  window.addEventListener('tiactive', poll); setTimeout(poll, 400); setTimeout(poll, 1600);
 })();
 </script>
 
@@ -17717,7 +17791,7 @@ document.getElementById('eq-bypass-btn').addEventListener('click', () => {
 // entirely — unlike volume 0, which kept it silently burning CPU.
 setTimeout(function wireOscEnable () {
   try {
-    ['a', 'b', 'c', 'd'].forEach(function (o) {
+    OSC_LETTERS.forEach(function (o) {
       var dev = document.getElementById('osc-' + o + '-device'); if (! dev) return;
       var lab = dev.querySelector('.device-label'); if (! lab) return;
       var st = null;
@@ -17833,7 +17907,7 @@ function __synTablePid (o) {
 // the osc letter behind a header table <select> — '' for every OTHER [data-syn] control, which is
 // what keeps this branch scoped to the four osc headers and nothing else.
 function __synTableOsc (el) {
-  try { var m = /^osc-([a-d])-preset-select$/.exec ((el && el.id) || ''); return m ? m[1] : ''; } catch (e) { return ''; }
+  try { var m = /^osc-([a-h])-preset-select$/.exec ((el && el.id) || ''); return m ? m[1] : ''; } catch (e) { return ''; }
 }
 var __synTableSaid = {};
 function __synTableState (o, fallback) {
@@ -17938,7 +18012,7 @@ setTimeout(function wireSynControls () {
     // 7-choice param) — dedicated handler instead.
     try {
       var ENGINE_NAMES = ['Wavetable','Sample','Granular','Resynth','FM','Harmonic','Modal']; // by param index 0..6
-      ['a','b','c','d'].forEach(function (o) {
+      OSC_LETTERS.forEach(function (o) {
         var disp = document.getElementById ('osc-' + o + '-engine-display');
         var sel  = document.getElementById ('osc-' + o + '-engine-select');
         if (! disp || ! sel || ! window.Juce || ! window.Juce.getSliderState) return;
@@ -18071,7 +18145,7 @@ setTimeout(function wireSynControls () {
              repaints the sample family and re-kicks the Resynth painter. Cheap: a single rAF, and
              only for a device that actually owns one of these views. */
           try {
-            var oL = (dev.id || '').replace (/^osc-([a-d])-device$/, '$1');
+            var oL = (dev.id || '').replace (/^osc-([a-h])-device$/, '$1');
             if (oL && oL.length === 1) {
               if (window.__oscFaceHeal) window.__oscFaceHeal (oL);   /* fb635 — the one heal (sample family · Resynth · waterfall) */
             }
@@ -18212,7 +18286,7 @@ setTimeout(function wireSynControls () {
     //    HEALERS: per-frame re-query, TIME watchdog wipe back to the bare flatline. ──
     try {
       var HV = {};
-      ['a','b','c','d'].forEach (function (o) { HV[o] = { t: null, cur: null, seen: 0 }; });
+      OSC_LETTERS.forEach (function (o) { HV[o] = { t: null, cur: null, seen: 0 }; });
       function hvNow () { return (window.performance && performance.now) ? performance.now () : Date.now (); }
       window.updateHarmViz = function (o, white) {
         try { var st = HV[o]; if (! st) return; st.t = white; st.seen = hvNow (); } catch (e) {}
@@ -19206,7 +19280,7 @@ setTimeout(function wireSynControls () {
       setInterval (function () {
         try {
           if (! window.__followT || Date.now () - window.__followT < 700) return;
-          ['a', 'b', 'c', 'd'].forEach (function (o) {
+          OSC_LETTERS.forEach (function (o) {
             var S = SAMP[o], fl = window.__geodeFollow && window.__geodeFollow[o], on = !! (fl && fl.length);
             if (! on && S && S.phPool) for (var k = 0; k < S.phPool.length; k++) if (S.phPool[k]._on) { on = true; break; }
             if (! on) return;
@@ -20431,7 +20505,7 @@ setTimeout(function wireSynControls () {
             /* fb635 — a revealed back oscillator heals its face NOW (fb590's page-flip law, which the slot letter never
                had): the one-shot / granular / modal picture, the Resynth painter, and its 3D waterfall. */
             slot.querySelectorAll('.device.osc:not(.osc-hidden)').forEach(function(d){
-              var oL=(d.id||'').replace(/^osc-([a-d])-device$/,'$1'); if(oL.length===1&&window.__oscFaceHeal) window.__oscFaceHeal(oL);
+              var oL=(d.id||'').replace(/^osc-([a-h])-device$/,'$1'); if(oL.length===1&&window.__oscFaceHeal) window.__oscFaceHeal(oL);
             });
           });
         });
@@ -20623,7 +20697,7 @@ setTimeout(function wireSynControls () {
         function famMode (m) { return (m >= 1 && m <= 4) || m === 6 || m === 9 || m === 10; }   // fb553 — 6 = audio-rate Warp · fb551 — takes a SOURCE. Mirrors blendIsLive() in SynthVoice.h; fb470's law lives on this side of the wall too.
         var NSRC  = 17;                                                          // SRC choices: Osc A..D / Sub / Noise / Self / LFO 1-10 (fb223 — MUST equal the C++ srcs StringArray count)
         var bstate = {};                                                         // "a1" -> {mode,src,depth}  (display source of truth)
-        function st  (o, s) { var k = o + s; return bstate[k] || (bstate[k] = { mode: 0, src: ('abcd'.indexOf(o) + 1) % 4, depth: 0 }); }
+        function st  (o, s) { var k = o + s; return bstate[k] || (bstate[k] = { mode: 0, src: (window.__oscBankIndex(o) + 1) % 4, depth: 0 }); }
         function pid (o, s, p) { return 'SYN_OSC_' + o.toUpperCase() + '_WSLOT' + s + '_' + p; }
         function wMode (o, s, m) { st(o, s).mode = m; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'MODE'), m / (MODES.length - 1)); }
         function wSrc  (o, s, v) { st(o, s).src  = v; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'SRC'),  v / (NSRC - 1)); }
@@ -20653,7 +20727,7 @@ setTimeout(function wireSynControls () {
         }
 
         function menu (pill, o, s, x, y) {
-          var b = st(o, s), items = [], ci = 'abcd'.indexOf(o);
+          var b = st(o, s), items = [], ci = window.__oscBankIndex(o);
           items.push({ isHeader: true, label: 'Blend ' + s + ' · Osc ' + o.toUpperCase() });
           MENU_FAM.forEach(function (m) {
             var mi = MODES.indexOf(m), on = (mi === 0) || P1ON[m];
@@ -20664,7 +20738,7 @@ setTimeout(function wireSynControls () {
           });
           if (famMode(b.mode)) {   // fb551 — FM / PD / AM / RM + FM Exp / FM Clamp all take a source. Without this the two new modes would show in the menu, store in the patch, and offer NO WAY to pick what modulates them.
             items.push({ isHeader: true, label: 'Source' });
-            ['a','b','c','d'].forEach(function (so) { if (so === o) return; var si = 'abcd'.indexOf(so);
+            window.__oscBankLetters(o).forEach(function (so) { if (so === o) return; var si = window.__oscBankIndex(so);   /* tp20 — a source is a bank-mate */
               items.push({ label: 'Osc ' + so.toUpperCase(), isChecked: (b.src === si), keepOpen: true,
                 onPick: function () { wSrc(o, s, si); paintLabel(pill, o, s); menu(pill, o, s, x, y); } }); });
             items.push({ label: 'Noise', isChecked: (b.src === 5), keepOpen: true,   // fb64 — blend an osc WITH the noise (any mode)
@@ -20711,7 +20785,7 @@ setTimeout(function wireSynControls () {
         document.querySelectorAll('#syn-panel .back-only .blend-pills').forEach(function (row) {
           var dev = row.closest('.device.osc'); if (!dev || !dev.id) return;
           var o = dev.id.charAt(4);   // 'osc-a-device' -> 'a'
-          if ('abcd'.indexOf(o) < 0) return;
+          if ('abcdefgh'.indexOf(o) < 0) return;
           var pills = row.querySelectorAll('.blend-pill');
           for (var i = 0; i < pills.length && i < 4; ++i) wire(pills[i], o, i + 1);   // B1..B4 (Mix/Mod pills removed 2026-07-13)
         });
@@ -20747,9 +20821,9 @@ setTimeout(function wireSynControls () {
       try {
         document.querySelectorAll ('#syn-panel .blend-pill.fmix-pill').forEach (function (pill) {
           var dev = pill.closest ('.device.osc'); if (! dev || ! dev.id) return;
-          var oi = 'abcd'.indexOf (dev.id.charAt (4)); if (oi < 0) return;
+          var oi = 'abcdefgh'.indexOf (dev.id.charAt (4)); if (oi < 0) return;
           var fno = (pill.getAttribute ('data-fmix') === 'SYN_FILTER2_MIX') ? 2 : 1;   // markup key kept; meaning = THIS osc's send
-          var id = 'SYN_OSC_' + 'ABCD'.charAt (oi) + '_F' + fno + 'MIX';
+          var id = 'SYN_OSC_' + 'ABCDEFGH'.charAt (oi) + '_F' + fno + 'MIX';
           pill.setAttribute ('data-mod-dest', String ((fno === 2 ? 362 : 358) + oi));   // per-osc send mod dests
           var txt = pill.querySelector ('.bp-txt'); var name = txt ? txt.textContent : '';
           var fill = document.createElement ('div'); fill.className = 'fmix-fill'; pill.insertBefore (fill, pill.firstChild);
@@ -33230,7 +33304,9 @@ restoreThemeFromBackend();
     'SUB_RANGE':346,'SUB_FORM':350,'UNISON':354,                                    // fb78 — Sub Octave/Shape + Unison Voices (stepped)
     'PHASE':1870,'PHASE_AMT':1874,                                                  // fb532 — note-on phase + randomisation (ModDest::PhaseOffA / PhaseAmtA, +1 per osc)
     'F1MIX':358,'F2MIX':362 };                                                      // fb79 — per-osc filter sends (the F1/F2 pills)
-    ['A','B','C','D'].forEach(function(L,i){ Object.keys(F).forEach(function(sfx){ KNOBDEST['SYN_OSC_'+L+'_'+sfx]=F[sfx]+i; }); }); })();
+    ['A','B','C','D'].forEach(function(L,i){ Object.keys(F).forEach(function(sfx){ KNOBDEST['SYN_OSC_'+L+'_'+sfx]=F[sfx]+i; }); });
+    /* tp20 — oscillators E–H: every A–D destination has a twin at OSCBANK2_BASE + d (SynthModConfig.h: OscBank2Base = 1890) */
+    Object.keys(KNOBDEST).forEach(function(k){ var m=/^SYN_OSC_([A-D])_(.+)$/.exec(k); if(m) KNOBDEST['SYN_OSC_'+String.fromCharCode(m[1].charCodeAt(0)+4)+'_'+m[2]]=KNOBDEST[k]+window.OSCBANK2_BASE; }); })();
   // fb75 — filter knobs are SLOT-AWARE (the 1/2 tab picks the filter) → dest resolved at DROP like the cut emblem.
   var FSLOT_BACK ={ 'Mix':[62,63], 'Drive':[60,61], 'Env':[56,57], 'Vel':[340,341], 'Track':[342,343] };   // fb78 — the WHOLE back row routes now; front RES/DRV/ENV target the runtime .fk-em emblems
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
@@ -33588,7 +33664,7 @@ restoreThemeFromBackend();
      oscillator"); the noise's own name is the fifth. NO SUB — his exclusion. */
   (function armFollowGrips(){
     function arm(){
-      ['a','b','c','d'].forEach(function(o,i){
+      OSC_LETTERS.forEach(function(o,i){
         var d=document.getElementById('osc-'+o+'-device'); if(!d)return;
         var L=d.querySelector('.device-label'); if(!L)return;
         L.setAttribute('data-drag-follow',String(i+1));
@@ -34462,9 +34538,9 @@ restoreThemeFromBackend();
   // read like "modulate which osc is on"); osc Level/Pan route via the back-panel knobs (KNOBDEST),
   // where restored Level routes now badge too. Delayed so the other init IIFEs build their DOM first.
   setTimeout(function(){ try{
-    document.querySelectorAll('#syn-panel .device.osc').forEach(function(dev){ if(!dev.id) return; var o='abcd'.indexOf(dev.id.charAt(4)); if(o<0) return;
+    document.querySelectorAll('#syn-panel .device.osc').forEach(function(dev){ if(!dev.id) return; var o='abcdefgh'.indexOf(dev.id.charAt(4)); if(o<0) return;
       var pills=dev.querySelectorAll('.back-only .blend-pills .blend-pill');
-      for(var i=0;i<pills.length&&i<4;i++) pills[i].setAttribute('data-mod-dest', 76+o*4+i);
+      for(var i=0;i<pills.length&&i<4;i++) pills[i].setAttribute('data-mod-dest', (o>=4?window.OSCBANK2_BASE:0)+76+(o%4)*4+i);   /* tp20 — bank 1 mirrors */
     });
     var nk=document.querySelectorAll('#syn-panel .noise-knobs .knob');
     if(nk.length>=3){ nk[0].setAttribute('data-mod-dest',72); nk[1].setAttribute('data-mod-dest',73); nk[2].setAttribute('data-mod-dest',74); }
@@ -34543,25 +34619,39 @@ restoreThemeFromBackend();
        note stage wherever they sit. Chain params ride __synSliderShim (post-relay-ceiling;
        defined LATER in this file → bound post-parse via setTimeout 0). */
     var modeState=null; if(J){ try{ modeState=J.getSliderState('FLOW_MODE'); }catch(e){} }
-    var chainSt=[null,null,null,null], chainWriting=false;
-    function chainHandle(i){ if(!chainSt[i]&&window.__synSliderShim) chainSt[i]=window.__synSliderShim('FLOW_CHAIN_'+(i+1),0);
+    /* tp20 — THE FLOW POOL. A chain entry is a mode key with an optional instance digit: 'chop' is Chop 1 (the
+       fb131 meaning), 'chop2' is Chop 2. FLOW_CHAIN_1..16 hold the kinds, FLOW_CHAIN_INST_n the instance (0 = 1).
+       Slots 1..4 keep their fb131 shim; slots 5..16 and every INST ride the pool slider state (batched). */
+    var NSLOT=16, FLOW_IMAX={arp:4,chop:4,glitch:4,drift:1};
+    function fKind(m){ return String(m||'').replace(/\d+$/,''); }
+    function fInst(m){ var x=/(\d+)$/.exec(String(m||'')); return x?Math.max(1,parseInt(x[1],10)):1; }
+    function withInst(k,n){ return (n|0)>1?k+n:k; }
+    window.__flowKindOf=fKind; window.__flowInstOf=fInst; window.__flowWithInst=withInst; window.__flowInstMax=function(k){ return FLOW_IMAX[k]||1; };
+    var chainSt=[], instSt=[], chainWriting=false;
+    function chainHandle(i){ if(!chainSt[i]){ if(i<4){ if(window.__synSliderShim) chainSt[i]=window.__synSliderShim('FLOW_CHAIN_'+(i+1),0); }
+        else if(J){ try{ chainSt[i]=J.getSliderState('FLOW_CHAIN_'+(i+1)); }catch(e){} } }
       return chainSt[i]; }
-    function setChoiceParam(c){ if(!modeState)return; var idx=CHOICES.indexOf(c); if(idx<0)idx=0;
+    function instHandle(i){ if(!instSt[i]&&J){ try{ instSt[i]=J.getSliderState('FLOW_CHAIN_INST_'+(i+1)); }catch(e){} } return instSt[i]; }
+    function setChoiceParam(c){ if(!modeState)return; var idx=CHOICES.indexOf(fKind(c)); if(idx<0)idx=0;
       try{ modeState.setNormalisedValue(idx/(CHOICES.length-1)); }catch(e){} }
     function writeChain(){ chainWriting=true;
-      for(var i=0;i<4;i++){ var h=chainHandle(i), idx=i<chain.length?CHOICES.indexOf(chain[i]):0;
-        if(h){ try{ h.setNormalisedValue(Math.max(0,idx)/(CHOICES.length-1)); }catch(e){} } }
+      for(var i=0;i<NSLOT;i++){ var h=chainHandle(i), hi=instHandle(i), idx=i<chain.length?CHOICES.indexOf(fKind(chain[i])):0, ins=i<chain.length?fInst(chain[i]):1;
+        if(h){ try{ h.setNormalisedValue(Math.max(0,idx)/(CHOICES.length-1)); }catch(e){} }
+        if(hi){ try{ hi.setNormalisedValue(Math.max(0,Math.min(3,ins-1))/3); }catch(e){} } }
       setChoiceParam(chain[0]||'off'); chainWriting=false; }
     function chainFromParams(){ var out=[];
-      for(var i=0;i<4;i++){ var h=chainHandle(i); if(!h)continue; var idx=0;
+      for(var i=0;i<NSLOT;i++){ var h=chainHandle(i); if(!h)continue; var idx=0, ins=1;
         try{ idx=Math.round(h.getNormalisedValue()*(CHOICES.length-1)); }catch(e){}
-        var c=CHOICES[idx]; if(c&&c!=='off'&&out.indexOf(c)<0) out.push(c); }
+        var hi=instHandle(i); if(hi){ try{ ins=1+Math.round(hi.getNormalisedValue()*3); }catch(e){} }
+        var c=CHOICES[idx]; if(!c||c==='off') continue; if(c==='drift') ins=1; if(ins>(FLOW_IMAX[c]||1)) ins=1;
+        var m=withInst(c,ins); if(out.indexOf(m)<0) out.push(m); }
       return out; }
     function sameChain(a,b){ if(a.length!==b.length)return false;
       for(var i=0;i<a.length;i++){ if(a[i]!==b[i])return false; } return true; }
     var MIXP={arp:'FLOW_ARP_BLEND',chop:'FLOW_CHOP_BLEND',glitch:'FLOW_GLI_BLEND',drift:'FLOW_DRF_MORPH'};
+    function mixIdOf(m){ var id=MIXP[fKind(m)], n=fInst(m); if(!id) return null; return n>1?id.replace(/^(FLOW_[A-Z]+)_/,'$1'+n+'_'):id; }   /* tp20 — FLOW_ARP_BLEND -> FLOW_ARP2_BLEND */
     var mixH={};
-    function pushMixFull(m){ var id=MIXP[m]; if(!id)return;   // Max: "once selected, MIX = 100%"
+    function pushMixFull(m){ var id=mixIdOf(m); if(!id)return;   // Max: "once selected, MIX = 100%"
       if(!mixH[id]){ if(J){ try{ mixH[id]=J.getSliderState(id); }catch(e){} }
         if(!mixH[id]&&window.__synSliderShim) mixH[id]=window.__synSliderShim(id,1); }
       if(mixH[id]){ try{ mixH[id].setNormalisedValue(1); }catch(e){} } }
@@ -34580,7 +34670,7 @@ restoreThemeFromBackend();
       refreshKnobs(); }
     /* tp1 — the Patcher reads and writes the chain: a cable into a tile puts it in the chain, cutting it takes it out. */
     window.__flowChain=function(){ return chain.slice(); };
-    window.__flowSetChain=function(arr){ try{ var nc=[]; (arr||[]).forEach(function(m){ if(CHOICES.indexOf(m)>0&&nc.indexOf(m)<0) nc.push(m); });
+    window.__flowSetChain=function(arr){ try{ var nc=[]; (arr||[]).forEach(function(m){ m=String(m||''); var k=fKind(m), n=fInst(m); if(CHOICES.indexOf(k)<=0) return; if(k==='drift') n=1; if(n>(FLOW_IMAX[k]||1)) return; m=withInst(k,n); if(nc.indexOf(m)<0) nc.push(m); });
       nc.forEach(function(m){ if(chain.indexOf(m)<0) pushMixFull(m); }); chain=nc; if(chain.length&&chain.indexOf(displayMode)<0) displayMode=chain[chain.length-1];
       writeChain(); renderChain(); return true; }catch(e){ return false; } };
     // tile click — add to the chain, or click again to remove (cards still open on right-click)
@@ -34611,8 +34701,9 @@ restoreThemeFromBackend();
     setTimeout(function(){
       var pc=chainFromParams();
       if(pc.length&&!sameChain(pc,chain)){ chain=pc; displayMode=chain[chain.length-1]; renderChain(); }
-      for(var i=0;i<4;i++){ var h=chainHandle(i);
-        if(h&&h.valueChangedEvent&&h.valueChangedEvent.addListener) h.valueChangedEvent.addListener(onChainParam); }
+      for(var i=0;i<NSLOT;i++){ var h=chainHandle(i), hi=instHandle(i);
+        if(h&&h.valueChangedEvent&&h.valueChangedEvent.addListener) h.valueChangedEvent.addListener(onChainParam);
+        if(hi&&hi.valueChangedEvent&&hi.valueChangedEvent.addListener) hi.valueChangedEvent.addListener(onChainParam); }
     },0);
 
     /* fb114 — right-click glass BLEND menu removed (MIX lives in every card header;
@@ -34691,6 +34782,11 @@ restoreThemeFromBackend();
         'FLOW_GLI_SCT_AMT':468,'FLOW_GLI_SCT_VARY':469,'FLOW_GLI_SCT_WIDTH':470,'FLOW_GLI_BLEND':471,'FLOW_RBN_VARY':472,'FLOW_RBN_DRIFT':473,
         'FLOW_RBN_WOBBLE':474,'FLOW_RBN_LVL':475,'FLOW_RBN_PAN':476,'FLOW_RBN_AFTER':477,'FLOW_RBN_GLIDE':478,'FLOW_RBN_OVERLAP':479,
         'FLOW_RBN_FADE':480,'FLOW_GLI_VARY':23,'FLOW_GLI_TRAJ':24,'FLOW_GLI_MORPH':25,'FLOW_DRF_MORPH':25};
+      /* tp20 — the Flow pool's card knobs: FLOW_ARP2_X routes to the mirror of FLOW_ARP_X's destination
+         (SynthModConfig.h flowInstDest: FlowInstBase + (n-2)*473 + (d - FlowTime)). Robin stays one. */
+      try{ Object.keys(MODDEST).forEach(function(k){ var mm=/^FLOW_(ARP|SEQ|CHOP|GLI)_(.+)$/.exec(k); if(!mm) return;
+        for(var n=2;n<=4;n++) MODDEST['FLOW_'+mm[1]+n+'_'+mm[2]]=window.__flowInstDest?window.__flowInstDest(n,MODDEST[k]):MODDEST[k]; }); }catch(eM){ try{ console.warn('[tp20] flow dest mirror', eM); }catch(_){} }
+      window.__flowModDestOf=function(id){ return MODDEST[id]; };   /* tp20 — the probes read the table through this */
       function stampMod(card,BIND,S){
         /* fb145 — every continuous card control joins the LFO drop-target pool. The
            observer re-applies after rebuilds (fillDepth/fillEngine wipe their grids). */
@@ -34988,7 +35084,7 @@ restoreThemeFromBackend();
          snap strings passed through verbatim. Menu appends to document.body (the
          scoped-menu gotcha). */
       function presets(cfg){
-        var S=cfg.S;
+        var S=cfg.S, KIND=cfg.kind||cfg.id, FOLD=cfg.folder||KIND;   /* tp20 — instances share their kind's folder and its rules */
         /* fb168 — the TOPO DICE reach each card through the SAME state the presets own */
         window.__tiDice = window.__tiDice || {};
         window.__tiDice[cfg.id] = { S: cfg.S, DEF: cfg.DEF };
@@ -35010,16 +35106,16 @@ restoreThemeFromBackend();
         function mergeV(){ var o={},i,k; for(k in cfg.DEF)o[k]=cfg.DEF[k];
           for(i=0;i<arguments.length;i++){ var a=arguments[i]; if(a)for(k in a)o[k]=a[k]; } return o; }
         function mkSlot(p,delta){
-          if(cfg.id==='arp'){ var ab=JSON.parse(cfg.laneDef);
+          if(KIND==='arp'){ var ab=JSON.parse(cfg.laneDef);
             return JSON.stringify({v:mergeV(p.v,delta&&delta.v), lanes:(delta&&delta.lanes)||p.lanes||ab.lanes||ab}); }
-          if(cfg.id==='rbn') return JSON.stringify({ b:((delta&&delta.b)||p.b||[1,1,1,1]).slice(),
+          if(KIND==='rbn') return JSON.stringify({ b:((delta&&delta.b)||p.b||[1,1,1,1]).slice(),
                                                      v:mergeV(p.v,(delta&&delta.v)||delta) });
           return JSON.stringify(mergeV(p.v,delta)); }
         function apply(p){
           var v=mergeV(p.v);
-          if(cfg.id==='arp'){ var ab2=JSON.parse(cfg.laneDef);
+          if(KIND==='arp'){ var ab2=JSON.parse(cfg.laneDef);
             cfg.snapSet(JSON.stringify({v:v, lanes:p.lanes||ab2.lanes||ab2})); }
-          else if(cfg.id==='rbn'){ cfg.snapSet(JSON.stringify({ b:(p.b||[1,1,1,1]).slice(), v:v })); }
+          else if(KIND==='rbn'){ cfg.snapSet(JSON.stringify({ b:(p.b||[1,1,1,1]).slice(), v:v })); }
           else cfg.snapSet(JSON.stringify(v));
           var st=null;
           if(p.slots||p.chain){ st={ slots:{}, chain:(p.chain||[1]).slice() };
@@ -35034,7 +35130,7 @@ restoreThemeFromBackend();
         pas[0].addEventListener('click',function(e){ e.stopPropagation(); step(-1); });
         pas[1].addEventListener('click',function(e){ e.stopPropagation(); step(1); });
         function refresh(cb){ if(!listFn){ if(cb)cb(); return; }
-          try{ Promise.resolve(listFn(cfg.id)).then(function(x){
+          try{ Promise.resolve(listFn(FOLD)).then(function(x){
             try{ var a=JSON.parse(String(x||'[]')); user=[];
               for(var i=0;i<a.length;i++)if(a[i]&&a[i].name)user.push(a[i]);
               user.sort(function(a2,b2){ return a2.name<b2.name?-1:1; });
@@ -35043,8 +35139,8 @@ restoreThemeFromBackend();
         refresh();
         function collect(name){
           var o={ name:name }, k;
-          if(cfg.id==='rbn'){ var g=JSON.parse(cfg.snapGet()); o.b=g.b; o.v=g.v; }
-          else if(cfg.id==='arp'){ var ag=JSON.parse(cfg.snapGet()); o.v=ag.v; o.lanes=ag.lanes; }
+          if(KIND==='rbn'){ var g=JSON.parse(cfg.snapGet()); o.b=g.b; o.v=g.v; }
+          else if(KIND==='arp'){ var ag=JSON.parse(cfg.snapGet()); o.v=ag.v; o.lanes=ag.lanes; }
           else o.v=JSON.parse(cfg.snapGet());
           var st=cfg.sc.getState(), hasSlots=false;
           for(k in st.slots){ hasSlots=true; break; }
@@ -35065,7 +35161,7 @@ restoreThemeFromBackend();
            overwrites anything. */
         var saveArmed=false;
         function doSave(nm,payload){ saveArmed=false;
-          if(saveFn){ try{ saveFn(cfg.id,nm,JSON.stringify(payload||collect(nm))); }catch(e){} }
+          if(saveFn){ try{ saveFn(FOLD,nm,JSON.stringify(payload||collect(nm))); }catch(e){} }
           curName=nm; pn.textContent=nm; pillIs(nm);
           refresh(function(){ if(menu){ closeMenu(); buildMenu(); } }); }
         function beginSaveInput(rowEl){
@@ -35116,9 +35212,9 @@ restoreThemeFromBackend();
             pn.textContent=curName;
             if(commit&&nm&&nm!==old&&saveFn){
               var o=collect(nm);
-              try{ saveFn(cfg.id,nm,JSON.stringify(o)); }catch(e){}
+              try{ saveFn(FOLD,nm,JSON.stringify(o)); }catch(e){}
               var wasUser=false; for(var i=0;i<user.length;i++)if(user[i].name===old)wasUser=true;
-              if(wasUser&&delFn){ try{ delFn(cfg.id,old); }catch(e2){} }   // true rename for user presets
+              if(wasUser&&delFn){ try{ delFn(FOLD,old); }catch(e2){} }   // true rename for user presets
               curName=nm; pn.textContent=nm; pillIs(nm); refresh(); } }
           inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
             if(ev.key==='Enter')done(true); else if(ev.key==='Escape')done(false); });
@@ -35138,7 +35234,7 @@ restoreThemeFromBackend();
                 if(r.querySelector('input'))return;   /* fb138 — mid-rename clicks stay in the row */
                 apply(p); closeMenu(); });
               if(isUser){ r.querySelector('.dx').addEventListener('click',function(e){ e.stopPropagation();
-                if(delFn){ try{ delFn(cfg.id,p.name); }catch(e2){} }
+                if(delFn){ try{ delFn(FOLD,p.name); }catch(e2){} }
                 refresh(function(){ closeMenu(); openMenu(); }); });
                 /* fb138 — right-click a user preset's name = rename it in place (the saved
                    payload travels untouched; only the name changes) */
@@ -35156,8 +35252,8 @@ restoreThemeFromBackend();
                     var nm=(inp.value||'').trim();
                     if(commit&&nm&&nm!==nm0&&saveFn){
                       var np={}; for(var k2 in p)np[k2]=p[k2]; np.name=nm;
-                      try{ saveFn(cfg.id,nm,JSON.stringify(np)); }catch(e2){}
-                      if(delFn){ try{ delFn(cfg.id,nm0); }catch(e3){} }
+                      try{ saveFn(FOLD,nm,JSON.stringify(np)); }catch(e2){}
+                      if(delFn){ try{ delFn(FOLD,nm0); }catch(e3){} }
                       if(curName===nm0){ curName=nm; pn.textContent=nm; pillIs(nm); }
                       refresh(function(){ closeMenu(); buildMenu(); }); }
                     else nmEl.textContent=nm0; }
@@ -35259,7 +35355,7 @@ restoreThemeFromBackend();
     window.__TIC=TIC;   /* fb232 — the LFO card (shaper module) builds through the SAME factory */
 
     /* ───────── ARP · "Constellation" — the hero IS the pitch path ───────── */
-    var arpCard=(function(){
+    function makeArpCard(inst){ var SFX=inst>1?String(inst):'', PFX='FLOW_ARP'+SFX+'_', INST=inst-1;   /* tp20 — one factory, four instances */
       var built=null;
       var RATE_LIST=RATE_DIV_RICH.slice();
       var LANES=[['pitch','Pitch'],['gate','Gate'],['vel','Vel'],['oct','Oct'],['ratchet','Roll'],['prob','Chance'],['wt','Wave']];
@@ -35273,7 +35369,7 @@ restoreThemeFromBackend();
         prob:   [['amount','Amount',.8,TIC.inum(0,100)],['bias','Bias',.5,function(n){return String(Math.round((n-.5)*100));}],['seed','Seed',.44,TIC.inum(0,16)],['drift','Drift',0,TIC.inum(0,100)]],
         wt:     [['depth','Depth',.6,TIC.inum(0,100)],['curve','Curve',.45,TIC.inum(0,100)],['slide','Slide',.25,TIC.inum(0,100)],['random','Random',0,TIC.inum(0,100)]] };
       function build(){
-        var sh=TIC.shell({cls:'arp-ext',id:'arp',title:'Arp',mixId:'FLOW_ARP_BLEND',mixDef:1.0});
+        var sh=TIC.shell({cls:'arp-ext'+(SFX?' ti-inst ti-inst'+SFX:''),id:'arp'+SFX,kind:'arp',title:'Arp'+(SFX?' '+SFX:''),mixId:PFX+'BLEND',mixDef:1.0});
         var init={ lane:'pitch', rate:11, dir:0, octr:0, latch:1, sorted:0,
                    swing:0, mratch:0, timbre:.6, glide:.15 };
         for(var L in DEPTH) DEPTH[L].forEach(function(d){ init[L+'_'+d[0]]=d[2]; });
@@ -35386,8 +35482,8 @@ restoreThemeFromBackend();
         pb.querySelector('.togrow').appendChild(latchT); pb.querySelector('.togrow').appendChild(sortT);
         tp.panes.play.appendChild(pb);
         (function(){ var lst=null;   // FLOW_ARP_LATCH — live both surfaces
-          if(window.__cardOnly&&window.__synSliderShim){ lst=window.__synSliderShim('FLOW_ARP_LATCH',1); }
-          else if(J){ try{ lst=J.getSliderState('FLOW_ARP_LATCH'); }catch(e){} }
+          if(window.__cardOnly&&window.__synSliderShim){ lst=window.__synSliderShim(PFX+'LATCH',1); }
+          else if(J){ try{ lst=J.getSliderState(PFX+'LATCH'); }catch(e){} }
           if(!lst)return;
           try{ S.set('latch',lst.getNormalisedValue()>0.5?1:0); }catch(e){}
           if(lst.valueChangedEvent&&lst.valueChangedEvent.addListener)
@@ -35403,11 +35499,11 @@ restoreThemeFromBackend();
           var KN={range:'RANGE',curve:'CURVE',quant:'QUANT',slide:'SLIDE',length:'LEN',random:'RAND',
                   floor:'FLOOR',bias:'BIAS',spread:'SPREAD',count:'COUNT',decay:'DECAY',
                   chance:'AMT',amount:'AMT',seed:'SEED',drift:'DRIFT',depth:'DEPTH'};
-          var BIND={ rate:['FLOW_ARP_RATE',18,1], dir:['FLOW_ARP_DIR',3,0], octr:['FLOW_ARP_OCTR',3,0],
-                     sorted:['FLOW_ARP_SORTED',1,0], swing:['FLOW_ARP_SWING',0,0],
-                     mratch:['FLOW_ARP_MROLL',0,0], timbre:['FLOW_ARP_TIMBRE',0,0], glide:['FLOW_ARP_GLIDE',0,0] };
+          var BIND={ rate:[PFX+'RATE',18,1], dir:[PFX+'DIR',3,0], octr:[PFX+'OCTR',3,0],
+                     sorted:[PFX+'SORTED',1,0], swing:[PFX+'SWING',0,0],
+                     mratch:[PFX+'MROLL',0,0], timbre:[PFX+'TIMBRE',0,0], glide:[PFX+'GLIDE',0,0] };
           for(var L in DEPTH) DEPTH[L].forEach(function(d){
-            BIND[L+'_'+d[0]]=['FLOW_ARP_'+PRE[L]+'_'+KN[d[0]],0,0]; });
+            BIND[L+'_'+d[0]]=[PFX+PRE[L]+'_'+KN[d[0]],0,0]; });
           TIC.stampMod(sh.card,BIND,S);   /* fb145 — LFO drop targets · fb524 — S publishes the card's live value per dest (the anchor law) */
           Object.keys(BIND).forEach(function(key){
             var pid=BIND[key][0], steps=BIND[key][1], relay=BIND[key][2], h=null;
@@ -35433,12 +35529,13 @@ restoreThemeFromBackend();
           laneSetFn=window.Juce.getNativeFunction('setArpLanes');
           laneGetFn=window.Juce.getNativeFunction('getArpLanes');
           feedFn=window.Juce.getNativeFunction('getArpFeed'); } }catch(e){}
+        function laneSet(js){ if(laneSetFn){ try{ laneSetFn(js,INST); }catch(e){} } }   /* tp20 — this instance's lanes */
         var pushT=null;
         function pushLanes(){ if(!laneSetFn)return; clearTimeout(pushT);
-          pushT=setTimeout(function(){ try{ laneSetFn(JSON.stringify({steps:N,pitch:P.pitch,gate:P.gate,
+          pushT=setTimeout(function(){ try{ laneSet(JSON.stringify({steps:N,pitch:P.pitch,gate:P.gate,
             vel:P.vel,oct:P.oct,ratchet:P.ratchet,prob:P.prob,wt:P.wt})); }catch(e){} },120); }
         var P0=JSON.parse(JSON.stringify(P));   /* fb620 — the boot lanes: a preset without lanes lands here, not on the last preset's */
-        function pullLanes(){ if(!laneGetFn)return; try{ Promise.resolve(laneGetFn()).then(function(s){ var o=null; try{ o=JSON.parse(s||'null'); }catch(e){} o=o||{};
+        function pullLanes(){ if(!laneGetFn)return; try{ Promise.resolve(laneGetFn(INST)).then(function(s){ var o=null; try{ o=JSON.parse(s||'null'); }catch(e){} o=o||{};
           try{ for(var k in P) P[k]=(o[k]&&o[k].length)?o[k].slice(0,N).map(Number):P0[k].slice();
           heroPaint(); }catch(e){} }).catch(function(){}); }catch(e){} }
         pullLanes(); window.__tiPullArpLanes=pullLanes;
@@ -35493,8 +35590,8 @@ restoreThemeFromBackend();
             wt_depth:0,ratchet_chance:0,prob_amount:1}},
           {name:'Ambient Drift',v:{rate:7,dir:3,octr:2,latch:1,sorted:1,prob_amount:.6,prob_drift:.5,
             gate_length:1,glide:.3,vel_range:.3,vel_floor:.4,timbre:.25,wt_depth:.3,wt_slide:.5,ratchet_chance:0}} ];
-        TIC.presets({id:'arp',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,laneDef:snapGet(),factory:ARP_PRESETS});
-        TIC.cardSync('arp',sc,S,sh.card);
+        TIC.presets({id:'arp'+SFX,kind:'arp',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,laneDef:snapGet(),factory:ARP_PRESETS});
+        TIC.cardSync('arp'+SFX,sc,S,sh.card);
 
         sh.body.appendChild(hero); sh.body.appendChild(tp.tabs);
         sh.body.appendChild(tp.panes.pattern); sh.body.appendChild(tp.panes.play); sh.body.appendChild(tp.panes.motion);
@@ -35509,7 +35606,7 @@ restoreThemeFromBackend();
         var ARP_VMAX=Math.max.apply(null,RATE_LIST.map(TIC.stepsPerSec));   /* fb636 h3 — the playhead's fastest playing speed */
         var start=TIC.runLoop(sh.card,function(dt){
           if(feedFn&&!feedBusy){ feedBusy=true;
-            try{ Promise.resolve(feedFn()).then(function(fs){ feedBusy=false;
+            try{ Promise.resolve(feedFn(INST)).then(function(fs){ feedBusy=false;
               try{ feed=JSON.parse(fs); }catch(e){} }).catch(function(){ feedBusy=false; }); }
             catch(e){ feedBusy=false; } }
           var rp=false;
@@ -35545,12 +35642,13 @@ restoreThemeFromBackend();
         return { open:function(){ sh.open(); start(); heroPaint(); } }; }
       return { open:function(){ if(!built)built=build(); built.open(); },
                ensure:function(){ if(!built)built=build(); } };   /* fb168 — the dice build the card HIDDEN so its state exists before first open */
-    })();
+    }
+    var arpCard=makeArpCard(1);
     function openCard(){ arpCard.open(); }
     window.__tiEnsure=window.__tiEnsure||{}; window.__tiEnsure.arp=function(){ arpCard.ensure(); };
 
     /* ───────── GLITCH · "Monitor" — the screen shows the buffer being mangled ───────── */
-    var gliCardObj=(function(){
+    function makeGliCard(inst){ var SFX=inst>1?String(inst):'', PFX='FLOW_GLI'+SFX+'_', INST=inst-1;   /* tp20 */
       var built=null;
       var FX=[['rep','Rep','Repeat'],['rev','Rev','Reverse'],['tape','Tape','Tape Stop'],['gate','Gate','Gate'],
               ['pit','Pit','Pitch'],['crsh','Crsh','Crush'],['frz','Frz','Freeze'],['sct','Sct','Scatter']];
@@ -35579,7 +35677,7 @@ restoreThemeFromBackend();
         frz:{grain:'FRZ_SIZE',spray:'FRZ_SPRAY',shimmer:'FRZ_SHINE',melt:'FRZ_MELT'},
         sct:{windowk:'SCT_SIZE',density:'SCT_AMT',jitter:'SCT_VARY',width:'SCT_WIDTH'} };
       function build(){
-        var sh=TIC.shell({cls:'gli-ext',id:'gli',title:'Glitch',mixId:'FLOW_GLI_BLEND',mixDef:1.0});
+        var sh=TIC.shell({cls:'gli-ext'+(SFX?' ti-inst ti-inst'+SFX:''),id:'gli'+SFX,kind:'gli',title:'Glitch'+(SFX?' '+SFX:''),mixId:PFX+'BLEND',mixDef:1.0});
         var init={ chance:.5, dejavu:0, hold:0, loop:2, decay:0, omode:0, drop:0, burst:0, ping:0, selFx:'rep',
                    grate:11, quant:2, release:0, swing:0, chaos:0, bend:0,
                    syncf:1, seed:0 };
@@ -35823,8 +35921,8 @@ restoreThemeFromBackend();
                    3:{en_sct:1,chance:1,grate:14,sct_density:.8,sct_jitter:.5},
                    4:{en_rep:0,en_pit:1,chance:1,grate:5,hold:5,pit_ratio:0,pit_glidek:.25,dejavu:1}},
             chain:[1,2,3,4]} ];
-        TIC.presets({id:'gli',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,factory:GLI_PRESETS});
-        TIC.cardSync('gli',sc,S,sh.card);
+        TIC.presets({id:'gli'+SFX,kind:'gli',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,factory:GLI_PRESETS});
+        TIC.cardSync('gli'+SFX,sc,S,sh.card);
 
         sh.body.appendChild(scr); sh.body.appendChild(tp.tabs);
         sh.body.appendChild(tp.panes.fire); sh.body.appendChild(tp.panes.fx); sh.body.appendChild(tp.panes.motion);
@@ -35834,20 +35932,20 @@ restoreThemeFromBackend();
            macros are the SAME knob here (Chance=VARY, Grid=RATE, Swing=MORPH,
            Chaos=TRAJ — relay when docked); everything else rides the shim. */
         (function(){
-          var BIND={ chance:['FLOW_GLI_VARY',0,1], grate:['FLOW_GLI_RATE',18,1],
-                     swing:['FLOW_GLI_MORPH',0,1], chaos:['FLOW_GLI_TRAJ',0,1],
-                     dejavu:['FLOW_GLI_DEJAVU',0], decay:['FLOW_GLI_DECAY',0],
-                     omode:['FLOW_GLI_OUTMODE',2], ping:['FLOW_GLI_PING',0],
-                     drop:['FLOW_GLI_DROP',0], burst:['FLOW_GLI_BURST',0],
-                     bend:['FLOW_GLI_BEND',0], seed:['FLOW_GLI_SEED',0],
-                     hold:['FLOW_GLI_HOLD',5], loop:['FLOW_GLI_LOOP',4],
-                     quant:['FLOW_GLI_QUANT',3], release:['FLOW_GLI_RELEASE',1],
-                     syncf:['FLOW_GLI_SYNC',1] };
-          FX.forEach(function(f){ BIND['en_'+f[0]]=['FLOW_GLI_EN_'+f[0].toUpperCase(),1];
-            BIND[f[0]+'_opan']=['FLOW_GLI_'+f[0].toUpperCase()+'_PAN',2];
-            BIND[f[0]+'_otrg']=['FLOW_GLI_'+f[0].toUpperCase()+'_TRG',2];
-            BIND[f[0]+'_ogrd']=['FLOW_GLI_'+f[0].toUpperCase()+'_GRID',19]; });
-          for(var m2 in EK) for(var k2 in EK[m2]) BIND[m2+'_'+k2]=['FLOW_GLI_'+EK[m2][k2],0];
+          var BIND={ chance:[PFX+'VARY',0,1], grate:[PFX+'RATE',18,1],
+                     swing:[PFX+'MORPH',0,1], chaos:[PFX+'TRAJ',0,1],
+                     dejavu:[PFX+'DEJAVU',0], decay:[PFX+'DECAY',0],
+                     omode:[PFX+'OUTMODE',2], ping:[PFX+'PING',0],
+                     drop:[PFX+'DROP',0], burst:[PFX+'BURST',0],
+                     bend:[PFX+'BEND',0], seed:[PFX+'SEED',0],
+                     hold:[PFX+'HOLD',5], loop:[PFX+'LOOP',4],
+                     quant:[PFX+'QUANT',3], release:[PFX+'RELEASE',1],
+                     syncf:[PFX+'SYNC',1] };
+          FX.forEach(function(f){ BIND['en_'+f[0]]=[PFX+'EN_'+f[0].toUpperCase(),1];
+            BIND[f[0]+'_opan']=[PFX+f[0].toUpperCase()+'_PAN',2];
+            BIND[f[0]+'_otrg']=[PFX+f[0].toUpperCase()+'_TRG',2];
+            BIND[f[0]+'_ogrd']=[PFX+f[0].toUpperCase()+'_GRID',19]; });
+          for(var m2 in EK) for(var k2 in EK[m2]) BIND[m2+'_'+k2]=[PFX+EK[m2][k2],0];
           TIC.stampMod(sh.card,BIND,S);   /* fb145 — LFO drop targets · fb524 — S publishes the card's live value per dest (the anchor law) */
           Object.keys(BIND).forEach(function(key){
             var pid=BIND[key][0], steps=BIND[key][1], relay=BIND[key][2], h=null;
@@ -35889,7 +35987,7 @@ restoreThemeFromBackend();
         var start=TIC.runLoop(sh.card,function(dt,t){
           sim.t=t;
           if(gliFeedFn&&!feedBusy){ feedBusy=true;
-            try{ Promise.resolve(gliFeedFn()).then(function(fs2){ feedBusy=false;
+            try{ Promise.resolve(gliFeedFn(INST)).then(function(fs2){ feedBusy=false;
               try{ feed=JSON.parse(fs2); }catch(e){} }).catch(function(){ feedBusy=false; }); }
             catch(e){ feedBusy=false; } }
           if(feed&&feed.on===1){
@@ -35951,7 +36049,8 @@ restoreThemeFromBackend();
         return { open:function(){ sh.open(); start(); } }; }
       return { open:function(){ if(!built)built=build(); built.open(); },
                ensure:function(){ if(!built)built=build(); } };   /* fb168 — the dice build the card HIDDEN so its state exists before first open */
-    })();
+    }
+    var gliCardObj=makeGliCard(1);
     var gliCard={ open:function(){ gliCardObj.open(); } };
     window.__tiEnsure=window.__tiEnsure||{}; window.__tiEnsure.gli=function(){ gliCardObj.ensure(); };
 
@@ -36231,7 +36330,7 @@ restoreThemeFromBackend();
     window.__tiEnsure=window.__tiEnsure||{}; window.__tiEnsure.rbn=function(){ rbnCardObj.ensure(); };
 
     /* ───────── CHOP · "Ribbon" — the memory ribbon, DSP-true ───────── */
-    var chopCardObj=(function(){
+    function makeChopCard(inst){ var SFX=inst>1?String(inst):'', PFX='FLOW_CHOP'+SFX+'_', PSEQ='FLOW_SEQ'+SFX+'_', INST=inst-1;   /* tp20 */
       var built=null;
       var LANES=[['order','Order'],['pitch','Pitch'],['rev','Rev'],['trim','Trim'],['rpt','Repeat'],['drop','Drop']];
       var DEPTH={ order:[['spread','Sprd',0],['bias','Bias',.5],['lock','Lock',0],['seed','Seed',.44]],
@@ -36244,7 +36343,7 @@ restoreThemeFromBackend();
            steps:function(n){ return ['Off','Ev 8','Ev 4','Ev 3','Ev 2','All'][Math.min(5,Math.floor(n*5.999))]; },
                  bias:function(n){ return String(Math.round((n-.5)*100)); } };
       function build(){
-        var sh=TIC.shell({cls:'chop-ext',id:'chop',title:'Chop',mixId:'FLOW_CHOP_BLEND',mixDef:1.0});
+        var sh=TIC.shell({cls:'chop-ext'+(SFX?' ti-inst ti-inst'+SFX:''),id:'chop'+SFX,kind:'chop',title:'Chop'+(SFX?' '+SFX:''),mixId:PFX+'BLEND',mixDef:1.0});
         var SLICEL=[2,3,4,6,8,12,16], LOOPL=[2,4,6,8,10,12,16];
         var init={ lane:'order', slices:4, loop:3, mode:0, always:1, catch:0, time:11,
                    scan:1, auto:0, spreadM:0, feed:0, freeze:0, collect:0, rpts:1,
@@ -36324,7 +36423,7 @@ restoreThemeFromBackend();
         cap.querySelector('.gr4').appendChild(TIC.togEl(S,'collect','Collect'));
         var wipeB=TIC.el('<div class="tog off"><i></i>Wipe</div>');
         wipeB.addEventListener('click',function(){ sim.off+=997;
-          if(chopWipeFn){ try{ chopWipeFn(); }catch(e){} }        /* fb106 — clears the DSP memory */
+          if(chopWipeFn){ try{ chopWipeFn(INST); }catch(e){} }        /* fb106 — clears the DSP memory */
           wipeB.classList.remove('off');
           setTimeout(function(){ wipeB.classList.add('off'); },180); });
         cap.querySelector('.gr4').appendChild(wipeB);
@@ -36442,8 +36541,8 @@ restoreThemeFromBackend();
             wow:.15,smooth:.2},
             slots:{1:{},2:{time:14,rpt_chance:.7},3:{rev_chance:.5,drop_density:.3,spreadM:.5}},
             chain:[1,2,1,3]} ];
-        TIC.presets({id:'chop',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,factory:CHOP_PRESETS});
-        TIC.cardSync('chop',sc,S,sh.card);
+        TIC.presets({id:'chop'+SFX,kind:'chop',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,factory:CHOP_PRESETS});
+        TIC.cardSync('chop'+SFX,sc,S,sh.card);
 
         /* fb106 — DSP WIRING: every Ribbon control ↔ its APVTS param through
            __synSliderShim (post-ceiling law — works identically on both surfaces).
@@ -36455,16 +36554,16 @@ restoreThemeFromBackend();
                   glide:'GLIDE',quant:'QUANT',chance:'ODDS',run:'RUN',snap:'SNAP',length:'LEN',
                   curve:'CURVE',random:'RAND',gate:'GATE',count:'COUNT',decay:'DECAY',
                   density:'AMT',grain:'SIZE',spray:'SPRAY',tone:'TONE'};
-          var BIND={ time:['FLOW_SEQ_RATE',18,1],   /* fb107 — shares the front chop-grid knob (relay when docked) */
-                     'catch':['FLOW_CHOP_CATCH',1], slices:['FLOW_CHOP_SLICES',6], loop:['FLOW_CHOP_LOOP',6],
-                     mode:['FLOW_CHOP_MODE',3], rpts:['FLOW_CHOP_RPTS',3], fltr:['FLOW_CHOP_FILTER',3],
-                     freeze:['FLOW_CHOP_FREEZE',1], collect:['FLOW_CHOP_COLLECT',1],
-                     scan:['FLOW_CHOP_SCAN',0], auto:['FLOW_CHOP_WANDER',0], spreadM:['FLOW_CHOP_SPREAD',0],
-                     feed:['FLOW_CHOP_SPEED',0], stepsC:['FLOW_CHOP_STEPS',0], detune:['FLOW_CHOP_DETUNE',0],
-                     wow:['FLOW_CHOP_WOW',0], smooth:['FLOW_CHOP_SMOOTH',0], grit:['FLOW_CHOP_GRIT',0],
-                     trimC:['FLOW_CHOP_TRIM',0] };
+          var BIND={ time:[PSEQ+'RATE',18,1],   /* fb107 — shares the front chop-grid knob (relay when docked) */
+                     'catch':[PFX+'CATCH',1], slices:[PFX+'SLICES',6], loop:[PFX+'LOOP',6],
+                     mode:[PFX+'MODE',3], rpts:[PFX+'RPTS',3], fltr:[PFX+'FILTER',3],
+                     freeze:[PFX+'FREEZE',1], collect:[PFX+'COLLECT',1],
+                     scan:[PFX+'SCAN',0], auto:[PFX+'WANDER',0], spreadM:[PFX+'SPREAD',0],
+                     feed:[PFX+'SPEED',0], stepsC:[PFX+'STEPS',0], detune:[PFX+'DETUNE',0],
+                     wow:[PFX+'WOW',0], smooth:[PFX+'SMOOTH',0], grit:[PFX+'GRIT',0],
+                     trimC:[PFX+'TRIM',0] };
           for(var L in DEPTH) DEPTH[L].forEach(function(d){
-            BIND[L+'_'+d[0]]=['FLOW_CHOP_'+PRE[L]+'_'+KN[d[0]],0]; });
+            BIND[L+'_'+d[0]]=[PFX+PRE[L]+'_'+KN[d[0]],0]; });
           TIC.stampMod(sh.card,BIND,S);   /* fb145 — LFO drop targets · fb524 — S publishes the card's live value per dest (the anchor law) */
           Object.keys(BIND).forEach(function(key){
             var pid=BIND[key][0], steps=BIND[key][1], relay=BIND[key][2], h=null;
@@ -36510,7 +36609,7 @@ restoreThemeFromBackend();
           if(!S.v.freeze) sim.off+=dt*(22+S.v.feed*30)*ribE;
           sim.rw=1-ribE; if(ribE<=0) sim.off=0;
           if(chopFeedFn&&!feedBusy){ feedBusy=true;
-            try{ Promise.resolve(chopFeedFn()).then(function(fs){ feedBusy=false;
+            try{ Promise.resolve(chopFeedFn(INST)).then(function(fs){ feedBusy=false;
               try{ feed=JSON.parse(fs); }catch(e){} }).catch(function(){ feedBusy=false; }); }
             catch(e){ feedBusy=false; } }
           var n=nSlices();
@@ -36551,25 +36650,29 @@ restoreThemeFromBackend();
         return { open:function(){ sh.open(); start(); } }; }
       return { open:function(){ if(!built)built=build(); built.open(); },
                ensure:function(){ if(!built)built=build(); } };   /* fb168 — the dice build the card HIDDEN so its state exists before first open */
-    })();
+    }
+    var chopCardObj=makeChopCard(1);
     function openChopCard(){ chopCardObj.open(); }
     window.__tiEnsure=window.__tiEnsure||{}; window.__tiEnsure.chop=function(){ chopCardObj.ensure(); };
     // fb82 — ONE opener for every surface (expand button, tile right-click, popped-card
     // redock, card-only boot). If the card is currently popped out into a native window,
     // opening it in-plugin would DUPLICATE it — instead ping popOutCard with w=0, which
     // the C++ treats as "refocus the existing window".
+    /* tp20 — the Flow pool's cards: instance 1 is the object every old caller holds; 2..4 are built on demand */
+    var __flowCards={};
+    window.__flowCardOf=function(kind,inst){ inst=(inst|0)||1; if(kind==='drift') inst=1;
+      if(inst<=1) return kind==='arp'?arpCard:kind==='glitch'?gliCardObj:kind==='chop'?chopCardObj:kind==='drift'?rbnCardObj:null;
+      var mk=kind==='arp'?makeArpCard:kind==='glitch'?makeGliCard:kind==='chop'?makeChopCard:null; if(!mk) return null;
+      var key=kind+inst; if(!__flowCards[key]) __flowCards[key]=mk(inst); return __flowCards[key]; };
+    window.__flowPidOf=function(m){ var k=fKind(m), n=fInst(m); return ((k==='chop')?'chop':(k==='glitch')?'gli':(k==='drift')?'rbn':'arp')+(n>1&&k!=='drift'?n:''); };
+    window.__flowModeOfPid=function(pid){ pid=String(pid||''); var k=pid.replace(/\d+$/,''), n=pid.slice(k.length); return ({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[k]||'arp')+(k==='rbn'?'':n); };
     window.__openFlowCard=function(m){
-      var pid=(m==='chop')?'chop':(m==='glitch')?'gli':(m==='drift')?'rbn':'arp';
+      var pid=window.__flowPidOf(m);
       if(window.__poppedCards&&window.__poppedCards[pid]){
         try{ var f=window.Juce&&window.Juce.getNativeFunction&&window.Juce.getNativeFunction('popOutCard'); if(f)f(pid,0,0,0,0); }catch(e){}
         return; }
-      try{
-        if(m==='chop')        openChopCard();
-        else if(m==='glitch') gliCard.open();
-        else if(m==='drift')  rbnCard.open();   // mode 4 = ROBIN (key 'drift' frozen)
-        else                  openCard();
-      }catch(e){} };
-    window.__redockCard=function(id){ if(id==='mod')return; if(id==='lfo'){ if(window.__openLfoCard)window.__openLfoCard(); return; } if(id==='crv'){ if(window.__crvRedock)window.__crvRedock(); else if(window.__openCrvCard)window.__openCrvCard(); return; }   /* fb570 — the host it left with */ window.__openFlowCard({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[id]||'arp'); };   /* fb149 — the palette has no docked twin · fb232 — lfo docks home through its own door (it fell to 'arp') */
+      try{ var c=window.__flowCardOf(fKind(m),fInst(m)); if(c) c.open(); }catch(e){} };
+    window.__redockCard=function(id){ if(id==='mod')return; if(id==='lfo'){ if(window.__openLfoCard)window.__openLfoCard(); return; } if(id==='crv'){ if(window.__crvRedock)window.__crvRedock(); else if(window.__openCrvCard)window.__openCrvCard(); return; }   /* fb570 — the host it left with */ window.__openFlowCard(window.__flowModeOfPid?window.__flowModeOfPid(id):'arp'); };   /* tp20 — 'chop2' docks to Chop 2 */   /* fb149 — the palette has no docked twin · fb232 — lfo docks home through its own door (it fell to 'arp') */
     window.__cardWinGone=function(id){ if(window.__poppedCards) delete window.__poppedCards[id]; if(id==='crv'&&window.__crvParked) window.__crvParked(null); };   /* fb570 — a closed curve window forgets its parked identity */
     // expand button → the active mode's extension card
     if(exp) exp.addEventListener('click', function(){ window.__openFlowCard(displayMode); });
@@ -37738,7 +37841,7 @@ restoreThemeFromBackend();
       var p=e.target&&e.target.closest?e.target.closest('.pop'):null; if(!p)return;
       var card=p.closest('.arp-ext,.chop-ext,.gli-ext,.rbn-ext,.lfo-ext,.crv-ext'); if(!card)return;
       e.preventDefault(); e.stopPropagation();
-      var id=null,k; for(k in CARDS){ if(card.classList.contains(CARDS[k])){ id=k; break; } }
+      var id=null,k; for(k in CARDS){ if(card.classList.contains(CARDS[k])){ id=k; break; } } if(id&&window.__cardOnly&&String(window.__cardOnly).indexOf(id)===0) id=window.__cardOnly;   /* tp20 — 'chop2' */
       if(!id)return;
       var f=NF('popOutCard'); if(!f)return;               // no native (browser/old build) → ⧉ inert, card stays put
       if(id==='crv'){ /* fb570 — every host pops out (fb560's Distortion-only refusal is retired): park the identity first */
@@ -37752,7 +37855,7 @@ restoreThemeFromBackend();
   }
 
   /* ── CARD-ONLY BOOT: this page IS one popped card ── */
-  var MODE={arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[window.__cardOnly]||'arp';
+  var MODE=(function(co){ var k=String(co||'').replace(/\d+$/,''), n=String(co||'').slice(k.length); return ({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[k]||'arp')+(k==='rbn'?'':n); })(window.__cardOnly);   /* tp20 */
   function bootModPal(){
     /* fb149 — the LFO palette window: ten chips, each a cross-window drag source.
        One setModDrag(phase 0) starts it; the PROCESSOR tracks the mouse + detects
@@ -37810,7 +37913,7 @@ restoreThemeFromBackend();
     else {
       if(!window.__openFlowCard){ setTimeout(boot,150); return; }
       window.__openFlowCard(MODE); }
-    var card=document.querySelector('.'+CARDS[window.__cardOnly]);
+    var card=(function(co){ var k=co.replace(/\d+$/,''), n=co.slice(k.length); if(!CARDS[k]) return null; return document.querySelector('.'+CARDS[k]+(n?'.ti-inst'+n:'')); })(String(window.__cardOnly||''));   /* tp20 */
     if(!card||!card.classList.contains('open')){
       /* fb570 — a crv window whose host never mounts must not spin behind a blank page forever: 9 s, then it closes */
       if(window.__cardOnly==='crv'&&++crvBootTries>60){ if(window.__crvCloseWin){ window.__crvCloseWin(); return; } }
@@ -37881,7 +37984,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 (function () {
   'use strict';
 
-  var OSC_IDS = ['a', 'b', 'c', 'd'];
+  var OSC_IDS = OSC_LETTERS;
   var TWO_PI  = Math.PI * 2;
   var NHARM   = 64;            // band-limit for additive tables -> clean, never jagged
   var WAVE_COLOR = '#ECE8F2';  // the light color the osc waveform already uses
@@ -38060,7 +38163,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // → 60fps at 64 frames. Frames come from getOscWavetable (C++). Own rAF (animates independent
   // of the audio scope). Geometry validated in a standalone headless harness before wiring.
   var wtWaterfall = {
-    on:{a:false,b:false,c:false,d:false}, cache:{a:null,b:null,c:null,d:null}, off:{a:null,b:null,c:null,d:null},
+    on:{a:false,b:false,c:false,d:false,e:false,f:false,g:false,h:false}, cache:{a:null,b:null,c:null,d:null,e:null,f:null,g:null,h:null}, off:{a:null,b:null,c:null,d:null,e:null,f:null,g:null,h:null},   /* tp20 */
     raf:0, _accent:null, imported:{a:false,b:false,c:false,d:false}, res:{a:1,b:1,c:1,d:1},
     /* fb458 — WARP/FOLD made visible. The bake happens in C++ THROUGH THE SHIPPED WARP CHAIN
        (PluginProcessor::getOscWavetableJson), never in JS — reimplementing twenty-odd warp modes
@@ -38342,7 +38445,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     if (wtWaterfall._wired) return;
     try { if (! (window.Juce && window.Juce.getSliderState)) return; } catch (e) { return; }
     var any = false;
-    ['a','b','c','d'].forEach (function (o) {
+    OSC_LETTERS.forEach (function (o) {
       ['SYN_OSC_' + o.toUpperCase() + '_WT_PRESET', 'SYN_OSC_' + o.toUpperCase() + '_ENGINE',
      'SYN_OSC_' + o.toUpperCase() + '_HARM_MODE',   /* fb589 — the additive table is a source too */
      'SYN_OSC_' + o.toUpperCase() + '_HARM_TABLE']  /* fb601 — …and since fb601 that table is its OWN param */.forEach (function (id) {
@@ -39022,7 +39125,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   };
   // Intercept the native WT dropdown → glass menu (select gets pointer-events:none so the OS menu never opens).
   [200, 800, 2000].forEach (function (ms) { setTimeout (function () { try {
-    ['a','b','c','d'].forEach (function (o) {
+    OSC_LETTERS.forEach (function (o) {
       var sel = document.getElementById ('osc-' + o + '-preset-select');
       if (sel && ! sel._wtGlass) { sel._wtGlass = true;
         try { sel.style.pointerEvents = 'none'; } catch (e) {}
@@ -39102,7 +39205,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if (factF) { try { Promise.resolve (factF ()).then (function (js) { try { fact = JSON.parse (js); } catch (e) {} fin (); }).catch (fin); } catch (e) { fin (); } } else fin ();
       if (impF)  { try { Promise.resolve (impF ()).then (function (js) { try { imp = JSON.parse (js); } catch (e) {} fin (); }).catch (fin); } catch (e) { fin (); } } else fin ();
     };
-    ['a','b','c','d'].forEach (function (o) {   // header name → open (the span is CSS-gated to the 3 sample engines)
+    OSC_LETTERS.forEach (function (o) {   // header name → open (the span is CSS-gated to the 3 sample engines)
       var d = document.getElementById ('osc-' + o + '-sampname-display');
       var w = d ? d.parentElement : null;
       if (w) w.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); window.openSampleBrowser (o, e); });
@@ -39122,7 +39225,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   wtWaterfall.restoreImports = function () {
     var fn = wtNfn ('getImportState'); if (! fn) return;
     Promise.resolve (fn()).then (function (js) { var st = {}; try { st = JSON.parse (js); } catch (e) { return; }
-      ['a','b','c','d'].forEach (function (o) { var s = st[o]; if (s && s.active) {
+      OSC_LETTERS.forEach (function (o) { var s = st[o]; if (s && s.active) {
         wtWaterfall.imported[o] = true; if (! wtWaterfall.importName) wtWaterfall.importName = {}; wtWaterfall.importName[o] = s.name || '';
         try { window.__wtPath = window.__wtPath || {}; window.__wtPath[o] = null; } catch (e9) {}   /* fb560 — a restore carries a name, not a path */
         var disp = document.getElementById ('osc-' + o + '-preset-display'); if (disp && s.name) disp.textContent = s.name;
@@ -39146,7 +39249,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       // saved-on oscs and NEVER back off — so a stale waterfall (e.g. a persisted WebView, or on[] diverging from
       // the processor's saved state) could survive a reopen even when the saved view is the oscilloscope. Now:
       // saved-on → waterfall · saved-off → oscilloscope (Max: "if I was on the oscilloscope, stay there — regardless").
-      ['a','b','c','d'].forEach (function (o) {
+      OSC_LETTERS.forEach (function (o) {
         var want = !! st[o];
         if (want && ! wtWaterfall.on[o]) { wtWaterfall.on[o] = true; wtWaterfall.fetch (o); wtWaterfall.kick(); wtWaterfall.syncClass (o); }   // don't call setWaterfallView — already correct in the processor
         else if (! want && wtWaterfall.on[o]) {
@@ -40734,7 +40837,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
    wd9-armored: try/catch, NaN guards, stall watchdog. */
 (function () {
   'use strict';
-  var IDS = ['a', 'b', 'c', 'd'];
+  var IDS = OSC_LETTERS;
   var st = {};
   IDS.forEach(function (o) {
     st[o] = { on: false, pos: 0, lastMs: 0, cv: null, gen: -1,
@@ -40893,7 +40996,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   'use strict';
   function ready(fn){ if(window.Juce&&window.Juce.getSliderState&&window.OscWave){fn();} else setTimeout(function(){ready(fn);},120); }
   ready(function(){
-    var OSC=['a','b','c','d'];
+    var OSC=OSC_LETTERS;
     function ss(n){try{return window.Juce.getSliderState(n);}catch(e){return null;}}
     function nv(s){try{return s?Math.max(0,Math.min(1,s.getNormalisedValue())):0;}catch(e){return 0;}}
     OSC.forEach(function(o){
@@ -40925,7 +41028,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   function sIdx (s) { try { return s ? Math.round(s.getScaledValue ? s.getScaledValue() : 0) : 0; } catch (e) { return 0; } }
   function resync () {
     if (! (window.Juce && window.Juce.getSliderState)) return;
-    ['a','b','c','d'].forEach(function (o) {
+    OSC_LETTERS.forEach(function (o) {
       var L = o.toUpperCase();
       /* fb601 — the header's table param is per-ENGINE: Harmonics reads SYN_OSC_x_HARM_TABLE,
          everything else SYN_OSC_x_WT_PRESET. This block is the boot authority for the name, so it
@@ -40973,7 +41076,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   var tblWired = {}, tblSaid = {};
   function wireTbl () {
     if (! (window.Juce && window.Juce.getSliderState)) return;
-    ['a','b','c','d'].forEach(function (o) {
+    OSC_LETTERS.forEach(function (o) {
       if (tblWired[o]) return;
       var st = ss('SYN_OSC_' + o.toUpperCase() + '_HARM_TABLE');
       if (st && st.valueChangedEvent && st.valueChangedEvent.addListener) {
@@ -41851,8 +41954,8 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     T(() => setTimeout(() => { try { window.__tiNoiseResync && window.__tiNoiseResync(); window.__tiFltBackSync && window.__tiFltBackSync(); } catch (e) {} }, 450));
     T(() => typeof syncDeepStateFromCpp === 'function' && syncDeepStateFromCpp());
     T(() => { if (typeof getModStateFn !== 'undefined' && getModStateFn && typeof restoreModState === 'function') Promise.resolve(getModStateFn()).then(j => { if (j) restoreModState(j); }).catch(() => {}); });
-    T(() => { const W = window.wtWaterfall; if (W && W.fetch) ['a', 'b', 'c', 'd'].forEach(o => W.fetch(o)); });
-    T(() => ['a', 'b', 'c', 'd'].forEach(o => window.__oscFaceHeal && window.__oscFaceHeal(o)));   /* fb635 — Max: "every time we load up a preset, an automatic heal" */
+    T(() => { const W = window.wtWaterfall; if (W && W.fetch) OSC_LETTERS.forEach(o => W.fetch(o)); });
+    T(() => OSC_LETTERS.forEach(o => window.__oscFaceHeal && window.__oscFaceHeal(o)));   /* fb635 — Max: "every time we load up a preset, an automatic heal" */
   }
 
   /* ═══ THE LOADING OVERLAY ══════════════════════════════════════════════════════════════════════
@@ -42333,7 +42436,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var TAPE_VIZ=[196,150];   /* the machine picture inside the tape node: the cabinet scales by min(h·.85/160, w/220), so a squarer box fills it */
   var FXNAMES={reverb:'Reverb',delay:'Delay',saturate:'Distortion',granular:'Granular',flt:'Filter',cho:'Chorus',fla:'Flanger',pha:'Phaser',tape:'Tape',eqz:'Equalizer',wid:'Widen',cmp:'Compress',ott:'Multiband',bod:'Bode',utl:'Utility',spl:'Splitter'};
   var FXLIST=['reverb','delay','saturate','granular','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];   /* the Tape card lives in the Tape category */
-  var OSC=['a','b','c','d'], FLOWS=['arp','drift','chop','glitch'], FLOWNAME={arp:'Arp',drift:'Robin',chop:'Chop',glitch:'Glitch'};
+  var OSC=['a','b','c','d'], FLOWS=['arp','drift','chop','glitch'], FLOWNAME={arp:'Arp',drift:'Robin',chop:'Chop',glitch:'Glitch'}, FLOW_INST_MAX={arp:4,drift:1,chop:4,glitch:4};   /* tp20 — the Flow pool */
   var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette'];
   function oscList(){ try{ if(window.__oscPool&&window.__oscPool.length) return window.__oscPool.slice(); }catch(e){} return OSC; }   /* the oscillator pool (E–Z land here when the engine has them) */
   var IC={ fit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
@@ -42359,7 +42462,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function choiceNorm(id,idx,fallbackN){ var n=0; try{ n=window.__paramCardinality?window.__paramCardinality(id):0; }catch(e){} if(!(n>1)) n=fallbackN||2; return Math.max(0,Math.min(1,idx/(n-1))); }
   function oscLetter(o){ return String(o||'').toUpperCase(); }   /* A, B, C, D … the alphabet is the ceiling: A–Z */
   function OX(o){ return 'SYN_OSC_'+String(o).toUpperCase()+'_'; }
-  function nodeName(n){ if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='fx') return (n.core==='tape'?'Tape · '+(n.type||''):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return FLOWNAME[n.sub];
+  function nodeName(n){ if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='fx') return (n.core==='tape'?'Tape · '+(n.type||''):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return flowLabel(n.sub);
     if(n.kind==='tape'){ var S=ST(); return 'Tape · '+(MACHINES[S?S.tapeMachine|0:0]||''); }
     return {midi:'MIDI In',out:'Out',filter:'Filter',env:'Envelope',lfo:'LFO',tapeloop:'Deck',voice:'Voice',rnd:'Randomizer'}[n.kind]||n.kind; }
 
@@ -42443,7 +42546,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     p.addEventListener('click',function(e){ e.stopPropagation(); }); n.wrap.appendChild(p); n.ports.push({el:p,kind:kind,i:i,x:x,y:y}); return p; }
   var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a']},filter:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a']},env:{outs:['m']},voice:{},lfo:{outs:['m']},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']}};   /* tp11 — the Randomizer's port */
   var RIN={osc:1,filter:1,env:1,lfo:1,fx:1,tape:1,flow:1};   /* tp11 — what a Randomizer cable can land on (a module's top) */
-  function sideSpec(n){ if(n.kind==='flow') return (n.sub==='arp'||n.sub==='drift')?{ins:['n'],outs:['n']}:{ins:['a'],outs:['a']}; return SIDE[n.kind]||{}; }
+  function sideSpec(n){ if(n.kind==='flow'){ var k=fKind(n.sub); return (k==='arp'||k==='drift')?{ins:['n'],outs:['n']}:{ins:['a'],outs:['a']}; } return SIDE[n.kind]||{}; }
   function addSidePorts(n){ var sp=sideSpec(n); (sp.ins||[]).forEach(function(t,i){ addPort(n,'in',i,0,n.h/2,t); }); (sp.outs||[]).forEach(function(t,i){ addPort(n,'out',i,n.w,n.h/2,t); }); if(RIN[n.kind]) addPort(n,'rin',0,n.w/2,0,'r'); }
   /* where an element sits inside its node, in world units — measured, not summed, so no engine's zoom rounding can drift it (tp3) */
   function offsetIn(el,root){ try{ var a=el.getBoundingClientRect(), b=root.getBoundingClientRect(), z=view.z||1; return {x:(a.left-b.left)/z, y:(a.top-b.top)/z, w:a.width/z, h:a.height/z}; }catch(e){ return {x:0,y:0,w:0,h:0}; } }
@@ -42510,18 +42613,28 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function returnLoop(n){ reclip(n); if(n.viz) clearVizStyle(n.viz); goHome(n); dropNode(n); var S=ST(); if(S&&prevTapeTab!=null){ S.tapeSubTab=prevTapeTab; prevTapeTab=null; } try{ var rc0=document.getElementById('tape-reel-canvas'); if(rc0){ var dpr0=window.devicePixelRatio||1; rc0.width=Math.round(260*dpr0); rc0.height=Math.round(48*dpr0); rc0.style.width='260px'; rc0.style.height='48px'; } }catch(e){} }   /* the hero's own size (its sizer cannot measure the hidden LOOP tab) */
   /* the FLOW modules: a small tile (in the chain) that extends into its card. The card is opened through the one opener (fb82) and MOVED into the node; minimizing sends it back to body and closes it. */
   var CARDCLS={arp:'arp-ext',drift:'rbn-ext',chop:'chop-ext',glitch:'gli-ext'}, CARDPID={arp:'arp',drift:'rbn',chop:'chop',glitch:'gli'};
-  function adoptFlowNode(m,at){ if(nodeByKey('flow-'+m)||!modesEl) return null; var tile=tileHome[m]; if(!tile) return null;
+  /* tp20 — THE FLOW POOL on the canvas: a node's sub is 'chop' (instance 1) or 'chop2'. Instance tiles are clones of the
+     kind's tile with a badge; they live on the canvas only (the synth page's 2x2 grid stays the four kinds). */
+  function fKind(m){ return String(m||'').replace(/\d+$/,''); }
+  function fInst(m){ var x=/(\d+)$/.exec(String(m||'')); return x?Math.max(1,parseInt(x[1],10)):1; }
+  function cardPidOf(m){ var n=fInst(m), k=fKind(m); return CARDPID[k]+(n>1&&k!=='drift'?n:''); }
+  function cardElOf(m){ var n=fInst(m), cls=CARDCLS[fKind(m)]; if(!cls) return null; return document.querySelector('.ti-card.'+cls+(n>1?'.ti-inst'+n:':not(.ti-inst)')); }
+  function flowLabel(m){ var n=fInst(m); return (FLOWNAME[fKind(m)]||'Flow')+(n>1?' '+n:''); }
+  function mkInstTile(m){ var k=fKind(m), n=fInst(m), base=tileHome&&tileHome[k]; if(!base||n<=1||k==='drift') return null;
+    var t=base.cloneNode(true); t.setAttribute('data-mode',m); t.classList.remove('act'); t.title=flowLabel(m);
+    var b=document.createElement('span'); b.className='tp-inst'; b.textContent=String(n); t.appendChild(b); t.__inst=1; tileHome[m]=t; return t; }
+  function adoptFlowNode(m,at){ if(nodeByKey('flow-'+m)||!modesEl) return null; var tile=tileHome[m]||mkInstTile(m); if(!tile) return null;   /* tp20 — instance tiles are minted here */
     var n=mkNode('flow-'+m,'flow',tile,{sub:m,parent:modesEl,at:at}); n.tile=tile; n.home=null; n.ext=false; markViz(n);
     if(layout.ext['flow-'+m]) setFlowExt(n,true); return n; }
   function setFlowExt(n,ext){ if(!!n.ext===!!ext) return;
-    if(ext){ if(window.__poppedCards&&window.__poppedCards[CARDPID[n.sub]]){ toast('That card is popped into its own window'); return; }
-      try{ if(window.__openFlowCard) window.__openFlowCard(n.sub); }catch(e){} var card=document.querySelector('.ti-card.'+CARDCLS[n.sub]); if(!card){ toast('No card for '+FLOWNAME[n.sub]); return; }
+    if(ext){ if(window.__poppedCards&&window.__poppedCards[cardPidOf(n.sub)]){ toast('That card is popped into its own window'); return; }
+      try{ if(window.__openFlowCard) window.__openFlowCard(n.sub); }catch(e){} var card=cardElOf(n.sub); if(!card){ toast('No card for '+flowLabel(n.sub)); return; }
       n.card=card; n.body.appendChild(card); card.classList.add('open'); var h=card.querySelector('.h'); if(h&&!h.querySelector('.tp-min')){ var mn=document.createElement('span'); mn.className='tp-min'; mn.title='Minimize'; mn.innerHTML=IC.min; var x=h.querySelector('.x'); h.insertBefore(mn,x||null); }
       n.ext=true; n.wrap.classList.add('ext'); layout.ext[n.key]=1; markViz(n); setTimeout(function(){ fitNodeToCard(n); },30); setTimeout(function(){ fitNodeToCard(n); },200); }
     else { if(n.card){ try{ var mn2=n.card.querySelector('.h .tp-min'); if(mn2) mn2.remove(); document.body.appendChild(n.card); n.card.classList.remove('open'); }catch(e){} n.card=null; }
       n.ext=false; n.wrap.classList.remove('ext'); delete layout.ext[n.key]; markViz(n); resizeNode(n,SIZES.flow[0],SIZES.flow[1]); }
     saveLayout(); if(page.classList.contains('viz')) vizFitAll(); soon(); }
-  function returnFlowNode(n){ if(n.ext){ var was=layout.ext[n.key]; setFlowExt(n,false); if(was) layout.ext[n.key]=1; } leave(n,function(){ if(n.tile&&n.tile.parentNode===n.body){ n.tile.classList.remove('tp-viz'); modesEl.appendChild(n.tile); } }); }
+  function returnFlowNode(n){ if(n.ext){ var was=layout.ext[n.key]; setFlowExt(n,false); if(was) layout.ext[n.key]=1; } leave(n,function(){ if(n.tile&&n.tile.parentNode===n.body){ n.tile.classList.remove('tp-viz'); if(n.tile.__inst) n.tile.remove(); else modesEl.appendChild(n.tile); } }); }   /* tp20 — an instance tile has no home on the synth page */
   function fitNodeToCard(n){ if(!n.ext||!n.card) return; try{ var r=n.card.getBoundingClientRect(), z=view.z||1, w=Math.round(r.width/z), h=Math.round(r.height/z); if(w<40||h<40) return; resizeNode(n,w,h); }catch(e){} }
   var adopting=false;
   function adoptFx(){ if(adopting) return; adopting=true; try{ var rack=document.getElementById('fxr-rack'); var devs=window.__fxrDevs?window.__fxrDevs():[]; var keep={};
@@ -42551,14 +42664,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function syncPresence(){ var changed=false;
     oscList().forEach(function(o){ if(!oscDev(o)) return; var on=oscOn(o), n=nodeByKey('osc-'+o); if(on&&!n){ if(adoptOsc(o)) changed=true; } else if(!on&&n){ returnOsc(n); changed=true; } });
     var tOn=toggleOn('tape-toggle'), tn=nodeByKey('tape'); if(tOn&&!tn){ if(adoptTape()) changed=true; } else if(!tOn&&tn){ returnTape(tn); changed=true; }
-    var ch=window.__flowChain?window.__flowChain():[]; FLOWS.forEach(function(m){ var inC=ch.indexOf(m)>=0, n=nodeByKey('flow-'+m); if(inC&&!n){ if(adoptFlowNode(m)) changed=true; } else if(!inC&&n){ returnFlowNode(n); changed=true; } });
+    var ch=window.__flowChain?window.__flowChain():[]; ch.forEach(function(m){ if(!nodeByKey('flow-'+m)){ if(adoptFlowNode(m)) changed=true; } });
+    nodes.slice().forEach(function(n){ if(n.kind==='flow'&&ch.indexOf(n.sub)<0){ returnFlowNode(n); changed=true; } });   /* tp20 — presence follows the chain, every instance */
     if(changed){ var o=nodeByKey('out'); if(o) o.wrap.style.zIndex=++zTop; drawMini(); } return changed; }
 
   /* ── the cables — derived from the parameters every pass ── */
   function curFilterSlot(){ var p=document.getElementById('filter-pill-2'); return p&&p.classList.contains('act')?2:1; }
   function derive(){ var out=[], seen={}; var midi=nodeByKey('midi'), outN=nodeByKey('out'); if(!midi||!outN) return out;
     function add(a,ak,ai,b,bk,bi,t,edit,fixed){ var id=a.key+'.'+ak+ai+'>'+b.key+'.'+bk+bi; if(seen[id]) return; seen[id]=1; out.push({id:id,from:a,fk:ak,fi:ai,to:b,tk:bk,ti:bi,t:t,edit:edit||null,fixed:!!fixed}); }
-    var chain=window.__flowChain?window.__flowChain():[]; var noteT=chain.filter(function(m){return m==='arp'||m==='drift';}), audioT=chain.filter(function(m){return m==='chop'||m==='glitch';});
+    var chain=window.__flowChain?window.__flowChain():[]; var noteT=chain.filter(function(m){var k=fKind(m); return k==='arp'||k==='drift';}), audioT=chain.filter(function(m){var k=fKind(m); return k==='chop'||k==='glitch';});
     var src=midi; noteT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(!t) return; add(src,'out',0,t,'in',0,'n',{flow:m}); src=t; });
     var oscs=nodes.filter(function(n){ return n.kind==='osc'; });
     oscs.forEach(function(o){ add(src,'out',0,o,'in',0,'n',null,true); });
@@ -42810,7 +42924,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(n.kind==='fx'){ rollFxCard(n.idx,lvl,R,P); return; }
     if(n.kind==='tape'){ var S=ST(), mc=S?S.tapeMachine|0:1, ids=[['STUDIO_SCULPT','STUDIO_WEAVE','STUDIO_TILT'],['WOW_FLUTTER','SATURATION','HISS'],['WIRE_WOW','WIRE_SATURATION','WIRE_HISS']][mc]||[], top=lvl==='wild'?1:lvl==='heavy'?.8:lvl==='medium'?.6:.4;
       ids.forEach(function(id,k){ P(id, (mc===0&&k===2)?between(.5-top/2,.5+top/2):between(.05,top)); }); return; }
-    if(n.kind==='flow'){ try{ if(window.__tiDiceMode) window.__tiDiceMode(CARDPID[n.sub],big); }catch(e){} return; } }
+    if(n.kind==='flow'){ try{ var fc=window.__flowCardOf&&window.__flowCardOf(fKind(n.sub),fInst(n.sub)); if(fc&&fc.ensure) fc.ensure(); if(window.__tiDiceMode) window.__tiDiceMode(cardPidOf(n.sub),big); }catch(e){} return; } }
   function rollLinked(keys){ var lvl=layout.rlevel||'medium', R=REACH[lvl]||REACH.medium, list=[], ids=[], names=[], hadFx=false, hadTape=false;
     keys.forEach(function(k){ var n=nodeByKey(k); if(!n) return; names.push(nodeName(n)); if(n.kind==='fx') hadFx=true; if(n.kind==='tape') hadTape=true; rollModule(n,lvl,R,function(id,v){ list.push([id,v]); ids.push(id); }); });
     rFlash=nowR()+700; try{ if(window.__tiWakeBurst) window.__tiWakeBurst(); }catch(e){}
@@ -43083,7 +43197,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function catalog(){ var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');
     oscList().forEach(function(o){ var on=!!nodeByKey('osc-'+o); it.push({k:'osc:'+o,n:'Oscillator '+oscLetter(o),cat:'Oscillators',dis:on,note:on?'Already on the canvas':null}); });
     it.push({k:'flt',n:'Filter',cat:'Filters'});   /* tp9 — another filter = the rack's Filter card (the whole roster), as many as its pool holds */
-    FLOWS.forEach(function(m){ var on=!!nodeByKey('flow-'+m); it.push({k:'flow:'+m,n:FLOWNAME[m],cat:'Flow',dis:on,note:on?'A second '+FLOWNAME[m]+' lands with the engine pools (next)':null}); });
+    FLOWS.forEach(function(m){ var mx=FLOW_INST_MAX[m]||1, free=null; for(var n=1;n<=mx;n++){ var key=n>1?m+n:m; if(!nodeByKey('flow-'+key)){ free=key; break; } }
+      if(free) it.push({k:'flow:'+free,n:flowLabel(free),cat:'Flow'});
+      else it.push({k:'flow:'+m,n:FLOWNAME[m],cat:'Flow',dis:true,note:mx>1?('All '+mx+' are on the canvas'):'Already on the canvas'}); });   /* tp20 — the next free instance */
     MACHINES.forEach(function(nm,i){ var cur=tapeUp&&mach===i; it.push({k:'tape:'+i,n:nm,cat:'Tape',dis:cur,note:cur?'A second machine lands with the engine pools (next)':null}); });
     TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:nm,cat:'Tape'}); });
     FXLIST.forEach(function(k){ it.push({k:k,n:FXNAMES[k],cat:'Effects'}); }); return it; }

@@ -1268,6 +1268,21 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     }
                 complete (juce::var{});
             })
+            .withNativeFunction("getSynParams", [this](const juce::Array<juce::var>& args,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // tp20 — the pool's batched read: one call for every E–H / Flow-instance slider state the page holds
+                juce::String out;
+                if (args.size() >= 1)
+                {
+                    juce::StringArray ids; ids.addTokens (args[0].toString(), ",", "");
+                    for (int i = 0; i < ids.size(); ++i)
+                    {
+                        if (i) out << ",";
+                        if (auto* p = audioProcessor.getAPVTS().getParameter (ids[i].trim())) out << juce::String (p->getValue(), 5);
+                    }
+                }
+                complete (juce::var (out));
+            })
             .withNativeFunction("getSynParam", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5586,6 +5601,21 @@ public:
                             p->setValueNotifyingHost (v);
                         }
                     complete (juce::var{});
+                })
+                .withNativeFunction ("getSynParams", [&proc](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {   // tp20 — the popped card's copy of the pool's batched read
+                    juce::String out;
+                    if (args.size() >= 1)
+                    {
+                        juce::StringArray ids; ids.addTokens (args[0].toString(), ",", "");
+                        for (int i = 0; i < ids.size(); ++i)
+                        {
+                            if (i) out << ",";
+                            if (auto* p = proc.getAPVTS().getParameter (ids[i].trim())) out << juce::String (p->getValue(), 5);
+                        }
+                    }
+                    complete (juce::var (out));
                 })
                 .withNativeFunction ("getSynParam", [&proc](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
