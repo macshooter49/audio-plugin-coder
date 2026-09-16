@@ -945,6 +945,36 @@ class SynthVoice : public juce::SynthesiserVoice
             sendFilterSlot7_.setType (static_cast<tw::filters::Type> (clamped));  // fb347 — exclusion mirror
             forBuiltPools ([clamped] (PoolSend& ps) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setType (static_cast<tw::filters::Type> (clamped)); });   // fb348 — pooled mirrors (fb636: built pairs only)
         }
+        // ══ tp22 — THE FILTER TABLE. The curve is the processor's shared bake; the frame is a live,
+        //    modulatable parameter. Both go to the MAIN slot and to every mirror of it — the four send
+        //    duplicates and every built pooled pair — because a send is the same filter and must draw the
+        //    same curve (the fb280 law: a send hears the filtered sound, not a different one).
+        //    Gated on change so a still frame costs two compares, not a pooled walk.
+        void setFilterTable1 (const tw::FilterTableSource::Curve* c, float frame01) noexcept
+        {
+            if (c == tblSeen1_ && frame01 == tblFrameSeen1_) return;
+            tblSeen1_ = c; tblFrameSeen1_ = frame01;
+            filterSlot_      .setTableCurve (c); filterSlot_      .setTableFrame (frame01);
+            sendFilterSlot_  .setTableCurve (c); sendFilterSlot_  .setTableFrame (frame01);
+            sendFilterSlot3_ .setTableCurve (c); sendFilterSlot3_ .setTableFrame (frame01);
+            sendFilterSlot5_ .setTableCurve (c); sendFilterSlot5_ .setTableFrame (frame01);
+            sendFilterSlot7_ .setTableCurve (c); sendFilterSlot7_ .setTableFrame (frame01);
+            forBuiltPools ([c, frame01] (PoolSend& ps)
+            { if (auto* f = ps.flt1.load (std::memory_order_acquire)) { f->setTableCurve (c); f->setTableFrame (frame01); } });
+        }
+        void setFilterTable2 (const tw::FilterTableSource::Curve* c, float frame01) noexcept
+        {
+            if (c == tblSeen2_ && frame01 == tblFrameSeen2_) return;
+            tblSeen2_ = c; tblFrameSeen2_ = frame01;
+            filterSlot2_     .setTableCurve (c); filterSlot2_     .setTableFrame (frame01);
+            sendFilterSlot2_ .setTableCurve (c); sendFilterSlot2_ .setTableFrame (frame01);
+            sendFilterSlot4_ .setTableCurve (c); sendFilterSlot4_ .setTableFrame (frame01);
+            sendFilterSlot6_ .setTableCurve (c); sendFilterSlot6_ .setTableFrame (frame01);
+            sendFilterSlot8_ .setTableCurve (c); sendFilterSlot8_ .setTableFrame (frame01);
+            forBuiltPools ([c, frame01] (PoolSend& ps)
+            { if (auto* f = ps.flt2.load (std::memory_order_acquire)) { f->setTableCurve (c); f->setTableFrame (frame01); } });
+        }
+
         // ── Filter 2 (independent) + routing/mix setters ──
         void setFilterParameters2 (float cutoffHz, float resonance) noexcept
         {
@@ -7268,6 +7298,9 @@ class SynthVoice : public juce::SynthesiserVoice
         HalfBandDown2x          osDnL_,  osDnR_;
         /** Clear every 2× converter — note-on, type swap, and the NaN guard. */
         bool osOsLatch_ = false;   // tp21 — is THIS note running the 2x path? (latched at note-on, upgrade-only)
+        const tw::FilterTableSource::Curve* tblSeen1_ = nullptr;   // tp22 — what this voice last pushed
+        const tw::FilterTableSource::Curve* tblSeen2_ = nullptr;
+        float tblFrameSeen1_ = -1.0f, tblFrameSeen2_ = -1.0f;
         void resetOversamplers() noexcept
         { osUp1L_.reset(); osUp1R_.reset(); osUp2L_.reset(); osUp2R_.reset(); osDnL_.reset(); osDnR_.reset(); }
 

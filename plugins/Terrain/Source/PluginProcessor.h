@@ -2193,6 +2193,21 @@ private:
         int  builtPreset      = -2;     // -2 = nothing built yet (a real preset index is >= 0)
     };
     HarmTableSlot harmTable_[ParameterIDs::kOscCount];
+
+    // ══ tp22 — THE FILTER TABLE's bake. Same contract as HarmTableSlot directly above, for the same
+    //    reason: turning a table into a curve is 128 frames x 512 trig conversions, which is a message-
+    //    thread job, and 96 voices x 10 slots must SHARE one read-only result rather than own copies.
+    //    Double-buffered with a retire cooldown so a voice mid-block never reads a buffer being rewritten.
+    struct FilterTableSlot
+    {
+        std::unique_ptr<tw::FilterTableSource::Curve>    curve[2];
+        std::atomic<const tw::FilterTableSource::Curve*> live { nullptr };
+        int buildIdx = 0, retireCooldown = 0, builtPreset = -2;   // -2 = nothing built yet
+    };
+    FilterTableSlot fltTable_[2];                                  // [0] = filter 1, [1] = filter 2
+    std::unique_ptr<tw::HarmTableSource::Grid> fltBakeGrid_;       // message thread only — the intermediate
+    std::unique_ptr<tw::WavetableSpec>         fltBakeSpec_;       // heap: a spec is ~229 KB (the MSVC stack law)
+    void rebuildFilterTableIfNeeded (int slot);                    // message thread (timerCallback)
     // fb589 — THE ADDITIVE WATERFALL. Its own engine instance, deliberately NOT the editor's
     // harmDispEng_[]: that one is mid-flight every 60 Hz tick baking the bars, and a 16-row HUE
     // sweep would be walking through its state. One instance serves all four oscillators because

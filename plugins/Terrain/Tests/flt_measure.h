@@ -87,7 +87,7 @@ static const char* kName[] = {
  "Comb Raw +","Comb Raw -","Comb Bright +","Comb Bright -","Comb Band +","Comb Band -",
  "Flange +","Flange -",
  "Low EQ 6","High EQ 6",
- "Formant Soprano","Formant Tenor","Formant Alto" };
+ "Formant Soprano","Formant Tenor","Formant Alto", "Filter Table" };
 static constexpr int kNameCount = (int) (sizeof (kName) / sizeof (kName[0]));
 static_assert (kNameCount == kNumTypes,
                "flt_measure.h kName[] does not have exactly tw::filters::kNumTypes entries — the "

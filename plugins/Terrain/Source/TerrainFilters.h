@@ -31,6 +31,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "FilterTableSource.h"   // tp22 — the FILTER TABLE's band curve (pure; brings HarmTableSource)
+
 namespace tw
 {
 
@@ -227,9 +229,13 @@ enum class Type : int
     COMB_BAND_P   = 109, COMB_BAND_M   = 110,
     FLANGE_P      = 111, FLANGE_M      = 112,
     LOW_EQ6       = 113, HIGH_EQ6      = 114,
-    FORMANT_SOP   = 115, FORMANT_TEN   = 116, FORMANT_ALTO = 117
+    FORMANT_SOP   = 115, FORMANT_TEN   = 116, FORMANT_ALTO = 117,
+    //    118  FILTER TABLE — tp22. Its response curve IS a wavetable's harmonic content; CUTOFF
+    //         places harmonic 24, RESONANCE scales how pronounced the peaks and troughs are, and a
+    //         FRAME parameter scans the table. Linear (a bank of bells) ⇒ NOT in needsOversampling().
+    FILTER_TABLE  = 118
 };
-constexpr int kNumTypes = 118;   // fb604 — 94 -> 118
+constexpr int kNumTypes = 119;   // fb604 — 94 -> 118 · tp22 — 118 -> 119 (FILTER TABLE)
 
 // ─── 1. Moog Ladder LP·24 (Huovilainen, corrected ZDF) — report §1 ─────
 //
@@ -1805,6 +1811,21 @@ struct BellEQ
     }
 };
 
+// ═══ tp22 — THE FILTER TABLE bank ═══════════════════════════════════════════════════════════
+//  A cascade of RBJ bells — BellEQ below, verbatim, one per band — whose GAINS are a wavetable
+//  frame's harmonic content (FilterTableSource) and whose CENTRES are fixed multiples of the
+//  cutoff. That split is the whole design: the shape comes from the table, the placement comes
+//  from the knob, so CUTOFF stays as modulatable as it is on every other filter here.
+struct TableBank
+{
+    static constexpr int kB = FilterTableSource::kBands;
+    BellEQ band[kB];
+    void reset() noexcept { for (auto& b : band) b.reset(); }
+    inline float process (float x) noexcept
+    { for (int k = 0; k < kB; ++k) x = band[k].process (x); return x; }
+};
+
+
 // SAMP-HOLD "filter" (Serum Misc homage): hold the input at rate = CUT.
 struct SampHoldFx
 {
@@ -1991,6 +2012,7 @@ public:
         ring2L_.reset();    ring2R_.reset();
         dampL_.reset();     dampR_.reset();
         eqAL_.reset(); eqAR_.reset(); eqBL_.reset(); eqBR_.reset();
+        tblL_.reset(); tblR_.reset();   // tp22
         shfxL_.reset();     shfxR_.reset();
         for (int i = 0; i < 4; ++i) { vapL_[i].reset(); vapR_[i].reset(); }
         fbScrL_ = 0.0f; fbScrR_ = 0.0f;
@@ -2004,6 +2026,7 @@ public:
         // Invalidating the memo here costs one coefficient recompute per note-on and closes
         // the whole class of leak, not just the diode one.
         lastCut_ = lastRes_ = lastDrv_ = lastMorph_ = -1.0f;
+        lastTblCurve_ = nullptr; lastTblFrame_ = -1.0f;   // tp22 — the fb603 config law: the memo's inputs are config, so they invalidate here too
         lastFs_  = -1.0;
         diodeL_.outMakeup = diodeR_.outMakeup = 1.0f;
         ladderHpL_.outMakeup = ladderHpR_.outMakeup = 1.0f;
@@ -2053,13 +2076,19 @@ public:
         // calls this PER SAMPLE, but with nothing modulating, the inputs are block-constant. Gate
         // the tan()/pow()/exp() coefficient recompute on actual change; NONE has no coefficients.
         if (type_ == Type::NONE) { preDrive_ = 1.0f; postMakeup_ = 1.0f; return; }
+        // tp22 — the FILTER TABLE adds two inputs this memo did not know about: WHICH table is
+        //  published and WHERE the scan sits. Without them a table filter computes its bells once
+        //  and then freezes — the table would load, the frame would sweep, and nothing would move.
         if (cutHz == lastCut_ && res01 == lastRes_ && drv01 == lastDrv_
             && fs == lastFs_ && type_ == lastType_ && morph_ == lastMorph_
-            && poleTapSel_ == lastPoleTap_ && spread_ == lastSpread_)
+            && poleTapSel_ == lastPoleTap_ && spread_ == lastSpread_
+            && (const void*) tblCurve_.load (std::memory_order_relaxed) == lastTblCurve_
+            && tblFrame_ == lastTblFrame_)
             return;
         lastCut_ = cutHz; lastRes_ = res01; lastDrv_ = drv01;
         lastFs_ = fs; lastType_ = type_; lastMorph_ = morph_;
         lastPoleTap_ = poleTapSel_; lastSpread_ = spread_;
+        lastTblCurve_ = (const void*) tblCurve_.load (std::memory_order_relaxed); lastTblFrame_ = tblFrame_;   // tp22
         // fb636 — when only the CUTOFF moves (an LFO on Cut: 10 of Max's presets redesign every 1-9 samples), the
         //  drive pair and the spread factor are the same functions of the same inputs every time: memoized on their
         //  inputs' bits. Every use below reads the value the call would have returned.
@@ -2779,6 +2808,38 @@ public:
                 break;
             }
             case Type::NONE:
+            case Type::FILTER_TABLE:
+            {
+                // tp22 — the table IS the response. Band k sits at cutoff x its fixed ratio (harmonic
+                //  24 on the knob), and its gain is that frame's harmonic energy there.
+                //  RESONANCE is a CONTRAST control, not a Q: 0 leaves the curve flat (the filter does
+                //  nothing, which is what a resonance of zero should mean) and 1.0 reaches 2.5x the
+                //  table's own shape, so the knob's 100 % is the algorithm's 100 % (the lifeguard law).
+                //  The per-band clamp is a safety rail, not a voicing: 32 cascaded bells at +60 dB is
+                //  a 1000x gain in one band, and that is a blow-up, not a sound.
+                constexpr float kTblQ = 4.9f;      // bands are 0.29 octaves apart; this is their RBJ Q
+                constexpr float kTblMaxDb = 24.0f;
+                const auto* curve = tblCurve_.load (std::memory_order_acquire);
+                float db[TableBank::kB] = {};
+                if (curve != nullptr)
+                    tw::FilterTableSource::blend (*curve, tblFrame_, res01 * 2.5f, db);
+                //  ⚠️ A BAND THAT DOES NOT FIT MUST BE BYPASSED, NOT CLAMPED. BellEQ pins fc into
+                //     [20, 0.45 fs], so with the cutoff up high a dozen bands all land ON that ceiling
+                //     and stack into one enormous resonance at Nyquist — measured as the curve moving
+                //     the WRONG WAY when the cutoff rose (Tests/au_filter_table.cpp caught it). Out of
+                //     range means the table has nothing to say there, and 0 dB is how a bell says nothing.
+                const float* ratio = tw::FilterTableSource::bandRatios();
+                const float fLo = 20.0f, fHi = 0.45f * (float) fs;
+                for (int k = 0; k < TableBank::kB; ++k)
+                {
+                    const float g  = juce::jlimit (-kTblMaxDb, kTblMaxDb, db[k]);
+                    const float fL = cutHzL * ratio[k], fR = cutHzR * ratio[k];
+                    tblL_.band[k].setBell (juce::jlimit (fLo, fHi, fL), (fL >= fLo && fL <= fHi) ? g : 0.0f, kTblQ, fs);
+                    tblR_.band[k].setBell (juce::jlimit (fLo, fHi, fR), (fR >= fLo && fR <= fHi) ? g : 0.0f, kTblQ, fs);
+                }
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
+                break;
+            }
             default:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
                 break;
@@ -2963,6 +3024,10 @@ public:
                 break;
             }
             case Type::NONE:
+            case Type::FILTER_TABLE:
+                l = tblL_.process (l * preDrive_) * postMakeup_;
+                r = tblR_.process (r * preDrive_) * postMakeup_;
+                break;
             default:
                 // True bypass — Max finally hears the oscillators clean.
                 break;
@@ -3016,6 +3081,13 @@ public:
     static constexpr float kOsResOn   = 0.90f;   // the grid's last resonance — beyond it, no claim
     bool oversamplingWanted (float drv01, float res01) const noexcept
     { return needsOversampling() && (drv01 > kOsDriveOn || res01 > kOsResOn); }
+
+    /** tp22 — FILTER TABLE. The curve is owned and published by the processor (message thread,
+     *  double-buffered, atomic swap — the harmTable_ contract); a slot only points at it. A null
+     *  curve is a flat filter, which is exactly what "no table chosen yet" should sound like. */
+    void setTableCurve (const tw::FilterTableSource::Curve* c) noexcept
+    { tblCurve_.store (c, std::memory_order_release); }
+    void setTableFrame (float f01) noexcept { tblFrame_ = juce::jlimit (0.0f, 1.0f, f01); }
 
     /** Set the OB-X / SEM morph (0=LP, .5=Notch, 1=HP). Wired for when a
      *  morph knob exists; until then OB-X uses the default (LP-voiced SEM). */
@@ -3185,6 +3257,16 @@ private:
     VarAllpass     vapL_[4], vapR_[4];   // DIFFUSOR 4-stage + ADD BASS rotator (stages 0-1) — fb636 M1u: views
     float          fbScrL_ = 0.0f, fbScrR_ = 0.0f;   // SCREAM feedback state
     float          screamDrv_ = 1.0f, screamFb_ = 0.0f;   // fb603 — SCREAM loop taper (computed in setParams)
+    // ── tp22 — THE FILTER TABLE. The curve is a SHARED, read-only bake published by the message
+    //    thread (one per selected table, exactly as harmTable_ publishes for the Harmonics engine),
+    //    so a slot holds a POINTER, never a copy: 96 voices x 10 slots cannot each own 128 frames.
+    //    Only the 32 bells' coefficients and state are per-slot (~1.8 KB), which is the price of
+    //    a curve that follows a modulated cutoff.
+    TableBank      tblL_, tblR_;
+    std::atomic<const tw::FilterTableSource::Curve*> tblCurve_ { nullptr };
+    float          tblFrame_ = 0.0f;                      // 0..1 scan position (a real parameter, modulatable)
+    const void*    lastTblCurve_ = nullptr;               // ← the change-gate's 9th and 10th inputs
+    float          lastTblFrame_ = -1.0f;
     float          satMix_ = 0.0f;                        // fb603 — post-EQ drive saturator blend
 };
 

@@ -300,7 +300,8 @@ static juce::StringArray terrainFilterEngineNames()
         filterTypeChoices.add ("Formant Soprano");    // 115
         filterTypeChoices.add ("Formant Tenor");      // 116
         filterTypeChoices.add ("Formant Alto");       // 117
-    static_assert (tw::filters::kNumTypes == 118, "engine list and Type enum must stay the same size");   // fb604 — 94 -> 118
+        filterTypeChoices.add ("Filter Table");        // 118 — tp22: the curve IS a wavetable's harmonic content
+    static_assert (tw::filters::kNumTypes == 119, "engine list and Type enum must stay the same size");   // fb604 — 94 -> 118 · tp22 — 118 -> 119
     return filterTypeChoices;
 }
 
@@ -2698,6 +2699,29 @@ const tw::WavetableSpec* TerrainAudioProcessor::oscSourceSpec (int oscIdx, int p
 // thread's job, see HarmTableSource::blend). Double-buffered with the same retire cooldown as
 // MorphSlot: audioReadingIdx only refreshes at block start, so a buffer the audio thread has
 // "left" can still be in use for up to a full block.
+// ══ tp22 — THE FILTER TABLE's bake. MESSAGE THREAD (timerCallback). Gated on the chosen table, so it
+//    runs once per selection and never again; the audio thread only ever dereferences `live`.
+void TerrainAudioProcessor::rebuildFilterTableIfNeeded (int slotIdx)
+{
+    const int si = juce::jlimit (0, 1, slotIdx);
+    auto& slot = fltTable_[si];
+    const int preset = (int) *apvts.getRawParameterValue (si == 0 ? ParameterIDs::SYN_FILTER1_TBL
+                                                                  : ParameterIDs::SYN_FILTER2_TBL);
+    if (preset == slot.builtPreset && slot.live.load (std::memory_order_relaxed) != nullptr) return;
+    if (slot.retireCooldown > 0) { --slot.retireCooldown; return; }   // a voice may still hold the old buffer
+
+    if (fltBakeSpec_ == nullptr) fltBakeSpec_ = std::make_unique<tw::WavetableSpec>();
+    if (fltBakeGrid_ == nullptr) fltBakeGrid_ = std::make_unique<tw::HarmTableSource::Grid>();
+    *fltBakeSpec_ = tw::WavetableBank::specForPreset (preset);
+    tw::HarmTableSource::bake (*fltBakeSpec_, *fltBakeGrid_);        // table -> harmonics (the existing bake)
+
+    const int t = slot.buildIdx;
+    if (slot.curve[t] == nullptr) slot.curve[t] = std::make_unique<tw::FilterTableSource::Curve>();
+    tw::FilterTableSource::bake (*fltBakeGrid_, *slot.curve[t]);     // harmonics -> the band curve
+    slot.live.store (slot.curve[t].get(), std::memory_order_release);
+    slot.buildIdx = 1 - t; slot.retireCooldown = 2; slot.builtPreset = preset;
+}
+
 void TerrainAudioProcessor::rebuildHarmTableIfNeeded (int oscIdx)
 {
     const int oi = juce::jlimit (0, ParameterIDs::kOscCount - 1, oscIdx);
@@ -2988,6 +3012,7 @@ void TerrainAudioProcessor::timerCallback()
                                   ParameterIDs::kOsc_SPECTRAL_AMT[o], ParameterIDs::kOsc_SPECTRAL_LO[o], ParameterIDs::kOsc_SPECTRAL_HI[o]);
     freeRetiredMorphs();   // fb636 F4 — AFTER the rebuilds: give back morph buffers no audio block can still hold (see MorphSlot)
     for (int o = 0; o < ParameterIDs::kOscCount; ++o) rebuildHarmTableIfNeeded (o);   // fb588 — HARMONICS <- WAVETABLES · tp20 — every bank
+    rebuildFilterTableIfNeeded (0); rebuildFilterTableIfNeeded (1);   // tp22 — the FILTER TABLE's curve
     // fb584 — THE BLUR TWIN BUILDER IS GONE. A twin only ever existed to make renderBlend average
     //  frames in the MAGNITUDE domain instead of cancelling in the phasor domain, and nothing calls
     //  renderBlend with a non-zero blur any more. Left running it would have built a 4.25 MB twin per
@@ -7233,6 +7258,23 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                 juce::ParameterID { ids[o], 1 }, nms[o], wtRoster, defTable));
     }
 
+    // ══ tp22 — THE FILTER TABLE's own two controls per main filter. Placed here because this is where
+    //    `wtRoster` (the ONE table roster, fb601) is in scope — the filter picks from the same list the
+    //    oscillators do, so "select a wavetable" means the same thing everywhere in the instrument.
+    {
+        const int defTable = juce::jmax (0, wtRoster.indexOf ("Prophet Saw"));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER1_TBL, 1 }, "Synth Filter 1 Table", wtRoster, defTable));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER2_TBL, 1 }, "Synth Filter 2 Table", wtRoster, defTable));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER1_TBL_FRAME, 1 }, "Synth Filter 1 Table Frame",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER2_TBL_FRAME, 1 }, "Synth Filter 2 Table Frame",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
+    }
+
     // ══ tp20 — THE POOL. Appended AFTER every hand-written parameter (the parameter law: IDs are append-only;
     //    instance 1 keeps its bare id). A clone carries the source's type, range/choices, default and label.
     {
@@ -10751,6 +10793,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float res2     =        mdP (ParameterIDs::SYN_FILTER2_RES, wc::ModDest::Res2, 0.0f, 1.0f);
         const float fltKt2   =        100.0f * ownM (*rpar (ParameterIDs::SYN_FILTER2_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack2, 0.0f, 1.0f);   // fb184 ownership
         const int   filtType2= juce::roundToInt ((float) *rpar (ParameterIDs::SYN_FILTER2_TYPE));  // fb604 — ditto
+        // tp22 — THE FILTER TABLE. The curve is whatever the message thread has published for this slot
+        //  (null until the first bake, which reads as a flat filter — the honest answer for "not ready").
+        //  FRAME rides the mod matrix like any other knob, which is what lets an envelope sweep the curve.
+        const auto* fltTbl1 = fltTable_[0].live.load (std::memory_order_acquire);
+        const auto* fltTbl2 = fltTable_[1].live.load (std::memory_order_acquire);
+        const float fltTblFrame1 = mdP (ParameterIDs::SYN_FILTER1_TBL_FRAME, wc::ModDest::FltTblFrame1, 0.0f, 1.0f);
+        const float fltTblFrame2 = mdP (ParameterIDs::SYN_FILTER2_TBL_FRAME, wc::ModDest::FltTblFrame2, 0.0f, 1.0f);
         const float filtDrv2 =        mdP (ParameterIDs::SYN_FILTER2_DRV, wc::ModDest::FDrv2, 0.0f, 1.0f);
         const float filtMix1 =        mdP (ParameterIDs::SYN_FILTER1_MIX, wc::ModDest::FMix1, 0.0f, 1.0f);
         const float filtMix2 =        mdP (ParameterIDs::SYN_FILTER2_MIX, wc::ModDest::FMix2, 0.0f, 1.0f);
@@ -11571,6 +11620,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setFilterKeytrack         (fltKt1 / 100.0f);
                 sv->setFilterKeytrack2        (fltKt2 / 100.0f);
                 sv->setFilterType             (filtType);
+                sv->setFilterTable1 (fltTbl1, fltTblFrame1);   // tp22 — the FILTER TABLE's curve + scan
                 sv->setFilterDrive            (filtDrv);
                 sv->setFltEnvDAHDSR           (fltDly, fltEnvA, fltHld, fltEnvD, fltEnvS, fltEnvR, fltCa, fltCd, fltCr, fltLoop);
                 // fb177 — dynamic envelope pool: version-gated copy (once per change,
@@ -11596,6 +11646,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 }
                 sv->setFilterParameters2      (cut2, res2);
                 sv->setFilterType2            (filtType2);
+                sv->setFilterTable2 (fltTbl2, fltTblFrame2);   // tp22
                 sv->setFilterDrive2           (filtDrv2);
                 sv->setFilterMix1             (filtMix1);
                 sv->setFilterMix2             (filtMix2);
