@@ -1,0 +1,167 @@
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  dice_rules_gate.js — tp23 · THE DICE'S RULES, EXERCISED, NOT GREPPED.
+//
+//      node Tests/dice_rules_gate.js Source/ui/public/index.html
+//
+//  WHY THIS FILE EXISTS.  Max's rules for the dice are statistical ("only on crazy", "cap at 6",
+//  "never past 20"), and a regex cannot tell you whether a branch is REACHABLE — only whether a
+//  string is present. So this gate lifts the actual decision code OUT of the shipping index.html
+//  and RUNS it, tens of thousands of times, across every aim and every reach. It is the shipped
+//  text that executes here: if someone edits the engine choice, this runs the edit.
+//
+//  What it holds the dice to (Max, tp23):
+//    · "take away the granular and the sample engine from even being thought of in the dice" —
+//      Sample / Granular / Resynth appear at NO reach but CRAZY, and DO appear on crazy.
+//    · "the randomization cap should be at 6 engines. Not the whole 8" — never more than 6, and
+//      the top of the reach really can get there (a cap nothing approaches is a dead rule).
+//    · "the delay feedback should always be under 20" — knobTop pins delay knob 1, at every reach.
+//    · percussion is gone: not an aim, not an ENV row, not a sample category.
+//    · FX and Modulation are AIMS in the one list, not actions at the bottom of the menu.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+const fs = require('fs');
+const SRC = fs.readFileSync(process.argv[2] || 'Source/ui/public/index.html', 'utf8');
+
+let pass = 0, fail = 0;
+const chk = (ok, what, detail) => { ok ? pass++ : fail++; console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${what}`); if (!ok && detail) console.log(`        ${detail}`); };
+
+/** Lift a balanced `var NAME={...};` (or a function body) out of the source, verbatim. */
+function lift(startPat, opener = '{', closer = '}') {
+  const i = SRC.search(startPat);
+  if (i < 0) throw new Error('not found: ' + startPat);
+  const j = SRC.indexOf(opener, i);
+  let d = 0, k = j;
+  for (; k < SRC.length; k++) {
+    if (SRC[k] === opener) d++;
+    else if (SRC[k] === closer && --d === 0) break;
+  }
+  return SRC.slice(i, k + 1);
+}
+/** Lift a run of source between two anchors (inclusive of the end line). */
+function span(a, b) {
+  const i = SRC.indexOf(a); if (i < 0) throw new Error('no anchor: ' + a);
+  const j = SRC.indexOf(b, i); if (j < 0) throw new Error('no end: ' + b);
+  return SRC.slice(i, j + b.length);
+}
+
+// ── the real tables and helpers, straight out of the page ────────────────────────────────────
+const REACH  = eval('(' + lift(/var REACH=\{/).replace(/^var REACH=/, '') + ')');
+const SAMPR  = eval('(' + lift(/var SAMPR=\{/).replace(/^var SAMPR=/, '') + ')');
+const AIMS   = eval(span("var AIMS=[", "];").replace(/^var AIMS=/, '').replace(/,\s*LEVELS=.*$/s, '').replace(/;$/, ''));
+const DLYMAX = eval(span("var DLY_FB_MAX=", ";").replace(/^var DLY_FB_MAX=/, '').replace(/;$/, ''));
+// knobTop closes over DLY_FB_MAX in the page; hand it the real one rather than inlining a copy
+const knobTop = new Function('DLY_FB_MAX', 'return (' +
+  span("function knobTop(core,k,top)", "}").replace(/^function knobTop/, 'function') + ')')(DLYMAX);
+
+const LEVELS = ['light', 'medium', 'heavy', 'wild', 'crazy'];
+const SOUND_AIMS = AIMS.filter(a => a !== 'anything');
+
+// deterministic-ish RNG so a failure is reproducible
+let seed = 12345;
+const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+const pick = a => a[Math.floor(rnd() * a.length)];
+
+// ── 1 · THE ENGINE CHOICE — the shipped expression, run ──────────────────────────────────────
+const engineSrc = span("var crazy=(lvl==='crazy');", "/* Sample 1 · Granular 2 · Resynth 3 — CRAZY only */");
+const chooseEngine = new Function('aim', 'lvl', 'R', 'rnd', 'pick', 'SAMPR',
+  engineSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return { modal:modal, samp:samp, fm:fm, harm:harm, seng:seng, engine: modal?6:samp?seng:harm?5:fm?4:0 };');
+
+const SAMPLE_FAMILY = new Set([1, 2, 3]);   // Sample · Granular · Resynth
+const seen = {}; LEVELS.forEach(l => seen[l] = new Set());
+for (const lvl of LEVELS)
+  for (const aim of SOUND_AIMS)
+    for (let n = 0; n < 4000; n++)
+      seen[lvl].add(chooseEngine(aim, lvl, REACH[lvl], rnd, pick, SAMPR).engine);
+
+for (const lvl of LEVELS.filter(l => l !== 'crazy')) {
+  const leaked = [...seen[lvl]].filter(e => SAMPLE_FAMILY.has(e));
+  chk(leaked.length === 0, `[1] ${lvl}: no sample-based engine is ever chosen`,
+      leaked.length ? `leaked engine index(es): ${leaked.join(', ')} (1=Sample 2=Granular 3=Resynth)` : '');
+}
+chk([...seen.crazy].some(e => SAMPLE_FAMILY.has(e)), '[1] crazy: the sample engines DO come back',
+    `crazy saw engines: ${[...seen.crazy].sort().join(', ')}`);
+for (const e of [0, 4, 5, 6]) {
+  const name = { 0: 'Wavetable', 4: 'FM', 5: 'Additive', 6: 'Modal' }[e];
+  chk([...seen.medium].includes(e), `[1] the synthesis pool still reaches ${name} at medium`);
+}
+
+// ── 2 · THE ENGINE CAP ───────────────────────────────────────────────────────────────────────
+const capConst = Number(/var DICE_MAX_ENGINES=(\d+);/.exec(SRC)[1]);
+chk(capConst === 6, `[2] the declared cap is 6 (found ${capConst})`);
+const capSrc = span("var DICE_MAX_ENGINES=", "nOn=Math.min(Math.min(DICE_MAX_ENGINES,pool.length),nOn);");
+const countOn = new Function('aim', 'lvl', 'big', 'rnd', 'oscList',
+  capSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return nOn;');
+const pool8 = () => ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+let worst = 0, bestCrazy = 0;
+for (const lvl of LEVELS) {
+  const big = (lvl === 'heavy' || lvl === 'wild' || lvl === 'crazy');
+  for (const aim of SOUND_AIMS)
+    for (let n = 0; n < 4000; n++) {
+      const v = countOn(aim, lvl, big, rnd, pool8);
+      worst = Math.max(worst, v);
+      if (lvl === 'crazy') bestCrazy = Math.max(bestCrazy, v);
+    }
+}
+chk(worst <= 6, '[2] the dice never turns on more than 6 oscillators', `worst seen: ${worst}`);
+chk(bestCrazy === 6, '[2] and crazy really does reach 6 (the cap is not decorative)', `crazy best: ${bestCrazy}`);
+
+// ── 3 · DELAY FEEDBACK ───────────────────────────────────────────────────────────────────────
+chk(DLYMAX <= 0.20, `[3] DLY_FB_MAX is ${DLYMAX} (<= 0.20 = 20 %)`);
+let fbWorst = 0, otherMoved = false;
+for (const top of [0.55, 0.7, 0.85, 0.95, 1]) {
+  fbWorst = Math.max(fbWorst, knobTop('delay', 1, top));
+  if (knobTop('delay', 0, top) === top && knobTop('reverb', 1, top) === top) otherMoved = true;
+}
+chk(fbWorst <= 0.20, '[3] delay knob 1 (Fdbk) is capped at every reach', `worst top: ${fbWorst}`);
+chk(otherMoved, '[3] and the cap touches nothing else (delay Time, other cards, untouched)');
+chk(/if\(f\.core==='delay'&&kk===1\) continue;/.test(SRC),
+    '[3] delay feedback is struck off the modulation target pool too');
+chk(/\(core==='delay'&&k===1\)\?Math\.min\(hi,\.20\)/.test(SRC),
+    "[3] the rack's own dice carries the same cap (its own closure)");
+
+// ── 4 · PERCUSSION IS GONE ───────────────────────────────────────────────────────────────────
+chk(!AIMS.includes('percussion'), '[4] percussion is not an aim any more');
+const diceRegion = SRC.slice(SRC.indexOf('var AIMS=['), SRC.indexOf('function openAimMenu'));
+const leftovers = (diceRegion.match(/percussion/g) || []).length;
+const inComment = (diceRegion.match(/PERCUSSION IS GONE|went with percussion/g) || []).length;
+chk(leftovers === inComment, '[4] no live percussion branch survives in the dice',
+    `${leftovers} mentions, ${inComment} of them the note explaining its removal`);
+
+// ── 5 · THE MENU ─────────────────────────────────────────────────────────────────────────────
+chk(/var DTARGETS=\['fx','modulation'\]/.test(SRC), '[5] FX and Modulation are dice TARGETS');
+chk(/AIMS\.concat\(DTARGETS\)\.map/.test(SRC), '[5] and they render in the ONE list with the aims');
+chk(!/Randomize chain/.test(SRC), '[5] the old bottom-of-menu "Randomize chain" action is gone');
+chk(/if\(t==='dice'&&!g\.classList\.contains\('dis'\)\) rollDice\(\);/.test(SRC),
+    '[5] the dice button dispatches through rollDice (honours the standing selection)');
+chk(/function rollDice\(\)\{[\s\S]{0,220}layout\.aim/.test(SRC),
+    '[5] rollDice reads layout.aim — so it persists and repeats without reopening the menu');
+
+// ── 6 · FLOW: MORE THAN ONE CARD ─────────────────────────────────────────────────────────────
+const FLOW_INST_MAX = eval('(' + span("FLOW_INST_MAX={", "}").replace(/^FLOW_INST_MAX=/, '') + ')');
+const flowSrc = span("var FLOWBAG={", "chain=shuffle(chain);");
+const buildChain = new Function('aim', 'R', 'rnd', 'pick', 'shuffle', 'ispan', 'FLOW_INST_MAX',
+  flowSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return chain;');
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const ispan = r => Math.round(r[0] + rnd() * (r[1] - r[0]));
+let sawMulti = false, sawTwoOfKind = false, overCeiling = null, maxLen = 0;
+for (const lvl of LEVELS)
+  for (const aim of SOUND_AIMS)
+    for (let n = 0; n < 3000; n++) {
+      const c = buildChain(aim, REACH[lvl], rnd, pick, shuffle, ispan, FLOW_INST_MAX);
+      maxLen = Math.max(maxLen, c.length);
+      if (c.length > 1) sawMulti = true;
+      const kinds = {};
+      for (const m of c) { const k = String(m).replace(/\d+$/, ''); kinds[k] = (kinds[k] || 0) + 1;
+        if (kinds[k] > (FLOW_INST_MAX[k] || 1)) overCeiling = `${k} x${kinds[k]} (max ${FLOW_INST_MAX[k]})`; }
+      if (Object.values(kinds).some(v => v >= 2)) sawTwoOfKind = true;
+      if (new Set(c).size !== c.length) overCeiling = 'duplicate instance key in ' + c.join(',');
+    }
+chk(sawMulti, '[6] the dice puts MORE THAN ONE flow card in the chain');
+chk(sawTwoOfKind, '[6] and two of the same kind (two arps, two glitches) really happen');
+chk(overCeiling === null, "[6] no kind ever exceeds its instance ceiling", overCeiling || '');
+chk(maxLen <= 8, '[6] the chain stays sane', `longest: ${maxLen}`);
+chk(/__tiDiceMode\)\s*window\.__tiDiceMode\(cardPidOf\(m\),big\)/.test(SRC),
+    '[6] every instance is diced on ITS OWN card (glitch 2 is not glitch 1 again)');
+chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — routed to something of their own');
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

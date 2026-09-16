@@ -12209,7 +12209,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 var d=DEVS[ri]; if(!d||last) return;
                 if(d.types&&d.types.length>1&&rnd()<(big?.9:.55)){ var ty=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(ty.length) setType(ri,pick(ty)); d=DEVS[ri]||d; }
                 var hot=HOTC.test(core);
-                if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) setP(kp, bt(lo, hot?Math.min(hi,.6):hi)); }
+                if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) setP(kp, bt(lo, (core==='delay'&&k===1)?Math.min(hi,.20):(hot?Math.min(hi,.6):hi))); }   /* tp23 — Max: delay feedback never past 20 */
                   var mk=d.knobs[3], mr=MIXR[core]||[.25,.5]; if(mk&&mk.p) setP(mk.p, Math.min(.95, bt(mr[0],mr[1]))); }
                 if(d.back&&rnd()<(big?.9:.55)){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) setP(b.p, norm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
                   (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]&&rnd()<(big?.85:.5)) setP(kn[2], bt(lo, hot?.6:hi)); }); }
@@ -42839,18 +42839,32 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      light) the level — the gate. Modal is the one sample engine the dice may pick (keys / plucks / textures), with a
      one-shot from the library and sane hardness / decay / material. NO DEAD NODES: everything the dice leaves on the
      canvas is on and in the path, then the canvas tidies itself so the nodes move. */
-  var AIMS=['anything','keys','pads','bass','leads','plucks','textures','percussion'], LEVELS=['light','medium','heavy','wild','crazy'];   /* tp16 — Max: "how come the other menu gets crazy" — ONE reach, and it goes all the way */
-  var ENV={keys:[.05,.45,.6,.35],pads:[.45,.55,.85,.65],bass:[.02,.35,.7,.2],leads:[.06,.35,.85,.3],plucks:[.0,.3,.0,.25],textures:[.55,.6,.9,.8],percussion:[.0,.22,.0,.18]};
+  var AIMS=['anything','keys','pads','bass','leads','plucks','textures'], LEVELS=['light','medium','heavy','wild','crazy'];
+  /* tp23 — THE DICE'S TARGETS. Max: "instead of putting a randomized chain could you just put effects and then
+     modulation and just put it in the list" — and, the point of it: "if I have it set to FX all I have to do is keep
+     clicking the random button until I get something good. I don't have to keep loading up that menu." So FX and
+     Modulation are not ACTIONS at the bottom of the menu any more, they are aims you SELECT, they persist in the
+     layout like every other aim, and the dice button itself keeps rolling whichever one is current.
+     tp23 — PERCUSSION IS GONE ENTIRELY (Max: "take percussion away actually. I don't even want that to be a thing"). */
+  var DTARGETS=['fx','modulation'], DTNAME={fx:'FX',modulation:'Modulation'};
+  function isTarget(a){ return DTARGETS.indexOf(a)>=0; }
+  /* tp23 — DELAY FEEDBACK IS CAPPED, EVERYWHERE THE DICE CAN REACH IT (Max: "the delay feedback should always be
+     under 20 ... 'cause then it's gonna give us a feedback loop, and that's terrible"). The knob is 0..100 %, so the
+     normalised cap IS the percentage. It is also struck off the modulation target pool below — a capped value an LFO
+     can still drive to 1.0 is not capped. */
+  var DLY_FB_MAX=.20;
+  function knobTop(core,k,top){ return (core==='delay'&&k===1)?Math.min(top,DLY_FB_MAX):top; }   /* tp16 — Max: "how come the other menu gets crazy" — ONE reach, and it goes all the way */
+  var ENV={keys:[.05,.45,.6,.35],pads:[.45,.55,.85,.65],bass:[.02,.35,.7,.2],leads:[.06,.35,.85,.3],plucks:[.0,.3,.0,.25],textures:[.55,.6,.9,.8]};
   /* the REACH — how far every section goes. uni = unison VOICES (never above 7, Max: "anything above is a CPU eater"); lfo/env/fx = how many;
      types = chance a card leaves its default type; back = chance its back panel rolls; fxMod = share of LFOs aimed at effect knobs;
      depth = route depth range; wideLfo = chance an LFO takes any shape (else sine/triangle-ish); subset = chance an effect hears only SOME oscillators */
-  var REACH={ light:{uni:[1,2],fold:[0,.1],warp:[0,.3],w2:.5,spec:0,fm:[.05,.3],modal:.15,fx:[1,2],lfo:[2,3],env:[1,2],gate:.15,gli:.1,drv:[0,0],res:[.05,.25],mix:.8,tape:0,f2:.15,types:.45,back:.35,fxMod:.25,depth:[.12,.35],wideLfo:.15,subset:.25,fast:.05,wide:.25},   /* tp13 — Max: "you're going easy" */
-              medium:{uni:[1,4],fold:[0,.25],warp:[0,.5],w2:.5,spec:.35,fm:[.1,.45],modal:.22,fx:[2,3],lfo:[3,5],env:[2,3],gate:.3,gli:.28,drv:[0,.2],res:[.1,.35],mix:1,tape:.25,f2:.45,types:.75,back:.65,fxMod:.5,depth:[.2,.55],wideLfo:.5,subset:.45,fast:.2,wide:.6},
-              heavy:{uni:[2,6],fold:[0,.45],warp:[.1,.7],w2:.7,spec:.6,fm:[.2,.6],modal:.3,fx:[3,4],lfo:[5,7],env:[3,4],gate:.5,gli:.5,drv:[.1,.4],res:[.15,.5],mix:1.15,tape:.4,f2:.8,types:.95,back:.9,fxMod:.75,depth:[.3,.85],wideLfo:.9,subset:.6,fast:.45,wide:.95},
-              wild:{uni:[3,7],fold:[.1,.7],warp:[.2,1],w2:.85,spec:.9,fm:[.3,.8],modal:.4,fx:[4,5],lfo:[7,10],env:[3,5],gate:.65,gli:.7,drv:[.2,.6],res:[.2,.65],mix:1.3,tape:.55,f2:.95,types:1,back:1,fxMod:.9,depth:[.35,1],wideLfo:1,subset:.7,fast:.6,wide:1},
-              crazy:{uni:[4,7],fold:[.2,.9],warp:[.35,1],w2:1,spec:1,fm:[.45,1],modal:.55,fx:[5,6],lfo:[9,10],env:[4,5],gate:.8,gli:.85,drv:[.3,.8],res:[.3,.8],mix:1.4,tape:.7,f2:1,types:1,back:1,fxMod:1,depth:[.45,1],wideLfo:1,subset:.85,fast:.75,wide:1} };   /* tp16 — past wild: every filter exotic, both filters, 9-10 LFOs, the deepest routes */
+  var REACH={ light:{uni:[1,2],fold:[0,.1],warp:[0,.3],w2:.5,spec:0,fm:[.05,.3],modal:.15,fx:[1,2],lfo:[2,3],env:[1,2],gate:.15,gli:.1,drv:[0,0],res:[.05,.25],mix:.8,tape:0,f2:.15,types:.45,back:.35,fxMod:.25,depth:[.12,.35],wideLfo:.15,subset:.25,fast:.05,wide:.25,flow:[0,1]},   /* tp13 — Max: "you're going easy" */
+              medium:{uni:[1,4],fold:[0,.25],warp:[0,.5],w2:.5,spec:.35,fm:[.1,.45],modal:.22,fx:[2,3],lfo:[3,5],env:[2,3],gate:.3,gli:.28,drv:[0,.2],res:[.1,.35],mix:1,tape:.25,f2:.45,types:.75,back:.65,fxMod:.5,depth:[.2,.55],wideLfo:.5,subset:.45,fast:.2,wide:.6,flow:[1,2]},
+              heavy:{uni:[2,6],fold:[0,.45],warp:[.1,.7],w2:.7,spec:.6,fm:[.2,.6],modal:.3,fx:[3,4],lfo:[5,7],env:[3,4],gate:.5,gli:.5,drv:[.1,.4],res:[.15,.5],mix:1.15,tape:.4,f2:.8,types:.95,back:.9,fxMod:.75,depth:[.3,.85],wideLfo:.9,subset:.6,fast:.45,wide:.95,flow:[2,3]},
+              wild:{uni:[3,7],fold:[.1,.7],warp:[.2,1],w2:.85,spec:.9,fm:[.3,.8],modal:.4,fx:[4,5],lfo:[7,10],env:[3,5],gate:.65,gli:.7,drv:[.2,.6],res:[.2,.65],mix:1.3,tape:.55,f2:.95,types:1,back:1,fxMod:.9,depth:[.35,1],wideLfo:1,subset:.7,fast:.6,wide:1,flow:[2,4]},
+              crazy:{uni:[4,7],fold:[.2,.9],warp:[.35,1],w2:1,spec:1,fm:[.45,1],modal:.55,fx:[5,6],lfo:[9,10],env:[4,5],gate:.8,gli:.85,drv:[.3,.8],res:[.3,.8],mix:1.4,tape:.7,f2:1,types:1,back:1,fxMod:1,depth:[.45,1],wideLfo:1,subset:.85,fast:.75,wide:1,flow:[3,5]} };   /* tp16 — past wild: every filter exotic, both filters, 9-10 LFOs, the deepest routes */
   var FXPOOL={ pads:['reverb','delay','cho','pha','wid','fla','tape','granular','eqz'], keys:['reverb','delay','cho','tape','pha','eqz','wid'], bass:['saturate','ott','delay','eqz','tape','bod','cho'],
-               leads:['delay','reverb','saturate','cho','pha','fla','wid','bod'], plucks:['delay','reverb','cho','pha','granular','wid'], textures:['reverb','granular','delay','fla','pha','tape','wid','bod','saturate'], percussion:['reverb','delay','saturate','eqz','bod','cho'] };
+               leads:['delay','reverb','saturate','cho','pha','fla','wid','bod'], plucks:['delay','reverb','cho','pha','granular','wid'], textures:['reverb','granular','delay','fla','pha','tape','wid','bod','saturate'] };
   var FXMORE=['bod','fla','granular','saturate','pha','cho','wid','eqz','ott','delay','reverb','tape'];   /* heavy / wild reach past the aim's own pool */
   var FXMIX={reverb:[.25,.45],delay:[.2,.4],cho:[.3,.6],pha:[.3,.55],fla:[.25,.5],wid:[.4,.8],tape:[.4,.8],saturate:[.3,.7],cmp:[.5,1],ott:[.3,.6],eqz:[.8,1],granular:[.25,.5],bod:[.25,.55]};
   var HOT=/saturate|ott|cmp|bod/;
@@ -42868,7 +42882,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      lead". Drums live in their own world: a DRUM preset is all drums, layered, and no melodic preset ever pulls one. */
   var MELODIC=['Bass','Bell','Keys','Lead','Pad','Pluck','Synth'];
   var DRUMCATS=['Drums','808'];
-  var AIMCATS={keys:['Keys','Bell','Pluck'],pads:['Pad','Keys','Synth'],bass:['Bass'],leads:['Lead','Synth','Bell'],plucks:['Pluck','Bell','Keys'],textures:['Pad','Synth','Keys'],percussion:['Drums','808']};
+  var AIMCATS={keys:['Keys','Bell','Pluck'],pads:['Pad','Keys','Synth'],bass:['Bass'],leads:['Lead','Synth','Bell'],plucks:['Pluck','Bell','Keys'],textures:['Pad','Synth','Keys']};
   var libCache=null, libAt=0, blendPeers=null;
   function sampLib(cb){ if(libCache&&Date.now()-libAt<60000){ cb(libCache); return; } var f=NF('scanSampleFactory'); if(!f){ cb(null); return; }
     try{ Promise.resolve(f()).then(function(r){ var d=(typeof r==='string')?JSON.parse(r):r; libCache=(d&&d.cats)?d:null; libAt=Date.now(); cb(libCache); }).catch(function(){ cb(null); }); }catch(e){ cb(null); } }
@@ -42885,13 +42899,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* the sample engines' own knobs, rolled (Max: "loop them, reverse them, chop them, stretch them, formant-shift them"). SCAN is −1..+1 (0.75
      normalised = 1x forward; below the middle plays BACKWARDS); FORMANT −1..+1 (0.5 = none). */
   function rollSample(X,eng,aim,lvl,P){ var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'), wild=(lvl==='wild'||lvl==='crazy'), S=X+'SAMPLE_';   /* eng: 1 = Sample · 3 = Resynth (Granular is off the table, tp13) */
-    var lm=pick(big?[0,1,2,3,4,2,1]:[0,0,1,4,2]); if(aim==='pads'||aim==='textures') lm=pick([1,3,4,2,1]); if(aim==='plucks'||aim==='percussion') lm=pick([0,0,4,2]);
+    var lm=pick(big?[0,1,2,3,4,2,1]:[0,0,1,4,2]); if(aim==='pads'||aim==='textures') lm=pick([1,3,4,2,1]); if(aim==='plucks') lm=pick([0,0,4,2]);
     P(S+'LOOP_MODE', choiceNorm(S+'LOOP_MODE', lm, 5));   /* One-Shot · Forward · Reverse · Ping-Pong · Tailed */
     var st=between(0, big?.35:.12); P(S+'START', st); P(S+'END', rnd()<(big?.45:.2)?between(Math.min(.95,st+.25),1):1);   /* chop the window */
     if(lm===1||lm===3){ var ls=between(st, Math.min(.85,st+.4)); P(S+'LOOP_START', ls); P(S+'LOOP_END', between(Math.min(.98,ls+.08),1)); P(S+'XFADE', between(.05,.35)); }
     var rev=rnd()<(big?.3:.12); P(S+'SCAN', rev?between(.1,.4):(eng===2?between(.52,.7):between(.68,.82)));
     P(S+'STRETCH', eng===1?(rnd()<(big?.5:.2)?between(0,wild?.9:.5):0):between(.2,wild?1:.7)); P(S+'STRETCH_MODE', choiceNorm(S+'STRETCH_MODE', (aim==='pads'||aim==='textures')?2:0, 3));
     P(S+'FORMANT', .5+between(-1,1)*(wild?.35:big?.22:.1)); if(rnd()<(big?.35:.1)) P(S+'FORMANT_MODE', choiceNorm(S+'FORMANT_MODE', 1+Math.floor(rnd()*3), 4));
+    if(eng===2){   /* tp23 — GRANULAR is on the table again, CRAZY only. Its own knobs, or the engine is a silent default. */
+      P(X+'GRAIN_DENSITY', between(.25, wild?.9:.6)); P(X+'GRAIN_SIZE', between(.12, wild?.8:.5)); P(X+'GRAIN_SHAPE', rnd());
+      P(X+'GRAIN_POSITION', between(0,.7)); P(X+'GRAIN_SPRAY', between(.05, wild?.7:.35)); P(X+'GRAIN_PSPRAY', between(0, wild?.5:.2));
+      P(X+'GRAIN_PITCH', .5+between(-1,1)*(wild?.3:.12)); P(X+'GRAIN_WIDTH', between(.3,.9)); P(X+'GRAIN_SKEW', between(.2,.8));
+      P(X+'GRAIN_SCAN', between(.35,.75)); P(X+'GRAIN_KEY', rnd()<.5?1:0); P(X+'GRAIN_DIR', rnd()<.25?1:0); }
     if(eng===3){   /* tp13 — RESYNTH, CREATIVELY (Max: "I'll let you get a crack at the resynth but it has to be creative") */
       P(X.replace(/_$/,'')+'_SPECTRAL_TYPE', rnd()); P(X.replace(/_$/,'')+'_SPECTRAL_AMT', between(.35, wild?1:.8));
       P(X.replace(/_$/,'')+'_SPECTRAL_LO', between(0,.35)); P(X.replace(/_$/,'')+'_SPECTRAL_HI', between(.6,1));
@@ -42914,25 +42933,35 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* one oscillator's sound, rolled — everything but pitch (shared by the dice and the map's per-oscillator roll) */
   function rollOsc(o,i,aim,lvl,R,P){ var X=OX(o);
     /* tp13 — GRANULAR IS OFF THE TABLE (Max). Sample 1 and Resynth 3 only, and Resynth has to be USED, not defaulted.
-       A percussion roll is a DRUM roll: struck Modal, or the sampler with a real drum one-shot layered across the oscs. */
-    var perc=aim==='percussion', modal=perc?rnd()<.45:((aim==='keys'||aim==='plucks'||aim==='textures')&&rnd()<R.modal), samp=!modal&&(perc||rnd()<(SAMPR[lvl]||.4)*(aim==='bass'?.6:1)), fm=!modal&&!samp&&rnd()<(aim==='bass'?.45:.3), harm=!modal&&!samp&&aim==='textures'&&rnd()<.35;
-    var seng=!samp?0:perc?1:(aim==='pads'||aim==='textures')?pick([1,3,3]):(aim==='plucks'||aim==='keys'||aim==='bass')?pick([1,1,1,3]):pick([1,1,3]);   /* Sample 1 · Resynth 3 */
+       tp23 — and now the whole sample family is CRAZY-only; see the engine choice below. */
+    /* tp23 — SYNTHESIS ONLY, UNLESS IT IS CRAZY (Max: "take away the granular and the sample engine from even being
+       thought of in the dice ... only filter types and all the synthesizer stuff, FM, additive, modal is fine, and then
+       wavetable"). Outside CRAZY the pool is WT 0 · FM 4 · HARM 5 · MODAL 6 and nothing else — no Sample, no Granular,
+       no Resynth, and no one-shot is loaded at all. On CRAZY the whole instrument is on the table, which is where Max
+       wants the IDM glitches and the sample mangling to live: "only when it's on crazy". */
+    var crazy=(lvl==='crazy');
+    var modal=((aim==='keys'||aim==='plucks'||aim==='textures')&&rnd()<R.modal);
+    var samp=crazy&&!modal&&rnd()<(SAMPR[lvl]||.4)*(aim==='bass'?.6:1);
+    var fm=!modal&&!samp&&rnd()<(aim==='bass'?.45:.3);
+    /* additive is a NAMED member of the synthesis pool now, not a textures-only accident */
+    var harm=!modal&&!samp&&!fm&&rnd()<(aim==='textures'?.4:.22);
+    var seng=!samp?0:(aim==='pads'||aim==='textures')?pick([1,3,3,2]):(aim==='plucks'||aim==='keys'||aim==='bass')?pick([1,1,1,3,2]):pick([1,1,3,2]);   /* Sample 1 · Granular 2 · Resynth 3 — CRAZY only */
     P(X+'ENGINE', choiceNorm(X+'ENGINE', modal?6:samp?seng:harm?5:fm?4:0, 7));
     phase180(X,P);   /* tp12b — HARD RULE (Max): 180°, ALIGNED — "I shouldn't see an oscillator that isn't 180" */   /* Engine enum: WT 0 · SAMP 1 · GRAN 2 · SPEC 3 · FM 4 · HARM 5 · MODAL 6 */
     P(X+'LEVEL',.78); P(X+'PAN',.5+(i%2?1:-1)*between(.05,.2)); P(X+'WT_PRESET',rnd()); P(X+'WT_FRAME',rnd());
     P(X+'WARP_MODE',rnd()); P(X+'WARP_AMOUNT',between(R.warp[0],R.warp[1])); P(X+'WARP2_MODE',rnd()<R.w2?rnd():0); P(X+'WARP2_AMT',between(R.warp[0],R.warp[1])*0.7);
     P(X+'SPECTRAL_TYPE',rnd()); P(X+'SPECTRAL_AMT',between(0,.4)); if(rnd()<R.spec){ P(X+'SPECTRAL_LO',between(0,.3)); P(X+'SPECTRAL_HI',between(.5,1)); }
     P(X+'FOLD_SHAPE',rnd()); P(X+'FOLD_AMT',between(R.fold[0],R.fold[1])*(aim==='bass'?1.2:1)); P(X+'FRAME_SPREAD',between(0,.12));
-    var vmax=R.uni[1]; if(aim==='percussion') vmax=Math.min(vmax,2); if(aim==='bass') vmax=Math.min(vmax,lvl==='wild'?4:3); if(aim==='plucks'||aim==='keys') vmax=Math.min(vmax,5);
+    var vmax=R.uni[1]; if(aim==='bass') vmax=Math.min(vmax,lvl==='wild'?4:3); if(aim==='plucks'||aim==='keys') vmax=Math.min(vmax,5);
     P(X+'UNISON',uniNorm(R.uni[0]+rnd()*(Math.max(R.uni[0],vmax)-R.uni[0]))); P(X+'UWIDTH',between(.3,.85)); P(X+'UBLEND',between(.3,.7));
     if(fm){ P(X+'FM_DEPTH1',between(R.fm[0],R.fm[1])); P(X+'FM_DEPTH2',between(R.fm[0],R.fm[1])*.6); P(X+'FM_FB',between(R.fm[0],R.fm[1])*.5); P(X+'FM_STRIKE',between(0,.5)); P(X+'FM_AGE',between(0,.3)); }
     if(harm){ P(X+'HARM_MODE',rnd()); P(X+'HARM_HUE',rnd()); P(X+'HARM_COUNT',between(.3,.9)); P(X+'HARM_LEAN',between(.3,.7)); P(X+'HARM_GRIT',between(0,.3)); P(X+'HARM_SHINE',between(0,.5)); }
-    if(modal){ P(X+'MODAL_FAMILY',perc?pick([8,6,7,1,0])/8:rnd()); P(X+'MODAL_FORM',rnd()); P(X+'MODAL_HARD',perc?between(.55,.95):between(.35,.75)); P(X+'MODAL_POS',between(.2,.6)); P(X+'MODAL_DECAY',perc?between(.04,.28):aim==='plucks'?between(.2,.5):between(.3,.65)); P(X+'MODAL_MATERIAL',between(.25,.75));   /* Skin · Timber · Glass · Wire · Ivory, struck short */
-      P(X+'MODAL_BREATH',perc?between(0,.05):between(0,aim==='textures'?.5:.2)); P(X+'MODAL_STRETCH',between(0,lvl==='wild'?.35:.15)); P(X+'MODAL_BLOOM',between(0,.35)); P(X+'MODAL_HALO',between(0,.4)); P(X+'MODAL_AGE',between(0,.25)); P(X+'MODAL_BODY',between(.3,.8)); oneShot(o,aim,true); }
-    if(samp){ rollSample(X,seng,aim,lvl,P); oneShot(o,aim,perc,perc?[pick(['Drums','Drums','808'])]:null); }   /* tp13 — a drum layer per oscillator on a percussion roll, melodic one-shots otherwise */
+    if(modal){ P(X+'MODAL_FAMILY',rnd()); P(X+'MODAL_FORM',rnd()); P(X+'MODAL_HARD',between(.35,.75)); P(X+'MODAL_POS',between(.2,.6)); P(X+'MODAL_DECAY',aim==='plucks'?between(.2,.5):between(.3,.65)); P(X+'MODAL_MATERIAL',between(.25,.75));   /* Skin · Timber · Glass · Wire · Ivory, struck short */
+      P(X+'MODAL_BREATH',between(0,aim==='textures'?.5:.2)); P(X+'MODAL_STRETCH',between(0,lvl==='wild'?.35:.15)); P(X+'MODAL_BLOOM',between(0,.35)); P(X+'MODAL_HALO',between(0,.4)); P(X+'MODAL_AGE',between(0,.25)); P(X+'MODAL_BODY',between(.3,.8)); oneShot(o,aim,true); }
+    if(samp){ rollSample(X,seng,aim,lvl,P); oneShot(o,aim,false); }   /* tp23 — CRAZY only, and melodic one-shots only: the drum layer went with percussion */
     rollBlend(o,X,lvl,P);
     return modal; }
-  function rollOscNow(o){ var aim=layout.aim||'anything'; if(aim==='anything') aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium; var list=[], ids=[];
+  function rollOscNow(o){ var aim=layout.aim||'anything'; if(aim==='anything'||isTarget(aim)) aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium; var list=[], ids=[];
     rollOsc(o,oscList().indexOf(o),aim,lvl,R,function(id,v){ list.push([id,v]); ids.push(id); });
     track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); commit(); sync(); }); toast('Oscillator '+oscLetter(o)+' re-rolled · '+aim); }
   /* ── tp11 — THE RANDOMIZER'S CABLES (Max: "I connect it to oscillator A and B … click in the middle … it creates a random setting for A and B, not a
@@ -42943,7 +42972,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function rollFxCard(ri,lvl,R,P){ var d=(window.__fxrDevs?window.__fxrDevs():[])[ri]; if(!d||d.core==='cmp') return;   /* tp12 — nothing on the compressor */
     if(d.types&&d.types.length>1&&rnd()<R.types){ var tys=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(tys.length) setFxType(ri,pick(tys)); d=(window.__fxrDevs?window.__fxrDevs():[])[ri]||d; }
     var hot=HOT.test(d.core), hi=lvl==='wild'?.95:lvl==='heavy'?.85:lvl==='medium'?.7:.55, lo=lvl==='light'?.25:.08;
-    if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) P(kp, between(lo, hot?Math.min(hi,.6):hi)); } }
+    if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) P(kp, between(lo, knobTop(d.core,k,hot?Math.min(hi,.6):hi))); } }   /* tp23 — delay feedback capped here too */
     if(d.back&&rnd()<Math.max(.35,R.back)){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
       (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]) P(kn[2], between(lo, hot?.6:hi)); }); } }
   function rollModule(n,lvl,R,P){ var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
@@ -42979,8 +43008,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      1–7 LFOs of any shape / rate / sync / phase aimed at the oscillators, the filters AND the effect knobs, with real depths
      (each LFO's own master stays at full — the old dice wrote it near zero); envelopes 2, 4 and 5 shaped and routed (filter,
      wavetable, effects, LFO rate); Glitch fully re-rolled on heavy / wild; no dead nodes; the canvas tidies itself. */
-  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything') aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'); var tool=page.querySelector('.g[data-t="dice"]'); tool.classList.add('dis');
-    var pool=oscList(); var nOn=(aim==='bass'||aim==='percussion')?(1+(rnd()<.35?1:0)):(2+(rnd()<(lvl==='light'?.2:.45)?1:0)); if(big&&rnd()<.35) nOn++; if((lvl==='wild'||lvl==='crazy')&&rnd()<.3) nOn++; nOn=Math.min(Math.min(4,pool.length),nOn);
+  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything'||isTarget(aim)) aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'); var tool=page.querySelector('.g[data-t="dice"]'); tool.classList.add('dis');
+    /* tp23 — THE CAP IS SIX (Max: "the randomization cap should be at 6 engines. Not the whole 8, but it can choose up
+       to 6 engines"). The pool is eight since tp20; the dice deliberately stops two short of it, and only the top of
+       the reach gets anywhere near six. */
+    var DICE_MAX_ENGINES=6;
+    var pool=oscList(); var nOn=(aim==='bass')?(1+(rnd()<.35?1:0)):(2+(rnd()<(lvl==='light'?.2:.45)?1:0));
+    if(big&&rnd()<.5) nOn++; if((lvl==='wild'||lvl==='crazy')&&rnd()<.55) nOn++; if(lvl==='crazy'&&rnd()<.5) nOn++;
+    nOn=Math.min(Math.min(DICE_MAX_ENGINES,pool.length),nOn);
     var on=shuffle(pool).slice(0,nOn).sort(function(a,b){ return pool.indexOf(a)-pool.indexOf(b); }), list=[], ids=[], fxAdded=[], f2On=false;
     function P(id,v){ list.push([id,v]); ids.push(id); }
     function span(r){ return between(r[0],r[1]); }
@@ -42994,7 +43029,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       function(){ toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); phase180(X,P); if(!isOn) return;   /* tp12b — 180° on ALL of them, on or off */ rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
           blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); },
       function(){ toast('Shaping the filters…'); f2On=(on.length>1)&&rnd()<R.f2;   /* tp13 — Max: "why isn't the second filter active on anything" */
-          P('SYN_FILTER1_TYPE',ftypeR()); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65],percussion:[.45,.8]}[aim];
+          P('SYN_FILTER1_TYPE',ftypeR()); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65]}[aim]||[.4,.75];
           P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',span(R.res)); P('SYN_FILTER1_DRV',span(R.drv)); P('SYN_FILTER1_KEYTRACK',0); P('SYN_FILTER1_VEL',0);
           P('SYN_FILTER1_MIX',1); P('SYN_FILTER1_POLES',rnd()<.5?1:between(.3,1)); P('SYN_FILTER1_SPREAD',rnd()<(R.wide||.3)?between(.1,.6):0);
           P('SYN_FILTER1_DRIVETYPE',choiceNorm('SYN_FILTER1_DRIVETYPE',Math.floor(rnd()*6),6)); P('SYN_FILTER1_PDRV',span(R.drv));
@@ -43024,12 +43059,42 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             if(last) return;
             if(d.types&&d.types.length>1&&rnd()<R.types){ var tys=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(tys.length) setFxType(ri,pick(tys)); d=(window.__fxrDevs?window.__fxrDevs():[])[ri]||d; }
             var hot=HOT.test(core), hi=lvl==='crazy'?1:lvl==='wild'?.95:lvl==='heavy'?.85:.7, lo=lvl==='light'?.3:.1;
-            if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(!kp) continue; var top=hot?Math.min(hi,.6):hi; if(core==='delay'&&k===1) top=Math.min(top,.7); P(kp, between(lo,top)); }
+            if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(!kp) continue; var top=knobTop(core,k,hot?Math.min(hi,.6):hi); P(kp, between(lo,top)); }   /* tp23 — delay feedback capped at DLY_FB_MAX */
               var mk=d.knobs[3]; if(mk&&mk.p){ var mr=FXMIX[core]||[.25,.5]; P(mk.p, Math.min(.95, between(mr[0],mr[1])*R.mix*(aim==='pads'&&core==='reverb'?1.25:1))); } }
             if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
               (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]) P(kn[2], between(lo, hot?.6:hi)); }); } }); },
       function(){ toast('Wiring the modulation…'); if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
+          /* tp23 — MULTIPLE FLOW CARDS (Max: "I see two ARPs and two glitches and stuff like that, and glitches are
+             routed to something else than what it's routed to"). The chain is drawn from a weighted bag up to the
+             reach's own count, honouring each kind's instance ceiling (Robin is a singleton — FLOW_INST_MAX says so,
+             and __flowSetChain forces it anyway). Then every instance is diced on ITS OWN card id, so glitch 2 is a
+             different glitch and not a second copy of glitch 1, and the ORDER is shuffled — two glitches either side
+             of an arp is not the same patch as both after it. */
+          var FLOWBAG={arp:3,glitch:3,chop:2,drift:1}, fUsed={arp:0,glitch:0,chop:0,drift:0}, chain=[];
+          var wantF=ispan(R.flow||[0,1]);
+          if((aim==='plucks'||aim==='keys')&&wantF<1&&rnd()<.55) wantF=1;
+          var bag=[]; Object.keys(FLOWBAG).forEach(function(k){ for(var bi=0;bi<FLOWBAG[k];bi++) bag.push(k); });
+          for(var fq=0; fq<wantF; fq++){
+            var avail=Object.keys(fUsed).filter(function(k){ return fUsed[k]<(FLOW_INST_MAX[k]||1); });
+            if(!avail.length) break;
+            var cand=bag.filter(function(k){ return avail.indexOf(k)>=0; });
+            var fk=cand.length?pick(cand):pick(avail); if(!fk) break;
+            fUsed[fk]++; chain.push(fUsed[fk]>1?fk+fUsed[fk]:fk); }
+          chain=shuffle(chain);
+          window.__flowSetChain&&window.__flowSetChain(chain);
+          chain.forEach(function(m){ try{ if(window.__tiDiceMode) window.__tiDiceMode(cardPidOf(m),big); }catch(e){} });   /* each instance re-rolled whole, on its own card */
           var dpool=[];
+          /* tp23 — and the instances are MOD TARGETS, which is the other half of Max's ask: "glitches are routed to
+             something else than what it's routed to". Two glitches only feel like two cards if one rides an LFO the
+             other never sees, so every instance in the chain puts ITS OWN knobs into the pool. Instance 2+ ids are
+             real APVTS params (PluginProcessor clones the base list into FLOW_GLI2_*), and knobDest returns null for
+             anything this build does not carry — so naming more than exists stays safe (the tp13 rule). */
+          var FLOWPFX={arp:'FLOW_ARP',chop:'FLOW_CHOP',glitch:'FLOW_GLI'};
+          var FLOWKNOB={arp:['BLEND','GATE','GLIDE','MORPH'],chop:['BLEND','GRIT','FILTER','DETUNE'],glitch:['BLEND','DECAY','DEJAVU','BURST']};
+          chain.forEach(function(m){ var fk2=fKind(m), fn2=fInst(m), pfx=FLOWPFX[fk2]; if(!pfx) return;
+            var head=pfx+(fn2>1?fn2:'')+'_';
+            (FLOWKNOB[fk2]||[]).forEach(function(kn){ var d=knobDest(head+kn); if(d!=null) dpool.push({d:d,k:'flow'}); }); });
+
           var tapeOn=rnd()<Math.max(R.tape,big?.45:0)&&(aim==='pads'||aim==='keys'||aim==='textures'||aim==='bass'||big), tapeMach=Math.floor(rnd()*3);   /* tp12 — decided first: its knobs come up and join the targets */
           if(tapeOn){ rollTape(lvl,P); [1887,1888,1889].forEach(function(d){ dpool.push({d:d,k:'tape'}); }); }
           /* tp13 — Max: "I don't see the stuff on the BACK PANEL being LFO'd." Every one of these is a real dest; knobDest
@@ -43038,12 +43103,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
               .forEach(function(k){ var d=knobDest(X+k); if(d!=null) dpool.push({d:d,k:(k==='WT_FRAME'?'wt':(k==='LEVEL'?'lvl':'osc'))}); }); });
           dpool.push({d:0,k:'cut'}); dpool.push({d:54,k:'res'}); [58,60,62,340,342,344].forEach(function(d){ dpool.push({d:d,k:'fltback'}); });   /* drive · back drive · mix · vel · track · spread */
           if(f2On){ dpool.push({d:1,k:'cut'}); dpool.push({d:55,k:'res'}); [59,61,63,341,343,345].forEach(function(d){ dpool.push({d:d,k:'fltback'}); }); }
-          fxAdded.forEach(function(f){ if(f.core==='cmp') return; for(var kk=0;kk<12;kk++){   /* tp12 — nothing on the compressor · tp13 — 0-3 are the front dials, 4-11 the BACK PANEL: all of them are targets */ var d=window.__fxrDevs?(window.__fxModDest?window.__fxModDest(f.core,f.inst,kk):null):null; if(d!=null) dpool.push({d:d,k:(kk<4?'fx':'fxback')}); } });
+          fxAdded.forEach(function(f){ if(f.core==='cmp') return; for(var kk=0;kk<12;kk++){   /* tp12 — nothing on the compressor · tp13 — 0-3 are the front dials, 4-11 the BACK PANEL: all of them are targets */
+            if(f.core==='delay'&&kk===1) continue;   /* tp23 — NEVER modulate delay feedback: a value capped at 20 that an LFO can still drive to 1.0 is not capped */
+            var d=window.__fxrDevs?(window.__fxModDest?window.__fxModDest(f.core,f.inst,kk):null):null; if(d!=null) dpool.push({d:d,k:(kk<4?'fx':'fxback')}); } });
           var used={}; function take(kind){ var c=dpool.filter(function(p){ return !used[p.d]&&(!kind||p.k===kind); }); if(!c.length) c=dpool.filter(function(p){ return !used[p.d]; }); if(!c.length) return null; var p=pick(c); used[p.d]=1; return p; }
           function route(tag,addFn,dest,depth){ if(dest==null) return; addFn(dest); if(window.__tiSetDepth) window.__tiSetDepth(tag,dest,Math.max(-1,Math.min(1,depth))); }
           function dep(){ return between(R.depth[0],R.depth[1])*(rnd()<.25?-1:1); }
           var nL=Math.min(10,ispan(R.lfo)), lfoN=0;
-          for(var n=1;n<=nL;n++){ var tgt=(n===1)?take('wt'):(rnd()<R.fxMod)?(rnd()<.5?take('fxback'):take('fx')):(rnd()<.35?take('fltback'):take(null)); if(!tgt) break; lfoN=n;   /* tp13 — the back panels get their share */
+          for(var n=1;n<=nL;n++){ var tgt=(n===1)?take('wt'):(chain.length&&rnd()<.3)?take('flow'):(rnd()<R.fxMod)?(rnd()<.5?take('fxback'):take('fx')):(rnd()<.35?take('fltback'):take(null)); if(!tgt) break; lfoN=n;   /* tp23 — the flow instances take their share */   /* tp13 — the back panels get their share */
             var shape=rnd()<R.wideLfo?Math.floor(rnd()*11):pick([0,0,1,2]); P('LFO'+n+'_SHAPE',choiceNorm('LFO'+n+'_SHAPE',shape,11));
             var sync=rnd()<.5; P('LFO'+n+'_SYNC',sync?1:0); if(sync) P('LFO'+n+'_DIV',rnd());
             P('LFO'+n+'_RATE', rnd()<R.fast?between(.45,.85):between(.05,.4)); P('LFO'+n+'_PHASE',rnd()); P('LFO'+n+'_DEPTH',1);   /* the LFO's own master at full; the route carries the amount */
@@ -43059,8 +43126,6 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(f2On&&nE>=2) route('env2',function(d){ window.__tiAddRoute&&window.__tiAddRoute(2,0,d); },1,between(.08,.35));
           [4,5].slice(0,Math.max(0,nE-1)).forEach(function(en){ var t=(fxAdded.length&&rnd()<R.fxMod)?take('fx'):take(null); if(t) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },t.d,dep());
             if((lvl==='wild'||lvl==='crazy')&&lfoN&&rnd()<.4) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },11+1,between(.3,.8)); });   /* wild: an envelope swells LFO 1's depth */
-          var chain=[]; if((aim==='plucks'||aim==='keys')&&rnd()<.4) chain.push('arp'); if(aim==='pads'&&rnd()<.2) chain.push('drift'); if(rnd()<(aim==='textures'?Math.max(R.gli,.45):R.gli)) chain.push('glitch'); window.__flowSetChain&&window.__flowSetChain(chain);
-          if(chain.indexOf('glitch')>=0){ try{ if(window.__tiDiceMode) window.__tiDiceMode('gli',big); }catch(e){} }   /* Glitch re-rolled whole — every lane, grid and effect; wide on heavy / wild */
           setToggle('tape-toggle',tapeOn); if(tapeOn) setMachine(tapeMach); setToggle('loop-toggle',false); if(window.__tiBatchEnd) window.__tiBatchEnd(); },
       function(){ track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); pool.forEach(function(o){ var d=oscDev(o); if(d) d.classList.toggle('osc-off',on.indexOf(o)<0); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){}
           setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },350);   /* the cards read back the knobs the dice wrote */
@@ -43170,7 +43235,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       if(page.classList.contains('viz')){ e.preventDefault(); return; }
       if(n.kind==='flow'&&!n.ext){ e.preventDefault(); e.stopPropagation(); closeMenus(); setFlowExt(n,true); commit(); return; }   /* the tile opens IN PLACE (its own right-click would float a card) */
       closeMenus(); sel={node:n.key}; paintSel(); },true);   /* tp10 — CAPTURE; no "Part of the synth", no "Extend / Remove" (Max: delete = ⌫) — the module's own right-click runs */
-    page.querySelector('.tp-tools').addEventListener('mousedown',function(e){ e.stopPropagation(); var g=e.target.closest('.g'); if(!g||e.button!==0) return; var t=g.dataset.t; if(t==='fit') fit(); if(t==='tidy') glideTidy(); if(t==='undo') undo(); if(t==='redo') redo(); if(t==='viz') setViz(!layout.viz); if(t==='dice'&&!g.classList.contains('dis')) generate(); });
+    page.querySelector('.tp-tools').addEventListener('mousedown',function(e){ e.stopPropagation(); var g=e.target.closest('.g'); if(!g||e.button!==0) return; var t=g.dataset.t; if(t==='fit') fit(); if(t==='tidy') glideTidy(); if(t==='undo') undo(); if(t==='redo') redo(); if(t==='viz') setViz(!layout.viz); if(t==='dice'&&!g.classList.contains('dis')) rollDice(); });
     miniEl.addEventListener('mousedown',function(e){ e.stopPropagation(); var m=miniEl._map; if(!m) return; var r=miniEl.getBoundingClientRect(); var wx=(e.clientX-r.left-m.ox)/m.k+m.x0, wy=(e.clientY-r.top-m.oy)/m.k+m.y0; view.x=-(wx-m.W/2)*view.z; view.y=-(wy-m.H/2)*view.z; applyView(); saveView(); });
     addM.addEventListener('mousedown',function(e){ e.stopPropagation(); var c=e.target.closest('.cats .row'); if(c){ addCat=c.dataset.c; renderAdd(); return; } if(e.target.closest('.x')){ closeMenus(); return; } var r=e.target.closest('.items .row'); if(!r||r.classList.contains('dis')){ if(r&&r.dataset.note) toast(r.dataset.note); return; } addFromList(r.dataset.k,+addM.dataset.wx,+addM.dataset.wy); });
     addM.querySelector('input').addEventListener('input',renderAdd);
@@ -43217,16 +43282,25 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else { if(!window.__modDice){ toast('The modulation is not ready'); return; }
       toast('New modulation · '+lvl); window.__modDice(lvl);
       setTimeout(function(){ try{ sync(); commit(); }catch(e){} },300); } }
+  function aimLabel(a){ return DTNAME[a]||cap(a); }
+  /* tp23 — ONE list. FX and Modulation sit in it exactly like the sound aims, because that is what they now ARE:
+     things the dice is AIMED at, not one-shot actions you have to come back to the menu to fire again. */
   function openAimMenu(cx,cy){ closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
-    nMenu.innerHTML=AIMS.map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+cap(a)+'</div>'; }).join('')
-      +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('')
-      +'<div class="sepd"></div><div class="pi" data-act="fx">Randomize chain</div><div class="pi" data-act="mod">Randomize modulation</div>';
+    nMenu.innerHTML=AIMS.concat(DTARGETS).map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+aimLabel(a)+'</div>'; }).join('')
+      +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('');
     placeMenu(nMenu,cx,cy);
     nMenu.onmousedown=function(ev){ ev.stopPropagation(); var t=ev.target&&ev.target.closest?ev.target.closest('[data-aim],[data-dl],[data-act]'):null; if(!t) return;
       var a=t.dataset.aim, l=t.dataset.dl, act=t.dataset.act;
-      if(a){ layout.aim=a; saveLayout(); closeMenus(); toast('The dice aims at '+a); }
+      if(a){ layout.aim=a; saveLayout(); closeMenus(); toast(isTarget(a)?('The dice rolls '+aimLabel(a)+' — keep clicking it'):('The dice aims at '+a)); }
       if(l){ layout.dlevel=l; saveLayout(); closeMenus(); toast('The dice reaches '+l); }
       if(act){ closeMenus(); rollRack(act); } }; }
+  /* tp23 — EVERY click of the dice honours the selection that is already there (Max: "if I have it set to FX all I
+     have to do is keep clicking the random button until I get something good"). layout.aim is saved by saveLayout,
+     so it survives a reload too — the menu is for CHANGING the aim, never for repeating it. */
+  function rollDice(){ var a=layout.aim||'anything';
+    if(a==='fx') return rollRack('fx');
+    if(a==='modulation') return rollRack('mod');
+    generate(); }
   /* the add browser — two panes, names only: All · Oscillators · Filters · Flow · Tape · Effects */
   var CATS=['All','Oscillators','Filters','Flow','Tape','Effects'];
   function catalog(){ var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');
