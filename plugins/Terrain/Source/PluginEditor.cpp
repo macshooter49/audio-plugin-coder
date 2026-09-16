@@ -1328,7 +1328,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // Returns {"copied":n,"importActive":bool,"importName":"…"} so the page can dress the
                 // target's display. args[0] = source letter, args[1] = destination letter.
                 if (args.size() < 2) { complete (juce::var ("badargs")); return; }
-                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, 3, (int) s[0] - 'a') : 0; };
+                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) s[0] - 'a') : 0; };
                 const int src = toIdx (args[0].toString());
                 const int dst = toIdx (args[1].toString());
                 if (src == dst) { complete (juce::var ("same")); return; }
@@ -1539,20 +1539,20 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // fb105 — ARP card lane pattern: one JSON blob for all 7×16 steps
                 // (mod-matrix precedent: one round-trip, not 112 scalar calls).
-                if (args.size() >= 1) audioProcessor.setArpLanesFromJson (args[0].toString());
+                if (args.size() >= 1) audioProcessor.setArpLanesFromJson (args[0].toString(), args.size() > 1 ? (int) args[1] : 0);
                 complete (juce::var{});
             })
-            .withNativeFunction("getArpLanes", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getArpLanes", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getArpLanesJson()));
+                complete (juce::var (audioProcessor.getArpLanesJson (args.size() > 0 ? (int) args[0] : 0)));
             })
-            .withNativeFunction("getArpFeed", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getArpFeed", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb105 — live playhead/fire/bpm snapshot; the card rAF-polls this
                 // (same pattern as getNoiseViz — costs nothing while the card is closed).
-                complete (juce::var (audioProcessor.getArpFeedJson()));
+                complete (juce::var (audioProcessor.getArpFeedJson (args.size() > 0 ? (int) args[0] : 0)));
             })
             .withNativeFunction("setFltExtOpen", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1604,28 +1604,28 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // fb328 — the §5.8 live core: every mode's real transfer at the current knobs + occupancy + bloom
                 complete (juce::var (audioProcessor.getDistortionCurveVizJson()));
             })
-            .withNativeFunction("getChopFeed", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getChopFeed", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb106 — Ribbon playhead/slice/wet snapshot (rAF-polled by the chop card)
-                complete (juce::var (audioProcessor.getChopFeedJson()));
+                complete (juce::var (audioProcessor.getChopFeedJson (args.size() > 0 ? (int) args[0] : 0)));
             })
-            .withNativeFunction("chopWipe", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("chopWipe", [this](const juce::Array<juce::var>& args,
                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                audioProcessor.requestChopWipe();   // fb106 — Wipe: clear the chop memory
+                audioProcessor.requestChopWipe (args.size() > 0 ? (int) args[0] : 0);   // fb106 — Wipe: clear the chop memory
                 complete (juce::var{});
             })
-            .withNativeFunction("getGliFeed", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getGliFeed", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb115 — Monitor playhead/fire/levels snapshot (rAF-polled by the glitch card)
-                complete (juce::var (audioProcessor.getGliFeedJson()));
+                complete (juce::var (audioProcessor.getGliFeedJson (args.size() > 0 ? (int) args[0] : 0)));
             })
-            .withNativeFunction("gliRoll", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("gliRoll", [this](const juce::Array<juce::var>& args,
                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                audioProcessor.requestGliRoll();    // fb115 — Roll: quantized punch-in
+                audioProcessor.requestGliRoll (args.size() > 0 ? (int) args[0] : 0);    // fb115 — Roll: quantized punch-in
                 complete (juce::var{});
             })
             .withNativeFunction("getRbnFeed", [this](const juce::Array<juce::var>&,
@@ -1853,7 +1853,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // WAVETABLE AUDITION — headphone preview (one-shot): pluck the osc's current table at a fixed pitch.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.startWavetableAudition (oscIdx);
                 complete (juce::var ("ok"));
             })
@@ -1891,7 +1891,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 auto chooser = std::make_shared<juce::FileChooser> (
                     "Import wavetable — pick an audio file or a folder",
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
@@ -1949,7 +1949,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // IMPORT (fb60) — load a referenced wavetable file by absolute path → decode → mono → build table.
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 juce::File f (args[1].toString());
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 /* fb611 — SAY IT BEFORE THE READ, because the read is the part that takes the time.
@@ -1997,7 +1997,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // IMPORT — ONE dialog, pick a FILE or a FOLDER (mirrors pickNoiseImport; reference-in-place).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 auto chooser = std::make_shared<juce::FileChooser> (
                     "Import a sample — pick an audio file or a folder",
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
@@ -2035,7 +2035,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // in-memory entry point as a drop (loadOscSampleFromMemory), so peaks/persistence/blend all match.
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 juce::File f (args[1].toString());
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 juce::MemoryBlock mb;
@@ -2059,7 +2059,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // SAMPLE AUDITION — headphone preview: play the osc's current sample once (post-FX, capped 3.5 s).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.startOscSampleAudition (oscIdx);
                 complete (juce::var ("ok"));
             })
@@ -2068,7 +2068,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // WAVETABLE IMPORT — NATIVE file dialog (mirrors pickNoiseFile) → decode → mono → build wavetable.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 auto chooser = std::make_shared<juce::FileChooser> (
                     "Import a wavetable",
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
@@ -3716,7 +3716,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // PEROSC — args[0]=osc letter 'a'..'d', args[1]=filename, args[2]=base64 bytes
                 if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 const auto filename = args[1].toString();
                 const auto b64      = args[2].toString();
 
@@ -3742,7 +3742,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // wavetable for this osc. args[0]=osc 'a'..'d', args[1]=filename, args[2]=base64.
                 if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 const auto b64 = args[2].toString();
 
                 juce::MemoryOutputStream decoded;
@@ -3773,7 +3773,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // Wavetable EXTENDER — re-slice the osc's imported source at a new frame count (resolution).
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.setImportFrames (oscIdx, (int) (double) args[1]);
                 complete (juce::var ("ok"));
             })
@@ -3782,7 +3782,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // Wavetable EXTENDER — drop the imported table for this osc (revert to the factory selection).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.clearImportedWavetable (oscIdx);
                 complete (juce::var ("ok"));
             })
@@ -3791,7 +3791,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // Wavetable EXTENDER viz — return the osc's live table frames as JSON for the 3D waterfall.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
             })
             .withNativeFunction("setWarpDrawCurve", [this](const juce::Array<juce::var>& args,
@@ -3801,7 +3801,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (args.size() >= 3)
                 {
                     const juce::String oscStr = args[0].toString();
-                    const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                    const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                     const int slotIdx = juce::jlimit (0, 1, (int) args[1]);
                     // fb561 — optional 4th arg: the source mode's read rate, so a CAPTURED curve
                     // picks the same mip its source did. Absent (a hand-drawn edit) -> derive.
@@ -3815,7 +3815,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // fb546 — WARP EXTENSION CARD. args = [ osc ('a'..'d'), slot (0|1) ].
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 const int slotIdx = args.size() > 1 ? juce::jlimit (0, 1, (int) args[1]) : 0;
                 complete (juce::var (audioProcessor.getWarpCurveJson (oscIdx, slotIdx)));
             })
@@ -3834,7 +3834,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb248 — WT→LFO: exact current frame (numeric osc index 0..3).
-                const int oscIdx = args.size() > 0 ? juce::jlimit (0, 3, (int) args[0]) : 0;
+                const int oscIdx = args.size() > 0 ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) args[0]) : 0;
                 complete (juce::var (audioProcessor.getOscLfoWaveJson (oscIdx)));
             })
             .withNativeFunction("setWaterfallView", [this](const juce::Array<juce::var>& args,
@@ -3843,7 +3843,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (args.size() >= 2)
                 {
                     const juce::String oscStr = args[0].toString();
-                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                     audioProcessor.setWaterfallView (oscIdx, (bool) args[1]);
                 }
                 complete (juce::var ("ok"));
@@ -3860,7 +3860,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (args.size() >= 2)
                 {
                     const juce::String oscStr = args[0].toString();
-                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                     audioProcessor.setImportName (oscIdx, args[1].toString());
                 }
                 complete (juce::var ("ok"));
@@ -3926,7 +3926,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // `path`, which is what the recursive payload carries and what cannot be ambiguous.
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 auto name = args[1].toString();
                 auto dir = terrainWavetablesDir();   // fb602 — one accessor, SAME legacy location
                 juce::File file = dir.getChildFile (name);
@@ -3960,7 +3960,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // PEROSC — return the cached peaks JSON for this osc (or "").
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getCachedOscPayload (oscIdx)));
             })
             .withNativeFunction("normalizeOscSample", [this](const juce::Array<juce::var>& args,
@@ -3972,7 +3972,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // and re-push them, so the drawn waveform grows to match what you hear (picture ==
                 // sound). Region/loop edits are untouched (setLoaded only refreshes the wave data).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
 
                 constexpr float kNormTargetPeak = 0.70f;   // ≈ -3 dBFS — "a little bigger", not slammed
 
@@ -4028,7 +4028,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // path) from one oscillator to another. Works off the live buffer, so it survives
                 // even when the original file is gone. args[0] = source letter, args[1] = dest letter.
                 if (args.size() < 2) { complete (juce::var ("badargs")); return; }
-                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, 3, (int) s[0] - 'a') : 0; };
+                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) s[0] - 'a') : 0; };
                 const int src = toIdx (args[0].toString());
                 const int dst = toIdx (args[1].toString());
                 if (src == dst) { complete (juce::var ("same")); return; }
@@ -4071,7 +4071,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // on a background pool and republishes through loadOscSampleAsync (waveform morphs).
                 if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 const auto filename = args[1].toString();
 
                 juce::MemoryOutputStream decodedStream;
@@ -4094,7 +4094,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // wipe the cached waveform + source path (nothing to restore on reopen), and
                 // kill any live blend (sources, engine, persisted pair). Fresh as a new instance.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
 
                 audioProcessor.getOscSampleBuffer (oscIdx).store (nullptr);
                 audioProcessor.oscSourcePath (oscIdx).clear();
@@ -4116,7 +4116,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // REPLACE — a plain load ends the blend: knob row + arrow disappear, regular
                 // sample mode again. (The incoming load overwrites the audio right after.)
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 resetBlend (oscIdx, true);
                 complete (juce::var ("ok"));
             })
@@ -4126,7 +4126,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // UNDO — pop one blend layer: restore the pre-blend one-shot snapshot and end
                 // the live blend. Repeat to walk a 100-deep stack back to the first one-shot.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 auto& hist = blendHistory_[(size_t) oscIdx];
                 if (hist.empty()) { complete (juce::var ("none")); return; }
                 auto entry = hist.back();   // { pre-blend buffer, rate } — the one-shot snapshot (memory, no disk)
@@ -4141,7 +4141,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // EXPORT — copy the osc's current one-shot (typically a bake) to a friendly name
                 // in the blend cache and reveal it in Finder: one drag away from the DAW.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                 auto buf = audioProcessor.getOscSampleBuffer (oscIdx).load();
                 if (buf == nullptr || buf->getNumSamples() < 1) { complete (juce::var ("none")); return; }
                 const double rate = audioProcessor.getOscSampleBuffer (oscIdx).getSampleRate();
@@ -5649,7 +5649,7 @@ public:
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                    const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                    const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                     const int slotIdx = args.size() > 1 ? juce::jlimit (0, 1, (int) args[1]) : 0;
                     complete (juce::var (proc.getWarpCurveJson (oscIdx, slotIdx)));
                 })
@@ -5659,7 +5659,7 @@ public:
                     if (args.size() >= 3)
                     {
                         const juce::String oscStr = args[0].toString();
-                        const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                        const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
                         const int slotIdx = juce::jlimit (0, 1, (int) args[1]);
                         proc.setWarpDrawCurve (oscIdx, slotIdx, args[2].toString(),
                                                args.size() > 3 ? (float) (double) args[3] : -1.0f);
@@ -5708,7 +5708,7 @@ public:
                 .withNativeFunction ("getOscLfoWave", [&proc](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    const int oscIdx = args.size() > 0 ? juce::jlimit (0, 3, (int) args[0]) : 0;
+                    const int oscIdx = args.size() > 0 ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) args[0]) : 0;
                     complete (juce::var (proc.getOscLfoWaveJson (oscIdx)));
                 })
                 // fb343 — both-lists hardening: getModState was MAIN-only (read-only JSON of the
@@ -5790,39 +5790,39 @@ public:
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     // fb105 — popped ARP card edits lanes with the editor possibly closed
-                    if (args.size() >= 1) proc.setArpLanesFromJson (args[0].toString());
+                    if (args.size() >= 1) proc.setArpLanesFromJson (args[0].toString(), args.size() > 1 ? (int) args[1] : 0);
                     complete (juce::var{});
                 })
-                .withNativeFunction ("getArpLanes", [&proc](const juce::Array<juce::var>&,
+                .withNativeFunction ("getArpLanes", [&proc](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    complete (juce::var (proc.getArpLanesJson()));
+                    complete (juce::var (proc.getArpLanesJson (args.size() > 0 ? (int) args[0] : 0)));
                 })
-                .withNativeFunction ("getArpFeed", [&proc](const juce::Array<juce::var>&,
+                .withNativeFunction ("getArpFeed", [&proc](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    complete (juce::var (proc.getArpFeedJson()));
+                    complete (juce::var (proc.getArpFeedJson (args.size() > 0 ? (int) args[0] : 0)));
                 })
-                .withNativeFunction ("getChopFeed", [&proc](const juce::Array<juce::var>&,
+                .withNativeFunction ("getChopFeed", [&proc](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    complete (juce::var (proc.getChopFeedJson()));
+                    complete (juce::var (proc.getChopFeedJson (args.size() > 0 ? (int) args[0] : 0)));
                 })
-                .withNativeFunction ("chopWipe", [&proc](const juce::Array<juce::var>&,
+                .withNativeFunction ("chopWipe", [&proc](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    proc.requestChopWipe();
+                    proc.requestChopWipe (args.size() > 0 ? (int) args[0] : 0);
                     complete (juce::var{});
                 })
-                .withNativeFunction ("getGliFeed", [&proc](const juce::Array<juce::var>&,
+                .withNativeFunction ("getGliFeed", [&proc](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    complete (juce::var (proc.getGliFeedJson()));
+                    complete (juce::var (proc.getGliFeedJson (args.size() > 0 ? (int) args[0] : 0)));
                 })
-                .withNativeFunction ("gliRoll", [&proc](const juce::Array<juce::var>&,
+                .withNativeFunction ("gliRoll", [&proc](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    proc.requestGliRoll();
+                    proc.requestGliRoll (args.size() > 0 ? (int) args[0] : 0);
                     complete (juce::var{});
                 })
                 .withNativeFunction ("getRbnFeed", [&proc](const juce::Array<juce::var>&,

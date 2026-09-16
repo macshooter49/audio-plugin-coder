@@ -51,5 +51,12 @@ for n in TABLES:
     if n in names:
         hdr.append(f'inline constexpr const char* const kOsc_{n}[kOscCount] = {{ ' + ', '.join(f'SYN_OSC_{L}_{n}' for L in 'ABCDEFGH') + ' };')
 hdr.append("inline constexpr char kOscLetter[kOscCount] = { 'A','B','C','D','E','F','G','H' };")
+# tp20 — the FLOW cards' instance-1 ids (constants), so the processor can remap FLOW_ARP_X -> FLOW_ARP2_X by POINTER
+flow = []
+for m in re.finditer(r'constexpr char (FLOW_(?:ARP|SEQ|CHOP|GLI)_[A-Z0-9_]+)\[\]', src):
+    if m.group(1) not in flow: flow.append(m.group(1))
+hdr.append(f'inline constexpr int kFlowIdCount = {len(flow)};   // the Flow cards\' instance-1 constants (Arp / Seq=Chop macros / Chop / Glitch)')
+hdr.append('inline constexpr const char* const kFlowIds[kFlowIdCount] = {')
+hdr += ['    ' + ', '.join(flow[i:i+4]) + ',' for i in range(0, len(flow), 4)]; hdr.append('};')
 hdr.append('} // namespace ParameterIDs')
 open(out, 'w').write('\n'.join(hdr) + '\n'); print(f'OscBankIds.h: {len(names)} knobs per oscillator, {len(frm)} remaps')

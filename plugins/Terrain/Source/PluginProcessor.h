@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <unordered_map>
+#include <deque>
+#include <string>
 #include <memory>
 #include <thread>    // fb481 — the Windows stall beacon
 #include <mutex>     // fb528 — the PREPARE LOCK (see prepLock_)
@@ -1043,7 +1045,7 @@ public:
     int               getDistortionTableSrc() const noexcept { return dstTableSrc_; }
 
     // ── FLOW · ARP extension card (fb105) — lane pattern + live playhead feed ──
-    void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
+    void              setArpLanesFromJson (const juce::String& json, int inst = 0);   // message thread: parse -> swap under lock · tp20 inst
     // fb137 — CARD STATE (slots + chain JSON per card): both surfaces share ONE truth so
     // pop-out / dock-back / editor reopen never lose the chain (the arp-lanes precedent).
     void setCardStateJson (const juce::String& card, const juce::String& json)
@@ -1061,7 +1063,7 @@ public:
     juce::String getCardStatesJson() const;                       // "" when nothing is set (writes 0 bytes)
     void         setCardStatesFromJson (const juce::String& json); // "" ⇒ no-op, never a clear
     std::atomic<int> flowPlayingViz_ { 0 };   // fb137 — transport state for the feeds ("pl")
-    juce::String      getArpLanesJson() const;                          // for JS restore + state save
+    juce::String      getArpLanesJson (int inst = 0) const;             // for JS restore + state save · tp20 inst
     float             getReverbBloom() const noexcept { return hallBloomViz_.load (std::memory_order_relaxed); }  // fb280 — wet bloom 0..1 for the FX-rack core viz
     float             getDelayBloom()  const noexcept { return dlyBloomViz_.load  (std::memory_order_relaxed); }  // fb296 — delay wet level 0..1 for the delay core viz
     // fb352 — the SAME reading for pooled REVERB instance e (0 = Reverb 2 … 4 = Reverb 6).
@@ -1081,12 +1083,12 @@ public:
     juce::String  getConvIRRawJson     (int inst = 1) const;                  // fb311 — {name,n,L,R} (base64 float) for embedding in a preset
     void          setConvIRRawFromJson (const juce::String& json, int inst = 1);   // fb311 — restore the EXACT one-shot from a preset
     void          setConvIRAsset       (const juce::String& b64,  int inst = 1);   // fb621 — the FLAC envelope, resampled to the live rate
-    juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
-    juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
-    void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
-    juce::String      getGliFeedJson() const;                           // fb115: Monitor playhead/fire/levels snapshot
+    juce::String      getArpFeedJson (int inst = 0) const;              // playhead/fire/wave snapshot (rAF-polled) · tp20 inst
+    juce::String      getChopFeedJson (int inst = 0) const;             // fb106: Ribbon playhead/slice/wet snapshot · tp20 inst
+    void              requestChopWipe (int inst = 0) noexcept { chopWipeReq_[juce::jlimit (0, wc::kFlowInstances - 1, inst)].store (true); }   // Wipe button → audio thread
+    juce::String      getGliFeedJson (int inst = 0) const;              // fb115: Monitor playhead/fire/levels snapshot · tp20 inst
     juce::String      getRbnFeedJson() const;                           // fb122: Wheel now/next/notes snapshot
-    void              requestGliRoll() noexcept { gliRollReq_.store (true); }     // Roll button → audio thread (quantized)
+    void              requestGliRoll (int inst = 0) noexcept { gliRollReq_[juce::jlimit (0, wc::kFlowInstances - 1, inst)].store (true); }     // Roll button → audio thread (quantized)
 
     // ── Pitch-mode virtual slice ───────────────────────────────────────────
     // When SLICE_MODE == 0 (PITCH), the whole sample is played as a single
@@ -1503,28 +1505,30 @@ public:
     struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; int curve = -1; bool bypass = false; int aux = -1; };   // fb554 — curve = index into the published ModCurveSet, -1 = a straight line · fb563 (3) — bypass keeps the route but mutes it; aux = the "Scale by" source's wire code, −1 = none
     // FLOW · ARP lane pattern (fb105): UI pushes JSON, audio thread copies into the
     // engine on version bump (synModLock pattern). Raw JSON kept verbatim for state save.
+    // tp20 — everything below is PER INSTANCE ([0] = the fb-era single card). Index = the chain slot's instance.
     mutable juce::CriticalSection arpLaneLock_;
-    wc::ArpLaneData               arpLanesShared_;                 // guarded by arpLaneLock_
-    juce::String                  arpLanesJson_;                   // guarded by arpLaneLock_
-    std::atomic<int>              arpLanesVersion_ { 1 };
-    int                           arpLanesSeen_ = 0;               // audio-thread last-copied version
+    wc::ArpLaneData               arpLanesShared_[wc::kFlowInstances];   // guarded by arpLaneLock_
+    juce::String                  arpLanesJson_[wc::kFlowInstances];     // guarded by arpLaneLock_
+    std::atomic<int>              arpLanesVersion_[wc::kFlowInstances] { {1}, {1}, {1}, {1} };
+    int                           arpLanesSeen_[wc::kFlowInstances] {};  // audio-thread last-copied version
     // ARP viz feed (audio thread writes after flowArp.process, UI rAF-polls getArpFeed)
-    std::atomic<float>            arpVizStepF_ { 0.0f };
-    std::atomic<int>              arpVizCount_ { 0 }, arpVizNote_ { -1 }, arpVizVel_ { 0 }, arpVizActive_ { 0 };
-    float                         arpWaveMod_ = 0.0f;              // audio-thread only; voices consume NEXT block (drift-lane pattern)
+    std::atomic<float>            arpVizStepF_[wc::kFlowInstances] {};
+    std::atomic<int>              arpVizCount_[wc::kFlowInstances] {}, arpVizNote_[wc::kFlowInstances] { {-1}, {-1}, {-1}, {-1} },
+                                  arpVizVel_[wc::kFlowInstances] {}, arpVizActive_[wc::kFlowInstances] {};
+    float                         arpWaveMod_ = 0.0f;              // audio-thread only; voices consume NEXT block (drift-lane pattern) · tp20: the SUM over the chained Arps
     // FLOW · CHOP viz feed + Wipe request (fb106)
-    std::atomic<float>            chopVizStepF_ { 0.0f }, chopVizWet_ { 0.0f };
-    std::atomic<int>              chopVizCount_ { 0 }, chopVizSlice_ { 0 }, chopVizActive_ { 0 };
-    std::atomic<bool>             chopWipeReq_ { false };
+    std::atomic<float>            chopVizStepF_[wc::kFlowInstances] {}, chopVizWet_[wc::kFlowInstances] {};
+    std::atomic<int>              chopVizCount_[wc::kFlowInstances] {}, chopVizSlice_[wc::kFlowInstances] {}, chopVizActive_[wc::kFlowInstances] {};
+    std::atomic<bool>             chopWipeReq_[wc::kFlowInstances] {};
     // FLOW · GLITCH viz feed + Roll request (fb115)
-    std::atomic<float>            gliVizStepF_ { 0.0f }, gliVizLoopF_ { 0.0f }, gliVizFireS_ { 0.0f },
-                                  gliVizHold_ { 1.0f }, gliVizWet_ { 0.0f };
-    std::atomic<int>              gliVizFx_ { -1 }, gliVizCount_ { 0 }, gliVizActive_ { 0 };
-    std::atomic<float>            gliVizLvl_[16] {};
-    std::atomic<float>            gliVizOut_ { 0.0f };   // fb124 — speaker meter level
-    std::atomic<float>*           gliFxFltP_[8] { nullptr }, * gliFxPanP_[8] { nullptr },
-                                * gliFxTrgP_[8] { nullptr }, * gliFxGrdP_[8] { nullptr };   // fb125/127 — cached at prepare
-    std::atomic<bool>             gliRollReq_ { false };
+    std::atomic<float>            gliVizStepF_[wc::kFlowInstances] {}, gliVizLoopF_[wc::kFlowInstances] {}, gliVizFireS_[wc::kFlowInstances] {},
+                                  gliVizHold_[wc::kFlowInstances] { {1.0f}, {1.0f}, {1.0f}, {1.0f} }, gliVizWet_[wc::kFlowInstances] {};
+    std::atomic<int>              gliVizFx_[wc::kFlowInstances] { {-1}, {-1}, {-1}, {-1} }, gliVizCount_[wc::kFlowInstances] {}, gliVizActive_[wc::kFlowInstances] {};
+    std::atomic<float>            gliVizLvl_[wc::kFlowInstances][16] {};
+    std::atomic<float>            gliVizOut_[wc::kFlowInstances] {};   // fb124 — speaker meter level
+    std::atomic<float>*           gliFxFltP_[wc::kFlowInstances][8] {}, * gliFxPanP_[wc::kFlowInstances][8] {},
+                                * gliFxTrgP_[wc::kFlowInstances][8] {}, * gliFxGrdP_[wc::kFlowInstances][8] {};   // fb125/127 — cached at prepare
+    std::atomic<bool>             gliRollReq_[wc::kFlowInstances] {};
     // FLOW · ROBIN viz feed (fb122)
     std::atomic<int>              rbnVizNow_ { -1 }, rbnVizNext_ { -1 }, rbnVizNotes_ { 1 },
                                   rbnVizMask_ { 15 }, rbnVizWrap_ { 0 }, rbnVizHits_ { 0 };
@@ -1890,11 +1894,13 @@ private:
     // Cheap enough to call per block AND from the message-thread feeds (atomic loads only).
     wc::FlowChainState flowChainNow() const
     {
-        const int s[4] = { (int) rawParam (ParameterIDs::FLOW_CHAIN_1)->load(),
-                           (int) rawParam (ParameterIDs::FLOW_CHAIN_2)->load(),
-                           (int) rawParam (ParameterIDs::FLOW_CHAIN_3)->load(),
-                           (int) rawParam (ParameterIDs::FLOW_CHAIN_4)->load() };
-        return wc::resolveFlowChain (s, (int) rawParam (ParameterIDs::FLOW_MODE)->load());
+        int s[wc::kFlowChainSlots], in[wc::kFlowChainSlots];   // tp20 — 16 slots + their instances, through pointers cached in the constructor
+        for (int i = 0; i < wc::kFlowChainSlots; ++i)
+        {
+            s[i]  = flowChainSlotP_[i] != nullptr ? (int) flowChainSlotP_[i]->load() : 0;
+            in[i] = flowChainInstP_[i] != nullptr ? (int) flowChainInstP_[i]->load() : 0;
+        }
+        return wc::resolveFlowChain (s, in, wc::kFlowChainSlots, (int) rawParam (ParameterIDs::FLOW_MODE)->load());
     }
     static constexpr int kNumVoices = 32;  // bumped 16→32 for LAYER mode headroom (4 slices × 8 keys)
 
@@ -1953,10 +1959,29 @@ private:
         if (bankB_.load (std::memory_order_acquire) != nullptr)
             for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoicesB_[(size_t) i]) f (v, 1);
     }
-    wc::FlowArp                 flowArp;                    // FLOW · ARP engine (one global instance)
-    wc::FlowChop                chop;                       // FLOW · CHOP engine (mode 2) — audio insert at end of processBlock
-    wc::FlowGlitch              glitch;                     // FLOW · GLITCH engine (mode 3) — audio insert at end of processBlock
-    bool                        prevGlitchOn_ = false;      // FLOW · prev-block glitch-on (enable-edge detection; resets glitch clock on (re)enable)
+    // ══ tp20 — THE FLOW POOL: Arp / Chop / Glitch × kFlowInstances. Instance 1 keeps its old name as a reference so
+    //    every fb-era use site reads as it did; the chain names (kind, instance) per slot (FlowChain.h).
+    wc::FlowArp                 flowArps_[wc::kFlowInstances];
+    wc::FlowChop                chops_[wc::kFlowInstances];
+    wc::FlowGlitch              glitches_[wc::kFlowInstances];
+    wc::FlowArp&                flowArp = flowArps_[0];     // FLOW · ARP engine (instance 1)
+    wc::FlowChop&               chop    = chops_[0];        // FLOW · CHOP engine (mode 2) — audio insert at end of processBlock
+    wc::FlowGlitch&             glitch  = glitches_[0];     // FLOW · GLITCH engine (mode 3) — audio insert at end of processBlock
+    bool                        prevGlitchOn_[wc::kFlowInstances] {};   // FLOW · prev-block glitch-on per instance (enable-edge detection; resets glitch clock on (re)enable)
+    juce::MidiBuffer            flowMidiBuf_[wc::kFlowInstances];       // tp20 — the note stream between chained Arps (pre-sized in prepare)
+    // tp20 — the chain's 16 slots + instance choices, resolved once (the message thread reads flowChainNow() too)
+    std::atomic<float>*         flowChainSlotP_[wc::kFlowChainSlots] {};
+    std::atomic<float>*         flowChainInstP_[wc::kFlowChainSlots] {};
+    // tp20 — FLOW_ARP_X -> FLOW_ARP2_X by POINTER (the constants the stages pass), built once in the constructor
+    std::unordered_map<const void*, const char*> flowIdRemap_[wc::kFlowInstances];
+    std::deque<std::string>     flowIdStore_;
+    const char* fid (int inst, const char* id) const noexcept
+    {
+        if (inst <= 0) return id;
+        const auto& m = flowIdRemap_[inst]; const auto it = m.find ((const void*) id);
+        return it != m.end() ? it->second : id;
+    }
+    static wc::ModDest fd (int inst, wc::ModDest d) noexcept { return (wc::ModDest) wc::flowInstDest (inst, (int) d); }
     wc::FlowDrift               drift;                      // FLOW · DRIFT engine (mode 4) — generative mod source
     float                       driftLane_[wc::kDriftLanes] {};  // per-block DRIFT lane values (mod sources; matrix routing = phase-2)
     wc::FlowRobin               flowRobin_;                      // fb122 — the Wheel rotation brain (audio thread)

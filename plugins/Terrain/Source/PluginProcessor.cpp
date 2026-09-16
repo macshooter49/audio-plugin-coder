@@ -338,6 +338,22 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     //   the gather passes the very constants the table lists, so a lookup is one hash of the address.
     for (int i = 0; i < ParameterIDs::kOscRemapCount; ++i)
         oscRemap_[(const void*) ParameterIDs::kOscRemapFrom[i]] = ParameterIDs::kOscRemapTo[i];
+    // tp20 — THE FLOW POOL's ids: FLOW_ARP_X -> FLOW_ARP{n}_X for instances 2..4, keyed by the constant's pointer
+    //   (the stages pass ParameterIDs::FLOW_...), the strings parked in a deque so their c_str() never moves.
+    for (int n = 1; n < wc::kFlowInstances; ++n)
+        for (int i = 0; i < ParameterIDs::kFlowIdCount; ++i)
+        {
+            const std::string id (ParameterIDs::kFlowIds[i]);
+            const size_t u2 = id.find ('_', 5);                 // "FLOW_ARP_RATE": the underscore after the kind token
+            if (u2 == std::string::npos) continue;
+            flowIdStore_.push_back (id.substr (0, u2) + std::to_string (n + 1) + id.substr (u2));
+            flowIdRemap_[n][(const void*) ParameterIDs::kFlowIds[i]] = flowIdStore_.back().c_str();
+        }
+    for (int i = 0; i < wc::kFlowChainSlots; ++i)
+    {
+        flowChainSlotP_[i] = apvts.getRawParameterValue ("FLOW_CHAIN_" + juce::String (i + 1));
+        flowChainInstP_[i] = apvts.getRawParameterValue ("FLOW_CHAIN_INST_" + juce::String (i + 1));
+    }
 
     initializePresets();
 
@@ -9222,6 +9238,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     eqL.prepare(sampleRate, samplesPerBlock);
     for (auto& b : perLayerMidi_) b.ensureSize (8192);   // fb636 — the per-block MIDI buffers never allocate in processBlock
     flowMidi_.ensureSize (8192); mixedMidi_.ensureSize (8192);
+    for (auto& b : flowMidiBuf_) b.ensureSize (8192);   // tp20 — the chained Arps' streams
     eqR.prepare(sampleRate, samplesPerBlock);
     analyzerPre.prepare (sampleRate);
     analyzerPost.prepare (sampleRate);
@@ -9263,26 +9280,30 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     // FLOW · ARP — prepare the block-rate global LFO bank + reset the engine
     for (auto& l : flowLfo_) l.prepare (sampleRate);
     for (int fli = 0; fli < wc::NUM_LFOS; ++fli) flowLfo_[fli].setCustomTable (lfoTableAudio_[fli]);   // LFO ARC L1 — wire drawn-shape tables
-    chop.prepare   (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates
-    glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
-    prevGlitchOn_ = false;               // FLOW · re-anchor the glitch enable-edge on (re)prepare
+    for (auto& c : chops_)    c.prepare (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates · tp20: every instance
+    for (auto& g : glitches_) g.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
+    for (auto& pg : prevGlitchOn_) pg = false;               // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
     flowRobin_.prepare (sampleRate);    // fb122 ROBIN rotation brain
     {   // fb125 — glitch per-effect Out routing: resolve the 16 raw pointers ONCE (RT-safe reads)
         static const char* fxIds[8] = { "REP", "REV", "TAPE", "GATE", "PIT", "CRSH", "FRZ", "SCT" };
-        for (int fi = 0; fi < 8; ++fi)
+        for (int n = 0; n < wc::kFlowInstances; ++n)   // tp20 — every Glitch instance ("FLOW_GLI_", "FLOW_GLI2_", ...)
         {
-            gliFxFltP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_FLT");
-            gliFxPanP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_PAN");
-            gliFxTrgP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_TRG");
-            gliFxGrdP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_GRID");
+            const juce::String pre = n == 0 ? juce::String ("FLOW_GLI_") : "FLOW_GLI" + juce::String (n + 1) + "_";
+            for (int fi = 0; fi < 8; ++fi)
+            {
+                gliFxFltP_[n][fi] = apvts.getRawParameterValue (pre + fxIds[fi] + "_FLT");
+                gliFxPanP_[n][fi] = apvts.getRawParameterValue (pre + fxIds[fi] + "_PAN");
+                gliFxTrgP_[n][fi] = apvts.getRawParameterValue (pre + fxIds[fi] + "_TRG");
+                gliFxGrdP_[n][fi] = apvts.getRawParameterValue (pre + fxIds[fi] + "_GRID");
+            }
         }
     }
     synthEngine.setRobinBrain (&flowRobin_);
     reso.prepare   (sampleRate);        // ANNULUS resonator — allocates mode/delay state here only
     for (auto& e : resoVizEnergy_) e.store (0.0f, std::memory_order_relaxed);
     resoVizOut_.store (0.0f, std::memory_order_relaxed);
-    flowArp.reset();
+    for (auto& a : flowArps_) a.reset();   // tp20 — every instance
     if (modStateJson.isNotEmpty())
         modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
 
@@ -12689,9 +12710,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // the live transport ppq instead of resuming from a stale free-run phase (fired late / "whenever",
     // worse the longer the editor was closed). reset() clears haveClock_/nextStep_/freePpq_ and the
     // next process() re-anchors to hostPpq. Default-identical: only fires when GLITCH is (re)selected.
-    if (flowChain.glitch && ! prevGlitchOn_)
-        glitch.reset();
-    prevGlitchOn_ = flowChain.glitch;
+    for (int n = 0; n < wc::kFlowInstances; ++n)   // tp20 — per instance
+    {
+        if (flowChain.gliOn[n] && ! prevGlitchOn_[n]) glitches_[n].reset();
+        prevGlitchOn_[n] = flowChain.gliOn[n];
+    }
 
     // EFFECTIVE FLOW knobs = base param + Σ(global-LFO × depth), clamp once. Shared by ARP + SEQ —
     // SEQ reuses the same FLOW_ARP_* params (per-mode memory lives in the JS).  (proven: 35/35)
@@ -12732,120 +12755,129 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         return juce::jlimit (0.f, 1.f, (flowBase (id) + m) * (1.0f - w) + oV); };
     const bool  kLatch = *rawParam (ParameterIDs::FLOW_ARP_LATCH) > 0.5f;
 
-    if (flowChain.arp)   // ── ARP (mode 1) ──
+    // ══ tp20 — THE ARP CHAIN. Every Arp instance in the chain transforms the note stream IN CHAIN ORDER:
+    //    MIDI in → Arp a → Arp b → … → the synth. One instance is the fb105 arp exactly (one stage, the same
+    //    body). An instance NOT in the chain releases what it still held so nothing hangs. The rack's filters
+    //    hear the RAW keys once (fb377), whatever the chain does with them.
+    for (const auto meta : midiMessages)
+        if (const auto m = meta.getMessage(); m.isNoteOn())
+            for (auto& fe : fltPool_) fe.noteOn (m.getNoteNumber(), (float) m.getVelocity() / 127.0f);
+    auto arpStage = [&] (int inst, const juce::MidiBuffer& in, juce::MidiBuffer& out) -> float
     {
-        const float kRate  = flowKnob (ParameterIDs::FLOW_ARP_RATE,  wc::ModDest::FlowTime);
-        const float kGate  = flowKnob (ParameterIDs::FLOW_ARP_GATE,  wc::ModDest::FlowGate);
-        const float kVary  = flowKnob (ParameterIDs::FLOW_ARP_VARY,  wc::ModDest::FlowVary);
-        const float kTraj  = flowKnob (ParameterIDs::FLOW_ARP_TRAJ,  wc::ModDest::FlowTraj);
-        const float kMorph = flowKnob (ParameterIDs::FLOW_ARP_MORPH, wc::ModDest::FlowMorph);
-
+        auto& arp = flowArps_[inst];
+        const float kRate  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_RATE),  fd (inst, wc::ModDest::FlowTime));
+        const float kGate  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_GATE),  fd (inst, wc::ModDest::FlowGate));
+        const float kVary  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_VARY),  fd (inst, wc::ModDest::FlowVary));
+        const float kTraj  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_TRAJ),  fd (inst, wc::ModDest::FlowTraj));
+        const float kMorph = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_MORPH), fd (inst, wc::ModDest::FlowMorph));
         // ARP BLEND (glass menu): 1.0 = pure arp (normal). Pull down to also hear the dry held
         // chord sustaining under the arp — the held note-ons pass through at vel×(1-blend), the arp
         // events play at vel×blend (velocity crossfade through the shared poly synth). Changing the
         // blend affects newly-struck notes (MIDI velocity is set at note-on).
-        const float kBlend  = flowKnob (ParameterIDs::FLOW_ARP_BLEND, wc::ModDest::FlowArpMix);
+        const float kBlend  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_BLEND), fd (inst, wc::ModDest::FlowArpMix));
         const float dryGain = 1.0f - kBlend;
-
         // ── extension card (fb105): lane pattern copy-on-change + the 35 card scalars ──
         {
-            const int lv = arpLanesVersion_.load (std::memory_order_acquire);
-            if (lv != arpLanesSeen_)
+            const int lv = arpLanesVersion_[inst].load (std::memory_order_acquire);
+            if (lv != arpLanesSeen_[inst])
             {
                 const juce::ScopedLock sl (arpLaneLock_);
-                flowArp.setLanes (arpLanesShared_);
-                arpLanesSeen_ = lv;
+                arp.setLanes (arpLanesShared_[inst]);
+                arpLanesSeen_[inst] = lv;
             }
             wc::ArpExtParams X;
-            X.dir     = (int) rawParam (ParameterIDs::FLOW_ARP_DIR)->load();       // choice = INDEX
-            X.octaves = 1 + (int) rawParam (ParameterIDs::FLOW_ARP_OCTR)->load();
-            X.sorted  = rawParam (ParameterIDs::FLOW_ARP_SORTED)->load() > 0.5f;
-            X.swing  = flowKnob (ParameterIDs::FLOW_ARP_SWING, wc::ModDest::FlowArpSwing);  X.mroll  = flowKnob (ParameterIDs::FLOW_ARP_MROLL, wc::ModDest::FlowArpRoll);
-            X.timbre = flowKnob (ParameterIDs::FLOW_ARP_TIMBRE, wc::ModDest::FlowArpTimbre); X.glide  = flowKnob (ParameterIDs::FLOW_ARP_GLIDE, wc::ModDest::FlowArpGlide);
-            X.pRange = flowKnob (ParameterIDs::FLOW_ARP_P_RANGE, wc::ModDest::FlowArpPRange); X.pCurve = flowKnob (ParameterIDs::FLOW_ARP_P_CURVE, wc::ModDest::FlowArpPCurve);
-            X.pQuant = flowKnob (ParameterIDs::FLOW_ARP_P_QUANT, wc::ModDest::FlowArpPQuant); X.pSlide = flowKnob (ParameterIDs::FLOW_ARP_P_SLIDE, wc::ModDest::FlowArpPSlide);
-            X.gLen   = flowKnob (ParameterIDs::FLOW_ARP_G_LEN, wc::ModDest::FlowArpGLen);   X.gCurve = flowKnob (ParameterIDs::FLOW_ARP_G_CURVE, wc::ModDest::FlowArpGCurve);
-            X.gRand  = flowKnob (ParameterIDs::FLOW_ARP_G_RAND, wc::ModDest::FlowArpGRand);  X.gSlide = flowKnob (ParameterIDs::FLOW_ARP_G_SLIDE, wc::ModDest::FlowArpGSlide);
-            X.vRange = flowKnob (ParameterIDs::FLOW_ARP_V_RANGE, wc::ModDest::FlowArpVRange); X.vCurve = flowKnob (ParameterIDs::FLOW_ARP_V_CURVE, wc::ModDest::FlowArpVCurve);
-            X.vRand  = flowKnob (ParameterIDs::FLOW_ARP_V_RAND, wc::ModDest::FlowArpVRand);  X.vFloor = flowKnob (ParameterIDs::FLOW_ARP_V_FLOOR, wc::ModDest::FlowArpVFloor);
-            X.oRange = flowKnob (ParameterIDs::FLOW_ARP_O_RANGE, wc::ModDest::FlowArpORange); X.oBias  = flowKnob (ParameterIDs::FLOW_ARP_O_BIAS, wc::ModDest::FlowArpOBias);
-            X.oRand  = flowKnob (ParameterIDs::FLOW_ARP_O_RAND, wc::ModDest::FlowArpORand);  X.oSpread= flowKnob (ParameterIDs::FLOW_ARP_O_SPREAD, wc::ModDest::FlowArpOSpread);
-            X.rCount = flowKnob (ParameterIDs::FLOW_ARP_R_COUNT, wc::ModDest::FlowArpRCount); X.rDecay = flowKnob (ParameterIDs::FLOW_ARP_R_DECAY, wc::ModDest::FlowArpRDecay);
-            X.rCurve = flowKnob (ParameterIDs::FLOW_ARP_R_CURVE, wc::ModDest::FlowArpRCurve); X.rAmt   = flowKnob (ParameterIDs::FLOW_ARP_R_AMT, wc::ModDest::FlowArpRAmt);
-            X.cAmt   = flowKnob (ParameterIDs::FLOW_ARP_C_AMT, wc::ModDest::FlowArpCAmt);   X.cBias  = flowKnob (ParameterIDs::FLOW_ARP_C_BIAS, wc::ModDest::FlowArpCBias);
-            X.cSeed  = flowKnob (ParameterIDs::FLOW_ARP_C_SEED, wc::ModDest::FlowArpCSeed);  X.cDrift = flowKnob (ParameterIDs::FLOW_ARP_C_DRIFT, wc::ModDest::FlowArpCDrift);
-            X.wDepth = flowKnob (ParameterIDs::FLOW_ARP_W_DEPTH, wc::ModDest::FlowArpWDepth); X.wCurve = flowKnob (ParameterIDs::FLOW_ARP_W_CURVE, wc::ModDest::FlowArpWCurve);
-            X.wSlide = flowKnob (ParameterIDs::FLOW_ARP_W_SLIDE, wc::ModDest::FlowArpWSlide); X.wRand  = flowKnob (ParameterIDs::FLOW_ARP_W_RAND, wc::ModDest::FlowArpWRand);
-            flowArp.setExt (X);
+            X.dir     = (int) rawParam (fid (inst, ParameterIDs::FLOW_ARP_DIR))->load();       // choice = INDEX
+            X.octaves = 1 + (int) rawParam (fid (inst, ParameterIDs::FLOW_ARP_OCTR))->load();
+            X.sorted  = rawParam (fid (inst, ParameterIDs::FLOW_ARP_SORTED))->load() > 0.5f;
+            X.swing  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_SWING), fd (inst, wc::ModDest::FlowArpSwing));  X.mroll  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_MROLL), fd (inst, wc::ModDest::FlowArpRoll));
+            X.timbre = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_TIMBRE), fd (inst, wc::ModDest::FlowArpTimbre)); X.glide  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_GLIDE), fd (inst, wc::ModDest::FlowArpGlide));
+            X.pRange = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_P_RANGE), fd (inst, wc::ModDest::FlowArpPRange)); X.pCurve = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_P_CURVE), fd (inst, wc::ModDest::FlowArpPCurve));
+            X.pQuant = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_P_QUANT), fd (inst, wc::ModDest::FlowArpPQuant)); X.pSlide = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_P_SLIDE), fd (inst, wc::ModDest::FlowArpPSlide));
+            X.gLen   = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_G_LEN), fd (inst, wc::ModDest::FlowArpGLen));   X.gCurve = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_G_CURVE), fd (inst, wc::ModDest::FlowArpGCurve));
+            X.gRand  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_G_RAND), fd (inst, wc::ModDest::FlowArpGRand));  X.gSlide = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_G_SLIDE), fd (inst, wc::ModDest::FlowArpGSlide));
+            X.vRange = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_V_RANGE), fd (inst, wc::ModDest::FlowArpVRange)); X.vCurve = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_V_CURVE), fd (inst, wc::ModDest::FlowArpVCurve));
+            X.vRand  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_V_RAND), fd (inst, wc::ModDest::FlowArpVRand));  X.vFloor = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_V_FLOOR), fd (inst, wc::ModDest::FlowArpVFloor));
+            X.oRange = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_O_RANGE), fd (inst, wc::ModDest::FlowArpORange)); X.oBias  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_O_BIAS), fd (inst, wc::ModDest::FlowArpOBias));
+            X.oRand  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_O_RAND), fd (inst, wc::ModDest::FlowArpORand));  X.oSpread= flowKnob (fid (inst, ParameterIDs::FLOW_ARP_O_SPREAD), fd (inst, wc::ModDest::FlowArpOSpread));
+            X.rCount = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_R_COUNT), fd (inst, wc::ModDest::FlowArpRCount)); X.rDecay = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_R_DECAY), fd (inst, wc::ModDest::FlowArpRDecay));
+            X.rCurve = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_R_CURVE), fd (inst, wc::ModDest::FlowArpRCurve)); X.rAmt   = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_R_AMT), fd (inst, wc::ModDest::FlowArpRAmt));
+            X.cAmt   = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_C_AMT), fd (inst, wc::ModDest::FlowArpCAmt));   X.cBias  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_C_BIAS), fd (inst, wc::ModDest::FlowArpCBias));
+            X.cSeed  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_C_SEED), fd (inst, wc::ModDest::FlowArpCSeed));  X.cDrift = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_C_DRIFT), fd (inst, wc::ModDest::FlowArpCDrift));
+            X.wDepth = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_W_DEPTH), fd (inst, wc::ModDest::FlowArpWDepth)); X.wCurve = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_W_CURVE), fd (inst, wc::ModDest::FlowArpWCurve));
+            X.wSlide = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_W_SLIDE), fd (inst, wc::ModDest::FlowArpWSlide)); X.wRand  = flowKnob (fid (inst, ParameterIDs::FLOW_ARP_W_RAND), fd (inst, wc::ModDest::FlowArpWRand));
+            arp.setExt (X);
         }
-        flowArp.setLatch (kLatch);
-        juce::MidiBuffer& flowMidi = flowMidi_; flowMidi.clear();   // fb636 — member, no audio-thread allocation
-        for (const auto meta : midiMessages)
+        arp.setLatch (*rawParam (fid (inst, ParameterIDs::FLOW_ARP_LATCH)) > 0.5f);
+        out.clear();
+        for (const auto meta : in)
         {
             const auto m = meta.getMessage();
             if      (m.isNoteOn())
             {
-                flowArp.noteOn (m.getNoteNumber(), m.getVelocity());
-                // fb377 — the rack KNOWS THE NOTE. Key track and the Karplus pluck both need it,
-                // and an external filter plugin cannot have it without a MIDI routing safari.
-                for (auto& fe : fltPool_)
-                    fe.noteOn (m.getNoteNumber(), (float) m.getVelocity() / 127.0f);
+                arp.noteOn (m.getNoteNumber(), m.getVelocity());
                 const int dv = (int) std::lround (m.getVelocity() * dryGain);   // dry held chord (un-arped)
-                if (dv >= 1) flowMidi.addEvent (juce::MidiMessage::noteOn (1, m.getNoteNumber(), (juce::uint8) juce::jlimit (1, 127, dv)), meta.samplePosition);
+                if (dv >= 1) out.addEvent (juce::MidiMessage::noteOn (1, m.getNoteNumber(), (juce::uint8) juce::jlimit (1, 127, dv)), meta.samplePosition);
             }
             else if (m.isNoteOff())
             {
-                flowArp.noteOff (m.getNoteNumber());
-                flowMidi.addEvent (juce::MidiMessage::noteOff (1, m.getNoteNumber()), meta.samplePosition);   // release any sustained dry note
+                arp.noteOff (m.getNoteNumber());
+                out.addEvent (juce::MidiMessage::noteOff (1, m.getNoteNumber()), meta.samplePosition);   // release any sustained dry note
             }
-            else                    flowMidi.addEvent (m, meta.samplePosition);   // CC / pitchbend pass through
+            else                    out.addEvent (m, meta.samplePosition);   // CC / pitchbend pass through
         }
-
         wc::ArpEvent ev[wc::kArpMaxEvents];
-        const int n = flowArp.process (kRate, kGate, kVary, kTraj, kMorph,
-                                       flowPpq, flowBpm, getSampleRate(), numSamples,
-                                       flowPlaying, ev, wc::kArpMaxEvents);
+        const int n = arp.process (kRate, kGate, kVary, kTraj, kMorph,
+                                   flowPpq, flowBpm, getSampleRate(), numSamples,
+                                   flowPlaying, ev, wc::kArpMaxEvents);
         for (int i = 0; i < n; ++i)
         {
             if (ev[i].on)
             {
                 const int av = (int) std::lround (ev[i].vel * kBlend);   // arp stream scaled by blend
-                if (av >= 1) flowMidi.addEvent (juce::MidiMessage::noteOn (1, ev[i].note, (juce::uint8) juce::jlimit (1, 127, av)), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
+                if (av >= 1) out.addEvent (juce::MidiMessage::noteOn (1, ev[i].note, (juce::uint8) juce::jlimit (1, 127, av)), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
             }
             else
-                flowMidi.addEvent (juce::MidiMessage::noteOff (1, ev[i].note), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
+                out.addEvent (juce::MidiMessage::noteOff (1, ev[i].note), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
         }
-        TI_PROF ("synth:params");
-        synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
-        if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, flowMidi, 0, numSamples);   // tp20 — bank 1, same MIDI, same scratch
-
         // publish the live playhead/fire feed (UI rAF-polls getArpFeed) + the WAVE
         // lane's frame-offset for the voices (consumed NEXT block — drift-lane pattern)
-        arpVizStepF_.store  (flowArp.vizStepF(),            std::memory_order_relaxed);
-        arpVizCount_.store  ((int) flowArp.vizFireCount(),  std::memory_order_relaxed);
-        arpVizNote_.store   (flowArp.vizNote(),             std::memory_order_relaxed);
-        arpVizVel_.store    (flowArp.vizVel(),              std::memory_order_relaxed);
-        arpVizActive_.store (flowArp.vizActive() ? 1 : 0,   std::memory_order_relaxed);
-        arpWaveMod_ = flowArp.waveMod();
-    }
-    else
+        arpVizStepF_[inst].store  (arp.vizStepF(),            std::memory_order_relaxed);
+        arpVizCount_[inst].store  ((int) arp.vizFireCount(),  std::memory_order_relaxed);
+        arpVizNote_[inst].store   (arp.vizNote(),             std::memory_order_relaxed);
+        arpVizVel_[inst].store    (arp.vizVel(),              std::memory_order_relaxed);
+        arpVizActive_[inst].store (arp.vizActive() ? 1 : 0,   std::memory_order_relaxed);
+        return arp.waveMod();
+    };
+    const juce::MidiBuffer* midiIn = &midiMessages;
+    float waveSum = 0.0f; int stageK = 0; bool arpUsed[wc::kFlowInstances] = {};
+    for (int ci = 0; ci < flowChain.len; ++ci)
+        if (flowChain.order[ci] == 1)
+        {
+            const int inst = flowChain.inst[ci]; arpUsed[inst] = true;
+            juce::MidiBuffer& out = flowMidiBuf_[stageK % wc::kFlowInstances];
+            waveSum += arpStage (inst, *midiIn, out);
+            midiIn = &out; ++stageK;
+        }
+    arpWaveMod_ = stageK > 0 ? juce::jlimit (-1.0f, 1.0f, waveSum) : 0.0f;
+    // ARP instances not in the chain (Off, or CHOP/GLITCH = end-of-block audio inserts, or ROBIN = the Wheel):
+    // release any note they were holding so it can't hang, and pass the stream on untouched.
+    juce::MidiBuffer& mixed = mixedMidi_; bool useMixed = false;
+    for (int n = 0; n < wc::kFlowInstances; ++n)
     {
-        arpVizActive_.store (0, std::memory_order_relaxed);
-        arpWaveMod_ = 0.0f;
-        // ARP inactive (Off, or CHOP/GLITCH = end-of-block audio inserts, or DRIFT = mod source):
-        // release any note the arp was holding so it can't hang, then pass raw MIDI straight through.
-        wc::ArpEvent arel[wc::kArpMaxEvents]; const int an = flowArp.releaseAll (arel, wc::kArpMaxEvents);
+        if (arpUsed[n]) continue;
+        arpVizActive_[n].store (0, std::memory_order_relaxed);
+        wc::ArpEvent arel[wc::kArpMaxEvents]; const int an = flowArps_[n].releaseAll (arel, wc::kArpMaxEvents);
         if (an > 0)
         {
-            juce::MidiBuffer& mixed = mixedMidi_; mixed.clear();   // fb636 — member, no audio-thread allocation
-            mixed.addEvents (midiMessages, 0, numSamples, 0);
+            if (! useMixed) { mixed.clear(); mixed.addEvents (*midiIn, 0, numSamples, 0); useMixed = true; }   // fb636 — member, no audio-thread allocation
             for (int i = 0; i < an; ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, arel[i].note), 0);
-            synthEngine.renderNextBlock (synthScratch, mixed, 0, numSamples);
-            if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, mixed, 0, numSamples);   // tp20
         }
-        else
-            synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples);
-            if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, midiMessages, 0, numSamples);   // tp20
+    }
+    {
+        const juce::MidiBuffer& toSynth = useMixed ? mixed : *midiIn;
+        TI_PROF ("synth:params");
+        synthEngine.renderNextBlock (synthScratch, toSynth, 0, numSamples);
+        if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, toSynth, 0, numSamples);   // tp20 — bank 1, same MIDI, same scratch
     }
 
     TI_PROF ("flow");
@@ -14572,51 +14604,56 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //    click-free (FlowChop.h). MIDI passed through normally above; this chops the mix.
     //    Engine defaults (AlwaysOn, 8 slices, full wet) groove out of the box; the 5 mode-2
     //    macros (FLOW_SEQ_* IDs, now CHOP) ride it. Always call process so it free-runs when stopped.
-    if (! flowChain.chop) chopVizActive_.store (0, std::memory_order_relaxed);
-    auto chopStage = [&]   // fb131 — dispatched in chain order below
+    for (int n = 0; n < wc::kFlowInstances; ++n)   // tp20 — idle instances read as off
     {
-        const float cRate  = flowKnob (ParameterIDs::FLOW_SEQ_RATE,  wc::ModDest::ChopRate);
-        const float cGate  = flowKnob (ParameterIDs::FLOW_SEQ_GATE,  wc::ModDest::ChopGate);
-        const float cVary  = flowKnob (ParameterIDs::FLOW_SEQ_VARY,  wc::ModDest::ChopVary);
-        const float cTraj  = flowKnob (ParameterIDs::FLOW_SEQ_TRAJ,  wc::ModDest::ChopTraj);
-        const float cMorph = flowKnob (ParameterIDs::FLOW_SEQ_MORPH, wc::ModDest::ChopMorph);
-        chop.setMix (flowKnob (ParameterIDs::FLOW_CHOP_BLEND, wc::ModDest::FlowChopMix));   // dry/wet (glass menu); default 0.60
+        if (! flowChain.chopOn[n]) chopVizActive_[n].store (0, std::memory_order_relaxed);
+        if (! flowChain.gliOn[n])  gliVizActive_[n].store (0, std::memory_order_relaxed);
+    }
+    auto chopStage = [&] (int inst)   // fb131 — dispatched in chain order below · tp20 — per instance
+    {
+        auto& chop = chops_[inst];
+        const float cRate  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_RATE), fd (inst, wc::ModDest::ChopRate));
+        const float cGate  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_GATE), fd (inst, wc::ModDest::ChopGate));
+        const float cVary  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_VARY), fd (inst, wc::ModDest::ChopVary));
+        const float cTraj  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_TRAJ), fd (inst, wc::ModDest::ChopTraj));
+        const float cMorph = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_MORPH), fd (inst, wc::ModDest::ChopMorph));
+        chop.setMix (flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_BLEND), fd (inst, wc::ModDest::FlowChopMix)));   // dry/wet (glass menu); default 0.60
 
         // ── fb106 extension card: every Ribbon control, read per block ──
         {
             static constexpr int kSliceL[7] = { 2, 3, 4, 6, 8, 12, 16 };
             static constexpr int kLoopL[7]  = { 2, 4, 6, 8, 10, 12, 16 };
             wc::FlowChop::ChopExtParams X;
-            X.slices    = kSliceL[juce::jlimit (0, 6, (int) *rawParam (ParameterIDs::FLOW_CHOP_SLICES))];
-            X.loopCells = kLoopL [juce::jlimit (0, 6, (int) *rawParam (ParameterIDs::FLOW_CHOP_LOOP))];
-            X.modeOrder = (int) *rawParam (ParameterIDs::FLOW_CHOP_MODE);
-            X.rpts      = 1 + (int) *rawParam (ParameterIDs::FLOW_CHOP_RPTS);
-            X.filter    = (int) *rawParam (ParameterIDs::FLOW_CHOP_FILTER);
-            X.freeze    = *rawParam (ParameterIDs::FLOW_CHOP_FREEZE)  > 0.5f;
-            X.collect   = *rawParam (ParameterIDs::FLOW_CHOP_COLLECT) > 0.5f;
-            X.scan   = flowKnob (ParameterIDs::FLOW_CHOP_SCAN, wc::ModDest::FlowChopScan);   X.wander = flowKnob (ParameterIDs::FLOW_CHOP_WANDER, wc::ModDest::FlowChopWander);
-            X.spread = flowKnob (ParameterIDs::FLOW_CHOP_SPREAD, wc::ModDest::FlowChopSpread); X.speed  = flowKnob (ParameterIDs::FLOW_CHOP_SPEED, wc::ModDest::FlowChopSpeed);
-            X.steps  = flowKnob (ParameterIDs::FLOW_CHOP_STEPS, wc::ModDest::FlowChopCrush);  X.detune = flowKnob (ParameterIDs::FLOW_CHOP_DETUNE, wc::ModDest::FlowChopDetune);
-            X.wow    = flowKnob (ParameterIDs::FLOW_CHOP_WOW, wc::ModDest::FlowChopWow);    X.smooth = flowKnob (ParameterIDs::FLOW_CHOP_SMOOTH, wc::ModDest::FlowChopSmooth);
-            X.grit   = flowKnob (ParameterIDs::FLOW_CHOP_GRIT, wc::ModDest::FlowChopGrit);   X.trim   = flowKnob (ParameterIDs::FLOW_CHOP_TRIM, wc::ModDest::FlowChopTrim);
-            X.oSpread= flowKnob (ParameterIDs::FLOW_CHOP_O_SPREAD, wc::ModDest::FlowChopOSpread); X.oBias = flowKnob (ParameterIDs::FLOW_CHOP_O_BIAS, wc::ModDest::FlowChopOBias);
-            X.oLock  = flowKnob (ParameterIDs::FLOW_CHOP_O_LOCK, wc::ModDest::FlowChopOLock);   X.oSeed = flowKnob (ParameterIDs::FLOW_CHOP_O_SEED, wc::ModDest::FlowChopOSeed);
-            X.pRange = flowKnob (ParameterIDs::FLOW_CHOP_P_RANGE, wc::ModDest::FlowChopPRange);  X.pSteps= flowKnob (ParameterIDs::FLOW_CHOP_P_STEPS, wc::ModDest::FlowChopPSteps);
-            X.pGlide = flowKnob (ParameterIDs::FLOW_CHOP_P_GLIDE, wc::ModDest::FlowChopPGlide);  X.pQuant= flowKnob (ParameterIDs::FLOW_CHOP_P_QUANT, wc::ModDest::FlowChopPQuant);
-            X.rvOdds = flowKnob (ParameterIDs::FLOW_CHOP_RV_ODDS, wc::ModDest::FlowChopRvOdds);  X.rvRun = flowKnob (ParameterIDs::FLOW_CHOP_RV_RUN, wc::ModDest::FlowChopRvRun);
-            X.rvSpread=flowKnob (ParameterIDs::FLOW_CHOP_RV_SPREAD, wc::ModDest::FlowChopRvSpread);X.rvSnap= flowKnob (ParameterIDs::FLOW_CHOP_RV_SNAP, wc::ModDest::FlowChopRvSnap);
-            X.tLen   = flowKnob (ParameterIDs::FLOW_CHOP_T_LEN, wc::ModDest::FlowChopTLen);    X.tCurve= flowKnob (ParameterIDs::FLOW_CHOP_T_CURVE, wc::ModDest::FlowChopTCurve);
-            X.tRand  = flowKnob (ParameterIDs::FLOW_CHOP_T_RAND, wc::ModDest::FlowChopTRand);   X.tGate = flowKnob (ParameterIDs::FLOW_CHOP_T_GATE, wc::ModDest::FlowChopTGate);
-            X.rCount = flowKnob (ParameterIDs::FLOW_CHOP_R_COUNT, wc::ModDest::FlowChopRCount);  X.rDecay= flowKnob (ParameterIDs::FLOW_CHOP_R_DECAY, wc::ModDest::FlowChopRDecay);
-            X.rCurve = flowKnob (ParameterIDs::FLOW_CHOP_R_CURVE, wc::ModDest::FlowChopRCurve);  X.rOdds = flowKnob (ParameterIDs::FLOW_CHOP_R_ODDS, wc::ModDest::FlowChopROdds);
-            X.dAmt   = flowKnob (ParameterIDs::FLOW_CHOP_D_AMT, wc::ModDest::FlowChopDAmt);    X.dSize = flowKnob (ParameterIDs::FLOW_CHOP_D_SIZE, wc::ModDest::FlowChopDSize);
-            X.dSpray = flowKnob (ParameterIDs::FLOW_CHOP_D_SPRAY, wc::ModDest::FlowChopDSpray);  X.dTone = flowKnob (ParameterIDs::FLOW_CHOP_D_TONE, wc::ModDest::FlowChopDTone);
+            X.slices    = kSliceL[juce::jlimit (0, 6, (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_SLICES)))];
+            X.loopCells = kLoopL [juce::jlimit (0, 6, (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_LOOP)))];
+            X.modeOrder = (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_MODE));
+            X.rpts      = 1 + (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_RPTS));
+            X.filter    = (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_FILTER));
+            X.freeze    = *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_FREEZE))  > 0.5f;
+            X.collect   = *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_COLLECT)) > 0.5f;
+            X.scan   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SCAN), fd (inst, wc::ModDest::FlowChopScan));   X.wander = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_WANDER), fd (inst, wc::ModDest::FlowChopWander));
+            X.spread = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SPREAD), fd (inst, wc::ModDest::FlowChopSpread)); X.speed  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SPEED), fd (inst, wc::ModDest::FlowChopSpeed));
+            X.steps  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_STEPS), fd (inst, wc::ModDest::FlowChopCrush));  X.detune = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_DETUNE), fd (inst, wc::ModDest::FlowChopDetune));
+            X.wow    = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_WOW), fd (inst, wc::ModDest::FlowChopWow));    X.smooth = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SMOOTH), fd (inst, wc::ModDest::FlowChopSmooth));
+            X.grit   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_GRIT), fd (inst, wc::ModDest::FlowChopGrit));   X.trim   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_TRIM), fd (inst, wc::ModDest::FlowChopTrim));
+            X.oSpread= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_SPREAD), fd (inst, wc::ModDest::FlowChopOSpread)); X.oBias = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_BIAS), fd (inst, wc::ModDest::FlowChopOBias));
+            X.oLock  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_LOCK), fd (inst, wc::ModDest::FlowChopOLock));   X.oSeed = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_SEED), fd (inst, wc::ModDest::FlowChopOSeed));
+            X.pRange = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_RANGE), fd (inst, wc::ModDest::FlowChopPRange));  X.pSteps= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_STEPS), fd (inst, wc::ModDest::FlowChopPSteps));
+            X.pGlide = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_GLIDE), fd (inst, wc::ModDest::FlowChopPGlide));  X.pQuant= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_QUANT), fd (inst, wc::ModDest::FlowChopPQuant));
+            X.rvOdds = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_ODDS), fd (inst, wc::ModDest::FlowChopRvOdds));  X.rvRun = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_RUN), fd (inst, wc::ModDest::FlowChopRvRun));
+            X.rvSpread=flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_SPREAD), fd (inst, wc::ModDest::FlowChopRvSpread));X.rvSnap= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_SNAP), fd (inst, wc::ModDest::FlowChopRvSnap));
+            X.tLen   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_LEN), fd (inst, wc::ModDest::FlowChopTLen));    X.tCurve= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_CURVE), fd (inst, wc::ModDest::FlowChopTCurve));
+            X.tRand  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_RAND), fd (inst, wc::ModDest::FlowChopTRand));   X.tGate = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_GATE), fd (inst, wc::ModDest::FlowChopTGate));
+            X.rCount = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_COUNT), fd (inst, wc::ModDest::FlowChopRCount));  X.rDecay= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_DECAY), fd (inst, wc::ModDest::FlowChopRDecay));
+            X.rCurve = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_CURVE), fd (inst, wc::ModDest::FlowChopRCurve));  X.rOdds = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_ODDS), fd (inst, wc::ModDest::FlowChopROdds));
+            X.dAmt   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_AMT), fd (inst, wc::ModDest::FlowChopDAmt));    X.dSize = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_SIZE), fd (inst, wc::ModDest::FlowChopDSize));
+            X.dSpray = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_SPRAY), fd (inst, wc::ModDest::FlowChopDSpray));  X.dTone = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_TONE), fd (inst, wc::ModDest::FlowChopDTone));
             chop.setExt (X);
-            chop.setMode (*rawParam (ParameterIDs::FLOW_CHOP_CATCH) > 0.5f ? wc::ChopMode::Catch
+            chop.setMode (*rawParam (fid (inst, ParameterIDs::FLOW_CHOP_CATCH)) > 0.5f ? wc::ChopMode::Catch
                                                                             : wc::ChopMode::AlwaysOn);
             chop.setCatchHeld (resoHeldN_ > 0);                 // CATCH rides the real held keys
             if (resoHeldN_ > 0) chop.noteOnRoot (resoHeld_[resoHeldN_ - 1]);
-            if (chopWipeReq_.exchange (false)) chop.wipe();     // Wipe button (UI native)
+            if (chopWipeReq_[inst].exchange (false)) chop.wipe();     // Wipe button (UI native)
         }
 
         float* cl = buffer.getWritePointer (0);
@@ -14625,78 +14662,79 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                       flowPpq, flowBpm, getSampleRate(), cl, cr, numSamples, flowPlaying);
 
         // live Ribbon feed (UI rAF-polls getChopFeed)
-        chopVizStepF_.store (chop.vizStepF(),             std::memory_order_relaxed);
-        chopVizCount_.store ((int) chop.vizFireCount(),   std::memory_order_relaxed);
-        chopVizSlice_.store (chop.lastSliceIndex(),       std::memory_order_relaxed);
-        chopVizWet_.store   (chop.wetLevel(),             std::memory_order_relaxed);
-        chopVizActive_.store(chop.isActive() ? 1 : 0,     std::memory_order_relaxed);
+        chopVizStepF_[inst].store (chop.vizStepF(),             std::memory_order_relaxed);
+        chopVizCount_[inst].store ((int) chop.vizFireCount(),   std::memory_order_relaxed);
+        chopVizSlice_[inst].store (chop.lastSliceIndex(),       std::memory_order_relaxed);
+        chopVizWet_[inst].store   (chop.wetLevel(),             std::memory_order_relaxed);
+        chopVizActive_[inst].store(chop.isActive() ? 1 : 0,     std::memory_order_relaxed);
     };
 
     // ── FLOW · GLITCH (mode 3): audio insert — beat-synced buffer-mangler IN PLACE, click-free
     //    (FlowGlitch.h, equal-power seams + exponential tape-stop). Same insert shape as CHOP.
     //    Macros read FLOW_GLI_* (RATE/GATE/VARY=CHANCE/TRAJ=CHAOS/MORPH=SWING); BLEND default 1.0.
-    auto glitchStage = [&]   // fb131 — dispatched in chain order below
+    auto glitchStage = [&] (int inst)   // fb131 — dispatched in chain order below · tp20 — per instance
     {
-        const float gRate  = flowKnob (ParameterIDs::FLOW_GLI_RATE,  wc::ModDest::FlowTime);
-        const float gGate  = flowKnob (ParameterIDs::FLOW_GLI_GATE,  wc::ModDest::FlowGate);
-        const float gVary  = flowKnob (ParameterIDs::FLOW_GLI_VARY,  wc::ModDest::FlowVary);
-        const float gTraj  = flowKnob (ParameterIDs::FLOW_GLI_TRAJ,  wc::ModDest::FlowTraj);
-        const float gMorph = flowKnob (ParameterIDs::FLOW_GLI_MORPH, wc::ModDest::FlowMorph);
-        glitch.setMix (flowKnob (ParameterIDs::FLOW_GLI_BLEND, wc::ModDest::FlowGliMix));   // dry/wet (card MIX header); default 0.60
-        glitch.setOutMode ((int) *rawParam (ParameterIDs::FLOW_GLI_OUTMODE));   // fb142 — Mix/Cut/Gate
-        glitch.setPing (flowKnob (ParameterIDs::FLOW_GLI_PING, wc::ModDest::FlowGliPing));                // fb142 — stereo bounce
+        auto& glitch = glitches_[inst];
+        const float gRate  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_RATE), fd (inst, wc::ModDest::FlowTime));
+        const float gGate  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_GATE), fd (inst, wc::ModDest::FlowGate));
+        const float gVary  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_VARY), fd (inst, wc::ModDest::FlowVary));
+        const float gTraj  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_TRAJ), fd (inst, wc::ModDest::FlowTraj));
+        const float gMorph = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_MORPH), fd (inst, wc::ModDest::FlowMorph));
+        glitch.setMix (flowKnob (fid (inst, ParameterIDs::FLOW_GLI_BLEND), fd (inst, wc::ModDest::FlowGliMix)));   // dry/wet (card MIX header); default 0.60
+        glitch.setOutMode ((int) *rawParam (fid (inst, ParameterIDs::FLOW_GLI_OUTMODE)));   // fb142 — Mix/Cut/Gate
+        glitch.setPing (flowKnob (fid (inst, ParameterIDs::FLOW_GLI_PING), fd (inst, wc::ModDest::FlowGliPing)));                // fb142 — stereo bounce
 
         // ── fb115 extension card: every Monitor control, read per block ──
         {
             static constexpr float kHoldL[6] = { 1, 2, 3, 4, 6, 8 };
             static constexpr int   kLoopG[5] = { 2, 4, 8, 12, 16 };
             wc::GlitchExtParams X;
-            X.en[0] = *rawParam (ParameterIDs::FLOW_GLI_EN_REP)  > 0.5f;
-            X.en[1] = *rawParam (ParameterIDs::FLOW_GLI_EN_REV)  > 0.5f;
-            X.en[2] = *rawParam (ParameterIDs::FLOW_GLI_EN_TAPE) > 0.5f;
-            X.en[3] = *rawParam (ParameterIDs::FLOW_GLI_EN_GATE) > 0.5f;
-            X.en[4] = *rawParam (ParameterIDs::FLOW_GLI_EN_PIT)  > 0.5f;
-            X.en[5] = *rawParam (ParameterIDs::FLOW_GLI_EN_CRSH) > 0.5f;
-            X.en[6] = *rawParam (ParameterIDs::FLOW_GLI_EN_FRZ)  > 0.5f;
-            X.en[7] = *rawParam (ParameterIDs::FLOW_GLI_EN_SCT)  > 0.5f;
-            X.dejavu = flowBase (ParameterIDs::FLOW_GLI_DEJAVU);
-            X.decay  = flowKnob (ParameterIDs::FLOW_GLI_DECAY, wc::ModDest::FlowGliDecay);
-            X.drop   = flowKnob (ParameterIDs::FLOW_GLI_DROP, wc::ModDest::FlowGliDrop);               // fb143 — hole fires
-            X.burst  = flowKnob (ParameterIDs::FLOW_GLI_BURST, wc::ModDest::FlowGliBurst);              // fb143 — fires streak
-            X.bend   = flowKnob (ParameterIDs::FLOW_GLI_BEND, wc::ModDest::FlowGliBend);
-            X.seed   = (int) std::lround (flowBase (ParameterIDs::FLOW_GLI_SEED) * 99.0f);
-            X.holdSteps  = kHoldL[juce::jlimit (0, 5, (int) *rawParam (ParameterIDs::FLOW_GLI_HOLD))];
-            X.loopLen    = kLoopG[juce::jlimit (0, 4, (int) *rawParam (ParameterIDs::FLOW_GLI_LOOP))];
-            X.quantIdx   = (int) *rawParam (ParameterIDs::FLOW_GLI_QUANT);
-            X.releaseNow = (int) *rawParam (ParameterIDs::FLOW_GLI_RELEASE) == 1;
+            X.en[0] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_REP))  > 0.5f;
+            X.en[1] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_REV))  > 0.5f;
+            X.en[2] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_TAPE)) > 0.5f;
+            X.en[3] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_GATE)) > 0.5f;
+            X.en[4] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_PIT))  > 0.5f;
+            X.en[5] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_CRSH)) > 0.5f;
+            X.en[6] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_FRZ))  > 0.5f;
+            X.en[7] = *rawParam (fid (inst, ParameterIDs::FLOW_GLI_EN_SCT))  > 0.5f;
+            X.dejavu = flowBase (fid (inst, ParameterIDs::FLOW_GLI_DEJAVU));
+            X.decay  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_DECAY), fd (inst, wc::ModDest::FlowGliDecay));
+            X.drop   = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_DROP), fd (inst, wc::ModDest::FlowGliDrop));               // fb143 — hole fires
+            X.burst  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_BURST), fd (inst, wc::ModDest::FlowGliBurst));              // fb143 — fires streak
+            X.bend   = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_BEND), fd (inst, wc::ModDest::FlowGliBend));
+            X.seed   = (int) std::lround (flowBase (fid (inst, ParameterIDs::FLOW_GLI_SEED)) * 99.0f);
+            X.holdSteps  = kHoldL[juce::jlimit (0, 5, (int) *rawParam (fid (inst, ParameterIDs::FLOW_GLI_HOLD)))];
+            X.loopLen    = kLoopG[juce::jlimit (0, 4, (int) *rawParam (fid (inst, ParameterIDs::FLOW_GLI_LOOP)))];
+            X.quantIdx   = (int) *rawParam (fid (inst, ParameterIDs::FLOW_GLI_QUANT));
+            X.releaseNow = (int) *rawParam (fid (inst, ParameterIDs::FLOW_GLI_RELEASE)) == 1;
             // fb125 — per-effect Out routing (pointers cached at prepare; FLOW_GLI_FILTER/PAN
             // retired but stay registered for old sessions)
             for (int fi = 0; fi < 8; ++fi)
             {
-                X.fxFlt[fi] = gliFxFltP_[fi] != nullptr ? (int) gliFxFltP_[fi]->load() : 0;
-                X.fxPan[fi] = gliFxPanP_[fi] != nullptr ? (int) gliFxPanP_[fi]->load() : 1;
-                X.fxTrig[fi] = gliFxTrgP_[fi] != nullptr ? (int) gliFxTrgP_[fi]->load() : 0;
-                X.fxGrid[fi] = gliFxGrdP_[fi] != nullptr ? (int) gliFxGrdP_[fi]->load() : 0;
+                X.fxFlt[fi] = gliFxFltP_[inst][fi] != nullptr ? (int) gliFxFltP_[inst][fi]->load() : 0;
+                X.fxPan[fi] = gliFxPanP_[inst][fi] != nullptr ? (int) gliFxPanP_[inst][fi]->load() : 1;
+                X.fxTrig[fi] = gliFxTrgP_[inst][fi] != nullptr ? (int) gliFxTrgP_[inst][fi]->load() : 0;
+                X.fxGrid[fi] = gliFxGrdP_[inst][fi] != nullptr ? (int) gliFxGrdP_[inst][fi]->load() : 0;
             }
-            X.sync       = (int) *rawParam (ParameterIDs::FLOW_GLI_SYNC) == 1;
-            X.repSize  = flowKnob (ParameterIDs::FLOW_GLI_REP_SIZE, wc::ModDest::FlowGliRepSize);   X.repSpeed = flowKnob (ParameterIDs::FLOW_GLI_REP_SPEED, wc::ModDest::FlowGliRepSpeed);
-            X.repFade  = flowKnob (ParameterIDs::FLOW_GLI_REP_FADE, wc::ModDest::FlowGliRepFade);   X.repVary  = flowKnob (ParameterIDs::FLOW_GLI_REP_VARY, wc::ModDest::FlowGliRepVary);
-            X.revLen   = flowKnob (ParameterIDs::FLOW_GLI_REV_LEN, wc::ModDest::FlowGliRevLen);    X.revFade  = flowKnob (ParameterIDs::FLOW_GLI_REV_FADE, wc::ModDest::FlowGliRevFade);
-            X.revSprd  = flowKnob (ParameterIDs::FLOW_GLI_REV_SPRD, wc::ModDest::FlowGliRevSprd);   X.revSnap  = flowKnob (ParameterIDs::FLOW_GLI_REV_SNAP, wc::ModDest::FlowGliRevSnap);
-            X.tapeCurve= flowKnob (ParameterIDs::FLOW_GLI_TAPE_CURVE, wc::ModDest::FlowGliTapeCurve); X.tapeTime = flowKnob (ParameterIDs::FLOW_GLI_TAPE_TIME, wc::ModDest::FlowGliTapeTime);
-            X.tapeDepth= flowKnob (ParameterIDs::FLOW_GLI_TAPE_DEPTH, wc::ModDest::FlowGliTapeDepth); X.tapeSpin = flowKnob (ParameterIDs::FLOW_GLI_TAPE_SPIN, wc::ModDest::FlowGliTapeSpin);
-            X.gateRate = flowKnob (ParameterIDs::FLOW_GLI_GATE_RATE, wc::ModDest::FlowGliGateRate);  X.gateShape= flowKnob (ParameterIDs::FLOW_GLI_GATE_SHAPE, wc::ModDest::FlowGliGateShape);
-            X.gateNudge= flowKnob (ParameterIDs::FLOW_GLI_GATE_NUDGE, wc::ModDest::FlowGliGateNudge); X.gateAmt  = flowKnob (ParameterIDs::FLOW_GLI_GATE_AMT, wc::ModDest::FlowGliGateAmt);
-            X.pitShift = flowKnob (ParameterIDs::FLOW_GLI_PIT_SHIFT, wc::ModDest::FlowGliPitShift);  X.pitWalk  = flowKnob (ParameterIDs::FLOW_GLI_PIT_WALK, wc::ModDest::FlowGliPitWalk);
-            X.pitGlide = flowKnob (ParameterIDs::FLOW_GLI_PIT_GLIDE, wc::ModDest::FlowGliPitGlide);  X.pitJump  = flowKnob (ParameterIDs::FLOW_GLI_PIT_JUMP, wc::ModDest::FlowGliPitJump);
-            X.crshBits = flowKnob (ParameterIDs::FLOW_GLI_CRSH_BITS, wc::ModDest::FlowGliCrshBits);  X.crshRate = flowKnob (ParameterIDs::FLOW_GLI_CRSH_RATE, wc::ModDest::FlowGliCrshRate);
-            X.crshTone = flowKnob (ParameterIDs::FLOW_GLI_CRSH_TONE, wc::ModDest::FlowGliCrshTone);  X.crshAmt  = flowKnob (ParameterIDs::FLOW_GLI_CRSH_AMT, wc::ModDest::FlowGliCrshAmt);
-            X.frzSize  = flowKnob (ParameterIDs::FLOW_GLI_FRZ_SIZE, wc::ModDest::FlowGliFrzSize);   X.frzSpray = flowKnob (ParameterIDs::FLOW_GLI_FRZ_SPRAY, wc::ModDest::FlowGliFrzSpray);
-            X.frzShine = flowKnob (ParameterIDs::FLOW_GLI_FRZ_SHINE, wc::ModDest::FlowGliFrzShine);  X.frzMelt  = flowKnob (ParameterIDs::FLOW_GLI_FRZ_MELT, wc::ModDest::FlowGliFrzMelt);
-            X.sctSize  = flowKnob (ParameterIDs::FLOW_GLI_SCT_SIZE, wc::ModDest::FlowGliSctSize);   X.sctAmt   = flowKnob (ParameterIDs::FLOW_GLI_SCT_AMT, wc::ModDest::FlowGliSctAmt);
-            X.sctVary  = flowKnob (ParameterIDs::FLOW_GLI_SCT_VARY, wc::ModDest::FlowGliSctVary);   X.sctWidth = flowKnob (ParameterIDs::FLOW_GLI_SCT_WIDTH, wc::ModDest::FlowGliSctWidth);
+            X.sync       = (int) *rawParam (fid (inst, ParameterIDs::FLOW_GLI_SYNC)) == 1;
+            X.repSize  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REP_SIZE), fd (inst, wc::ModDest::FlowGliRepSize));   X.repSpeed = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REP_SPEED), fd (inst, wc::ModDest::FlowGliRepSpeed));
+            X.repFade  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REP_FADE), fd (inst, wc::ModDest::FlowGliRepFade));   X.repVary  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REP_VARY), fd (inst, wc::ModDest::FlowGliRepVary));
+            X.revLen   = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REV_LEN), fd (inst, wc::ModDest::FlowGliRevLen));    X.revFade  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REV_FADE), fd (inst, wc::ModDest::FlowGliRevFade));
+            X.revSprd  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REV_SPRD), fd (inst, wc::ModDest::FlowGliRevSprd));   X.revSnap  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_REV_SNAP), fd (inst, wc::ModDest::FlowGliRevSnap));
+            X.tapeCurve= flowKnob (fid (inst, ParameterIDs::FLOW_GLI_TAPE_CURVE), fd (inst, wc::ModDest::FlowGliTapeCurve)); X.tapeTime = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_TAPE_TIME), fd (inst, wc::ModDest::FlowGliTapeTime));
+            X.tapeDepth= flowKnob (fid (inst, ParameterIDs::FLOW_GLI_TAPE_DEPTH), fd (inst, wc::ModDest::FlowGliTapeDepth)); X.tapeSpin = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_TAPE_SPIN), fd (inst, wc::ModDest::FlowGliTapeSpin));
+            X.gateRate = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_GATE_RATE), fd (inst, wc::ModDest::FlowGliGateRate));  X.gateShape= flowKnob (fid (inst, ParameterIDs::FLOW_GLI_GATE_SHAPE), fd (inst, wc::ModDest::FlowGliGateShape));
+            X.gateNudge= flowKnob (fid (inst, ParameterIDs::FLOW_GLI_GATE_NUDGE), fd (inst, wc::ModDest::FlowGliGateNudge)); X.gateAmt  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_GATE_AMT), fd (inst, wc::ModDest::FlowGliGateAmt));
+            X.pitShift = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_PIT_SHIFT), fd (inst, wc::ModDest::FlowGliPitShift));  X.pitWalk  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_PIT_WALK), fd (inst, wc::ModDest::FlowGliPitWalk));
+            X.pitGlide = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_PIT_GLIDE), fd (inst, wc::ModDest::FlowGliPitGlide));  X.pitJump  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_PIT_JUMP), fd (inst, wc::ModDest::FlowGliPitJump));
+            X.crshBits = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_CRSH_BITS), fd (inst, wc::ModDest::FlowGliCrshBits));  X.crshRate = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_CRSH_RATE), fd (inst, wc::ModDest::FlowGliCrshRate));
+            X.crshTone = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_CRSH_TONE), fd (inst, wc::ModDest::FlowGliCrshTone));  X.crshAmt  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_CRSH_AMT), fd (inst, wc::ModDest::FlowGliCrshAmt));
+            X.frzSize  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_FRZ_SIZE), fd (inst, wc::ModDest::FlowGliFrzSize));   X.frzSpray = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_FRZ_SPRAY), fd (inst, wc::ModDest::FlowGliFrzSpray));
+            X.frzShine = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_FRZ_SHINE), fd (inst, wc::ModDest::FlowGliFrzShine));  X.frzMelt  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_FRZ_MELT), fd (inst, wc::ModDest::FlowGliFrzMelt));
+            X.sctSize  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_SCT_SIZE), fd (inst, wc::ModDest::FlowGliSctSize));   X.sctAmt   = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_SCT_AMT), fd (inst, wc::ModDest::FlowGliSctAmt));
+            X.sctVary  = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_SCT_VARY), fd (inst, wc::ModDest::FlowGliSctVary));   X.sctWidth = flowKnob (fid (inst, ParameterIDs::FLOW_GLI_SCT_WIDTH), fd (inst, wc::ModDest::FlowGliSctWidth));
             glitch.setExt (X);
-            if (gliRollReq_.exchange (false)) glitch.rollNow();   // Roll button (UI native, quantized)
+            if (gliRollReq_[inst].exchange (false)) glitch.rollNow();   // Roll button (UI native, quantized)
         }
 
         float* gl = buffer.getWritePointer (0);
@@ -14705,16 +14743,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                         flowPpq, flowBpm, getSampleRate(), gl, gr, numSamples, flowPlaying);
 
         // live Monitor feed (UI rAF-polls getGliFeed)
-        gliVizStepF_.store (glitch.vizStepF16(),          std::memory_order_relaxed);
-        gliVizLoopF_.store (glitch.vizLoopSlotF(),        std::memory_order_relaxed);
-        gliVizFx_.store    (glitch.vizFx(),               std::memory_order_relaxed);
-        gliVizFireS_.store (glitch.vizFireStep16(),       std::memory_order_relaxed);
-        gliVizHold_.store  (glitch.vizHoldSteps(),        std::memory_order_relaxed);
-        gliVizWet_.store   (glitch.wetLevelViz(),         std::memory_order_relaxed);
-        gliVizCount_.store ((int) glitch.vizFireCount(),  std::memory_order_relaxed);
-        gliVizActive_.store(glitch.isActive() ? 1 : 0,    std::memory_order_relaxed);
-        gliVizOut_.store   (glitch.outLevel(),            std::memory_order_relaxed);
-        for (int vi = 0; vi < 16; ++vi) gliVizLvl_[vi].store (glitch.stepLevel (vi), std::memory_order_relaxed);
+        gliVizStepF_[inst].store (glitch.vizStepF16(),          std::memory_order_relaxed);
+        gliVizLoopF_[inst].store (glitch.vizLoopSlotF(),        std::memory_order_relaxed);
+        gliVizFx_[inst].store    (glitch.vizFx(),               std::memory_order_relaxed);
+        gliVizFireS_[inst].store (glitch.vizFireStep16(),       std::memory_order_relaxed);
+        gliVizHold_[inst].store  (glitch.vizHoldSteps(),        std::memory_order_relaxed);
+        gliVizWet_[inst].store   (glitch.wetLevelViz(),         std::memory_order_relaxed);
+        gliVizCount_[inst].store ((int) glitch.vizFireCount(),  std::memory_order_relaxed);
+        gliVizActive_[inst].store(glitch.isActive() ? 1 : 0,    std::memory_order_relaxed);
+        gliVizOut_[inst].store   (glitch.outLevel(),            std::memory_order_relaxed);
+        for (int vi = 0; vi < 16; ++vi) gliVizLvl_[inst][vi].store (glitch.stepLevel (vi), std::memory_order_relaxed);
     };
 
     // fb131 — MODE CHAIN dispatch: the audio stages run in CLICK ORDER. Chop-then-glitch
@@ -14722,8 +14760,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // the untouched fb106/fb115 insert — the chain only decides who reads the buffer first.
     for (int ci = 0; ci < flowChain.len; ++ci)
     {
-        if      (flowChain.order[ci] == 2) chopStage();
-        else if (flowChain.order[ci] == 3) glitchStage();
+        if      (flowChain.order[ci] == 2) chopStage   (flowChain.inst[ci]);   // tp20 — the slot's instance
+        else if (flowChain.order[ci] == 3) glitchStage (flowChain.inst[ci]);
     }
 
     // 🎚️ fb636e (clean-up) — THE masterFx RING. The WET stem export attributes each layer's share of the shared FX
@@ -16065,8 +16103,9 @@ juce::String TerrainAudioProcessor::getDistortionCurveVizJson()
 // ── FLOW · ARP extension lanes (fb105): JS pushes the 7×16 pattern as one JSON blob
 // (mod-matrix lifecycle: parse on the message thread, swap under lock, version-bump
 // so the audio thread copies into the engine exactly once per change).
-void TerrainAudioProcessor::setArpLanesFromJson (const juce::String& json)
+void TerrainAudioProcessor::setArpLanesFromJson (const juce::String& json, int inst)
 {
+    inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
     auto v = juce::JSON::parse (json);
     if (! v.isObject()) return;
     wc::ArpLaneData l;
@@ -16087,94 +16126,98 @@ void TerrainAudioProcessor::setArpLanesFromJson (const juce::String& json)
     fill ("wt",      l.wt,      0.0f,  1.0f, 0.5f);
     {
         const juce::ScopedLock sl (arpLaneLock_);
-        arpLanesShared_ = l;
-        arpLanesJson_   = json;
+        arpLanesShared_[inst] = l;
+        arpLanesJson_[inst]   = json;
     }
-    arpLanesVersion_.fetch_add (1, std::memory_order_release);
+    arpLanesVersion_[inst].fetch_add (1, std::memory_order_release);
 }
 
-juce::String TerrainAudioProcessor::getArpLanesJson() const
+juce::String TerrainAudioProcessor::getArpLanesJson (int inst) const
 {
+    inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
     const juce::ScopedLock sl (arpLaneLock_);
-    if (arpLanesJson_.isNotEmpty()) return arpLanesJson_;
+    if (arpLanesJson_[inst].isNotEmpty()) return arpLanesJson_[inst];
     // no push yet → serialize the engine defaults so the card always boots on DSP truth
     auto arr = [&] (const float* v) {
         juce::String o ("[");
-        for (int i = 0; i < arpLanesShared_.steps; ++i) { if (i) o << ","; o << juce::String (v[i], 3); }
+        for (int i = 0; i < arpLanesShared_[inst].steps; ++i) { if (i) o << ","; o << juce::String (v[i], 3); }
         return o + "]"; };
     juce::String j ("{\"steps\":");
-    j << arpLanesShared_.steps
-      << ",\"pitch\""   << ":" << arr (arpLanesShared_.pitch)
-      << ",\"gate\""    << ":" << arr (arpLanesShared_.gate)
-      << ",\"vel\""     << ":" << arr (arpLanesShared_.vel)
-      << ",\"oct\""     << ":" << arr (arpLanesShared_.oct)
-      << ",\"ratchet\"" << ":" << arr (arpLanesShared_.ratchet)
-      << ",\"prob\""    << ":" << arr (arpLanesShared_.prob)
-      << ",\"wt\""      << ":" << arr (arpLanesShared_.wt) << "}";
+    j << arpLanesShared_[inst].steps
+      << ",\"pitch\""   << ":" << arr (arpLanesShared_[inst].pitch)
+      << ",\"gate\""    << ":" << arr (arpLanesShared_[inst].gate)
+      << ",\"vel\""     << ":" << arr (arpLanesShared_[inst].vel)
+      << ",\"oct\""     << ":" << arr (arpLanesShared_[inst].oct)
+      << ",\"ratchet\"" << ":" << arr (arpLanesShared_[inst].ratchet)
+      << ",\"prob\""    << ":" << arr (arpLanesShared_[inst].prob)
+      << ",\"wt\""      << ":" << arr (arpLanesShared_[inst].wt) << "}";
     return j;
 }
 
-juce::String TerrainAudioProcessor::getArpFeedJson() const
+juce::String TerrainAudioProcessor::getArpFeedJson (int inst) const
 {
-    const float sf = arpVizStepF_.load (std::memory_order_relaxed);
+    inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
+    const float sf = arpVizStepF_[inst].load (std::memory_order_relaxed);
     juce::String j ("{\"s\":");
     j << juce::String (std::isfinite (sf) ? sf : 0.0f, 3)
-      << ",\"c\"" << ":" << arpVizCount_.load (std::memory_order_relaxed)
-      << ",\"n\"" << ":" << arpVizNote_.load (std::memory_order_relaxed)
-      << ",\"v\"" << ":" << arpVizVel_.load (std::memory_order_relaxed)
-      << ",\"a\"" << ":" << arpVizActive_.load (std::memory_order_relaxed)
+      << ",\"c\"" << ":" << arpVizCount_[inst].load (std::memory_order_relaxed)
+      << ",\"n\"" << ":" << arpVizNote_[inst].load (std::memory_order_relaxed)
+      << ",\"v\"" << ":" << arpVizVel_[inst].load (std::memory_order_relaxed)
+      << ",\"a\"" << ":" << arpVizActive_[inst].load (std::memory_order_relaxed)
       << ",\"b\"" << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\"" << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
-      << ",\"on\":" << (flowChainNow().arp ? 1 : 0)
+      << ",\"on\":" << (flowChainNow().arpOn[inst] ? 1 : 0)
       << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";   // fb131/137 — chain membership + transport
     return j;
 }
 
-juce::String TerrainAudioProcessor::getChopFeedJson() const
+juce::String TerrainAudioProcessor::getChopFeedJson (int inst) const
 {
-    const float sf = chopVizStepF_.load (std::memory_order_relaxed);
-    const float wt = chopVizWet_.load (std::memory_order_relaxed);
+    inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
+    const float sf = chopVizStepF_[inst].load (std::memory_order_relaxed);
+    const float wt = chopVizWet_[inst].load (std::memory_order_relaxed);
     juce::String j ("{\"s\":");
     j << juce::String (std::isfinite (sf) ? sf : 0.0f, 3)
-      << ",\"c\""  << ":" << chopVizCount_.load (std::memory_order_relaxed)
-      << ",\"sl\"" << ":" << chopVizSlice_.load (std::memory_order_relaxed)
-      << ",\"a\""  << ":" << chopVizActive_.load (std::memory_order_relaxed)
+      << ",\"c\""  << ":" << chopVizCount_[inst].load (std::memory_order_relaxed)
+      << ",\"sl\"" << ":" << chopVizSlice_[inst].load (std::memory_order_relaxed)
+      << ",\"a\""  << ":" << chopVizActive_[inst].load (std::memory_order_relaxed)
       << ",\"w\""  << ":" << juce::String (std::isfinite (wt) ? wt : 0.0f, 3)
       << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
-      << ",\"on\":" << (flowChainNow().chop ? 1 : 0)
+      << ",\"on\":" << (flowChainNow().chopOn[inst] ? 1 : 0)
       << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";   // fb131/137
     return j;
 }
 
-juce::String TerrainAudioProcessor::getGliFeedJson() const
+juce::String TerrainAudioProcessor::getGliFeedJson (int inst) const
 {
+    inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
     // fb115 — Monitor snapshot: step16 playhead, loop slot, firing fx + start/hold,
     // wet, fires, seed, bpm, mode, and the 16-slot input level history for the bars.
-    const float sf = gliVizStepF_.load (std::memory_order_relaxed);
-    const float lf = gliVizLoopF_.load (std::memory_order_relaxed);
-    const float fs = gliVizFireS_.load (std::memory_order_relaxed);
-    const float hl = gliVizHold_.load  (std::memory_order_relaxed);
-    const float wt = gliVizWet_.load   (std::memory_order_relaxed);
+    const float sf = gliVizStepF_[inst].load (std::memory_order_relaxed);
+    const float lf = gliVizLoopF_[inst].load (std::memory_order_relaxed);
+    const float fs = gliVizFireS_[inst].load (std::memory_order_relaxed);
+    const float hl = gliVizHold_[inst].load  (std::memory_order_relaxed);
+    const float wt = gliVizWet_[inst].load   (std::memory_order_relaxed);
     juce::String j ("{\"s\":");
     j << juce::String (std::isfinite (sf) ? sf : 0.0f, 3)
       << ",\"ls\"" << ":" << juce::String (std::isfinite (lf) ? lf : 0.0f, 3)
-      << ",\"f\""  << ":" << gliVizFx_.load (std::memory_order_relaxed)
+      << ",\"f\""  << ":" << gliVizFx_[inst].load (std::memory_order_relaxed)
       << ",\"fs\"" << ":" << juce::String (std::isfinite (fs) ? fs : 0.0f, 2)
       << ",\"hl\"" << ":" << juce::String (std::isfinite (hl) ? hl : 1.0f, 1)
       << ",\"w\""  << ":" << juce::String (std::isfinite (wt) ? wt : 0.0f, 3)
-      << ",\"a\""  << ":" << gliVizActive_.load (std::memory_order_relaxed)
-      << ",\"c\""  << ":" << gliVizCount_.load (std::memory_order_relaxed)
-      << ",\"sd\"" << ":" << (int) std::lround (apvts.getRawParameterValue (ParameterIDs::FLOW_GLI_SEED)->load() * 99.0f)
+      << ",\"a\""  << ":" << gliVizActive_[inst].load (std::memory_order_relaxed)
+      << ",\"c\""  << ":" << gliVizCount_[inst].load (std::memory_order_relaxed)
+      << ",\"sd\"" << ":" << (int) std::lround (rawParam (fid (inst, ParameterIDs::FLOW_GLI_SEED))->load() * 99.0f)
       << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
-      << ",\"on\":" << (flowChainNow().glitch ? 1 : 0)   // fb131 — chain membership
+      << ",\"on\":" << (flowChainNow().gliOn[inst] ? 1 : 0)   // fb131 — chain membership
       << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed)
-      << ",\"ol\"" << ":" << juce::String (juce::jlimit (0.0f, 1.5f, gliVizOut_.load (std::memory_order_relaxed)), 3)
+      << ",\"ol\"" << ":" << juce::String (juce::jlimit (0.0f, 1.5f, gliVizOut_[inst].load (std::memory_order_relaxed)), 3)
       << ",\"lv\":[";
     for (int i = 0; i < 16; ++i)
     {
-        const float l = gliVizLvl_[i].load (std::memory_order_relaxed);
+        const float l = gliVizLvl_[inst][i].load (std::memory_order_relaxed);
         j << (i ? "," : "") << juce::jlimit (0, 99, (int) std::lround (std::sqrt (l > 0.f ? l : 0.f) * 125.0f));
     }
     j << "]}";
@@ -16831,9 +16874,15 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
     }
     {
         const juce::ScopedLock sl (arpLaneLock_);
-        if (arpLanesJson_.isNotEmpty())
-            state.setProperty ("arpLanesJson", arpLanesJson_, nullptr);   // FLOW · ARP lane pattern (fb105)
+        if (arpLanesJson_[0].isNotEmpty())
+            state.setProperty ("arpLanesJson", arpLanesJson_[0], nullptr);   // FLOW · ARP lane pattern (fb105)
         else state.removeProperty ("arpLanesJson", nullptr);   // fb618
+        for (int n = 1; n < wc::kFlowInstances; ++n)   // tp20 — Arp 2..4 carry their own patterns ("arpLanesJson2" ...)
+        {
+            const juce::String key = "arpLanesJson" + juce::String (n + 1);
+            if (arpLanesJson_[n].isNotEmpty()) state.setProperty (key, arpLanesJson_[n], nullptr);
+            else state.removeProperty (key, nullptr);
+        }
     }
     {
         const juce::ScopedLock lsl (lfoShapeLock_);
@@ -17915,6 +17964,11 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             {
                 auto al = newState.getProperty ("arpLanesJson", "").toString();
                 if (al.isNotEmpty()) setArpLanesFromJson (al);   // FLOW · ARP lane pattern (fb105)
+                for (int n = 1; n < wc::kFlowInstances; ++n)   // tp20 — Arp 2..4
+                {
+                    auto aln = newState.getProperty ("arpLanesJson" + juce::String (n + 1), "").toString();
+                    if (aln.isNotEmpty()) setArpLanesFromJson (aln, n);
+                }
             }
             // fb602 — HOLE 1 READ SIDE. Sits with its siblings above: a JSON blob, restored before
             // the V1/V2 branch and before apvts.replaceState(). Empty ⇒ no-op, never a clear, so a
@@ -19037,8 +19091,8 @@ void TerrainAudioProcessor::clearPatchBlobs()
     dstPtVersion_.fetch_add (1, std::memory_order_release);
     setDistortionTableSrc (-1);
     for (int i = 0; i < 2 * ParameterIDs::kOscCount; ++i) drawTable_[i].store (nullptr, std::memory_order_release);   // the identity warp
-    { const juce::ScopedLock sl (arpLaneLock_); arpLanesShared_ = wc::ArpLaneData{}; arpLanesJson_.clear(); }
-    arpLanesVersion_.fetch_add (1, std::memory_order_release);
+    { const juce::ScopedLock sl (arpLaneLock_); for (int n = 0; n < wc::kFlowInstances; ++n) { arpLanesShared_[n] = wc::ArpLaneData{}; arpLanesJson_[n].clear(); } }   // tp20 — every instance
+    for (auto& v : arpLanesVersion_) v.fetch_add (1, std::memory_order_release);   // tp20 — every instance
     { const juce::ScopedLock sl (cardStateLock_); cardStates_.clear(); }
     noiseVizMode_ = 1;
     for (int o = 0; o < 4; ++o) wt3dView_[o] = false;

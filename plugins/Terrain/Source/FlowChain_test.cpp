@@ -70,6 +70,33 @@ int main()
         check (s.len == 2 && s.arp && s.robin && ! s.chop && ! s.glitch, "T10 note-only chain has no audio stages");
     }
 
+    std::printf ("— tp20 THE FLOW POOL: instances —\n");
+    {   // P1 — two Chops (instances 1 and 2) are two stages, in order
+        const int sl[16] = { 2, 2 }, in[16] = { 0, 1 };
+        auto s = resolveFlowChain (sl, in, 16, 0);
+        check (s.len == 2 && s.order[0] == 2 && s.inst[0] == 0 && s.order[1] == 2 && s.inst[1] == 1, "P1 Chop 1 -> Chop 2 are two stages");
+        check (s.chop && s.chopOn[0] && s.chopOn[1] && ! s.chopOn[2], "P1 per-instance flags");
+    }
+    {   // P2 — the same (kind, instance) twice dedupes; a different instance does not
+        const int sl[16] = { 3, 3, 3 }, in[16] = { 1, 1, 2 };
+        auto s = resolveFlowChain (sl, in, 16, 0);
+        check (s.len == 2 && s.inst[0] == 1 && s.inst[1] == 2, "P2 (Glitch,2) twice keeps one; (Glitch,3) is another");
+    }
+    {   // P3 — Robin is ONE: a saved 'Robin 3' resolves to the Wheel (instance 0) and dedupes with Robin 1
+        const int sl[16] = { 4, 4 }, in[16] = { 2, 0 };
+        auto s = resolveFlowChain (sl, in, 16, 0);
+        check (s.len == 1 && s.order[0] == 4 && s.inst[0] == 0 && s.robin, "P3 Robin never splits");
+    }
+    {   // P4 — the fb131 four-slot shape still resolves exactly as before (instance 0 everywhere)
+        const int sl[4] = { 2, 3, 0, 0 };
+        auto s = resolveFlowChain (sl, 0);
+        check (s.len == 2 && s.inst[0] == 0 && s.inst[1] == 0 && s.chopOn[0] && s.gliOn[0], "P4 legacy overload = instance 1");
+    }
+    {   // P5 — an out-of-range instance clamps to instance 1 instead of wedging
+        const int sl[16] = { 1 }, in[16] = { 9 };
+        auto s = resolveFlowChain (sl, in, 16, 0);
+        check (s.len == 1 && s.inst[0] == 0 && s.arpOn[0], "P5 garbage instance = instance 1");
+    }
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

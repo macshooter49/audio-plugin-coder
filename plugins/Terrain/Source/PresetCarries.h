@@ -179,9 +179,13 @@ inline bool convPlays (const juce::ValueTree& s, int inst)
 // The FLOW cards that are ON, exactly as the processor resolves them every block.
 inline int flowCardsOn (const juce::ValueTree& s)
 {
-    const int slots[4] = { choiceOf (s, ParameterIDs::FLOW_CHAIN_1, 0), choiceOf (s, ParameterIDs::FLOW_CHAIN_2, 0),
-                           choiceOf (s, ParameterIDs::FLOW_CHAIN_3, 0), choiceOf (s, ParameterIDs::FLOW_CHAIN_4, 0) };
-    return wc::resolveFlowChain (slots, choiceOf (s, ParameterIDs::FLOW_MODE, 0)).len;
+    int slots[wc::kFlowChainSlots] = {}, insts[wc::kFlowChainSlots] = {};   // tp20 — 16 slots, each with its instance
+    for (int i = 0; i < wc::kFlowChainSlots; ++i)
+    {
+        slots[i] = choiceOf (s, ("FLOW_CHAIN_" + juce::String (i + 1)).toRawUTF8(), 0);
+        insts[i] = choiceOf (s, ("FLOW_CHAIN_INST_" + juce::String (i + 1)).toRawUTF8(), 0);
+    }
+    return wc::resolveFlowChain (slots, insts, wc::kFlowChainSlots, choiceOf (s, ParameterIDs::FLOW_MODE, 0)).len;
 }
 
 // Does LFO n (1 … 10), as saved, play its drawn table?
