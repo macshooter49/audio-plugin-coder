@@ -45,6 +45,7 @@
 #include "TerrainUtilityFx.h"     // fb444 — kind 14, the glue strip         // fb426 — chain kind 12    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
+#include "OscBankIds.h"   // tp20 — the A–D → E–H remap tables (generated)
 #include "SamplerVoice.h"
 #include "SampleBuffer.h"
 #include "ResynthEngine.h"        // GEODE resynthesis engine (Engine::SPEC) — analyzer + frame store
@@ -693,18 +694,18 @@ public:
     std::atomic<float> fltVisHz1_ { -1.f }, fltVisRes1_ { 0.f }, fltVisHz2_ { -1.f }, fltVisRes2_ { 0.f };
     // fb457 — the loudest voice's EFFECTIVE wavetable frame per osc. -1 = nothing sounding, and
     // the UI then falls back to the knob, exactly as it always did (so an idle rack is unchanged).
-    std::atomic<float> wtFrameVis_[4] { { -1.f }, { -1.f }, { -1.f }, { -1.f } };
+    std::atomic<float> wtFrameVis_[ParameterIDs::kOscCount] { { -1.f }, { -1.f }, { -1.f }, { -1.f }, { -1.f }, { -1.f }, { -1.f }, { -1.f } };
     // (this section is already public: — line 552. An access specifier added here would have
     //  closed it and made every member below private; it did, and the editor stopped compiling.)
     float wtFrameVis (int o) const noexcept
-    { return (o >= 0 && o < 4) ? wtFrameVis_[o].load (std::memory_order_relaxed) : -1.f; }
+    { return (o >= 0 && o < ParameterIDs::kOscCount) ? wtFrameVis_[o].load (std::memory_order_relaxed) : -1.f; }
 
     // fb458 — the SHAPING the waterfall must draw on top of the frame. wtDispLive_ = 0 means no
     // voice is sounding, and every consumer then falls back to the base parameters, so an idle
     // panel and a hand-turned knob look exactly as they did.
-    std::atomic<int>   wtDispLive_[4] { { 0 }, { 0 }, { 0 }, { 0 } };
-    std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {}, wtBlurVis_[4] {};
-    std::atomic<int>   wtWarpModeVis_[4] {}, wtWarp2ModeVis_[4] {}, wtFoldShapeVis_[4] {};
+    std::atomic<int>   wtDispLive_[ParameterIDs::kOscCount] { { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 }, { 0 } };
+    std::atomic<float> wtWarpAmtVis_[ParameterIDs::kOscCount] {}, wtWarp2AmtVis_[ParameterIDs::kOscCount] {}, wtFoldAmtVis_[ParameterIDs::kOscCount] {}, wtBlurVis_[ParameterIDs::kOscCount] {};
+    std::atomic<int>   wtWarpModeVis_[ParameterIDs::kOscCount] {}, wtWarp2ModeVis_[ParameterIDs::kOscCount] {}, wtFoldShapeVis_[ParameterIDs::kOscCount] {};
     tw::SynthVoice::WtDisp wtDispEffective (int o) const noexcept;
     // fb546 — WARP EXTENSION CARD. The curve for one warp slot, computed by the SHIPPED statics
     // (applyPhaseWarp / applyAmpWarp / warpFiltCoef + warpFiltTick) exactly as getOscWavetableJson
@@ -717,7 +718,7 @@ public:
     //  half-redrawn curve and neither side ever locks or allocates.
     //  A curve that is (within 1e-4) the identity publishes NULLPTR, which is what makes mode 37
     //  bit-exact dry until something is actually drawn.
-    tw::SynthVoice::DrawCurve            drawCurve_[8][2];
+    tw::SynthVoice::DrawCurve            drawCurve_[2 * ParameterIDs::kOscCount][2];   // tp20 — 8 oscs x 2 warp slots
     // fb554 — THE MOD-CONNECTION CURVES. Double-buffered and published by pointer, the same shape
     //  as drawCurve_ above and for the same reason: the message thread rewrites the whole set on
     //  every matrix edit while the audio thread is reading it. Publishing a POINTER TO THE WHOLE
@@ -727,7 +728,7 @@ public:
     std::atomic<const wc::ModCurveSet*>  modCurves_ { nullptr };
     int                                  modCurveSpare_ = 0;
     int                                  drawSpare_[8] = { 0,0,0,0,0,0,0,0 };
-    tw::SynthVoice::DrawSlot             drawTable_[8];      // what every voice reads
+    tw::SynthVoice::DrawSlot             drawTable_[2 * ParameterIDs::kOscCount];      // what every voice reads (bank 1 reads from + 8)
     void         setWarpDrawCurve (int osc, int slot, const juce::String& csv, float rateOverride = -1.0f);   // fb561 — rateOverride: a CAPTURE inherits its source's mip read-rate
     juce::String getWarpDrawCurveCsv (int osc, int slot) const;
     // fb459 — what the SPECTRAL morph is doing right now. The amount is the EFFECTIVE one the
@@ -745,13 +746,13 @@ public:
      *  Engine::SPEC or has no store). Read by the editor's display engine for the waterfall
      *  visualizer. Safe on the message thread: rebuilds run on the same (message) thread. */
     const tw::ResynthFrameStore* geodeLiveStore (int osc) const noexcept
-    { return (osc >= 0 && osc < 4) ? geodeSlot_[(size_t) osc].live.load (std::memory_order_acquire) : nullptr; }
-    int geodeLiveGen (int osc) const noexcept { return (osc >= 0 && osc < 4) ? geodeSlot_[(size_t) osc].gen.load (std::memory_order_relaxed) : 0; }   // fb636
+    { return (osc >= 0 && osc < ParameterIDs::kOscCount) ? geodeSlot_[(size_t) osc].live.load (std::memory_order_acquire) : nullptr; }
+    int geodeLiveGen (int osc) const noexcept { return (osc >= 0 && osc < ParameterIDs::kOscCount) ? geodeSlot_[(size_t) osc].gen.load (std::memory_order_relaxed) : 0; }   // fb636
     /** HARM viz — the latest gathered knob snapshot for one osc. The editor's DISPLAY
      *  HarmonicEngine instances rebuild their banks from this on the message-thread tick
      *  (plain struct copy of block-rate floats — a torn read costs one cosmetic frame). */
-    bool  harmVizLive (int osc) const noexcept { return harmVizLive_[(size_t) juce::jlimit (0, 3, osc)].load (std::memory_order_relaxed) != 0; }
-    float harmVizBin (int osc, int b) const noexcept { return harmVizBins_[(size_t) juce::jlimit (0, 3, osc)][(size_t) juce::jlimit (0, 95, b)].load (std::memory_order_relaxed); }
+    bool  harmVizLive (int osc) const noexcept { return harmVizLive_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)].load (std::memory_order_relaxed) != 0; }
+    float harmVizBin (int osc, int b) const noexcept { return harmVizBins_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)][(size_t) juce::jlimit (0, 95, b)].load (std::memory_order_relaxed); }
     /** fb588 — BY VALUE, and the TABLE arrays are re-blended HERE on the message thread.
         The scalars above tolerate a torn read (one cosmetic frame). The Table family's amp/phase
         arrays would not have been the same bargain: harmP points them at harmAmpScratch_, which
@@ -766,7 +767,7 @@ public:
         field left out of here is a knob the picture ignores. */
     float harmDisplaySignature (int osc) const noexcept
     {
-        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)];
         return (float) ((double) p.mainMode * 101.7 + (double) p.sculptMode * 71.3
                       + (double) p.tableSig * 0.37 + (double) p.tableN * 1.9
                       + p.hue * 13.1 + p.count * 17.7 + p.lean * 19.3 + p.fan * 23.9
@@ -783,7 +784,7 @@ public:
     // -1 means "not on the Table family" → the page falls back to the knob, exactly as before.
     float harmHueVis (int osc) const noexcept
     {
-        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)];
         return p.mainMode == 6 ? juce::jlimit (0.0f, 1.0f, p.hue) : -1.0f;
     }
 
@@ -810,7 +811,7 @@ public:
     // the real excursion reflects inward; the page clips the band to the axis for the same look.
     float harmChurnBandVis (int osc) const noexcept
     {
-        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)];
         const float c = juce::jlimit (0.0f, 1.0f, p.churn);
         if (p.mainMode != 6 || c <= 0.0f) return 0.0f;
         return tw::harm::kChurnDepth * (tw::harm::kChurnDepthFloor
@@ -825,7 +826,7 @@ public:
     // band and not a line.
     float harmChurnRateVis (int osc) const noexcept
     {
-        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)];
         const float c = juce::jlimit (0.0f, 1.0f, p.churn);
         if (p.mainMode != 6 || c <= 0.0f) return 0.0f;
         return tw::harm::kChurnRateHz * (std::exp2f (tw::harm::kChurnCurve * c) - 1.0f)
@@ -834,7 +835,7 @@ public:
 
     tw::HarmParams harmDisplayParams (int osc) const noexcept
     {
-        const int o = juce::jlimit (0, 3, osc);
+        const int o = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
         tw::HarmParams p = harmDisplayParams_[(size_t) o];
         if (p.mainMode == 6)
         {
@@ -910,7 +911,7 @@ public:
         bakeSeamlessNoiseLoop (const std::shared_ptr<juce::AudioBuffer<float>>& in);
 
     // PEROSC-BUFFERS — per-OSC Sample oscillator buffers (synth-side; A/B/C/D independent).
-    tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, 3, idx)]; }
+    tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)]; }
     // NOISE IMPORT (P5) — one shared looping-sample source for the Noise module (user drop or factory sample).
     tw::SampleBuffer& getNoiseSampleBuffer () noexcept { return noiseSampleBuffer_; }
     // NOISE IMPORT (P5c) — persisted noise-sample selection descriptor (JSON): factory path or embedded user audio.
@@ -922,8 +923,8 @@ public:
     void         setNoiseVizMode (int m) noexcept { noiseVizMode_ = juce::jlimit (1, 2, m); }   // 1 particle · 2 waveform (UI state, persisted)
     int          getNoiseVizMode () const noexcept { return noiseVizMode_; }
     void startNoiseAudition () noexcept { noiseAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // headphone preview (browser)
-    void startWavetableAudition (int osc) noexcept { wtAudReqOsc_.store (juce::jlimit (0, 3, osc), std::memory_order_relaxed); wtAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // WT headphone preview
-    void startOscSampleAudition (int osc) noexcept { sampAudReqOsc_.store (juce::jlimit (0, 3, osc), std::memory_order_relaxed); sampAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // fb74 — SAMPLE browser headphone preview (plays the osc's current sample once)
+    void startWavetableAudition (int osc) noexcept { wtAudReqOsc_.store (juce::jlimit (0, ParameterIDs::kOscCount - 1, osc), std::memory_order_relaxed); wtAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // WT headphone preview
+    void startOscSampleAudition (int osc) noexcept { sampAudReqOsc_.store (juce::jlimit (0, ParameterIDs::kOscCount - 1, osc), std::memory_order_relaxed); sampAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // fb74 — SAMPLE browser headphone preview (plays the osc's current sample once)
     void stopPreview () noexcept { previewStop_.store (true, std::memory_order_relaxed); }   // kill the active one-shot audition immediately (Max: double-click/close stops it)
 
     // ── IMPORTS REGISTRY (fb60, 3-way fb74) — reference-in-place user imports: single FILES → an "Imports"
@@ -961,14 +962,14 @@ public:
     juce::String getManagedWavetablesJson();
     void         loadImportsRegistry ();
     void         saveImportsRegistry (int kind);
-    tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
-    juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
+    tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)]; }
+    juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)]; }
     // fb641 — copy one osc's loaded sample onto another: the audio, its NATIVE RATE, the source path, the loaded-path record
     //    and the waveform payload. false when src == dst or the source is empty. Message thread (the copyOscSample native).
     bool              copyOscSampleSlot  (int src, int dst);
     /** BLEND — persisted source-pair paths (which: 0 = A, 1 = B). Empty = no live blend.
      *  The editor reloads both files on reopen so the blend knobs stay LIVE across sessions. */
-    juce::String&     blendSrcPath (int idx, int which) noexcept { return blendSrcPaths_[(size_t) juce::jlimit (0, 3, idx)][(size_t) (which & 1)]; }
+    juce::String&     blendSrcPath (int idx, int which) noexcept { return blendSrcPaths_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)][(size_t) (which & 1)]; }
     void setCachedOscPayload (const juce::String& json, int idx)
     { if (idx < 0 || idx > 3) return; juce::ScopedLock sl (samplePayloadLock); cachedOscPayloads_[(size_t) idx] = json; }
     // Wavetable EXTENDER (message thread) — build/clear an imported table for osc 0..3.
@@ -1290,8 +1291,8 @@ public:
     std::atomic<float> noiseFreeNorm_{ 0.f  };   // fb66 — NOISE Free-mode global tape position 0..1
     // HARM-VIZ — live partial bins from the most-active voice (audio thread writes; editor
     // reads on its tick — cosmetic, tear-tolerant)
-    std::atomic<float> harmVizBins_[4][96] {};
-    std::atomic<int>   harmVizLive_[4] {};
+    std::atomic<float> harmVizBins_[ParameterIDs::kOscCount][96] {};
+    std::atomic<int>   harmVizLive_[ParameterIDs::kOscCount] {};
     std::atomic<float> synthLfo1Vis { 0.f };   // Batch 1 — live L1 LFO value for the editor dot
     // ANNULUS resonator — live feed read by the editor timer → purple audio-reactive harmonograph layer.
     std::atomic<float> resoVizEnergy_[4] { {0.f}, {0.f}, {0.f}, {0.f} };   // per-band modal energy
@@ -1304,9 +1305,9 @@ public:
     // for active sample voices + a count. Keyed by voiceIndex so the editor can give each note a
     // stable line (smooth fade on release). Capped at kMaxFollowers.
     static constexpr int kMaxFollowers = 16;
-    std::atomic<int>   sampleFollowIdx_[4][kMaxFollowers] {};   // voice index (identity)
-    std::atomic<float> sampleFollowPos_[4][kMaxFollowers] {};   // read position 0..1
-    std::atomic<int>   sampleFollowCount_[4] {};               // active count per osc
+    std::atomic<int>   sampleFollowIdx_[ParameterIDs::kOscCount][kMaxFollowers] {};   // voice index (identity)
+    std::atomic<float> sampleFollowPos_[ParameterIDs::kOscCount][kMaxFollowers] {};   // read position 0..1
+    std::atomic<int>   sampleFollowCount_[ParameterIDs::kOscCount] {};               // active count per osc
     // (GRANULAR-FOLLOWER grain-cloud atomics retired 2026-07-02 — granular now rides the sampleFollow_
     //  arrays above via SynthVoice::granScanPos01, drawn as reactive white lines in the UI.)
 
@@ -1419,6 +1420,11 @@ public:
     float lastOutGainDb_ = 1e30f, lastOutGain_ = 1.0f, lastFreezeRaw_ = 1e30f, lastFreeze_ = 0.0f;
     int gatherSpan_ = 1 << 20;                // huge => the very first block always gathers
     wc::ModConfig synModCfgPersist_;          // assigned inside the gather, consumed after it
+    // tp20 — bank 1's copies of the three hoisted sum arrays (members: 3 x NumDests floats is too much stack twice)
+    float modSumsB_[(int) wc::ModDest::NumDests] {};
+    float envOwnWB_[(int) wc::ModDest::NumDests] {};
+    float envOwnVB_[(int) wc::ModDest::NumDests] {};
+    wc::ModConfig synModCfgB_;                // the per-voice matrix as bank 1 sees it: mirror dests rebased, A–D's own dests dropped
     float         synModBpmPersist_ = 0.0f;
     long long dspT0_ = 0, dspTA_ = 0;   // audio thread only
 
@@ -1831,6 +1837,31 @@ private:
         std::atomic<float>* vals[kSlots] {};
     };
     mutable std::unique_ptr<RawCache> rawCache_ { new RawCache() };
+    // tp20 — bank 1's cache: keyed by the SAME A–D pointer the gather passes, resolving to the E–H twin's
+    //    atomic (OscBankIds.h). An id with no twin (a global) resolves to itself, so the one gather text
+    //    reads bank 1's oscillators and everybody's globals.
+    mutable std::unique_ptr<RawCache> rawCacheB_ { new RawCache() };
+    std::unordered_map<const void*, const char*> oscRemap_;   // built once in the constructor
+    std::atomic<float>* rawParamB (const char* id) const
+    {
+        auto& c = *rawCacheB_;
+        const uintptr_t k = (uintptr_t) id;
+        size_t h = (size_t) (((k >> 3) * 11400714819323198485ull) >> 52) & RawCache::kMask;
+        for (int probe = 0; probe < 64; ++probe)
+        {
+            const void* key = c.keys[h];
+            if (key == (const void*) id) { if (auto* v = c.vals[h]) return v; break; }
+            if (key == nullptr) break;
+            h = (h + 1) & RawCache::kMask;
+        }
+        const char* twin = id;
+        if (auto it = oscRemap_.find ((const void*) id); it != oscRemap_.end()) twin = it->second;
+        auto* p = const_cast<juce::AudioProcessorValueTreeState&> (apvts).getRawParameterValue (twin);
+        c.vals[h] = p;
+        std::atomic_thread_fence (std::memory_order_release);
+        c.keys[h] = (const void*) id;
+        return p;
+    }
     std::atomic<float>* rawParam (const char* id) const
     {
         auto& c = *rawCache_;
@@ -1888,6 +1919,11 @@ private:
     // block; they're pure functions of params/BPM, so they now push only on actual change
     // (every change still broadcasts to the FULL pool, so voices are never stale). The
     // pushed_ flags force the first push (and re-push after prepareToPlay resets voices).
+    // tp20 — the change-gates are PER BANK (bank 1's spA is osc E's, not osc A's). Bank 0 = [0].
+    struct BankGate { wc::ModConfig lastSynModCfg; float lastSynModBpm = 0.0f; bool synCfgPushed = false;
+                      tw::SynthVoice::SampleEngineParams spA, spB, spC, spD; tw::GranularEngineParams gpA, gpB, gpC, gpD;
+                      bool engParamsPushed = false; };
+    BankGate      bankGate_[2];
     wc::ModConfig lastSynModCfg_;
     float         lastSynModBpm_    = -1.0f;
     bool          synCfgPushed_     = false;
@@ -1899,6 +1935,24 @@ private:
     float synthGlideFrom_  = -1.0f;   // last synth note (pitch to glide FROM); -1 = none yet
     int   synthNotesHeld_  = 0;       // synth notes currently sounding
     UnisonSynth                 synthEngine;   // Phase 8a: was juce::Synthesiser
+    // ══ tp20 — THE OSCILLATOR POOL: BANK 1 (E–H) is a SECOND synthesiser of unmodified SynthVoices fed the
+    //    same MIDI. A bank-1 voice's A/B/C/D slots ARE E/F/G/H; it renders through the same gather with
+    //    rawParamB() (the E–H twins of every A–D id), its own mod sums, its own route snapshot, and sums
+    //    into the same buses. It is BUILT LAZILY on the message thread the first time an E–H oscillator is
+    //    switched on (ensureBankB), then published through bankB_; until then a patch that never touched
+    //    E–H costs exactly nothing — and bank 0 is bit-identical by construction (its code did not move).
+    std::unique_ptr<UnisonSynth>                     synthEngineB_;
+    std::atomic<UnisonSynth*>                        bankB_ { nullptr };
+    std::array<tw::SynthVoice*, kSynthVoiceCount>    synthVoicesB_ {};
+    void ensureBankB();                              // message thread — builds + prepares bank 1 once
+    bool bankBWanted() const noexcept;               // any SYN_OSC_E..H_ENABLE on (message thread; atomics only)
+    /** Every voice of every built bank — the viz walks and the message-thread pushes use this. */
+    template <typename F> void forEachVoiceAllBanks (F&& f)
+    {
+        for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoices_[(size_t) i]) f (v, 0);
+        if (bankB_.load (std::memory_order_acquire) != nullptr)
+            for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoicesB_[(size_t) i]) f (v, 1);
+    }
     wc::FlowArp                 flowArp;                    // FLOW · ARP engine (one global instance)
     wc::FlowChop                chop;                       // FLOW · CHOP engine (mode 2) — audio insert at end of processBlock
     wc::FlowGlitch              glitch;                     // FLOW · GLITCH engine (mode 3) — audio insert at end of processBlock
@@ -1963,10 +2017,12 @@ private:
         juce::uint32 retiredMs[2] {};     // fb636 F4 — when (the hold before the free)
     };
     MorphSlot morphA_, morphB_, morphC_, morphD_;
+    MorphSlot morphE_, morphF_, morphG_, morphH_;   // tp20 — bank 1 (E–H)
+    MorphSlot& morphSlot (int osc) noexcept { MorphSlot* m[8] = { &morphA_, &morphB_, &morphC_, &morphD_, &morphE_, &morphF_, &morphG_, &morphH_ }; return *m[juce::jlimit (0, 7, osc)]; }
     // fb76 — the audio thread publishes the EFFECTIVE (LFO-modulated) spectral amount per osc each
     // block; the 60 Hz timer's rebuildMorphIfNeeded reads it instead of the raw param. -1 = not yet
     // published (fresh instance / suspended host) → the timer falls back to the raw param.
-    std::atomic<float> spectralEffAmt_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    std::atomic<float> spectralEffAmt_[ParameterIDs::kOscCount] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     // fb467 — same publish for the partial window's two edges (SpecLo/SpecHi are mod destinations,
     // so the timer must build from the MODULATED value, not the raw param). -1 = not yet published.
     // 🚨 fb469 — the EFFECTIVE blur, published unconditionally. The twin build first keyed off
@@ -1975,16 +2031,16 @@ private:
     //    and blur silently kept its old behaviour — caught on the installed AU, where Square's
     //    centroid still fell 7.93 -> 2.83 while the offline gate said 13.97 -> 17.55. A display feed
     //    is not a control signal (fb373).
-    std::atomic<float> blurEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
-    std::atomic<float> specLoEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
-    std::atomic<float> specHiEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    std::atomic<float> blurEff_[ParameterIDs::kOscCount] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    std::atomic<float> specLoEff_[ParameterIDs::kOscCount] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    std::atomic<float> specHiEff_[ParameterIDs::kOscCount] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     // fb467 — the eight window parameters, RESOLVED ONCE in the constructor. The publish needs the
     // parameter's own NormalisableRange to modulate in its skewed space, and the general helper
     // (fb193 modP) reaches it via apvts.getParameter(juce::String(pid)) — a juce::String is a
     // ref-counted heap buffer, so that is a malloc per routed edge per block on the AUDIO THREAD.
     // fb456's law: an allocation on the audio thread is a violation regardless of what it costs.
-    juce::RangedAudioParameter* specLoParam_[4] { nullptr, nullptr, nullptr, nullptr };
-    juce::RangedAudioParameter* specHiParam_[4] { nullptr, nullptr, nullptr, nullptr };
+    juce::RangedAudioParameter* specLoParam_[ParameterIDs::kOscCount] {};
+    juce::RangedAudioParameter* specHiParam_[ParameterIDs::kOscCount] {};
 
     // ── fb522 · LANE P — THE OVERPASS STAGE ───────────────────────────────────────────────────
     // URANGE is EXPONENTIAL (5..4800 cents) and PHASE is 0..360 degrees, so a mod route on either
@@ -1993,8 +2049,8 @@ private:
     // juce::String is a ref-counted heap buffer, i.e. a malloc PER ROUTED KNOB PER BLOCK on the
     // audio thread, which fb456's law forbids outright. Same fix as fb467's window edges: resolve
     // the pointers once, in the constructor.
-    juce::RangedAudioParameter* uniRangeParam_[4] { nullptr, nullptr, nullptr, nullptr };
-    juce::RangedAudioParameter* phaseOffParam_[4] { nullptr, nullptr, nullptr, nullptr };
+    juce::RangedAudioParameter* uniRangeParam_[ParameterIDs::kOscCount] {};
+    juce::RangedAudioParameter* phaseOffParam_[ParameterIDs::kOscCount] {};
     // The per-block resolved values, in the units the voice will want. Written once per block in
     // processBlock (audio thread) and read in the same pass by the voice push loop — same thread,
     // so no atomics and no publish. 🚧 The push itself is NOT wired yet: SynthVoice.h has no setter
@@ -2012,7 +2068,7 @@ private:
         float phaseOffDeg   = 0.0f;    // 0..360 degrees
         float phaseAmt      = 1.0f;    // 0..1    (PHASE_AMT % / 100); 1 = unscaled = today
     };
-    OverpassOscStage overpassOsc_[4];
+    OverpassOscStage overpassOsc_[ParameterIDs::kOscCount];
 
     // ── Wavetable EXTENDER — per-osc imported tables ("turn anything into a wavetable") ──
     // Built on the message thread from dropped audio (Wavetable::buildFromPcm) then atomic-
@@ -2079,17 +2135,17 @@ private:
         const tw::Wavetable* wt  = nullptr;   // the import to read, or nullptr (none live)
         int                  idx = -1;
     };
-    ImportSlot importSlot_[4];
-    std::vector<float> importedPcm_[4];                          // stored mono source per osc (re-slice on resolution change)
-    int                importFrames_[4] = { 40, 40, 40, 40 };    // current frame count per osc (resolution mode)
-    bool               importIsFile_[4] = { false, false, false, false };  // true = a real wavetable FILE (fixed frames), false = arbitrary audio (resolution-adjustable)
+    ImportSlot importSlot_[ParameterIDs::kOscCount];
+    std::vector<float> importedPcm_[ParameterIDs::kOscCount];                          // stored mono source per osc (re-slice on resolution change)
+    int                importFrames_[ParameterIDs::kOscCount] = { 40, 40, 40, 40, 40, 40, 40, 40 };    // current frame count per osc (resolution mode)
+    bool               importIsFile_[ParameterIDs::kOscCount] = {};  // true = a real wavetable FILE (fixed frames), false = arbitrary audio (resolution-adjustable)
     // fb253 — SPECTRAL ON CUSTOM TABLES: SpectralMorph consumes a 16-frame WavetableSpec. For an imported
     // table we derive one via Wavetable::toSpec() and cache it (message-thread only in rebuildMorphIfNeeded),
     // re-deriving only when the import changes (pointer/buildEpoch). The morph then acts on THIS instead of
     // the factory preset spec — so custom tables get spectral (and modulate, via fb252) exactly like presets.
-    tw::WavetableSpec  importSpec_[4];
-    const tw::Wavetable* importSpecSrc_[4]   = { nullptr, nullptr, nullptr, nullptr };
-    int                importSpecEpoch_[4]   = { -1, -1, -1, -1 };
+    tw::WavetableSpec  importSpec_[ParameterIDs::kOscCount];
+    const tw::Wavetable* importSpecSrc_[ParameterIDs::kOscCount]   = {};
+    int                importSpecEpoch_[ParameterIDs::kOscCount]   = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
     // ══ fb588 — HARMONICS ← WAVETABLES ═══════════════════════════════════════════════════════
     //  The additive bank can take its 512-partial recipe from a wavetable — factory OR imported —
@@ -2111,7 +2167,7 @@ private:
         int  builtImportEpoch = -1;
         int  builtPreset      = -2;     // -2 = nothing built yet (a real preset index is >= 0)
     };
-    HarmTableSlot harmTable_[4];
+    HarmTableSlot harmTable_[ParameterIDs::kOscCount];
     // fb589 — THE ADDITIVE WATERFALL. Its own engine instance, deliberately NOT the editor's
     // harmDispEng_[]: that one is mid-flight every 60 Hz tick baking the bars, and a 16-row HUE
     // sweep would be walking through its state. One instance serves all four oscillators because
@@ -2121,11 +2177,11 @@ private:
     float harmWfAmp_  [tw::HarmTableSource::kMaxN] = {};
     float harmWfPhase_[tw::HarmTableSource::kMaxN] = {};
     // The audio thread blends into these; HarmParams points at them for the rest of the block.
-    float harmAmpScratch_  [4][tw::HarmTableSource::kMaxN] = {};
-    float harmPhaseScratch_[4][tw::HarmTableSource::kMaxN] = {};
+    float harmAmpScratch_  [ParameterIDs::kOscCount][tw::HarmTableSource::kMaxN] = {};
+    float harmPhaseScratch_[ParameterIDs::kOscCount][tw::HarmTableSource::kMaxN] = {};
     // the DISPLAY's own copy — written only on the message thread, in harmDisplayParams()
-    mutable float harmDispAmp_  [4][tw::HarmTableSource::kMaxN] = {};
-    mutable float harmDispPhase_[4][tw::HarmTableSource::kMaxN] = {};
+    mutable float harmDispAmp_  [ParameterIDs::kOscCount][tw::HarmTableSource::kMaxN] = {};
+    mutable float harmDispPhase_[ParameterIDs::kOscCount][tw::HarmTableSource::kMaxN] = {};
     // fb248 — imported-table build pool (1 serialized worker). The FFT reconstruction of 8 mip levels ×
     // frames × 2048 is heavy (Serum-size tables freeze the UI when built on the message thread + flash purple).
     // Declared AFTER importSlot_/importedPcm_ so it destructs FIRST (joins any in-flight build before those die).
@@ -2141,13 +2197,13 @@ private:
     /* the pool's own destructor drains, but a job's callAsync may already be in the message queue
        when this processor dies. The flag it captures by value outlives us and says so. */
     std::shared_ptr<std::atomic<bool>> ioAlive_ { std::make_shared<std::atomic<bool>> (true) };
-    std::atomic<juce::uint32> wtBuildReq_[4] { {0}, {0}, {0}, {0} };   // fb610 — newest-request ticket per osc; a queued bake for a table the user has stepped past returns without working
-    juce::String       importName_[4];                                     // display/persist name (file/table) per osc
+    std::atomic<juce::uint32> wtBuildReq_[ParameterIDs::kOscCount] { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0} };   // fb610 — newest-request ticket per osc; a queued bake for a table the user has stepped past returns without working
+    juce::String       importName_[ParameterIDs::kOscCount];                                     // display/persist name (file/table) per osc
     juce::String       presetPillsJson_;                                   // fb623 — card/device pill names
     juce::MemoryBlock  virginChunk_;                                       // fb623 — what a brand-new instance is
     juce::String       macroNamesJson_;                                    // fb564 — ["Cutoff","",…] as the page wrote it
     mutable juce::CriticalSection macroNamesLock_;
-    bool               wt3dView_[4] = { false, false, false, false };       // 3D-waterfall view toggle per osc (survives editor reopen + preset)
+    bool               wt3dView_[ParameterIDs::kOscCount] = {};       // 3D-waterfall view toggle per osc (survives editor reopen + preset)
     void rebuildImport (int osc);                                // message thread — (re)build importSlot_[osc] from importedPcm_
     void rebuildImportAsync (int osc);                           // fb248 — snapshot on msg thread, build on wtBuildPool_ (UI never freezes)
     // fb636 M2 / M2r — ImportSlot lifetime (see ImportSlot). "Locked" = slot.mx HELD.
@@ -2194,7 +2250,7 @@ private:
 
     const tw::Wavetable* wavetableForDisplay (int osc, const MorphSlot& slot, int presetIdx) const noexcept
     {
-        osc = juce::jlimit (0, 3, osc);
+        osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
         return wavetableForDisplay (slot, presetIdx, importSlot_[(size_t) osc].live.load (std::memory_order_acquire));
     }
     // fb636 F1 — the same order with the import already resolved. A caller that SAMPLES the table passes its
@@ -2212,7 +2268,7 @@ private:
 
     const tw::Wavetable* wavetableForOsc (int osc, MorphSlot& slot, int presetIdx) noexcept
     {
-        osc = juce::jlimit (0, 3, osc);
+        osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
         auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_seq_cst);   // fb636 M2 — seq_cst: the grace fence's audio half (importGraceOver)
         // fb253 — the morph now applies to the IMPORT too (rebuildMorphIfNeeded sources its spec from the
         // loaded table). A live+ready morph wins (morph-of-import OR morph-of-preset); otherwise fall back to
@@ -2248,7 +2304,7 @@ private:
     }
 
     // Audio-thread-only: the last built bank table each osc actually used. See above.
-    const tw::Wavetable* bankLastGood_[4] { nullptr, nullptr, nullptr, nullptr };
+    const tw::Wavetable* bankLastGood_[ParameterIDs::kOscCount] {};
 
     /** fb496 — build the factory tables the four oscs currently point at.
         MESSAGE THREAD ONLY (2.5 ms per table it actually has to build).
@@ -2275,7 +2331,7 @@ private:
         int         builtEngine   = -1;
         int         builtWtPreset = -999;
     };
-    GeodeSlot geodeSlot_[4];
+    GeodeSlot geodeSlot_[ParameterIDs::kOscCount];
     void rebuildGeodeIfNeeded (int osc);                 // message thread
     // fb498 — MODAL's lazy arm. Message thread only (timerCallback + prepareToPlay). See the
     // definition in PluginProcessor.cpp for why 1,152 MiB used to be spent in the constructor.
@@ -2315,12 +2371,12 @@ private:
     int geodePartialsLive_ = 0;                          // audio-thread only (no atomics)
     // HARM-ENGINE — per-osc knob snapshots for the editor's display banks (written in the
     // processBlock gather; read on the message thread — cosmetic, tear-tolerant)
-    std::array<tw::HarmParams, 4> harmDisplayParams_ {};
+    std::array<tw::HarmParams, ParameterIDs::kOscCount> harmDisplayParams_ {};
     // fb587 — the FM operator stage's live parameters, for the waterfall. Same contract as
     // harmDisplayParams_ above: written in the processBlock gather, read on the message thread,
     // cosmetic and tear-tolerant. Without it the drawing has no way to know what the operators
     // are doing, because the conditioning (Strike / Age / key-scale) happens inside the voice.
-    std::array<tw::FmOps::Params, 4> fmDisplayParams_ {};
+    std::array<tw::FmOps::Params, ParameterIDs::kOscCount> fmDisplayParams_ {};
 
 public:
     /** fb587 — one scalar that moves whenever ANY FM operator control moves. The waterfall only
@@ -2329,7 +2385,7 @@ public:
         cache warmed. Weights are mutually irrational-ish so two different rigs cannot collide. */
     float fmDisplaySignature (int osc) const noexcept
     {
-        const tw::FmOps::Params& p = fmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        const tw::FmOps::Params& p = fmDisplayParams_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)];
         return (float) (p.alg * 1.0 + p.d1 * 3.1 + p.d2 * 5.3 + p.fbk * 7.7
                       + p.storm12 * 11.3 + p.storm21 * 13.7
                       + p.scorchPre * 17.1 + p.scorchBias * 19.3
@@ -2381,7 +2437,7 @@ private:
     std::array<juce::String, 4>               cachedLayerPayloads;
     // PEROSC-BUFFERS — dedicated per-OSC buffers/loaders/payloads/paths (one loader each so
     // rapid drops on A..D don't cancel one another). Guarded by samplePayloadLock for payloads.
-    std::array<tw::SampleBuffer, 4>           oscSampleBuffers_;
+    std::array<tw::SampleBuffer, ParameterIDs::kOscCount>           oscSampleBuffers_;
     // fb602 — the restore MISS LEDGER. A slot that could not be filled used to be a silent
     // `continue` in the editor; it is now a row here, and getRestoreMissesJson() publishes it.
     struct RestoreMiss { juce::String slot, path, why; };
@@ -2393,7 +2449,8 @@ private:
     // the slots whose source moved and no others. Empty ⇒ nothing decoded for that slot. Measured:
     // pushing the same blob twice reports filled=1 then filled=0, and pushing a patch whose file is
     // gone CLEARS the osc buffer (-200 dB) instead of leaving the previous patch's sample playing.
-    std::array<juce::String, 4>               layerLoadedPath_ {}, oscLoadedPath_ {};
+    std::array<juce::String, 4>               layerLoadedPath_ {};
+    std::array<juce::String, ParameterIDs::kOscCount>             oscLoadedPath_ {};
     juce::String                              noiseLoadedSel_;
     tw::SampleBuffer                          noiseSampleBuffer_;   // NOISE IMPORT (P5) — shared looping-sample noise source
     juce::String                              noiseSampleSelJson_;  // NOISE IMPORT (P5c) — persisted selection (factory path / user audio)
@@ -2454,9 +2511,9 @@ private:
     void editImportsRegistry   (int kind, const juce::String& path, bool add);
     void applyPendingImportEdits();
     juce::Array<juce::var> builtinWtCatItems (int cat) const;   // fb606 — the 46 built-ins for one merged category
-    std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
-    std::array<juce::String, 4>               cachedOscPayloads_;
-    std::array<juce::String, 4>               oscSourcePaths_;
+    std::array<tw::SampleLoader, ParameterIDs::kOscCount>           oscSampleLoaders_;
+    std::array<juce::String, ParameterIDs::kOscCount>             cachedOscPayloads_;
+    std::array<juce::String, ParameterIDs::kOscCount>             oscSourcePaths_;
     // ═══ fb621 — THE ASSET CACHE ═══════════════════════════════════════════════════════════════
     //  getStateInformation runs on EVERY host project save. Encoding megabytes of FLAC there would
     //  turn a ⌘S into a stall, so every asset is encoded ONCE and kept, keyed by the audio's own
@@ -2465,17 +2522,19 @@ private:
     //  then copies a string. 🚨 The cache is also what makes save → load → save BYTE-IDENTICAL
     //  (Tests/preset_roundtrip_cert.cpp): a load stores the string it decoded, so the next save
     //  writes those exact bytes back instead of re-encoding a decoded buffer into a near-miss.
-    std::array<juce::String, 4>               assetB64Osc_ {}, assetB64Layer_ {}, assetB64Wt_ {};
+    std::array<juce::String, ParameterIDs::kOscCount>             assetB64Osc_ {}, assetB64Wt_ {};
+    std::array<juce::String, 4>               assetB64Layer_ {};
     std::mutex                                stateBuildLock_;   // fb632 — buildStateTree() has two callers (host save · save sheet)
     std::array<juce::String, (size_t) 6>      assetB64Ir_ {};
-    std::array<juce::uint64, 4>               assetKeyOsc_ {}, assetKeyLayer_ {}, assetKeyWt_ {};
+    std::array<juce::uint64, ParameterIDs::kOscCount>             assetKeyOsc_ {}, assetKeyWt_ {};
+    std::array<juce::uint64, 4>               assetKeyLayer_ {};
     std::array<juce::uint64, (size_t) 6>      assetKeyIr_ {};
     //  Where a wavetable import CAME FROM. Before fb621 the only identity a loaded table had was
     //  its display name, so a factory table could never be referenced by path and every preset
     //  embedded its own 1.4 MB copy of shipped content.
-    std::array<juce::String, 4>               importPath_ {};
+    std::array<juce::String, ParameterIDs::kOscCount>             importPath_ {};
     juce::String                              patcherJson_;   // fb621 — the environment seat
-    std::array<std::array<juce::String, 2>, 4> blendSrcPaths_;   // BLEND source pair (A/B) per osc
+    std::array<std::array<juce::String, 2>, ParameterIDs::kOscCount> blendSrcPaths_;   // BLEND source pair (A/B) per osc
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;
@@ -2663,6 +2722,16 @@ private:
     // changed pulls it at note-on. poolWantMask_ tells the timer (message thread) which pooled sends
     // need their per-voice filter pairs built; poolBuiltMask_ is what it has built so far.
     tw::RouteSnapshot          routeSnap_;
+    // ══ tp20 — bank 1's routing. The E–H pills feed source bits 6..9 of the ONE topology; what comes back
+    //    out of entry[] for those bits is bank 1's entry gains, written into ITS snapshot in slots 0..3
+    //    (a bank-1 voice's A..D = E..H), Sub in slot 4 (the S pill is shared), Noise 0 (bank 1 has none).
+    tw::RouteSnapshot          routeSnapB_;
+    float  hallRvbGB_[4] {}, dlyGB_[4] {}, dstGB_[4] {};                      // the E–H pills of the three legacy devices
+    std::array<float, (size_t) kPoolSendCount * 4> poolRouteGB_ {};           // the E–H pills of every pooled send
+    float  hallEntryGB_[6] {}, dlyEntryGB_[6] {}, dstEntryGB_[6] {}, exUnionGB_[6] {};
+    std::array<float, (size_t) kPoolSendCount * 6> poolEntryGB_ {};
+    float  lastHallEntryGB_[6] {}, lastDlyEntryGB_[6] {}, lastDstEntryGB_[6] {}, lastExUnionGB_[6] {};
+    std::array<float, (size_t) kPoolSendCount * 6> lastPoolEntryGB_ {};
     std::atomic<juce::uint64>  poolWantMask_[2] { { 0 }, { 0 } };
     juce::uint64               poolBuiltMask_[2] { 0, 0 };
     // fb636 bugA — THE PAIRS NO LONGER WAIT FOR THE TIMER. poolWantMask_ is written by the audio thread
@@ -2708,7 +2777,7 @@ private:
         std::atomic<float>* width; std::atomic<float>* modrate; std::atomic<float>* moddepth;
         std::atomic<float>* wow; std::atomic<float>* duck; std::atomic<float>* sync;
         std::atomic<float>* link; std::atomic<float>* ping; std::atomic<float>* hq;
-        std::atomic<float>* src[6]; };   // fb348 — per-osc route pills (A,B,C,D,Sub,Noise)
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };   // fb348 — per-osc route pills (A,B,C,D,Sub,Noise)
     // fb352 — POOLED REVERB (instances 2..6). Params are eager (they must be: the host caches the
     //   list at load), ENGINES are lazy — an instance builds only the ONE engine its current type
     //   needs, on the MESSAGE THREAD (timerCallback), never on the audio thread. That is what makes
@@ -2720,7 +2789,7 @@ private:
         std::atomic<float>* moddepth; std::atomic<float>* modrate; std::atomic<float>* hidamp;
         std::atomic<float>* lowdecay; std::atomic<float>* lowcut; std::atomic<float>* width;
         std::atomic<float>* mod; std::atomic<float>* freeze; std::atomic<float>* duck;
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     struct PoolRvbEngines
     {
         std::unique_ptr<HallReverb>        hall;     std::unique_ptr<RoomReverb>    room;
@@ -2761,7 +2830,7 @@ private:
         std::atomic<float>* window; std::atomic<float>* spray; std::atomic<float>* pitch;
         std::atomic<float>* detune; std::atomic<float>* shape; std::atomic<float>* width;
         std::atomic<float>* freeze; std::atomic<float>* freezePill; std::atomic<float>* sync;
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     std::array<GrnRefs, (size_t) ParameterIDs::kFxInstances> grnRefs_ {};
     std::array<std::unique_ptr<tw::GranularFxEngine>, (size_t) ParameterIDs::kFxInstances> grnPool_;
     // fb528 — THE PUBLICATION POINTER. A std::unique_ptr's stored pointer is a PLAIN object:
@@ -2797,7 +2866,7 @@ private:
         std::atomic<float>* flutter; std::atomic<float>* bump; std::atomic<float>* width;
         std::atomic<float>* duck; std::atomic<float>* sync; std::atomic<float>* delay;
         std::atomic<float>* sculpt; std::atomic<float>* weave; std::atomic<float>* tilt;
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     std::array<TpeRefs, (size_t) ParameterIDs::kFxInstances> tpeRefs_ {};
     std::array<std::unique_ptr<tw::TapeFxEngine>, (size_t) ParameterIDs::kFxInstances> tpePool_;
     std::array<std::atomic<tw::TapeFxEngine*>, (size_t) ParameterIDs::kFxInstances> tpeLive_ {};   // fb528 — see grnLive_
@@ -2831,7 +2900,7 @@ private:
         std::atomic<float>* poles; std::atomic<float>* sense; std::atomic<float>* attack;
         std::atomic<float>* release; std::atomic<float>* rate; std::atomic<float>* sweep;
         std::atomic<float>* wide; std::atomic<float>* punch;
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     std::array<FltRefs, (size_t) ParameterIDs::kFxInstances> fltRefs_ {};
     std::array<tw::FilterFxEngine, (size_t) ParameterIDs::kFxInstances> fltPool_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> fltEnv_ {};   // power fade, click-free
@@ -2861,7 +2930,7 @@ private:
         std::atomic<float>* xsh[4] {};                                // fb470 — each free band's shape (Bell/Low Cut/High Cut/shelves)
         std::atomic<float>* x[8] {}; std::atomic<float>* xon[4] {};   // fb438 — the Equalizer's free bells (null on the other three)
         std::atomic<float>* q[8] {};                                  // fb441 — the Equalizer's per-band Q (4 roles + 4 free; null on the other three)
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
 
     struct ChoRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr;
@@ -2871,7 +2940,7 @@ private:
         std::atomic<float>* colour; std::atomic<float>* lowkeep; std::atomic<float>* phase;
         std::atomic<float>* sync; std::atomic<float>* wide;
         std::atomic<float>* motion;                       // fb418 — the back panel's 2nd dropdown
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     struct FlaRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr;
         std::atomic<float>* rate; std::atomic<float>* depth; std::atomic<float>* feedback;
@@ -2880,7 +2949,7 @@ private:
         std::atomic<float>* bounce; std::atomic<float>* tail; std::atomic<float>* lowcut;
         std::atomic<float>* sync; std::atomic<float>* invert;
         std::atomic<float>* route;                        // fb418 — where the loop is wired
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     struct PhaRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr;
         std::atomic<float>* rate; std::atomic<float>* depth; std::atomic<float>* feedback;
@@ -2889,7 +2958,7 @@ private:
         std::atomic<float>* lag; std::atomic<float>* floorK; std::atomic<float>* color;
         std::atomic<float>* sync; std::atomic<float>* invert;
         std::atomic<float>* motion;                       // fb418 — LFO shape override
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     std::array<ChoRefs, (size_t) ParameterIDs::kFxInstances> choRefs_ {};
     std::array<FlaRefs, (size_t) ParameterIDs::kFxInstances> flaRefs_ {};
     std::array<PhaRefs, (size_t) ParameterIDs::kFxInstances> phaRefs_ {};
@@ -2911,7 +2980,7 @@ private:
         std::atomic<float>* type;                                   // fb450 — Character / Wiring are gone
         std::atomic<float>* f1; std::atomic<float>* f2; std::atomic<float>* f3;
         std::atomic<float>* mix; std::atomic<float>* b[8];
-        std::atomic<float>* pill[5]; std::atomic<float>* src[6]; };   // fb450 — five switches (the DC lamp is gone)
+        std::atomic<float>* pill[5]; std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };   // fb450 — five switches (the DC lamp is gone)
     std::array<UtlRefs, (size_t) ParameterIDs::kFxInstances> utlRefs_ {};
     std::array<float,   (size_t) ParameterIDs::kFxInstances> utlEnv_  {};
     void cacheUtlRefs();
@@ -2925,7 +2994,7 @@ private:
         std::atomic<float>* split; std::atomic<float>* balance; std::atomic<float>* spread;
         std::atomic<float>* mix; std::atomic<float>* b[8];
         std::atomic<float>* mute[4]; std::atomic<float>* solo[4]; std::atomic<float>* flip[4];
-        std::atomic<float>* src[6]; };
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };
     std::array<SplRefs, (size_t) ParameterIDs::kFxInstances> splRefs_ {};
     std::array<float,   (size_t) ParameterIDs::kFxInstances> splEnv_  {};
     void cacheSplRefs();
@@ -3043,7 +3112,7 @@ private:
         std::atomic<float>* drive; std::atomic<float>* sig; std::atomic<float>* tone;
         std::atomic<float>* mix; std::atomic<float>* autoP; std::atomic<float>* pill2;
         std::atomic<float>* p[8];
-        std::atomic<float>* src[6]; };   // fb348 — per-osc route pills
+        std::atomic<float>* src[6]; std::atomic<float>* srcB[4] {}; };   // fb348 — per-osc route pills
     std::array<DlyRefs, (size_t) kFxExtra> dlyRefs_ {};
     std::array<DstRefs, (size_t) kFxExtra> dstRefs_ {};
     // instance-1 chain membership (the three shipped devices)

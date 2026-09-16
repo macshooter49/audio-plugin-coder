@@ -258,7 +258,21 @@ enum class ModDest : int
     //    Wow/Saturation/Hiss), resolved in the processor's GLOBAL pass. Appended at the tail (saved routes store ints);
     //    generated Linear01 x 1.0 rows (makeDestInfo's tail loop). index.html's createFxKnob stamps 1887..1889.
     TapeSlot1, TapeSlot2, TapeSlot3,
-    NumDests
+    LegacyDestsEnd,                    // tp20 — the end of the 1890-wide space every saved route before the pools used
+    // ── tp20 · THE OSCILLATOR POOL'S DESTINATIONS. Oscillators E–H are a second VOICE BANK whose A/B/C/D
+    //    slots are E/F/G/H, so their knobs are the SAME knobs. Their destinations MIRROR the whole legacy
+    //    space at OscBank2Base + d: a route to "Osc E Level" is stored as OscBank2Base + LevelA, and the
+    //    bank-1 gather reads modSums at LevelA out of ITS OWN sum arrays (destForBank rebases). Only the
+    //    lettered dests (isOscLetteredDest) are meaningful in the mirror; the rest are never minted by the
+    //    page and simply hold zero. Appended at the tail — saved routes store ints, nothing above moves.
+    OscBank2Base = LegacyDestsEnd,
+    OscBank2End  = OscBank2Base + LegacyDestsEnd,
+    // ── tp20 · THE FLOW POOL'S DESTINATIONS. Arp / Chop / Glitch instances 2..4 mirror the flow span
+    //    [FlowTime, EnvPBase) once per extra instance: flowInstDest (n, d) = FlowInstBase + (n-1)*kFlowSpan
+    //    + (d - FlowTime). Instance 1 keeps its legacy ints.
+    FlowInstBase = OscBank2End,
+    FlowInstEnd  = FlowInstBase + 3 * (EnvPBase - FlowTime),
+    NumDests = FlowInstEnd
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
@@ -272,9 +286,47 @@ static_assert ((int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiA == 1850,
 static_assert ((int) ModDest::UniRangeA == 1854 && (int) ModDest::UniWarpA  == 1858
             && (int) ModDest::WarpVarA  == 1862 && (int) ModDest::Warp2VarA == 1866
             && (int) ModDest::PhaseOffA == 1870 && (int) ModDest::PhaseAmtA == 1874
-            && (int) ModDest::MacroDest1 == 1878 && (int) ModDest::TapeSlot1 == 1887 && (int) ModDest::NumDests == 1890,
+            && (int) ModDest::MacroDest1 == 1878 && (int) ModDest::TapeSlot1 == 1887 && (int) ModDest::LegacyDestsEnd == 1890,
     "fb522 - the JS mod-dest menu mirrors these ints (index.html KNOBDEST); a shift here re-points every saved overpass route. NumDests was 1854 before this block was appended. "
     "fb565 - index.html stamps the Macros view from window.__MACRO_DEST=1878 (ModDest::MacroDest1); Tests/mod_source_gate.py reads both");
+
+// ── tp20 · THE POOL HELPERS ──────────────────────────────────────────────────────────────────
+inline constexpr int kOscBanks = 2;                 // A–D, E–H
+inline constexpr int kFlowInstances = 4;            // Arp / Chop / Glitch × 4 (Robin stays one: it is the voice allocator's brain)
+inline constexpr int kFlowSpan = (int) ModDest::EnvPBase - (int) ModDest::FlowTime;
+static_assert ((int) ModDest::OscBank2Base == 1890 && (int) ModDest::FlowInstBase == 3780 && kFlowSpan == 473
+            && (int) ModDest::NumDests == 3780 + 3 * 473,
+    "tp20 - index.html mirrors OSCBANK2_BASE=1890, FLOWINST_BASE=3780, FLOW_SPAN=473; a shift here re-points every saved pool route");
+/** A destination that belongs to ONE oscillator (its letter is in its name). Every such family is
+ *  laid out A,B,C,D contiguously, so the ranges below are the families' first A and last D. */
+inline constexpr bool isOscLetteredDest (int d) noexcept
+{
+    auto in = [d] (ModDest a, ModDest b) constexpr { return d >= (int) a && d <= (int) b; };
+    return in (ModDest::Frame,        ModDest::Fold)        || in (ModDest::FrameB,    ModDest::FoldB)
+        || in (ModDest::FrameC,       ModDest::FoldD)       || in (ModDest::CoarseA,   ModDest::SubHeatD)
+        || in (ModDest::LevelA,       ModDest::PanD)        || in (ModDest::BlendDepthA1, ModDest::HarmFizzD)
+        || in (ModDest::SpectralA,    ModDest::UniWidthD)   || in (ModDest::FmRatio1A, ModDest::GrainDirD)
+        || in (ModDest::SubRangeA,    ModDest::OscF2SendD)  || in (ModDest::SpecLoA,   ModDest::PhaseAmtD);
+}
+/** The int a route to oscillator `bank`'s knob stores: bank 0 = the legacy int, bank 1 = the mirror. */
+inline constexpr int oscBankDest (int bank, int legacyDest) noexcept
+{ return bank <= 0 ? legacyDest : (int) ModDest::OscBank2Base + legacyDest; }
+/** Which sum array a stored route belongs to when bank `bank` gathers, and at which legacy index.
+ *  Returns -1 when the route is another bank's oscillator knob. Global dests reach every bank. */
+inline constexpr int destForBank (int bank, int storedDest) noexcept
+{
+    if (storedDest >= (int) ModDest::OscBank2Base && storedDest < (int) ModDest::OscBank2End)
+        return bank == 1 ? storedDest - (int) ModDest::OscBank2Base : -1;              // the mirror: bank 1's own knobs
+    if (storedDest < 0 || storedDest >= (int) ModDest::LegacyDestsEnd) return bank == 0 ? storedDest : -1;   // flow-instance dests: the flow stage reads them by exact int
+    if (isOscLetteredDest (storedDest)) return bank == 0 ? storedDest : -1;            // A–D's own knobs
+    return storedDest;                                                                   // global: both banks
+}
+/** Flow instance n (0-based) of a legacy flow dest. Instance 0 = the legacy int itself. */
+inline constexpr int flowInstDest (int inst, int legacyDest) noexcept
+{
+    if (inst <= 0 || legacyDest < (int) ModDest::FlowTime || legacyDest >= (int) ModDest::EnvPBase) return legacyDest;
+    return (int) ModDest::FlowInstBase + (inst - 1) * kFlowSpan + (legacyDest - (int) ModDest::FlowTime);
+}
 
 inline constexpr int kFxModKinds = 16, kFxModInsts = 6, kFxModKnobs = 12;
 inline constexpr int fxModDest (int kind, int inst, int knob) noexcept
@@ -1011,8 +1063,14 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     // inaudible at the bottom and enormous at the top. The fb522 rows that are plain percentages
     // (UniWarp/WarpVar/Warp2Var/PhaseAmt) are normalised by their read site's /100.0f instead, which
     // lands in the same 0..1 (or -1..+1) space — so one generated row is right for all 32.
-    for (int i = (int) ModDest::FxModEnd; i < (int) ModDest::NumDests; ++i)
+    for (int i = (int) ModDest::FxModEnd; i < (int) ModDest::LegacyDestsEnd; ++i)
         a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
+    // tp20 — the pool mirrors carry the ROW of the dest they mirror (OctA is semitones in bank 1 too).
+    for (int i = 0; i < (int) ModDest::LegacyDestsEnd; ++i)
+        a[(size_t) ((int) ModDest::OscBank2Base + i)] = a[(size_t) i];
+    for (int n = 0; n < 3; ++n)
+        for (int k = 0; k < kFlowSpan; ++k)
+            a[(size_t) ((int) ModDest::FlowInstBase + n * kFlowSpan + k)] = a[(size_t) ((int) ModDest::FlowTime + k)];
     return a;
 }
 static constexpr auto kDestInfo = makeDestInfo();

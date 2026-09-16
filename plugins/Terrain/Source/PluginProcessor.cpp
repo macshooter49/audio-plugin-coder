@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+static const char* const kSrcBSfx[4] = { "SRC_E", "SRC_F", "SRC_G", "SRC_H" };   // tp20 — bank 1's route pills, every device
 #if JUCE_MAC
  #include <sys/stat.h>   // fb611 — SF_DATALESS: the flag that says a listed file's bytes are still in iCloud
 #endif
@@ -313,11 +314,9 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     // fb467 — resolve the spectral window's parameters ONCE. See the members' comment: the
     // per-block publish must not do a string lookup on the audio thread.
     {
-        static const char* const LO[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
-                                           ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
-        static const char* const HI[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, ParameterIDs::SYN_OSC_B_SPECTRAL_HI,
-                                           ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
-        for (int o = 0; o < 4; ++o)
+        const auto* LO = ParameterIDs::kOsc_SPECTRAL_LO;   // tp20 — 8 wide (OscBankIds.h)
+        const auto* HI = ParameterIDs::kOsc_SPECTRAL_HI;
+        for (int o = 0; o < ParameterIDs::kOscCount; ++o)
         { specLoParam_[o] = apvts.getParameter (juce::String (LO[o]));
           specHiParam_[o] = apvts.getParameter (juce::String (HI[o]));
           jassert (specLoParam_[o] != nullptr && specHiParam_[o] != nullptr); }
@@ -327,15 +326,18 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     // exponential and PHASE is 0..360 deg, so both are modulated through their own
     // NormalisableRange, and the string lookup that needs must not happen per block.
     {
-        static const char* const UR[4] = { ParameterIDs::SYN_OSC_A_URANGE, ParameterIDs::SYN_OSC_B_URANGE,
-                                           ParameterIDs::SYN_OSC_C_URANGE, ParameterIDs::SYN_OSC_D_URANGE };
-        static const char* const PH[4] = { ParameterIDs::SYN_OSC_A_PHASE,  ParameterIDs::SYN_OSC_B_PHASE,
-                                           ParameterIDs::SYN_OSC_C_PHASE,  ParameterIDs::SYN_OSC_D_PHASE };
-        for (int o = 0; o < 4; ++o)
+        const auto* UR = ParameterIDs::kOsc_URANGE;   // tp20 — 8 wide
+        const auto* PH = ParameterIDs::kOsc_PHASE;
+        for (int o = 0; o < ParameterIDs::kOscCount; ++o)
         { uniRangeParam_[o] = apvts.getParameter (juce::String (UR[o]));
           phaseOffParam_[o] = apvts.getParameter (juce::String (PH[o]));
           jassert (uniRangeParam_[o] != nullptr && phaseOffParam_[o] != nullptr); }
     }
+
+    // tp20 — the A–D → E–H remap rawParamB() resolves through (OscBankIds.h, generated). Pointer-keyed:
+    //   the gather passes the very constants the table lists, so a lookup is one hash of the address.
+    for (int i = 0; i < ParameterIDs::kOscRemapCount; ++i)
+        oscRemap_[(const void*) ParameterIDs::kOscRemapFrom[i]] = ParameterIDs::kOscRemapTo[i];
 
     initializePresets();
 
@@ -391,7 +393,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     // fb550 — the drawn-warp table. std::atomic<T*> is NOT zero-initialised by default, and the
     // curves must read as the identity before anything is drawn, so both are set explicitly here,
     // BEFORE any voice is handed the table.
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 2 * ParameterIDs::kOscCount; ++i)
     {
         drawTable_[i].store (nullptr, std::memory_order_relaxed);
         for (int b = 0; b < 2; ++b)
@@ -762,7 +764,7 @@ TerrainAudioProcessor::resolveMorphTable (MorphSlot& slot, int presetIdx) noexce
 //==============================================================================
 void TerrainAudioProcessor::rebuildImport (int osc)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     const std::lock_guard<std::mutex> g (importSlot_[osc].mx);             // fb636 M2r — waits out a bake in progress
     wtBuildReq_[(size_t) osc].fetch_add (1, std::memory_order_acq_rel);    // fb636 M2r — and supersedes every queued one
     buildImportLocked (osc, importedPcm_[osc].data(), (int) importedPcm_[osc].size(), importFrames_[osc]);
@@ -773,7 +775,7 @@ void TerrainAudioProcessor::rebuildImport (int osc)
 // big Serum-size table. live is published atomically when done; the audio thread reads the old table meanwhile.
 void TerrainAudioProcessor::rebuildImportAsync (int osc)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     auto snap = std::make_shared<std::vector<float>> (importedPcm_[osc]);
     const int frames = importFrames_[osc];
     /* fb610 — LATEST WINS. The pool is ONE serialized worker and a 128-frame bake is 32 ms, so
@@ -1037,7 +1039,7 @@ static juce::String tiFxListOf (juce::AudioProcessorValueTreeState& apvts)
 void TerrainAudioProcessor::loadWavetableFileAsync (int osc, const juce::File& f,
                                                     std::function<void (bool, juce::String)> done)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     const juce::String nm = f.getFileNameWithoutExtension();
     auto alive = ioAlive_;
     wtIoPool_.addJob ([this, osc, f, nm, done, alive]
@@ -1067,7 +1069,7 @@ void TerrainAudioProcessor::loadWavetableFileAsync (int osc, const juce::File& f
 
 void TerrainAudioProcessor::importAudioAsWavetable (int osc, const float* pcm, int numSamples)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     importPath_[(size_t) osc].clear();   // fb622 — bytes, not a file: the caller sets a path if it HAS one
     importedPcm_[osc].assign (pcm, pcm + juce::jmax (0, numSamples));   // keep the source so resolution can change later
     // Auto-detect a WAVETABLE FILE (concatenated kFrameSize single-cycles, e.g. Serum/Vital): an exact
@@ -1083,14 +1085,14 @@ void TerrainAudioProcessor::importAudioAsWavetable (int osc, const float* pcm, i
 
 void TerrainAudioProcessor::setImportFrames (int osc, int frames)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     importFrames_[osc] = juce::jlimit (2, tw::Wavetable::kMaxFrames, frames);
     if (! importedPcm_[osc].empty()) rebuildImportAsync (osc);   // fb248 — re-slice off the message thread (no freeze)
 }
 
 void TerrainAudioProcessor::clearImportedWavetable (int osc)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     dropImportTable (osc);   // fb636 M2r — and a bake queued before the clear can no longer bring it back
     importedPcm_[osc].clear();
     importName_[osc]   = {};
@@ -1100,13 +1102,13 @@ void TerrainAudioProcessor::clearImportedWavetable (int osc)
 
 void TerrainAudioProcessor::setImportName (int osc, const juce::String& name)
 {
-    importName_[juce::jlimit (0, 3, osc)] = name;
+    importName_[juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)] = name;
 }
 
 juce::String TerrainAudioProcessor::getImportStateJson()
 {
     juce::String j = "{";
-    for (int o = 0; o < 4; ++o)
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
     {
         if (o) j += ",";
         const bool active = importSlot_[o].live.load (std::memory_order_acquire) != nullptr;
@@ -1120,13 +1122,13 @@ juce::String TerrainAudioProcessor::getImportStateJson()
 
 void TerrainAudioProcessor::setWaterfallView (int osc, bool on)
 {
-    wt3dView_[juce::jlimit (0, 3, osc)] = on;
+    wt3dView_[juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)] = on;
 }
 
 juce::String TerrainAudioProcessor::getWaterfallViewJson()
 {
     juce::String j = "{";
-    for (int o = 0; o < 4; ++o)
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
     {
         if (o) j += ",";
         const char k[2] = { (char) ('a' + o), 0 };
@@ -1173,7 +1175,7 @@ juce::String TerrainAudioProcessor::getNoiseWavePeaksJson()
 void TerrainAudioProcessor::spectralDisplay (int osc, float& amtOut, int& typeOut,
                                                         float& loOut, float& hiOut) const noexcept
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     static const char* const SA[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
                                        ParameterIDs::SYN_OSC_C_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
     static const char* const ST[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE, ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
@@ -1196,7 +1198,7 @@ void TerrainAudioProcessor::spectralDisplay (int osc, float& amtOut, int& typeOu
 
 tw::SynthVoice::WtDisp TerrainAudioProcessor::wtDispEffective (int osc) const noexcept
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     if (wtDispLive_[osc].load (std::memory_order_relaxed) != 0)
         return { wtFrameVis_[osc]  .load (std::memory_order_relaxed),
                  wtWarpAmtVis_[osc].load (std::memory_order_relaxed),
@@ -1253,7 +1255,7 @@ tw::SynthVoice::WtDisp TerrainAudioProcessor::wtDispEffective (int osc) const no
 void TerrainAudioProcessor::setWarpDrawCurve (int osc, int slot, const juce::String& csv,
                                                         float rateOverride)
 {
-    osc = juce::jlimit (0, 3, osc); slot = juce::jlimit (0, 1, slot);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc); slot = juce::jlimit (0, 1, slot);
     const int idx = osc * 2 + slot;
     auto toks = juce::StringArray::fromTokens (csv, ",", "");
     toks.removeEmptyStrings();
@@ -1305,7 +1307,7 @@ void TerrainAudioProcessor::setWarpDrawCurve (int osc, int slot, const juce::Str
 
 juce::String TerrainAudioProcessor::getWarpDrawCurveCsv (int osc, int slot) const
 {
-    osc = juce::jlimit (0, 3, osc); slot = juce::jlimit (0, 1, slot);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc); slot = juce::jlimit (0, 1, slot);
     const int idx = osc * 2 + slot;
     const auto* live = drawTable_[idx].load (std::memory_order_acquire);
     juce::String out;
@@ -1319,7 +1321,7 @@ juce::String TerrainAudioProcessor::getWarpDrawCurveCsv (int osc, int slot) cons
 
 juce::String TerrainAudioProcessor::getWarpCurveJson (int osc, int slot)
 {
-    osc  = juce::jlimit (0, 3, osc);
+    osc  = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     slot = juce::jlimit (0, 1, slot);
     static const char* const WV [4] = { ParameterIDs::SYN_OSC_A_WVAR,  ParameterIDs::SYN_OSC_B_WVAR,
                                         ParameterIDs::SYN_OSC_C_WVAR,  ParameterIDs::SYN_OSC_D_WVAR };
@@ -1467,7 +1469,7 @@ juce::String TerrainAudioProcessor::getWarpCurveJson (int osc, int slot)
    the JS side; never 0, so "absent" and "table 0" stay distinguishable. */
 int TerrainAudioProcessor::wtTableStamp (int osc) noexcept
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     static const char* const WTPS[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
                                          ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
     const MorphSlot& ms = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
@@ -1486,7 +1488,7 @@ int TerrainAudioProcessor::wtTableStamp (int osc) noexcept
 // depends on which wavetable they're at — people always need to be able to see their wavetable."
 int TerrainAudioProcessor::getOscNumFrames (int osc) noexcept
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     static const char* const WTPS[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
                                          ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
     const MorphSlot& ms = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
@@ -1496,7 +1498,7 @@ int TerrainAudioProcessor::getOscNumFrames (int osc) noexcept
 
 juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     // fb459 — "Resolve the table the same way the voice does" is what the old comment here CLAIMED,
     // and it was not true: it read import -> bank and never consulted the MORPH slot, so everything
     // SPECTRAL was invisible. The voice resolves through wavetableForOsc(); this is its read-only
@@ -1760,7 +1762,7 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
 // JS simplifies these to minimal breakpoints (Douglas-Peucker) so the LFO becomes the precise shape.
 juce::String TerrainAudioProcessor::getOscLfoWaveJson (int osc)
 {
-    osc = juce::jlimit (0, 3, osc);
+    osc = juce::jlimit (0, ParameterIDs::kOscCount - 1, osc);
     const ImportRead pin (importSlot_[osc]);   // fb636 F1 — the import stays mapped while it is sampled below (ImportRead)
     const tw::Wavetable* wt = pin.wt;
     if (wt == nullptr)
@@ -2635,7 +2637,7 @@ void TerrainAudioProcessor::applyPendingImportEdits()
 // stale one would let a later load of the target's OLD file keep playing the pasted audio instead.
 bool TerrainAudioProcessor::copyOscSampleSlot (int src, int dst)
 {
-    src = juce::jlimit (0, 3, src); dst = juce::jlimit (0, 3, dst);
+    src = juce::jlimit (0, ParameterIDs::kOscCount - 1, src); dst = juce::jlimit (0, ParameterIDs::kOscCount - 1, dst);
     if (src == dst) return false;
     auto srcBuf = oscSampleBuffers_[(size_t) src].load();
     if (srcBuf == nullptr || srcBuf->getNumSamples() <= 0) return false;
@@ -2657,7 +2659,7 @@ bool TerrainAudioProcessor::copyOscSampleSlot (int src, int dst)
 const tw::WavetableSpec* TerrainAudioProcessor::oscSourceSpec (int oscIdx, int preset,
                                                                         tw::WavetableSpec& scratch)
 {
-    const int oi = juce::jlimit (0, 3, oscIdx);
+    const int oi = juce::jlimit (0, ParameterIDs::kOscCount - 1, oscIdx);
     const ImportRead pin (importSlot_[(size_t) oi]);   // fb636 F1 — pinned while toSpec() reads it (ImportRead)
     const tw::Wavetable* imp = pin.wt;
     if (imp != nullptr)
@@ -2682,11 +2684,10 @@ const tw::WavetableSpec* TerrainAudioProcessor::oscSourceSpec (int oscIdx, int p
 // "left" can still be in use for up to a full block.
 void TerrainAudioProcessor::rebuildHarmTableIfNeeded (int oscIdx)
 {
-    const int oi = juce::jlimit (0, 3, oscIdx);
+    const int oi = juce::jlimit (0, ParameterIDs::kOscCount - 1, oscIdx);
     auto& slot = harmTable_[oi];
 
-    static const char* const ENG[4]  = { ParameterIDs::SYN_OSC_A_ENGINE,    ParameterIDs::SYN_OSC_B_ENGINE,
-                                         ParameterIDs::SYN_OSC_C_ENGINE,    ParameterIDs::SYN_OSC_D_ENGINE };
+    const auto* ENG = ParameterIDs::kOsc_ENGINE;       // tp20 — 8 wide
     // (fb599 — the MODE[] table is gone with the mode half of the gate below.)
     // 🚨 fb601 — HARMONICS RESOLVES ITS OWN TABLE. This used to be SYN_OSC_x_WT_PRESET, shared with
     //    the wavetable engine, whose default 0 = Sine gave the additive bank a 0.43-semitone frame
@@ -2697,8 +2698,7 @@ void TerrainAudioProcessor::rebuildHarmTableIfNeeded (int oscIdx)
     //    ⚠️ The IMPORT still wins over both: oscSourceSpec() prefers importSlot_ whenever a table is
     //    loaded, so an imported wavetable reaches Harmonics exactly as it always did, and this
     //    index only chooses the FACTORY fallback.
-    static const char* const PRE[4]  = { ParameterIDs::SYN_OSC_A_HARM_TABLE, ParameterIDs::SYN_OSC_B_HARM_TABLE,
-                                         ParameterIDs::SYN_OSC_C_HARM_TABLE, ParameterIDs::SYN_OSC_D_HARM_TABLE };
+    const auto* PRE = ParameterIDs::kOsc_HARM_TABLE;   // tp20 — 8 wide
 
     // Only bake for an oscillator that is actually on HARMONIC/Table — 64 KB and 16 frame
     // conversions per oscillator is not something to do for a panel nobody is using.
@@ -2756,13 +2756,13 @@ void TerrainAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
     // raw pass-through when unmodded). -1 = audio thread hasn't run yet → raw param fallback.
     // Rebuild churn stays naturally throttled by the retireCooldown below (~20 Hz worst case),
     // entirely on the message thread — the audio thread never pays for a morph rebuild.
-    const float effAmt = spectralEffAmt_[juce::jlimit (0, 3, oscIdx)].load (std::memory_order_relaxed);
+    const float effAmt = spectralEffAmt_[juce::jlimit (0, ParameterIDs::kOscCount - 1, oscIdx)].load (std::memory_order_relaxed);
     const float amount = (effAmt >= 0.0f) ? effAmt : apvts.getRawParameterValue (amtId)->load();   // ->load(): atomic<float> can't deduce in a ternary
 
     // fb467 — the PARTIAL WINDOW, same publish-then-read shape as the amount above. Rounded to whole
     // harmonics: the edges ARE harmonic indices, and a modulated edge that wobbles by 0.01 of a
     // partial would churn a 2.3 ms bake at 60 Hz for a change nothing can hear.
-    const int oi0    = juce::jlimit (0, 3, oscIdx);
+    const int oi0    = juce::jlimit (0, ParameterIDs::kOscCount - 1, oscIdx);
     const float effLo = specLoEff_[oi0].load (std::memory_order_relaxed);
     const float effHi = specHiEff_[oi0].load (std::memory_order_relaxed);
     // fb472 — the two CUT knobs, as normalised positions. Quantised to 1/512 so a modulated corner
@@ -2774,7 +2774,7 @@ void TerrainAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
     const bool  cutting = (lo > 0.0f) || (hi < 1.0f);
 
     // fb253 — the morph SOURCE is the loaded IMPORT if one exists, else the factory preset spec.
-    const int  oi        = juce::jlimit (0, 3, oscIdx);
+    const int  oi        = juce::jlimit (0, ParameterIDs::kOscCount - 1, oscIdx);
     const tw::Wavetable* imp = importSlot_[(size_t) oi].live.load (std::memory_order_acquire);
     const bool hasImport = (imp != nullptr);
     const int  impEpoch  = hasImport ? imp->buildEpoch() : -1;
@@ -2890,6 +2890,7 @@ void TerrainAudioProcessor::timerCallback()
     // banks) and prepareToPlay does the same to the same objects from a DIFFERENT thread under
     // AU. One lock owns all of it. The audio thread never waits on this.
     const std::lock_guard<std::mutex> prepGuard (prepLock_);
+    if (bankB_.load (std::memory_order_acquire) == nullptr && bankBWanted()) ensureBankB();   // tp20 — the pool wakes up
 
     // fb496 — LAZY ARM, on the message thread where the ~1 GB allocation belongs.
     // The stem rings only ever hold audio from a layer that HAS a sample (the write
@@ -2965,8 +2966,12 @@ void TerrainAudioProcessor::timerCallback()
                           ParameterIDs::SYN_OSC_D_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_LO,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_HI);
+    if (bankB_.load (std::memory_order_acquire) != nullptr)   // tp20 — bank 1's four, once it exists
+        for (int o = ParameterIDs::kOscPerBank; o < ParameterIDs::kOscCount; ++o)
+            rebuildMorphIfNeeded (morphSlot (o), o, ParameterIDs::kOsc_WT_PRESET[o], ParameterIDs::kOsc_SPECTRAL_TYPE[o],
+                                  ParameterIDs::kOsc_SPECTRAL_AMT[o], ParameterIDs::kOsc_SPECTRAL_LO[o], ParameterIDs::kOsc_SPECTRAL_HI[o]);
     freeRetiredMorphs();   // fb636 F4 — AFTER the rebuilds: give back morph buffers no audio block can still hold (see MorphSlot)
-    for (int o = 0; o < 4; ++o) rebuildHarmTableIfNeeded (o);   // fb588 — HARMONICS <- WAVETABLES
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o) rebuildHarmTableIfNeeded (o);   // fb588 — HARMONICS <- WAVETABLES · tp20 — every bank
     // fb584 — THE BLUR TWIN BUILDER IS GONE. A twin only ever existed to make renderBlend average
     //  frames in the MAGNITUDE domain instead of cancelling in the phasor domain, and nothing calls
     //  renderBlend with a non-zero blur any more. Left running it would have built a 4.25 MB twin per
@@ -2974,8 +2979,7 @@ void TerrainAudioProcessor::timerCallback()
     //  Wavetable::buildBlurTwin() and Tests/blur_twin_cert.cpp stay: still correct, simply uncalled.
 
     // GEODE — analyze any SPEC oscillator's source into partials+noise (off the audio thread).
-    rebuildGeodeIfNeeded (0); rebuildGeodeIfNeeded (1);
-    rebuildGeodeIfNeeded (2); rebuildGeodeIfNeeded (3);
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o) rebuildGeodeIfNeeded (o);   // tp20 — every oscillator of every bank
     prepareModalEnginesIfNeeded();   // fb498 — arm MODAL's waveguide lines the first time an osc asks for them
     prepareHarmonicEnginesIfNeeded();   // fb517 — same, for HARM's partial banks
 
@@ -3023,21 +3027,59 @@ static void buildDefaultGeodeStore (tw::ResynthFrameStore& out)
 //  silent at the new rate. SynthVoice::prepareModalEngines() already early-outs on its own
 //  acquire load, so the cost of re-asking every tick is 4 parameter reads plus (only when MODAL
 //  is selected) 96 atomic loads — nothing, at 60 Hz.
+// ══ tp20 — THE OSCILLATOR POOL wakes up here. Message thread (timerCallback under prepLock_). Builds the second
+//    UnisonSynth with the SAME set-once wiring bank 0 got in the constructor, but pointed at bank 1's stores:
+//    the draw table from slot 8, the geode stores 4..7, ITS route snapshot, distinct deterministic seeds.
+//    Prepared here at the current rate, then PUBLISHED through bankB_ — the audio thread picks it up at its
+//    next block. Never freed (the parameter law's cousin: a pool once opened stays open for the session).
+bool TerrainAudioProcessor::bankBWanted() const noexcept
+{
+    for (int o = ParameterIDs::kOscPerBank; o < ParameterIDs::kOscCount; ++o)
+        if (auto* p = apvts.getRawParameterValue (ParameterIDs::kOsc_ENABLE[o]); p != nullptr && p->load() > 0.5f) return true;
+    return false;
+}
+
+void TerrainAudioProcessor::ensureBankB()
+{
+    if (synthEngineB_ != nullptr) return;
+    auto eng = std::make_unique<UnisonSynth>();
+    eng->addSound (new tw::SynthSound());
+    for (int i = 0; i < kSynthVoiceCount; ++i)
+    {
+        auto* v = new tw::SynthVoice();
+        v->setModCurves (&modCurvesLive_);
+        v->setGlobalSources (&globalSrc_);
+        v->setDrawTable (drawTable_ + 2 * ParameterIDs::kOscPerBank);   // bank 1's eight draw slots
+        synthVoicesB_[(size_t) i] = v;
+        v->setDeterministicIndex (kSynthVoiceCount + i);
+        v->setRouteSnapshot (&routeSnapB_);
+        v->setGrainBudget (&granGrainsLive_, kGranBudget);
+        v->setPartialBudget (&geodePartialsLive_, kGeodePartialBudget);
+        v->setHarmPartialCensus (&harmBanksLive_, &harmBanksPrev_);
+        v->setGeodeStores (&geodeSlot_[4].live, &geodeSlot_[5].live, &geodeSlot_[6].live, &geodeSlot_[7].live);
+        eng->addVoice (v);
+    }
+    const double sr = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    const int    bs = getBlockSize() > 0 ? getBlockSize() : 512;
+    eng->setCurrentPlaybackSampleRate (sr);
+    for (int i = 0; i < kSynthVoiceCount; ++i)
+        if (auto* sv = synthVoicesB_[(size_t) i])
+        { sv->prepareToPlay (sr, bs, 2); sv->setLfoCustomTables (lfoTableAudio_); }
+    synthEngineB_ = std::move (eng);
+    bankB_.store (synthEngineB_.get(), std::memory_order_release);
+}
+
 void TerrainAudioProcessor::prepareModalEnginesIfNeeded()
 {
-    static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
-                                        ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+    const auto* ENG = ParameterIDs::kOsc_ENGINE;   // tp20 — 8 wide
     bool wanted = false;
-    for (int o = 0; o < 4 && ! wanted; ++o)
+    for (int o = 0; o < ParameterIDs::kOscCount && ! wanted; ++o)
         if ((int) *rawParam (ENG[o]) == (int) tw::SynthVoice::Engine::MODAL)   // AudioParameterChoice → the INDEX (CLAUDE.md §4)
             wanted = true;
 
     if (! wanted) return;
 
-    for (int i = 0; i < kSynthVoiceCount; ++i)
-        if (auto* v = synthVoices_[i])
-            v->prepareModalEngines();
-
+    forEachVoiceAllBanks ([] (tw::SynthVoice* v, int) { v->prepareModalEngines(); });
 }
 
 // fb517 — HARM's lazy arm, the fb498 modal shape cloned (message thread only; ~65 MB per
@@ -3045,26 +3087,21 @@ void TerrainAudioProcessor::prepareModalEnginesIfNeeded()
 // voice's harmReady_ in setCurrentPlaybackSampleRate and the next tick re-arms).
 void TerrainAudioProcessor::prepareHarmonicEnginesIfNeeded()
 {
-    static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
-                                        ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+    const auto* ENG = ParameterIDs::kOsc_ENGINE;   // tp20 — 8 wide
     bool wanted = false;
-    for (int o = 0; o < 4 && ! wanted; ++o)
+    for (int o = 0; o < ParameterIDs::kOscCount && ! wanted; ++o)
         if ((int) *rawParam (ENG[o]) == (int) tw::SynthVoice::Engine::HARM)   // AudioParameterChoice → the INDEX (CLAUDE.md §4)
             wanted = true;
 
     if (! wanted) return;
 
-    for (int i = 0; i < kSynthVoiceCount; ++i)
-        if (auto* v = synthVoices_[i])
-            v->prepareHarmonicEngines();
+    forEachVoiceAllBanks ([] (tw::SynthVoice* v, int) { v->prepareHarmonicEngines(); });
 }
 
 void TerrainAudioProcessor::rebuildGeodeIfNeeded (int o)
 {
-    static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
-                                        ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
-    static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                        ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const auto* ENG = ParameterIDs::kOsc_ENGINE;      // tp20 — 8 wide
+    const auto* WTP = ParameterIDs::kOsc_WT_PRESET;
     GeodeSlot& slot = geodeSlot_[o];
     const int engineIdx = (int) *rawParam (ENG[o]);
     if (engineIdx != 3)   // not GEODE (Engine::SPEC = 3) → publish nothing, force re-analyze on return
@@ -3462,7 +3499,17 @@ void TerrainAudioProcessor::setCustomTags(const juce::String& commaSeparated)
 //==============================================================================
 juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::createParameterLayout()
 {
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+    juce::AudioProcessorValueTreeState::ParameterLayout layoutReal;
+    // tp20 — THE POOL MINTS BY CLONING. Every add() below passes through this tap, so the pool block at the
+    //   end can clone oscillator B (E/F/G/H), every device's SRC_B pill (SRC_E..H) and the Flow cards
+    //   (instances 2..4) with whatever type / range / choices / default the hand-written block gave them.
+    //   One truth, no second copy of 700 lines — and a knob added to B tomorrow reaches E–H for free.
+    struct LayoutTap
+    {
+        juce::AudioProcessorValueTreeState::ParameterLayout& L;
+        std::vector<juce::RangedAudioParameter*> seen;
+        void add (std::unique_ptr<juce::RangedAudioParameter> p) { if (p == nullptr) return; seen.push_back (p.get()); L.add (std::move (p)); }   // every derived unique_ptr converts here
+    } layout { layoutReal, {} };
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParameterIDs::GRAIN_SIZE, 1 },
@@ -7170,7 +7217,71 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                 juce::ParameterID { ids[o], 1 }, nms[o], wtRoster, defTable));
     }
 
-    return layout;
+    // ══ tp20 — THE POOL. Appended AFTER every hand-written parameter (the parameter law: IDs are append-only;
+    //    instance 1 keeps its bare id). A clone carries the source's type, range/choices, default and label.
+    {
+        auto cloneOf = [] (juce::RangedAudioParameter* src, const juce::String& id, const juce::String& nm) -> std::unique_ptr<juce::RangedAudioParameter>
+        {
+            if (auto* f = dynamic_cast<juce::AudioParameterFloat*> (src))
+                return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, nm, f->range,
+                                                                    f->convertFrom0to1 (src->getDefaultValue()),
+                                                                    juce::AudioParameterFloatAttributes().withLabel (f->getLabel()));
+            if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (src))
+                return std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id, 1 }, nm, c->choices,
+                                                                     juce::roundToInt (c->convertFrom0to1 (src->getDefaultValue())));
+            if (auto* b = dynamic_cast<juce::AudioParameterBool*> (src))
+                return std::make_unique<juce::AudioParameterBool> (juce::ParameterID { id, 1 }, nm, src->getDefaultValue() > 0.5f);
+            if (auto* i = dynamic_cast<juce::AudioParameterInt*> (src))
+                return std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id, 1 }, nm, i->getRange().getStart(), i->getRange().getEnd(),
+                                                                  juce::roundToInt (i->convertFrom0to1 (src->getDefaultValue())));
+            jassertfalse; return nullptr;   // a new parameter class: teach cloneOf about it
+        };
+        const std::vector<juce::RangedAudioParameter*> base = layout.seen;   // a copy — the clones append as we go
+        // (1) OSCILLATORS E–H: oscillator B is the template (its ENABLE defaults OFF, its LEVEL to an audible 0.5).
+        for (auto* src : base)
+        {
+            const juce::String id = src->paramID, nm = src->name;
+            if (id.startsWith ("SYN_OSC_B_"))
+                for (int k = 0; k < ParameterIDs::kOscPerBank; ++k)
+                {
+                    const juce::String L = juce::String::charToString ((juce::juce_wchar) ('E' + k));
+                    layout.add (cloneOf (src, "SYN_OSC_" + L + "_" + id.substring (10),
+                                         nm.replace ("OSC B", "OSC " + L).replace ("Osc B", "Osc " + L).replace (" B ", " " + L + " ")));
+                }
+            else if (id.startsWith ("SYN_") && id.endsWith ("_SRC_B") && ! id.startsWith ("SYN_FILTER"))   // the route pills (the filter's A–D pills are retired: F1MIX/F2MIX are per-osc params)
+                for (int k = 0; k < ParameterIDs::kOscPerBank; ++k)
+                {
+                    const juce::String L = juce::String::charToString ((juce::juce_wchar) ('E' + k));
+                    layout.add (cloneOf (src, id.dropLastCharacters (1) + L, nm.trimEnd().dropLastCharacters (1) + L));
+                }
+        }
+        // (2) THE FLOW CARDS: Arp / Chop / Glitch instances 2..4. FLOW_ARP_X -> FLOW_ARP2_X (the rack's SYN_DLY2_ idiom);
+        //     the Chop macros keep their frozen SEQ prefix (FLOW_SEQ2_RATE drives Chop 2). Robin stays one.
+        for (auto* src : base)
+        {
+            const juce::String id = src->paramID, nm = src->name;
+            static const char* const kPfx[4] = { "FLOW_ARP_", "FLOW_SEQ_", "FLOW_CHOP_", "FLOW_GLI_" };
+            for (const char* pfx : kPfx)
+                if (id.startsWith (pfx))
+                {
+                    const juce::String head = juce::String (pfx).dropLastCharacters (1);   // "FLOW_ARP"
+                    for (int n = 2; n <= wc::kFlowInstances; ++n)
+                        layout.add (cloneOf (src, head + juce::String (n) + "_" + id.substring (head.length() + 1),
+                                             nm.upToFirstOccurrenceOf (" ", false, false) + " " + juce::String (n) + nm.fromFirstOccurrenceOf (" ", true, false)));
+                    break;
+                }
+        }
+        // (3) THE CHAIN grows to 16 slots, and every slot learns WHICH instance it holds (0 = instance 1, the old meaning).
+        for (int i = 5; i <= 16; ++i)
+            layout.add (std::make_unique<juce::AudioParameterChoice>(
+                juce::ParameterID { "FLOW_CHAIN_" + juce::String (i), 1 }, "Flow Chain " + juce::String (i),
+                juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Robin" }, 0));
+        for (int i = 1; i <= 16; ++i)
+            layout.add (std::make_unique<juce::AudioParameterChoice>(
+                juce::ParameterID { "FLOW_CHAIN_INST_" + juce::String (i), 1 }, "Flow Chain " + juce::String (i) + " Instance",
+                juce::StringArray { "1", "2", "3", "4" }, 0));
+    }
+    return layoutReal;
 }
 
 //==============================================================================
@@ -7197,7 +7308,7 @@ void TerrainAudioProcessor::cacheFxInstanceParams()
         v.lowcut=R(r+"LOWCUT"); v.width=R(r+"WIDTH"); v.mod=R(r+"MOD");
         v.freeze=R(r+"FREEZE"); v.duck=R(r+"DUCK");
         { static const char* sfx[6] = {"SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE"};
-          for (int k = 0; k < 6; ++k) v.src[k] = R (r + sfx[k]); }
+          for (int k = 0; k < 6; ++k) v.src[k] = R (r + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (r + kSrcBSfx[k]); }
 
         const juce::String p = "SYN_DLY" + juce::String (e + 2) + "_";
         auto& d = dlyRefs_[(size_t) e];
@@ -7208,7 +7319,7 @@ void TerrainAudioProcessor::cacheFxInstanceParams()
         d.width=R(p+"WIDTH"); d.modrate=R(p+"MODRATE"); d.moddepth=R(p+"MODDEPTH"); d.wow=R(p+"WOW");
         d.duck=R(p+"DUCK"); d.sync=R(p+"SYNC"); d.link=R(p+"LINK"); d.ping=R(p+"PING"); d.hq=R(p+"HQ");
         { static const char* sfx[6] = {"SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE"};
-          for (int k = 0; k < 6; ++k) d.src[k] = R (p + sfx[k]); }   // fb348
+          for (int k = 0; k < 6; ++k) d.src[k] = R (p + sfx[k]); for (int k = 0; k < 4; ++k) d.srcB[k] = R (p + kSrcBSfx[k]); }   // fb348
 
         const juce::String s = "SYN_DST" + juce::String (e + 2) + "_";
         auto& t = dstRefs_[(size_t) e];
@@ -7218,7 +7329,7 @@ void TerrainAudioProcessor::cacheFxInstanceParams()
         t.autoP=R(s+"AUTO"); t.pill2=R(s+"PILL2");
         for (int k = 0; k < 8; ++k) t.p[k] = R (s + "P" + juce::String (k + 1));
         { static const char* sfx[6] = {"SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE"};
-          for (int k = 0; k < 6; ++k) t.src[k] = R (s + sfx[k]); }   // fb348
+          for (int k = 0; k < 6; ++k) t.src[k] = R (s + sfx[k]); for (int k = 0; k < 4; ++k) t.srcB[k] = R (s + kSrcBSfx[k]); }   // fb348
     }
 }
 
@@ -7264,7 +7375,7 @@ void TerrainAudioProcessor::cacheGranularParams()
         v.scan=R(g+"SCAN"); v.window=R(g+"WINDOW"); v.spray=R(g+"SPRAY"); v.pitch=R(g+"PITCH");
         v.detune=R(g+"DETUNE"); v.shape=R(g+"SHAPE"); v.width=R(g+"WIDTH"); v.freeze=R(g+"FREEZE");
         v.freezePill=R(g+"FREEZEPILL"); v.sync=R(g+"SYNC");
-        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
         grnType_[(size_t) i] = -1;
     }
 }
@@ -7462,7 +7573,7 @@ void TerrainAudioProcessor::cacheTapeParams()
         v.duck=R(g+"DUCK"); v.sync=R(g+"SYNC"); v.delay=R(g+"DELAY");
         // the six machine controls live in fixed slots; applyTpe picks the three the Type uses
         v.p1=R(g+"WOW"); v.p2=R(g+"SAT"); v.p3=R(g+"HISS");
-        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
         v.sculpt=R(g+"SCULPT"); v.weave=R(g+"WEAVE"); v.tilt=R(g+"TILT");
     }
 }
@@ -7485,7 +7596,7 @@ void TerrainAudioProcessor::cacheFilterRefs()
         v.sense=R(g+"SENSE"); v.attack=R(g+"ATTACK"); v.release=R(g+"RELEASE");
         v.rate=R(g+"RATE"); v.sweep=R(g+"SWEEP");
         v.wide=R(g+"WIDE"); v.punch=R(g+"PUNCH");
-        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
     }
 }
 
@@ -7943,7 +8054,7 @@ void TerrainAudioProcessor::cacheUtlRefs()
         v.f1 = R (g + "GAIN"); v.f2 = R (g + "IMAGE"); v.f3 = R (g + "STEER"); v.mix = R (g + "MIX");
         for (int b = 0; b < 8; ++b) v.b[b]    = R (g + "B" + juce::String (b + 1));
         for (int k = 0; k < 5; ++k) v.pill[k] = R (g + pil[k]);
-        for (int k = 0; k < 6; ++k) v.src[k]  = R (g + sfx[k]);
+        for (int k = 0; k < 6; ++k) v.src[k]  = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
     }
 }
 
@@ -7968,7 +8079,7 @@ void TerrainAudioProcessor::cacheSplRefs()
             v.solo[k] = R (g + "SOLO" + juce::String (k + 1));
             v.flip[k] = R (g + "FLIP" + juce::String (k + 1));
         }
-        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
     }
 }
 
@@ -8166,7 +8277,7 @@ void TerrainAudioProcessor::cacheFx3Refs()
             v.time=R(g+"TIME"); v.detune=R(g+"DETUNE"); v.width=R(g+"WIDTH"); v.flutter=R(g+"FLUTTER");
             v.drift=R(g+"DRIFT"); v.colour=R(g+"COLOUR"); v.lowkeep=R(g+"LOWKEEP"); v.phase=R(g+"PHASE");
             v.sync=R(g+"SYNC"); v.wide=R(g+"WIDE"); v.motion=R(g+"MOTION");
-            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
         }
         {
             const juce::String g = "SYN_FLA" + n + "_";
@@ -8177,7 +8288,7 @@ void TerrainAudioProcessor::cacheFx3Refs()
             v.manual=R(g+"MANUAL"); v.spread=R(g+"SPREAD"); v.width=R(g+"WIDTH"); v.damping=R(g+"DAMPING");
             v.shape=R(g+"SHAPE"); v.bounce=R(g+"BOUNCE"); v.tail=R(g+"TAIL"); v.lowcut=R(g+"LOWCUT");
             v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT"); v.route=R(g+"ROUTE");
-            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
         }
         {
             const juce::String g = "SYN_PHA" + n + "_";
@@ -8188,7 +8299,7 @@ void TerrainAudioProcessor::cacheFx3Refs()
             v.center=R(g+"CENTER"); v.stages=R(g+"STAGES"); v.spread=R(g+"SPREAD"); v.stereo=R(g+"STEREO");
             v.touch=R(g+"TOUCH"); v.lag=R(g+"LAG"); v.floorK=R(g+"FLOOR"); v.color=R(g+"COLOR");
             v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT"); v.motion=R(g+"MOTION");
-            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
         }
     }
 }
@@ -8507,7 +8618,7 @@ void TerrainAudioProcessor::cacheFx4Refs()
             v.pill1 = (kSpec[d].pill1 != nullptr) ? R (g + kSpec[d].pill1) : nullptr;
             v.pill2 = (kSpec[d].pill2 != nullptr) ? R (g + kSpec[d].pill2) : nullptr;
             v.sync  = (kSpec[d].sync  != nullptr) ? R (g + kSpec[d].sync)  : nullptr;
-            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]); for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + kSrcBSfx[k]);
             if (d == 0)   // fb438 — the Equalizer's free bells
                 for (int k = 0; k < 4; ++k)
                 {
@@ -8956,6 +9067,13 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
             sv->setLfoCustomTables (lfoTableAudio_);   // LFO ARC L1 — wire drawn-shape tables
         }
     }
+    if (auto* bb = bankB_.load (std::memory_order_acquire))   // tp20 — bank 1, if it has been built
+    {
+        bb->setCurrentPlaybackSampleRate (sampleRate);
+        for (int i = 0; i < kSynthVoiceCount; ++i)
+            if (auto* sv = synthVoicesB_[(size_t) i])
+            { sv->prepareToPlay (sampleRate, samplesPerBlock, 2); sv->setLfoCustomTables (lfoTableAudio_); }
+    }
 
     // fb498 — arm MODAL here too, not only from the 60 Hz timer. setCurrentPlaybackSampleRate
     // above has just cleared every voice's ready flag, so a patch that ALREADY has an osc on
@@ -9250,7 +9368,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
 
     // fb588 — prime the HARM table grids so an oscillator already on Table sounds on the very
     // first block, instead of waiting for the 60 Hz timer's first tick.
-    for (int o = 0; o < 4; ++o) rebuildHarmTableIfNeeded (o);
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o) rebuildHarmTableIfNeeded (o);
 
 }
 
@@ -10209,6 +10327,26 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         return raw;
     };
     {
+    // ══ tp20 — THE OSCILLATOR POOL. The whole gather below runs ONCE PER BUILT BANK. Bank 0 is the text as it
+    //    always was (rpar == rawParam, the hoisted sums, synthEngine, synthVoices_) — bit-identical by
+    //    construction. Bank 1 (oscillators E–H, built lazily by ensureBankB) runs the SAME text with every
+    //    A–D id resolved to its E–H twin (rawParamB), its own mod sums (destForBank), its own change-gates,
+    //    its own per-osc stores (OB = 4), and no noise / Robin / global taps (those are bank 0's).
+    UnisonSynth* const bankBp = bankB_.load (std::memory_order_acquire);
+    const int nBanks = bankBp != nullptr ? 2 : 1;
+    for (int bank = 0; bank < nBanks; ++bank)
+    {
+        const bool   isB = bank == 1;
+        UnisonSynth& eng = isB ? *bankBp : synthEngine;
+        auto&        vs  = isB ? synthVoicesB_ : synthVoices_;
+        auto rpar = [this, isB] (const char* id) { return isB ? rawParamB (id) : rawParam (id); };
+        float* const mSum  = isB ? modSumsB_ : modSums;
+        float* const mOwnW = isB ? envOwnWB_ : envOwnW;
+        float* const mOwnV = isB ? envOwnVB_ : envOwnV;
+        if (isB) { std::fill_n (mSum, (int) wc::ModDest::NumDests, 0.0f); std::fill_n (mOwnW, (int) wc::ModDest::NumDests, 0.0f); std::fill_n (mOwnV, (int) wc::ModDest::NumDests, 0.0f); }
+        BankGate&    BG  = bankGate_[bank];
+        const int    OB  = bank * ParameterIDs::kOscPerBank;
+        juce::ignoreUnused (eng, vs, OB);
         // ═══ fb75 — UNIVERSAL LFO MOD (block-rate) ═══════════════════════════════════
         // ONE O(routes) pass turns the mod matrix into per-destination offsets for every
         // newly-routable target (filters 1/2, noise, blend depths, per-osc level/pan, and
@@ -10254,7 +10392,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // ── fb178 — MONO ENVELOPE TAP upkeep (only when an env feeds a global dest) ──
         {
             const uint32_t gm = monoEnvGlobalMask_.load (std::memory_order_acquire);
-            if (gm != 0)
+            if (gm != 0 && ! isB)   // tp20 — the mono env taps advance ONCE (bank 0)
             {
                 // legacy 1..5 shapes from their params (same values the voices consume)
                 static const char* const kPfx[5] = { "SYN_ENV_AMP_", "SYN_ENV_FLT_", "SYN_ENV_PIT_", "SYN_ENV_M1_", "SYN_ENV_M2_" };
@@ -10323,7 +10461,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 ParameterIDs::LFO7_DEPTH, ParameterIDs::LFO8_DEPTH, ParameterIDs::LFO9_DEPTH,
                 ParameterIDs::LFO10_DEPTH };
             const juce::ScopedLock sl (synModLock);
-            refreshModCurveAudio(); rebakeModCurveAudio();   // fb573 — under THIS lock: the set beside the routes it belongs to
+            if (! isB) { refreshModCurveAudio(); rebakeModCurveAudio(); }   // fb573 — under THIS lock: the set beside the routes it belongs to
             // fb245 — LFO→LFO amt for GLOBAL dests. Per-voice already scales its LFO peaks (SynthVoice ~1985),
             // but the processor global path read the RAW peek, so LfoAmt silently no-op'd for every global route.
             // Pre-pass the amt exactly like the per-voice pass (source × master × depth), then scale the peek below.
@@ -10334,18 +10472,19 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias);   // fb563 (3) — "Scale by"
                 if (r.dest < (int) wc::ModDest::LfoAmt1 || r.dest >= (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS) continue;
                 if (r.src >= 0 && r.src < wc::NUM_LFOS)
-                    lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += flowLfo_[r.src].peek() * (r.depth * *rawParam (kLfoDepthIds[r.src]));
+                    lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += flowLfo_[r.src].peek() * (r.depth * *rpar (kLfoDepthIds[r.src]));
                 else if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1)) * std::abs (r.depth);
                 else if (const int p2 = wc::phase2SourceForWire (r.src); p2 >= 0)   // fb563 clean-up — macros · wheel · aftertouch · bend · random · alt bend a global LFO's amount too
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += globalSourceValue (r.src, r.dest) * r.depth;
             }
-            const float velCurve01_ = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb263 — velocity block-rate feed: curve-shaped, most-active voice
+            const float velCurve01_ = *rpar (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb263 — velocity block-rate feed: curve-shaped, most-active voice
             const float velGlobal_  = std::pow (juce::jmax (0.0f, velVis_.load (std::memory_order_relaxed)), std::pow (3.0f, 1.0f - 2.0f * velCurve01_));
             for (const auto& r0 : synModRoutes)
             {
                 if (r0.bypass) continue;   // fb563 (3) — bypassed: in the list, out of the sum
                 SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias);   // fb563 (3) — "Scale by" scales the DEPTH, whatever the family's law
+                { const int dT = wc::destForBank (bank, r.dest); if (dT < 0) continue; r.dest = dT; }   // tp20 — the pool: a mirror int lands on bank 1's legacy index; A–D's own dests are bank 0's
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
                 const wc::ModCurveSet* mcSet = modCurvesLive_.load (std::memory_order_acquire);   // fb554 · fb573 — the audio-owned copy
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
@@ -10364,11 +10503,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     if (diR.domain == wc::ModDomain::Linear01)
                     {
                         const float dwR = std::abs (r.depth);
-                        envOwnW[r.dest] += dwR;
-                        envOwnV[r.dest] += dwR * (lv + 1.0f);
+                        mOwnW[r.dest] += dwR;
+                        mOwnV[r.dest] += dwR * (lv + 1.0f);
                         continue;
                     }
-                    modSums[r.dest] += wc::routeContribution (diR, lv, std::abs (r.depth));   // fb180 — magnitude
+                    mSum[r.dest] += wc::routeContribution (diR, lv, std::abs (r.depth));   // fb180 — magnitude
                     continue;
                 }
                 if (r.src >= wc::kFollowSrcBase && r.src < wc::kFollowSrcBase + wc::kNumFollowers)
@@ -10386,11 +10525,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     if (diF.domain == wc::ModDomain::Linear01)
                     {
                         const float dwF = std::abs (r.depth);
-                        envOwnW[r.dest] += dwF;
-                        envOwnV[r.dest] += dwF * (lv + 1.0f);
+                        mOwnW[r.dest] += dwF;
+                        mOwnV[r.dest] += dwF * (lv + 1.0f);
                         continue;
                     }
-                    modSums[r.dest] += wc::routeContribution (diF, lv, std::abs (r.depth));
+                    mSum[r.dest] += wc::routeContribution (diF, lv, std::abs (r.depth));
                     continue;
                 }
                 if (r.src == wc::kNoteSrc)
@@ -10404,16 +10543,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     if (diN.domain == wc::ModDomain::Linear01)
                     {
                         const float dwN = std::abs (r.depth);
-                        envOwnW[r.dest] += dwN;
-                        envOwnV[r.dest] += dwN * (lv + 1.0f);
+                        mOwnW[r.dest] += dwN;
+                        mOwnV[r.dest] += dwN * (lv + 1.0f);
                         continue;
                     }
-                    modSums[r.dest] += wc::routeContribution (diN, lv, std::abs (r.depth));
+                    mSum[r.dest] += wc::routeContribution (diN, lv, std::abs (r.depth));
                     continue;
                 }
                 if (r.src == wc::kVelSrc)   // fb263 — VELOCITY at block-rate: reaches Level/Pan/Res/FX/macros (global, most-active voice). Fixes velocity→Volume being a silent no-op (viz moved, no audio).
                 {
-                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
+                    mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
                                           wc::applyModCurve (mcSet, r.curve, (int) wc::ModSource::Velocity, velGlobal_), r.depth);   // fb554
                     continue;
                 }
@@ -10427,12 +10566,12 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     else if (p2 == (int) wc::ModSource::Bend)          v = globalSrc_.bend.load (std::memory_order_relaxed);
                     else if (wc::isRandModSource (p2))                 v = randSeedLive_.load (std::memory_order_relaxed) ? wc::randForRoute (randSeedVis_.load (std::memory_order_relaxed), r.dest, wc::randIndexOf (p2)) : 0.0f;   // fb572 — this route's own draw from the most-active note
                     else if (p2 == (int) wc::ModSource::Alt)           v = altVis_.load (std::memory_order_relaxed);
-                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyModCurve (mcSet, r.curve, p2, v), r.depth);
+                    mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyModCurve (mcSet, r.curve, p2, v), r.depth);
                     continue;
                 }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
-                const float master = *rawParam (kLfoDepthIds[r.src]);   // per-LFO MASTER ring (same law as the matrix merge below)
-                modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
+                const float master = *rpar (kLfoDepthIds[r.src]);   // per-LFO MASTER ring (same law as the matrix merge below)
+                mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
                                                           wc::applyModCurve (mcSet, r.curve, r.src,
                                                               flowLfo_[r.src].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + lfoAmt[r.src])), r.depth * master);   // fb245 — LfoAmt now scales global dests too
             }
@@ -10443,8 +10582,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (envProbe2 && (++pb2 % 8) == 0)
             {
                 float v60 = -1.f, v65 = -1.f, w60 = -1.f; int a60 = 0, a65 = 0;
-                for (int i = 0; i < synthEngine.getNumVoices(); ++i)
-                    if (auto* sv = synthVoices_[(size_t) i])
+                for (int i = 0; i < eng.getNumVoices(); ++i)
+                    if (auto* sv = vs[(size_t) i])
                     {
                         const int n = sv->getCurrentlyPlayingNote();
                         if (n == 60) { v60 = sv->dbgLvlSm (0); a60 = sv->isAmpEnvActive() ? 1 : 0; w60 = sv->dbgWarpEffA(); }
@@ -10455,39 +10594,39 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     + " held=" + juce::String (monoHeld_)
                     + " v60=" + juce::String (v60, 4) + "/" + juce::String (a60)
                     + " v65=" + juce::String (v65, 4) + "/" + juce::String (a65)
-                    + " sumLevA=" + juce::String (modSums[(int) wc::ModDest::LevelA], 4)
-                    + " wFb=" + juce::String (envOwnW[(int) wc::ModDest::FmFbA], 2)
-                    + " vFb=" + juce::String (envOwnV[(int) wc::ModDest::FmFbA], 4)
-                    + " vRes=" + juce::String (envOwnV[(int) wc::ModDest::Res1], 4)
+                    + " sumLevA=" + juce::String (mSum[(int) wc::ModDest::LevelA], 4)
+                    + " wFb=" + juce::String (mOwnW[(int) wc::ModDest::FmFbA], 2)
+                    + " vFb=" + juce::String (mOwnV[(int) wc::ModDest::FmFbA], 4)
+                    + " vRes=" + juce::String (mOwnV[(int) wc::ModDest::Res1], 4)
                     + " w60=" + juce::String (w60, 4)
-                    + " wA1=" + juce::String (envOwnW[(int) wc::ModDest::EnvPBase + 1], 2)
-                    + " vA1=" + juce::String (envOwnV[(int) wc::ModDest::EnvPBase + 1], 4) + "\n");
+                    + " wA1=" + juce::String (mOwnW[(int) wc::ModDest::EnvPBase + 1], 2)
+                    + " vA1=" + juce::String (mOwnV[(int) wc::ModDest::EnvPBase + 1], 4) + "\n");
             }
         }
         // fb184 — OWNERSHIP at the app site: the env's claim w crossfades the (LFO-modulated)
         // base toward the env's own shape mapped across lo..hi. w=0 → legacy additive exactly.
         auto ownM = [&] (float base, int d, float lo, float hi)
         {
-            const float w = envOwnW[d] > 1.0f ? 1.0f : envOwnW[d];
-            return juce::jlimit (lo, hi, (base + modSums[d]) * (1.0f - w) + lo * w + envOwnV[d] * (hi - lo));
+            const float w = mOwnW[d] > 1.0f ? 1.0f : mOwnW[d];
+            return juce::jlimit (lo, hi, (base + mSum[d]) * (1.0f - w) + lo * w + mOwnV[d] * (hi - lo));
         };
         // Wrap helper: base param + this block's mod, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
-        { return ownM (*rawParam (pid), (int) d, lo, hi); };
+        { return ownM (*rpar (pid), (int) d, lo, hi); };
         // dyn envs (blob ms, no APVTS param) — the editor's own norm curve (1..8000ms, skew .3)
         auto dynModMs = [&] (float ms, int d) -> float
         {
-            const float w0 = envOwnW[d]; if (w0 <= 0.0f && modSums[d] == 0.0f) return ms;
+            const float w0 = mOwnW[d]; if (w0 <= 0.0f && mSum[d] == 0.0f) return ms;
             const float w = w0 > 1.0f ? 1.0f : w0;
             const float n = std::pow (juce::jlimit (0.0f, 1.0f, (ms - 1.0f) / 9999.0f), 0.3f);
-            const float e = juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]);
+            const float e = juce::jlimit (0.0f, 1.0f, (n + mSum[d]) * (1.0f - w) + mOwnV[d]);
             return 1.0f + std::pow (e, 1.0f / 0.3f) * 9999.0f;
         };
         auto dynModS = [&] (float s, int d) -> float
         {
-            const float w0 = envOwnW[d]; if (w0 <= 0.0f && modSums[d] == 0.0f) return s;
+            const float w0 = mOwnW[d]; if (w0 <= 0.0f && mSum[d] == 0.0f) return s;
             const float w = w0 > 1.0f ? 1.0f : w0;
-            return juce::jlimit (0.0f, 1.0f, (s + modSums[d]) * (1.0f - w) + envOwnV[d]);
+            return juce::jlimit (0.0f, 1.0f, (s + mSum[d]) * (1.0f - w) + mOwnV[d]);
         };
         // fb565 — MACROS AS DESTINATIONS. Max: "there's no way to modulate the macros." A macro is a
         // global 0..1 value, so its routes are summed in THIS pass under the same ownership law as
@@ -10495,10 +10634,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // (globalSrc_.macro — the voices and the global pass alike). A macro routed INTO another macro
         // reads that macro's value as it stood at the top of this block: one block of latency per
         // link, never a feedback spiral. The knob's own value stays in macroBaseVis_ for the UI.
-        for (int k = 0; k < wc::kNumMacros; ++k)
+        for (int k = 0; k < (isB ? 0 : wc::kNumMacros); ++k)   /* tp20 — global: bank 0 only */
         {
             const int d = (int) wc::ModDest::MacroDest1 + k;
-            const bool routed = (envOwnW[d] > 0.0f || modSums[d] != 0.0f);
+            const bool routed = (mOwnW[d] > 0.0f || mSum[d] != 0.0f);
             macroModded_[k] = routed;
             if (routed) globalSrc_.macro[k].store (ownM (macroBaseVis_[k].load (std::memory_order_relaxed), d, 0.0f, 1.0f), std::memory_order_relaxed);
         }
@@ -10511,16 +10650,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 { ParameterIDs::STUDIO_SCULPT, ParameterIDs::STUDIO_WEAVE,    ParameterIDs::STUDIO_TILT },
                 { ParameterIDs::WOW_FLUTTER,   ParameterIDs::SATURATION,      ParameterIDs::HISS },
                 { ParameterIDs::WIRE_WOW,      ParameterIDs::WIRE_SATURATION, ParameterIDs::WIRE_HISS } };
-            const int mach = juce::jlimit (0, 2, (int) std::lround (rawParam (ParameterIDs::TAPE_MACHINE)->load()));
-            tapeSlotMach_ = mach;
-            for (int k = 0; k < 3; ++k)
+            const int mach = juce::jlimit (0, 2, (int) std::lround (rpar (ParameterIDs::TAPE_MACHINE)->load()));
+            if (! isB) tapeSlotMach_ = mach;
+            for (int k = 0; k < (isB ? 0 : 3); ++k)   /* tp20 — global: bank 0 only */
             {
                 const int d = (int) wc::ModDest::TapeSlot1 + k;
-                const bool routed = (envOwnW[d] > 0.0f || modSums[d] != 0.0f);
+                const bool routed = (mOwnW[d] > 0.0f || mSum[d] != 0.0f);
                 tapeSlotRouted_[k] = routed;
                 if (! routed) continue;
                 const float lo = (mach == 0 && k == 2) ? -100.0f : 0.0f, hi = 100.0f;   // Studio Tilt is bipolar
-                const float n  = (rawParam (kTapeIds[mach][k])->load() - lo) / (hi - lo);
+                const float n  = (rpar (kTapeIds[mach][k])->load() - lo) / (hi - lo);
                 tapeSlotEff_[k] = lo + ownM (n, d, 0.0f, 1.0f) * (hi - lo);
             }
         }
@@ -10536,8 +10675,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             {
                 const int d = (int) wc::ModDest::SpectralA + o;   // fb76 dests already exist (line ~128); only the WRITE was missing
                 float eff = mdP (kSpecIds[o], (wc::ModDest) d, 0.0f, 1.0f);
-                if (envOwnW[d] > 0.0f || modSums[d] != 0.0f) eff = std::round (eff * 128.0f) / 128.0f;   // anti-churn, routed only
-                spectralEffAmt_[o].store (eff, std::memory_order_relaxed);
+                if (mOwnW[d] > 0.0f || mSum[d] != 0.0f) eff = std::round (eff * 128.0f) / 128.0f;   // anti-churn, routed only
+                spectralEffAmt_[OB + o].store (eff, std::memory_order_relaxed);
             }
             // fb467 — the same publish for the PARTIAL WINDOW's two edges. modP (fb193) is the right
             // helper here and mdP is not: these params are LOG-mapped over 1..512, and modP converts
@@ -10550,18 +10689,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             // value EXACTLY, so an unmodulated window cannot nudge the rebuild gate.
             auto modWin = [&] (juce::RangedAudioParameter* p, float raw, int d) -> float
             {
-                const float w0 = envOwnW[d];
-                if ((w0 <= 0.0f && modSums[d] == 0.0f) || p == nullptr) return raw;
+                const float w0 = mOwnW[d];
+                if ((w0 <= 0.0f && mSum[d] == 0.0f) || p == nullptr) return raw;
                 const float w = w0 > 1.0f ? 1.0f : w0;
                 const float n = p->convertTo0to1 (raw);
-                return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]));
+                return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + mSum[d]) * (1.0f - w) + mOwnV[d]));
             };
             // fb469 — the effective BLUR, on the same always-runs path as the spectral amount above.
             // The message-thread twin build reads this; it must not depend on the editor being open.
             static const char* const kBlurIds[4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
                                                      ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
             for (int o = 0; o < 4; ++o)
-                blurEff_[o].store (mdP (kBlurIds[o], (wc::ModDest) ((int) wc::ModDest::BlurA + o), 0.0f, 1.0f),
+                blurEff_[OB + o].store (mdP (kBlurIds[o], (wc::ModDest) ((int) wc::ModDest::BlurA + o), 0.0f, 1.0f),
                                    std::memory_order_relaxed);
 
             static const char* const kLoIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
@@ -10570,27 +10709,27 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                                    ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
             for (int o = 0; o < 4; ++o)
             {
-                specLoEff_[o].store (modWin (specLoParam_[o], *rawParam (kLoIds[o]), (int) wc::ModDest::SpecLoA + o), std::memory_order_relaxed);
-                specHiEff_[o].store (modWin (specHiParam_[o], *rawParam (kHiIds[o]), (int) wc::ModDest::SpecHiA + o), std::memory_order_relaxed);
+                specLoEff_[OB + o].store (modWin (specLoParam_[OB + o], *rpar (kLoIds[o]), (int) wc::ModDest::SpecLoA + o), std::memory_order_relaxed);
+                specHiEff_[OB + o].store (modWin (specHiParam_[OB + o], *rpar (kHiIds[o]), (int) wc::ModDest::SpecHiA + o), std::memory_order_relaxed);
             }
         }
-        const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
-        const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
-        const float cent    =         *rawParam (ParameterIDs::SYN_OSC_A_CENT);
+        const int   oct     = (int)   *rpar (ParameterIDs::SYN_OSC_A_OCT);
+        const int   semi    = (int)   *rpar (ParameterIDs::SYN_OSC_A_SEMI);
+        const float cent    =         *rpar (ParameterIDs::SYN_OSC_A_CENT);
         const float lvl     =         mdP (ParameterIDs::SYN_OSC_A_LEVEL, wc::ModDest::LevelA, 0.0f, 1.0f);
         const float pan     =         mdP (ParameterIDs::SYN_OSC_A_PAN, wc::ModDest::PanA, -1.0f, 1.0f);
-        const float cut     =         *rawParam (ParameterIDs::SYN_FILTER1_CUT);
+        const float cut     =         *rpar (ParameterIDs::SYN_FILTER1_CUT);
         const float res     =         mdP (ParameterIDs::SYN_FILTER1_RES, wc::ModDest::Res1, 0.0f, 1.0f);
-        const float fltKt1  =         100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack1, 0.0f, 1.0f);   // fb78 Track mod · fb184 ownership
+        const float fltKt1  =         100.0f * ownM (*rpar (ParameterIDs::SYN_FILTER1_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack1, 0.0f, 1.0f);   // fb78 Track mod · fb184 ownership
         // Batch 1 Filter — TYPE, DRV and the dedicated FLT ADSR. (fb636 — SYN_FILTER1/2_ENV are no longer read
         // here: nothing in the voice used them. The FLT env reaches cutoff through its Env → Cutoff route.)
-        const int   filtType= juce::roundToInt ((float) *rawParam (ParameterIDs::SYN_FILTER1_TYPE));   // fb604 — ROUND, never truncate: see applyFlt's engine read
+        const int   filtType= juce::roundToInt ((float) *rpar (ParameterIDs::SYN_FILTER1_TYPE));   // fb604 — ROUND, never truncate: see applyFlt's engine read
         const float filtDrv =         mdP (ParameterIDs::SYN_FILTER1_DRV, wc::ModDest::FDrv1, 0.0f, 1.0f);
         // Filter 2 (independent) + per-filter mix + routing.
-        const float cut2     =        *rawParam (ParameterIDs::SYN_FILTER2_CUT);
+        const float cut2     =        *rpar (ParameterIDs::SYN_FILTER2_CUT);
         const float res2     =        mdP (ParameterIDs::SYN_FILTER2_RES, wc::ModDest::Res2, 0.0f, 1.0f);
-        const float fltKt2   =        100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack2, 0.0f, 1.0f);   // fb184 ownership
-        const int   filtType2= juce::roundToInt ((float) *rawParam (ParameterIDs::SYN_FILTER2_TYPE));  // fb604 — ditto
+        const float fltKt2   =        100.0f * ownM (*rpar (ParameterIDs::SYN_FILTER2_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack2, 0.0f, 1.0f);   // fb184 ownership
+        const int   filtType2= juce::roundToInt ((float) *rpar (ParameterIDs::SYN_FILTER2_TYPE));  // fb604 — ditto
         const float filtDrv2 =        mdP (ParameterIDs::SYN_FILTER2_DRV, wc::ModDest::FDrv2, 0.0f, 1.0f);
         const float filtMix1 =        mdP (ParameterIDs::SYN_FILTER1_MIX, wc::ModDest::FMix1, 0.0f, 1.0f);
         const float filtMix2 =        mdP (ParameterIDs::SYN_FILTER2_MIX, wc::ModDest::FMix2, 0.0f, 1.0f);
@@ -10598,13 +10737,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float filtVel2 =        mdP (ParameterIDs::SYN_FILTER2_VEL, wc::ModDest::FVel2, 0.0f, 1.0f);
         const float filtPdrv1=        mdP (ParameterIDs::SYN_FILTER1_PDRV, wc::ModDest::FPDrv1, 0.0f, 1.0f);
         const float filtPdrv2=        mdP (ParameterIDs::SYN_FILTER2_PDRV, wc::ModDest::FPDrv2, 0.0f, 1.0f);
-        const int   filtDrvType1=(int)*rawParam (ParameterIDs::SYN_FILTER1_DRIVETYPE);   // 0=Tube..5=Fuzz
-        const int   filtDrvType2=(int)*rawParam (ParameterIDs::SYN_FILTER2_DRIVETYPE);
-        const int   filtPole1= (int)  *rawParam (ParameterIDs::SYN_FILTER1_POLES);    // 0=6 1=12 2=18 3=24 dB
-        const int   filtPole2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_POLES);
+        const int   filtDrvType1=(int)*rpar (ParameterIDs::SYN_FILTER1_DRIVETYPE);   // 0=Tube..5=Fuzz
+        const int   filtDrvType2=(int)*rpar (ParameterIDs::SYN_FILTER2_DRIVETYPE);
+        const int   filtPole1= (int)  *rpar (ParameterIDs::SYN_FILTER1_POLES);    // 0=6 1=12 2=18 3=24 dB
+        const int   filtPole2= (int)  *rpar (ParameterIDs::SYN_FILTER2_POLES);
         const float filtSpread1=      mdP (ParameterIDs::SYN_FILTER1_SPREAD, wc::ModDest::FSpread1, 0.0f, 1.0f);   // stereo width 0..1 · fb78 mod
         const float filtSpread2=      mdP (ParameterIDs::SYN_FILTER2_SPREAD, wc::ModDest::FSpread2, 0.0f, 1.0f);
-        const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
+        const int   filtRoute= (int)  *rpar (ParameterIDs::SYN_FILTER_ROUTING);
         // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
         // fb79 — PER-OSC CONTINUOUS FILTER SENDS (the F1/F2 pills, each osc independent, default 0 =
         // dry). Replaces the binary A-D masks (SYN_FILTER*_SRC_A..D are no longer consumed for oscs —
@@ -10614,22 +10753,22 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                  mdP (ParameterIDs::SYN_OSC_B_F1MIX, wc::ModDest::OscF1SendB, 0.0f, 1.0f),
                                  mdP (ParameterIDs::SYN_OSC_C_F1MIX, wc::ModDest::OscF1SendC, 0.0f, 1.0f),
                                  mdP (ParameterIDs::SYN_OSC_D_F1MIX, wc::ModDest::OscF1SendD, 0.0f, 1.0f),
-                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_SUB) > 0.5f ? 1.0f : 0.0f };
+                                 *rpar (ParameterIDs::SYN_FILTER1_SRC_SUB) > 0.5f ? 1.0f : 0.0f };
         const float f2src[5] = { mdP (ParameterIDs::SYN_OSC_A_F2MIX, wc::ModDest::OscF2SendA, 0.0f, 1.0f),
                                  mdP (ParameterIDs::SYN_OSC_B_F2MIX, wc::ModDest::OscF2SendB, 0.0f, 1.0f),
                                  mdP (ParameterIDs::SYN_OSC_C_F2MIX, wc::ModDest::OscF2SendC, 0.0f, 1.0f),
                                  mdP (ParameterIDs::SYN_OSC_D_F2MIX, wc::ModDest::OscF2SendD, 0.0f, 1.0f),
-                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_SUB) > 0.5f ? 1.0f : 0.0f };
-        const bool  noiseF1 = *rawParam (ParameterIDs::SYN_FILTER1_SRC_NOISE) > 0.5f;   // fb63 — noise → filter routing
-        const bool  noiseF2 = *rawParam (ParameterIDs::SYN_FILTER2_SRC_NOISE) > 0.5f;
-        const float fltEnvA =         modP (ParameterIDs::SYN_ENV_FLT_A, *rawParam (ParameterIDs::SYN_ENV_FLT_A), (int) wc::ModDest::EnvPBase + 7);   // fb193
-        const float fltEnvD =         modP (ParameterIDs::SYN_ENV_FLT_D, *rawParam (ParameterIDs::SYN_ENV_FLT_D), (int) wc::ModDest::EnvPBase + 9);   // fb193
-        const float fltEnvS =         modP (ParameterIDs::SYN_ENV_FLT_S, *rawParam (ParameterIDs::SYN_ENV_FLT_S), (int) wc::ModDest::EnvPBase + 10);   // fb193
-        const float fltEnvR =         modP (ParameterIDs::SYN_ENV_FLT_R, *rawParam (ParameterIDs::SYN_ENV_FLT_R), (int) wc::ModDest::EnvPBase + 11);   // fb193
-        const float ampA    =         modP (ParameterIDs::SYN_ENV_AMP_A, *rawParam (ParameterIDs::SYN_ENV_AMP_A), (int) wc::ModDest::EnvPBase + 1);   // fb193
-        const float ampD    =         modP (ParameterIDs::SYN_ENV_AMP_D, *rawParam (ParameterIDs::SYN_ENV_AMP_D), (int) wc::ModDest::EnvPBase + 3);   // fb193
-        const float ampS    =         modP (ParameterIDs::SYN_ENV_AMP_S, *rawParam (ParameterIDs::SYN_ENV_AMP_S), (int) wc::ModDest::EnvPBase + 4);   // fb193
-        const float ampR    =         modP (ParameterIDs::SYN_ENV_AMP_R, *rawParam (ParameterIDs::SYN_ENV_AMP_R), (int) wc::ModDest::EnvPBase + 5);   // fb193
+                                 *rpar (ParameterIDs::SYN_FILTER2_SRC_SUB) > 0.5f ? 1.0f : 0.0f };
+        const bool  noiseF1 = *rpar (ParameterIDs::SYN_FILTER1_SRC_NOISE) > 0.5f;   // fb63 — noise → filter routing
+        const bool  noiseF2 = *rpar (ParameterIDs::SYN_FILTER2_SRC_NOISE) > 0.5f;
+        const float fltEnvA =         modP (ParameterIDs::SYN_ENV_FLT_A, *rpar (ParameterIDs::SYN_ENV_FLT_A), (int) wc::ModDest::EnvPBase + 7);   // fb193
+        const float fltEnvD =         modP (ParameterIDs::SYN_ENV_FLT_D, *rpar (ParameterIDs::SYN_ENV_FLT_D), (int) wc::ModDest::EnvPBase + 9);   // fb193
+        const float fltEnvS =         modP (ParameterIDs::SYN_ENV_FLT_S, *rpar (ParameterIDs::SYN_ENV_FLT_S), (int) wc::ModDest::EnvPBase + 10);   // fb193
+        const float fltEnvR =         modP (ParameterIDs::SYN_ENV_FLT_R, *rpar (ParameterIDs::SYN_ENV_FLT_R), (int) wc::ModDest::EnvPBase + 11);   // fb193
+        const float ampA    =         modP (ParameterIDs::SYN_ENV_AMP_A, *rpar (ParameterIDs::SYN_ENV_AMP_A), (int) wc::ModDest::EnvPBase + 1);   // fb193
+        const float ampD    =         modP (ParameterIDs::SYN_ENV_AMP_D, *rpar (ParameterIDs::SYN_ENV_AMP_D), (int) wc::ModDest::EnvPBase + 3);   // fb193
+        const float ampS    =         modP (ParameterIDs::SYN_ENV_AMP_S, *rpar (ParameterIDs::SYN_ENV_AMP_S), (int) wc::ModDest::EnvPBase + 4);   // fb193
+        const float ampR    =         modP (ParameterIDs::SYN_ENV_AMP_R, *rpar (ParameterIDs::SYN_ENV_AMP_R), (int) wc::ModDest::EnvPBase + 5);   // fb193
 
         // ══ fb492 — CONTROL-RATE GATHER GUARD OPENS ═══════════════════════════════════════
         // Everything from here to the end of this scope is pure "read a knob, push it at the
@@ -10642,213 +10781,213 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (gatherDue)
         {
         // ── Envelope DAHDSR extension reads (Batch 2/3) ──
-        const float ampDly = modP (ParameterIDs::SYN_ENV_AMP_DLY, *rawParam (ParameterIDs::SYN_ENV_AMP_DLY), (int) wc::ModDest::EnvPBase + 0);   // fb193
-        const float ampHld = modP (ParameterIDs::SYN_ENV_AMP_H, *rawParam (ParameterIDs::SYN_ENV_AMP_H), (int) wc::ModDest::EnvPBase + 2);   // fb193
-        const float ampCa = *rawParam (ParameterIDs::SYN_ENV_AMP_CA);
-        const float ampCd = *rawParam (ParameterIDs::SYN_ENV_AMP_CD);
-        const float ampCr = *rawParam (ParameterIDs::SYN_ENV_AMP_CR);
-        const bool  ampLoop = *rawParam (ParameterIDs::SYN_ENV_AMP_LOOP) > 0.5f;
-        const float fltDly = modP (ParameterIDs::SYN_ENV_FLT_DLY, *rawParam (ParameterIDs::SYN_ENV_FLT_DLY), (int) wc::ModDest::EnvPBase + 6);   // fb193
-        const float fltHld = modP (ParameterIDs::SYN_ENV_FLT_H, *rawParam (ParameterIDs::SYN_ENV_FLT_H), (int) wc::ModDest::EnvPBase + 8);   // fb193
-        const float fltCa = *rawParam (ParameterIDs::SYN_ENV_FLT_CA);
-        const float fltCd = *rawParam (ParameterIDs::SYN_ENV_FLT_CD);
-        const float fltCr = *rawParam (ParameterIDs::SYN_ENV_FLT_CR);
-        const bool  fltLoop = *rawParam (ParameterIDs::SYN_ENV_FLT_LOOP) > 0.5f;
-        const float pitDly = modP (ParameterIDs::SYN_ENV_PIT_DLY, *rawParam (ParameterIDs::SYN_ENV_PIT_DLY), (int) wc::ModDest::EnvPBase + 12);   // fb193
-        const float pitA = modP (ParameterIDs::SYN_ENV_PIT_A, *rawParam (ParameterIDs::SYN_ENV_PIT_A), (int) wc::ModDest::EnvPBase + 13);   // fb193
-        const float pitHld = modP (ParameterIDs::SYN_ENV_PIT_H, *rawParam (ParameterIDs::SYN_ENV_PIT_H), (int) wc::ModDest::EnvPBase + 14);   // fb193
-        const float pitD = modP (ParameterIDs::SYN_ENV_PIT_D, *rawParam (ParameterIDs::SYN_ENV_PIT_D), (int) wc::ModDest::EnvPBase + 15);   // fb193
-        const float pitS = modP (ParameterIDs::SYN_ENV_PIT_S, *rawParam (ParameterIDs::SYN_ENV_PIT_S), (int) wc::ModDest::EnvPBase + 16);   // fb193
-        const float pitR = modP (ParameterIDs::SYN_ENV_PIT_R, *rawParam (ParameterIDs::SYN_ENV_PIT_R), (int) wc::ModDest::EnvPBase + 17);   // fb193
-        const float pitCa = *rawParam (ParameterIDs::SYN_ENV_PIT_CA);
-        const float pitCd = *rawParam (ParameterIDs::SYN_ENV_PIT_CD);
-        const float pitCr = *rawParam (ParameterIDs::SYN_ENV_PIT_CR);
-        const bool  pitLoop = *rawParam (ParameterIDs::SYN_ENV_PIT_LOOP) > 0.5f;
-        const float m1eDly = modP (ParameterIDs::SYN_ENV_M1_DLY, *rawParam (ParameterIDs::SYN_ENV_M1_DLY), (int) wc::ModDest::EnvPBase + 18);   // fb193
-        const float m1eA = modP (ParameterIDs::SYN_ENV_M1_A, *rawParam (ParameterIDs::SYN_ENV_M1_A), (int) wc::ModDest::EnvPBase + 19);   // fb193
-        const float m1eHld = modP (ParameterIDs::SYN_ENV_M1_H, *rawParam (ParameterIDs::SYN_ENV_M1_H), (int) wc::ModDest::EnvPBase + 20);   // fb193
-        const float m1eD = modP (ParameterIDs::SYN_ENV_M1_D, *rawParam (ParameterIDs::SYN_ENV_M1_D), (int) wc::ModDest::EnvPBase + 21);   // fb193
-        const float m1eS = modP (ParameterIDs::SYN_ENV_M1_S, *rawParam (ParameterIDs::SYN_ENV_M1_S), (int) wc::ModDest::EnvPBase + 22);   // fb193
-        const float m1eR = modP (ParameterIDs::SYN_ENV_M1_R, *rawParam (ParameterIDs::SYN_ENV_M1_R), (int) wc::ModDest::EnvPBase + 23);   // fb193
-        const float m1eCa = *rawParam (ParameterIDs::SYN_ENV_M1_CA);
-        const float m1eCd = *rawParam (ParameterIDs::SYN_ENV_M1_CD);
-        const float m1eCr = *rawParam (ParameterIDs::SYN_ENV_M1_CR);
-        const bool  m1eLoop = *rawParam (ParameterIDs::SYN_ENV_M1_LOOP) > 0.5f;
-        const float m2eDly = modP (ParameterIDs::SYN_ENV_M2_DLY, *rawParam (ParameterIDs::SYN_ENV_M2_DLY), (int) wc::ModDest::EnvPBase + 24);   // fb193
-        const float m2eA = modP (ParameterIDs::SYN_ENV_M2_A, *rawParam (ParameterIDs::SYN_ENV_M2_A), (int) wc::ModDest::EnvPBase + 25);   // fb193
-        const float m2eHld = modP (ParameterIDs::SYN_ENV_M2_H, *rawParam (ParameterIDs::SYN_ENV_M2_H), (int) wc::ModDest::EnvPBase + 26);   // fb193
-        const float m2eD = modP (ParameterIDs::SYN_ENV_M2_D, *rawParam (ParameterIDs::SYN_ENV_M2_D), (int) wc::ModDest::EnvPBase + 27);   // fb193
-        const float m2eS = modP (ParameterIDs::SYN_ENV_M2_S, *rawParam (ParameterIDs::SYN_ENV_M2_S), (int) wc::ModDest::EnvPBase + 28);   // fb193
-        const float m2eR = modP (ParameterIDs::SYN_ENV_M2_R, *rawParam (ParameterIDs::SYN_ENV_M2_R), (int) wc::ModDest::EnvPBase + 29);   // fb193
-        const float m2eCa = *rawParam (ParameterIDs::SYN_ENV_M2_CA);
-        const float m2eCd = *rawParam (ParameterIDs::SYN_ENV_M2_CD);
-        const float m2eCr = *rawParam (ParameterIDs::SYN_ENV_M2_CR);
-        const bool  m2eLoop = *rawParam (ParameterIDs::SYN_ENV_M2_LOOP) > 0.5f;
+        const float ampDly = modP (ParameterIDs::SYN_ENV_AMP_DLY, *rpar (ParameterIDs::SYN_ENV_AMP_DLY), (int) wc::ModDest::EnvPBase + 0);   // fb193
+        const float ampHld = modP (ParameterIDs::SYN_ENV_AMP_H, *rpar (ParameterIDs::SYN_ENV_AMP_H), (int) wc::ModDest::EnvPBase + 2);   // fb193
+        const float ampCa = *rpar (ParameterIDs::SYN_ENV_AMP_CA);
+        const float ampCd = *rpar (ParameterIDs::SYN_ENV_AMP_CD);
+        const float ampCr = *rpar (ParameterIDs::SYN_ENV_AMP_CR);
+        const bool  ampLoop = *rpar (ParameterIDs::SYN_ENV_AMP_LOOP) > 0.5f;
+        const float fltDly = modP (ParameterIDs::SYN_ENV_FLT_DLY, *rpar (ParameterIDs::SYN_ENV_FLT_DLY), (int) wc::ModDest::EnvPBase + 6);   // fb193
+        const float fltHld = modP (ParameterIDs::SYN_ENV_FLT_H, *rpar (ParameterIDs::SYN_ENV_FLT_H), (int) wc::ModDest::EnvPBase + 8);   // fb193
+        const float fltCa = *rpar (ParameterIDs::SYN_ENV_FLT_CA);
+        const float fltCd = *rpar (ParameterIDs::SYN_ENV_FLT_CD);
+        const float fltCr = *rpar (ParameterIDs::SYN_ENV_FLT_CR);
+        const bool  fltLoop = *rpar (ParameterIDs::SYN_ENV_FLT_LOOP) > 0.5f;
+        const float pitDly = modP (ParameterIDs::SYN_ENV_PIT_DLY, *rpar (ParameterIDs::SYN_ENV_PIT_DLY), (int) wc::ModDest::EnvPBase + 12);   // fb193
+        const float pitA = modP (ParameterIDs::SYN_ENV_PIT_A, *rpar (ParameterIDs::SYN_ENV_PIT_A), (int) wc::ModDest::EnvPBase + 13);   // fb193
+        const float pitHld = modP (ParameterIDs::SYN_ENV_PIT_H, *rpar (ParameterIDs::SYN_ENV_PIT_H), (int) wc::ModDest::EnvPBase + 14);   // fb193
+        const float pitD = modP (ParameterIDs::SYN_ENV_PIT_D, *rpar (ParameterIDs::SYN_ENV_PIT_D), (int) wc::ModDest::EnvPBase + 15);   // fb193
+        const float pitS = modP (ParameterIDs::SYN_ENV_PIT_S, *rpar (ParameterIDs::SYN_ENV_PIT_S), (int) wc::ModDest::EnvPBase + 16);   // fb193
+        const float pitR = modP (ParameterIDs::SYN_ENV_PIT_R, *rpar (ParameterIDs::SYN_ENV_PIT_R), (int) wc::ModDest::EnvPBase + 17);   // fb193
+        const float pitCa = *rpar (ParameterIDs::SYN_ENV_PIT_CA);
+        const float pitCd = *rpar (ParameterIDs::SYN_ENV_PIT_CD);
+        const float pitCr = *rpar (ParameterIDs::SYN_ENV_PIT_CR);
+        const bool  pitLoop = *rpar (ParameterIDs::SYN_ENV_PIT_LOOP) > 0.5f;
+        const float m1eDly = modP (ParameterIDs::SYN_ENV_M1_DLY, *rpar (ParameterIDs::SYN_ENV_M1_DLY), (int) wc::ModDest::EnvPBase + 18);   // fb193
+        const float m1eA = modP (ParameterIDs::SYN_ENV_M1_A, *rpar (ParameterIDs::SYN_ENV_M1_A), (int) wc::ModDest::EnvPBase + 19);   // fb193
+        const float m1eHld = modP (ParameterIDs::SYN_ENV_M1_H, *rpar (ParameterIDs::SYN_ENV_M1_H), (int) wc::ModDest::EnvPBase + 20);   // fb193
+        const float m1eD = modP (ParameterIDs::SYN_ENV_M1_D, *rpar (ParameterIDs::SYN_ENV_M1_D), (int) wc::ModDest::EnvPBase + 21);   // fb193
+        const float m1eS = modP (ParameterIDs::SYN_ENV_M1_S, *rpar (ParameterIDs::SYN_ENV_M1_S), (int) wc::ModDest::EnvPBase + 22);   // fb193
+        const float m1eR = modP (ParameterIDs::SYN_ENV_M1_R, *rpar (ParameterIDs::SYN_ENV_M1_R), (int) wc::ModDest::EnvPBase + 23);   // fb193
+        const float m1eCa = *rpar (ParameterIDs::SYN_ENV_M1_CA);
+        const float m1eCd = *rpar (ParameterIDs::SYN_ENV_M1_CD);
+        const float m1eCr = *rpar (ParameterIDs::SYN_ENV_M1_CR);
+        const bool  m1eLoop = *rpar (ParameterIDs::SYN_ENV_M1_LOOP) > 0.5f;
+        const float m2eDly = modP (ParameterIDs::SYN_ENV_M2_DLY, *rpar (ParameterIDs::SYN_ENV_M2_DLY), (int) wc::ModDest::EnvPBase + 24);   // fb193
+        const float m2eA = modP (ParameterIDs::SYN_ENV_M2_A, *rpar (ParameterIDs::SYN_ENV_M2_A), (int) wc::ModDest::EnvPBase + 25);   // fb193
+        const float m2eHld = modP (ParameterIDs::SYN_ENV_M2_H, *rpar (ParameterIDs::SYN_ENV_M2_H), (int) wc::ModDest::EnvPBase + 26);   // fb193
+        const float m2eD = modP (ParameterIDs::SYN_ENV_M2_D, *rpar (ParameterIDs::SYN_ENV_M2_D), (int) wc::ModDest::EnvPBase + 27);   // fb193
+        const float m2eS = modP (ParameterIDs::SYN_ENV_M2_S, *rpar (ParameterIDs::SYN_ENV_M2_S), (int) wc::ModDest::EnvPBase + 28);   // fb193
+        const float m2eR = modP (ParameterIDs::SYN_ENV_M2_R, *rpar (ParameterIDs::SYN_ENV_M2_R), (int) wc::ModDest::EnvPBase + 29);   // fb193
+        const float m2eCa = *rpar (ParameterIDs::SYN_ENV_M2_CA);
+        const float m2eCd = *rpar (ParameterIDs::SYN_ENV_M2_CD);
+        const float m2eCr = *rpar (ParameterIDs::SYN_ENV_M2_CR);
+        const bool  m2eLoop = *rpar (ParameterIDs::SYN_ENV_M2_LOOP) > 0.5f;
         // Per-envelope routing (envs 2–5): destination index + bipolar depth.
-        const int   env2Dest  = (int) *rawParam (ParameterIDs::SYN_ENV2_DEST);
-        const float env2Depth =       *rawParam (ParameterIDs::SYN_ENV2_DEPTH);
-        const int   env3Dest  = (int) *rawParam (ParameterIDs::SYN_ENV3_DEST);
-        const float env3Depth =       *rawParam (ParameterIDs::SYN_ENV3_DEPTH);
-        const int   env4Dest  = (int) *rawParam (ParameterIDs::SYN_ENV4_DEST);
-        const float env4Depth =       *rawParam (ParameterIDs::SYN_ENV4_DEPTH);
-        const int   env5Dest  = (int) *rawParam (ParameterIDs::SYN_ENV5_DEST);
-        const float env5Depth =       *rawParam (ParameterIDs::SYN_ENV5_DEPTH);
+        const int   env2Dest  = (int) *rpar (ParameterIDs::SYN_ENV2_DEST);
+        const float env2Depth =       *rpar (ParameterIDs::SYN_ENV2_DEPTH);
+        const int   env3Dest  = (int) *rpar (ParameterIDs::SYN_ENV3_DEST);
+        const float env3Depth =       *rpar (ParameterIDs::SYN_ENV3_DEPTH);
+        const int   env4Dest  = (int) *rpar (ParameterIDs::SYN_ENV4_DEST);
+        const float env4Depth =       *rpar (ParameterIDs::SYN_ENV4_DEPTH);
+        const int   env5Dest  = (int) *rpar (ParameterIDs::SYN_ENV5_DEST);
+        const float env5Depth =       *rpar (ParameterIDs::SYN_ENV5_DEPTH);
         // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
-        const int            wtPreset = (int) *rawParam (ParameterIDs::SYN_OSC_A_WT_PRESET);
-        const float          wtFrame  =       *rawParam (ParameterIDs::SYN_OSC_A_WT_FRAME);
-        const tw::Wavetable* wt       = wavetableForOsc (0, morphA_, wtPreset);
+        const int            wtPreset = (int) *rpar (ParameterIDs::SYN_OSC_A_WT_PRESET);
+        const float          wtFrame  =       *rpar (ParameterIDs::SYN_OSC_A_WT_FRAME);
+        const tw::Wavetable* wt       = wavetableForOsc (OB + 0, morphSlot (OB + 0), wtPreset);
         // Phase 2C — warp mode + amount
-        const int   warpMode   = (int) *rawParam (ParameterIDs::SYN_OSC_A_WARP_MODE);
+        const int   warpMode   = (int) *rpar (ParameterIDs::SYN_OSC_A_WARP_MODE);
         const int   phaseModeA = /* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
-        const float warpAmount =       *rawParam (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
+        const float warpAmount =       *rpar (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
         // Phase 3 — OSC A engine choice
-        const int engineIdx = (int) *rawParam (ParameterIDs::SYN_OSC_A_ENGINE);
+        const int engineIdx = (int) *rpar (ParameterIDs::SYN_OSC_A_ENGINE);
         // Phase 9 — OSC B params
-        const int   octB       = (int)  *rawParam (ParameterIDs::SYN_OSC_B_OCT);
-        const int   semiB      = (int)  *rawParam (ParameterIDs::SYN_OSC_B_SEMI);
-        const float centB      =        *rawParam (ParameterIDs::SYN_OSC_B_CENT);
+        const int   octB       = (int)  *rpar (ParameterIDs::SYN_OSC_B_OCT);
+        const int   semiB      = (int)  *rpar (ParameterIDs::SYN_OSC_B_SEMI);
+        const float centB      =        *rpar (ParameterIDs::SYN_OSC_B_CENT);
         const float lvlB       =        mdP (ParameterIDs::SYN_OSC_B_LEVEL, wc::ModDest::LevelB, 0.0f, 1.0f);
         const float panB       =        mdP (ParameterIDs::SYN_OSC_B_PAN, wc::ModDest::PanB, -1.0f, 1.0f);
-        const int   wtPresetB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WT_PRESET);
-        const float wtFrameB   =        *rawParam (ParameterIDs::SYN_OSC_B_WT_FRAME);
-        const tw::Wavetable* wtB = wavetableForOsc (1, morphB_, wtPresetB);
-        const int   warpModeB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP_MODE);
+        const int   wtPresetB  = (int)  *rpar (ParameterIDs::SYN_OSC_B_WT_PRESET);
+        const float wtFrameB   =        *rpar (ParameterIDs::SYN_OSC_B_WT_FRAME);
+        const tw::Wavetable* wtB = wavetableForOsc (OB + 1, morphSlot (OB + 1), wtPresetB);
+        const int   warpModeB  = (int)  *rpar (ParameterIDs::SYN_OSC_B_WARP_MODE);
         const int   phaseModeB = /* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
-        const float warpAmountB =       *rawParam (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
+        const float warpAmountB =       *rpar (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
         // WARP 2 — chained second slot per OSC
-        const int   warp2ModeA = (int)  *rawParam (ParameterIDs::SYN_OSC_A_WARP2_MODE);
+        const int   warp2ModeA = (int)  *rpar (ParameterIDs::SYN_OSC_A_WARP2_MODE);
         const float warp2AmtA  =        mdP (ParameterIDs::SYN_OSC_A_WARP2_AMT, wc::ModDest::Warp2A, 0.0f, 1.0f);   // fb77 — back-panel WARP2 amount mod
-        const int   warp2ModeB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP2_MODE);
+        const int   warp2ModeB = (int)  *rpar (ParameterIDs::SYN_OSC_B_WARP2_MODE);
         const float warp2AmtB  =        mdP (ParameterIDs::SYN_OSC_B_WARP2_AMT, wc::ModDest::Warp2B, 0.0f, 1.0f);
-        const int   engineIdxB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ENGINE);
+        const int   engineIdxB = (int)  *rpar (ParameterIDs::SYN_OSC_B_ENGINE);
         // WAVER — per-OSC analog pitch-drift depth (0..100 %). Pushed per voice below.
-        const float waverA      =       *rawParam (ParameterIDs::SYN_OSC_A_WAVER);
-        const float waverB      =       *rawParam (ParameterIDs::SYN_OSC_B_WAVER);
+        const float waverA      =       *rpar (ParameterIDs::SYN_OSC_A_WAVER);
+        const float waverB      =       *rpar (ParameterIDs::SYN_OSC_B_WAVER);
         // KEYTRACK — per-OSC note->destination depth (0..100 %) + destination choice.
-        const float ktDepthA    =       *rawParam (ParameterIDs::SYN_OSC_A_KEYTRACK);
-        const int   ktDestA     = (int)  *rawParam (ParameterIDs::SYN_OSC_A_KEYTRACK_DEST);
-        const float ktDepthB    =       *rawParam (ParameterIDs::SYN_OSC_B_KEYTRACK);
-        const int   ktDestB     = (int)  *rawParam (ParameterIDs::SYN_OSC_B_KEYTRACK_DEST);
+        const float ktDepthA    =       *rpar (ParameterIDs::SYN_OSC_A_KEYTRACK);
+        const int   ktDestA     = (int)  *rpar (ParameterIDs::SYN_OSC_A_KEYTRACK_DEST);
+        const float ktDepthB    =       *rpar (ParameterIDs::SYN_OSC_B_KEYTRACK);
+        const int   ktDestB     = (int)  *rpar (ParameterIDs::SYN_OSC_B_KEYTRACK_DEST);
         // ROUTE — per-OSC source + destination + bipolar amount (-100..100 %).
-        const int   rtSrcA      = (int)  *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_SRC);
-        const int   rtDestA     = (int)  *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_DEST);
-        const float rtAmtA      =       *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_AMT);
-        const int   rtSrcB      = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_SRC);
-        const int   rtDestB     = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
-        const float rtAmtB      =       *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
+        const int   rtSrcA      = (int)  *rpar (ParameterIDs::SYN_OSC_A_ROUTE_SRC);
+        const int   rtDestA     = (int)  *rpar (ParameterIDs::SYN_OSC_A_ROUTE_DEST);
+        const float rtAmtA      =       *rpar (ParameterIDs::SYN_OSC_A_ROUTE_AMT);
+        const int   rtSrcB      = (int)  *rpar (ParameterIDs::SYN_OSC_B_ROUTE_SRC);
+        const int   rtDestB     = (int)  *rpar (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
+        const float rtAmtB      =       *rpar (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
         // ── OSC C / D params (4-osc) — mirror OSC B; pushed per voice below ──
-        const int   octC=(int)*rawParam (ParameterIDs::SYN_OSC_C_OCT), semiC=(int)*rawParam (ParameterIDs::SYN_OSC_C_SEMI);
-        const float centC=*rawParam (ParameterIDs::SYN_OSC_C_CENT), lvlC=mdP (ParameterIDs::SYN_OSC_C_LEVEL, wc::ModDest::LevelC, 0.0f, 1.0f), panC=mdP (ParameterIDs::SYN_OSC_C_PAN, wc::ModDest::PanC, -1.0f, 1.0f);
-        const int   wtPresetC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WT_PRESET);
-        const float wtFrameC=*rawParam (ParameterIDs::SYN_OSC_C_WT_FRAME);
-        const tw::Wavetable* wtC = wavetableForOsc (2, morphC_, wtPresetC);
-        const int   warpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=/* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
-        const float warpAmountC=*rawParam (ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
-        const int   warp2ModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP2_MODE);
+        const int   octC=(int)*rpar (ParameterIDs::SYN_OSC_C_OCT), semiC=(int)*rpar (ParameterIDs::SYN_OSC_C_SEMI);
+        const float centC=*rpar (ParameterIDs::SYN_OSC_C_CENT), lvlC=mdP (ParameterIDs::SYN_OSC_C_LEVEL, wc::ModDest::LevelC, 0.0f, 1.0f), panC=mdP (ParameterIDs::SYN_OSC_C_PAN, wc::ModDest::PanC, -1.0f, 1.0f);
+        const int   wtPresetC=(int)*rpar (ParameterIDs::SYN_OSC_C_WT_PRESET);
+        const float wtFrameC=*rpar (ParameterIDs::SYN_OSC_C_WT_FRAME);
+        const tw::Wavetable* wtC = wavetableForOsc (OB + 2, morphSlot (OB + 2), wtPresetC);
+        const int   warpModeC=(int)*rpar (ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=/* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
+        const float warpAmountC=*rpar (ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
+        const int   warp2ModeC=(int)*rpar (ParameterIDs::SYN_OSC_C_WARP2_MODE);
         const float warp2AmtC=mdP (ParameterIDs::SYN_OSC_C_WARP2_AMT, wc::ModDest::Warp2C, 0.0f, 1.0f);
-        const int   engineIdxC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ENGINE);
-        const float waverC=*rawParam (ParameterIDs::SYN_OSC_C_WAVER);
-        const float ktDepthC=*rawParam (ParameterIDs::SYN_OSC_C_KEYTRACK);
-        const int   ktDestC=(int)*rawParam (ParameterIDs::SYN_OSC_C_KEYTRACK_DEST);
-        const int   rtSrcC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_SRC), rtDestC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_DEST);
-        const float rtAmtC=*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_AMT);
-        const int   octD=(int)*rawParam (ParameterIDs::SYN_OSC_D_OCT), semiD=(int)*rawParam (ParameterIDs::SYN_OSC_D_SEMI);
-        const float centD=*rawParam (ParameterIDs::SYN_OSC_D_CENT), lvlD=mdP (ParameterIDs::SYN_OSC_D_LEVEL, wc::ModDest::LevelD, 0.0f, 1.0f), panD=mdP (ParameterIDs::SYN_OSC_D_PAN, wc::ModDest::PanD, -1.0f, 1.0f);
-        const int   wtPresetD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WT_PRESET);
-        const float wtFrameD=*rawParam (ParameterIDs::SYN_OSC_D_WT_FRAME);
-        const tw::Wavetable* wtD = wavetableForOsc (3, morphD_, wtPresetD);
-        const int   warpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=/* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
-        const float warpAmountD=*rawParam (ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
-        const int   warp2ModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP2_MODE);
+        const int   engineIdxC=(int)*rpar (ParameterIDs::SYN_OSC_C_ENGINE);
+        const float waverC=*rpar (ParameterIDs::SYN_OSC_C_WAVER);
+        const float ktDepthC=*rpar (ParameterIDs::SYN_OSC_C_KEYTRACK);
+        const int   ktDestC=(int)*rpar (ParameterIDs::SYN_OSC_C_KEYTRACK_DEST);
+        const int   rtSrcC=(int)*rpar (ParameterIDs::SYN_OSC_C_ROUTE_SRC), rtDestC=(int)*rpar (ParameterIDs::SYN_OSC_C_ROUTE_DEST);
+        const float rtAmtC=*rpar (ParameterIDs::SYN_OSC_C_ROUTE_AMT);
+        const int   octD=(int)*rpar (ParameterIDs::SYN_OSC_D_OCT), semiD=(int)*rpar (ParameterIDs::SYN_OSC_D_SEMI);
+        const float centD=*rpar (ParameterIDs::SYN_OSC_D_CENT), lvlD=mdP (ParameterIDs::SYN_OSC_D_LEVEL, wc::ModDest::LevelD, 0.0f, 1.0f), panD=mdP (ParameterIDs::SYN_OSC_D_PAN, wc::ModDest::PanD, -1.0f, 1.0f);
+        const int   wtPresetD=(int)*rpar (ParameterIDs::SYN_OSC_D_WT_PRESET);
+        const float wtFrameD=*rpar (ParameterIDs::SYN_OSC_D_WT_FRAME);
+        const tw::Wavetable* wtD = wavetableForOsc (OB + 3, morphSlot (OB + 3), wtPresetD);
+        const int   warpModeD=(int)*rpar (ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=/* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
+        const float warpAmountD=*rpar (ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
+        const int   warp2ModeD=(int)*rpar (ParameterIDs::SYN_OSC_D_WARP2_MODE);
         const float warp2AmtD=mdP (ParameterIDs::SYN_OSC_D_WARP2_AMT, wc::ModDest::Warp2D, 0.0f, 1.0f);
-        const int   engineIdxD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ENGINE);
-        const float waverD=*rawParam (ParameterIDs::SYN_OSC_D_WAVER);
-        const float ktDepthD=*rawParam (ParameterIDs::SYN_OSC_D_KEYTRACK);
-        const int   ktDestD=(int)*rawParam (ParameterIDs::SYN_OSC_D_KEYTRACK_DEST);
-        const int   rtSrcD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_DEST);
-        const float rtAmtD=*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_AMT);
+        const int   engineIdxD=(int)*rpar (ParameterIDs::SYN_OSC_D_ENGINE);
+        const float waverD=*rpar (ParameterIDs::SYN_OSC_D_WAVER);
+        const float ktDepthD=*rpar (ParameterIDs::SYN_OSC_D_KEYTRACK);
+        const int   ktDestD=(int)*rpar (ParameterIDs::SYN_OSC_D_KEYTRACK_DEST);
+        const int   rtSrcD=(int)*rpar (ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*rpar (ParameterIDs::SYN_OSC_D_ROUTE_DEST);
+        const float rtAmtD=*rpar (ParameterIDs::SYN_OSC_D_ROUTE_AMT);
         // ── SOLO / MUTE per OSC — bool params (getRawParameterValue returns normalized 0..1 → >0.5) ──
-        const bool muteA = *rawParam (ParameterIDs::SYN_OSC_A_MUTE) > 0.5f;
-        const bool soloA = *rawParam (ParameterIDs::SYN_OSC_A_SOLO) > 0.5f;
-        const bool muteB = *rawParam (ParameterIDs::SYN_OSC_B_MUTE) > 0.5f;
-        const bool soloB = *rawParam (ParameterIDs::SYN_OSC_B_SOLO) > 0.5f;
-        const bool muteC = *rawParam (ParameterIDs::SYN_OSC_C_MUTE) > 0.5f;
-        const bool soloC = *rawParam (ParameterIDs::SYN_OSC_C_SOLO) > 0.5f;
-        const bool muteD = *rawParam (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
-        const bool soloD = *rawParam (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
+        const bool muteA = *rpar (ParameterIDs::SYN_OSC_A_MUTE) > 0.5f;
+        const bool soloA = *rpar (ParameterIDs::SYN_OSC_A_SOLO) > 0.5f;
+        const bool muteB = *rpar (ParameterIDs::SYN_OSC_B_MUTE) > 0.5f;
+        const bool soloB = *rpar (ParameterIDs::SYN_OSC_B_SOLO) > 0.5f;
+        const bool muteC = *rpar (ParameterIDs::SYN_OSC_C_MUTE) > 0.5f;
+        const bool soloC = *rpar (ParameterIDs::SYN_OSC_C_SOLO) > 0.5f;
+        const bool muteD = *rpar (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
+        const bool soloD = *rpar (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
         const bool anySolo = soloA || soloB || soloC || soloD;
         // OSC ENABLE — the real per-osc ON/OFF (the white OSC letters in the UI). Rides the
         // same click-free gate one-pole as solo/mute; once the gate settles at silence the
         // voice SKIPS the osc's whole render path (engines included), so OFF costs ~nothing —
         // unlike volume 0, which kept the osc silently burning CPU.
-        const bool enA = *rawParam (ParameterIDs::SYN_OSC_A_ENABLE) > 0.5f;
-        const bool enB = *rawParam (ParameterIDs::SYN_OSC_B_ENABLE) > 0.5f;
-        const bool enC = *rawParam (ParameterIDs::SYN_OSC_C_ENABLE) > 0.5f;
-        const bool enD = *rawParam (ParameterIDs::SYN_OSC_D_ENABLE) > 0.5f;
+        const bool enA = *rpar (ParameterIDs::SYN_OSC_A_ENABLE) > 0.5f;
+        const bool enB = *rpar (ParameterIDs::SYN_OSC_B_ENABLE) > 0.5f;
+        const bool enC = *rpar (ParameterIDs::SYN_OSC_C_ENABLE) > 0.5f;
+        const bool enD = *rpar (ParameterIDs::SYN_OSC_D_ENABLE) > 0.5f;
         auto oscGate = [anySolo](bool en, bool mute, bool solo){ return (! en || mute || (anySolo && !solo)) ? 0.0f : 1.0f; };
         const float gateA = oscGate(enA, muteA, soloA), gateB = oscGate(enB, muteB, soloB),
                     gateC = oscGate(enC, muteC, soloC), gateD = oscGate(enD, muteD, soloD);
         // ════════ SAMPLE-ENGINE-PUSH — read per-OSC Sample params (Opus) ════════
         tw::SynthVoice::SampleEngineParams spA;
-        spA.scan      = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_SCAN);       spA.stretch = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH);
-        spA.formant   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT);    spA.spray   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY);
-        spA.xfade     = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_XFADE);      spA.start   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_START);
-        spA.end       = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_END);        spA.loopStart = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START);
-        spA.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END);   spA.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE);
-        spA.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE);
-        spA.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE);
-        spA.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_SNAP);      spA.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN);
-        spA.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT);
-        spA.air       = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_AIR);
-        spA.warp      = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_WARP);
-        spA.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_WARPMODE);
-        spA.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADEIN_CURVE);
-        spA.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADEOUT_CURVE);
+        spA.scan      = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_SCAN);       spA.stretch = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH);
+        spA.formant   = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT);    spA.spray   = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY);
+        spA.xfade     = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_XFADE);      spA.start   = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_START);
+        spA.end       = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_END);        spA.loopStart = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START);
+        spA.loopEnd   = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END);   spA.loopMode  = (int) *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE);
+        spA.stretchMode = (int) *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE);
+        spA.formantMode = (int) *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE);
+        spA.snap      = (int) *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_SNAP);      spA.fadeIn    = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN);
+        spA.fadeOut   = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT);
+        spA.air       = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_AIR);
+        spA.warp      = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_WARP);
+        spA.warpMode  = (int) *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_WARPMODE);
+        spA.fadeInCurve  = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_FADEIN_CURVE);
+        spA.fadeOutCurve = *rpar (ParameterIDs::SYN_OSC_A_SAMPLE_FADEOUT_CURVE);
         tw::SynthVoice::SampleEngineParams spB;
-        spB.scan      = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SCAN);       spB.stretch = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH);
-        spB.formant   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT);    spB.spray   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY);
-        spB.xfade     = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_XFADE);      spB.start   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_START);
-        spB.end       = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_END);        spB.loopStart = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START);
-        spB.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END);   spB.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE);
-        spB.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE);
-        spB.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE);
-        spB.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SNAP);      spB.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN);
-        spB.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT);
-        spB.air       = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_AIR);
-        spB.warp      = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_WARP);
-        spB.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_WARPMODE);
-        spB.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADEIN_CURVE);
-        spB.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADEOUT_CURVE);
+        spB.scan      = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_SCAN);       spB.stretch = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH);
+        spB.formant   = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT);    spB.spray   = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY);
+        spB.xfade     = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_XFADE);      spB.start   = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_START);
+        spB.end       = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_END);        spB.loopStart = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START);
+        spB.loopEnd   = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END);   spB.loopMode  = (int) *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE);
+        spB.stretchMode = (int) *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE);
+        spB.formantMode = (int) *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE);
+        spB.snap      = (int) *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_SNAP);      spB.fadeIn    = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN);
+        spB.fadeOut   = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT);
+        spB.air       = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_AIR);
+        spB.warp      = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_WARP);
+        spB.warpMode  = (int) *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_WARPMODE);
+        spB.fadeInCurve  = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_FADEIN_CURVE);
+        spB.fadeOutCurve = *rpar (ParameterIDs::SYN_OSC_B_SAMPLE_FADEOUT_CURVE);
         tw::SynthVoice::SampleEngineParams spC;
-        spC.scan      = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SCAN);       spC.stretch = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH);
-        spC.formant   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT);    spC.spray   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY);
-        spC.xfade     = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_XFADE);      spC.start   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_START);
-        spC.end       = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_END);        spC.loopStart = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START);
-        spC.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END);   spC.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE);
-        spC.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE);
-        spC.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE);
-        spC.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SNAP);      spC.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN);
-        spC.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT);
-        spC.air       = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_AIR);
-        spC.warp      = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_WARP);
-        spC.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_WARPMODE);
-        spC.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADEIN_CURVE);
-        spC.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADEOUT_CURVE);
+        spC.scan      = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_SCAN);       spC.stretch = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH);
+        spC.formant   = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT);    spC.spray   = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY);
+        spC.xfade     = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_XFADE);      spC.start   = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_START);
+        spC.end       = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_END);        spC.loopStart = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START);
+        spC.loopEnd   = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END);   spC.loopMode  = (int) *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE);
+        spC.stretchMode = (int) *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE);
+        spC.formantMode = (int) *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE);
+        spC.snap      = (int) *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_SNAP);      spC.fadeIn    = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN);
+        spC.fadeOut   = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT);
+        spC.air       = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_AIR);
+        spC.warp      = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_WARP);
+        spC.warpMode  = (int) *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_WARPMODE);
+        spC.fadeInCurve  = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_FADEIN_CURVE);
+        spC.fadeOutCurve = *rpar (ParameterIDs::SYN_OSC_C_SAMPLE_FADEOUT_CURVE);
         tw::SynthVoice::SampleEngineParams spD;
-        spD.scan      = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SCAN);       spD.stretch = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH);
-        spD.formant   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT);    spD.spray   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY);
-        spD.xfade     = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_XFADE);      spD.start   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_START);
-        spD.end       = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_END);        spD.loopStart = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START);
-        spD.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END);   spD.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE);
-        spD.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE);
-        spD.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE);
-        spD.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
-        spD.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
-        spD.air       = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_AIR);
-        spD.warp      = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
-        spD.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
-        spD.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADEIN_CURVE);
-        spD.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADEOUT_CURVE);
+        spD.scan      = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_SCAN);       spD.stretch = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH);
+        spD.formant   = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT);    spD.spray   = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY);
+        spD.xfade     = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_XFADE);      spD.start   = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_START);
+        spD.end       = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_END);        spD.loopStart = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START);
+        spD.loopEnd   = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END);   spD.loopMode  = (int) *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE);
+        spD.stretchMode = (int) *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE);
+        spD.formantMode = (int) *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE);
+        spD.snap      = (int) *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
+        spD.fadeOut   = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
+        spD.air       = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_AIR);
+        spD.warp      = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
+        spD.warpMode  = (int) *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
+        spD.fadeInCurve  = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_FADEIN_CURVE);
+        spD.fadeOutCurve = *rpar (ParameterIDs::SYN_OSC_D_SAMPLE_FADEOUT_CURVE);
         // ── GRAIN engine: gather the 12 grain functions per OSC (GRAIN-ENGINE-GATHER) ──
         // ID order: scan,density,size,spray,shape,key, position,pitch,pspray,width,dir,skew.
         // 'key' is the only choice → cast to index. static table = built once (no per-block alloc).
@@ -10876,21 +11015,21 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             { ParameterIDs::SYN_OSC_C_GRAIN_SCAN, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, ParameterIDs::SYN_OSC_C_GRAIN_SIZE, ParameterIDs::SYN_OSC_C_GRAIN_SPRAY, ParameterIDs::SYN_OSC_C_GRAIN_SHAPE, ParameterIDs::SYN_OSC_C_GRAIN_KEY, ParameterIDs::SYN_OSC_C_GRAIN_POSITION, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, ParameterIDs::SYN_OSC_C_GRAIN_DIR, ParameterIDs::SYN_OSC_C_GRAIN_SKEW },
             { ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE, ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, ParameterIDs::SYN_OSC_D_GRAIN_POSITION, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, ParameterIDs::SYN_OSC_D_GRAIN_DIR, ParameterIDs::SYN_OSC_D_GRAIN_SKEW }
         };
-        auto gatherGrain = [this] (const char* const* id)
+        auto gatherGrain = [&] (const char* const* id)   // tp20 — reads through rpar (the bank's lookup)
         {
             tw::GranularEngineParams g;
-            g.scan       = *rawParam (id[0]);
-            g.density    = *rawParam (id[1]);
-            g.size       = *rawParam (id[2]);
-            g.spray      = *rawParam (id[3]);
-            g.shape      = *rawParam (id[4]);
-            g.key        = (int) *rawParam (id[5]);   // choice → index
-            g.position   = *rawParam (id[6]);
-            g.pitch      = *rawParam (id[7]);
-            g.pitchSpray = *rawParam (id[8]);
-            g.width      = *rawParam (id[9]);
-            g.dir        = *rawParam (id[10]);
-            g.skew       = *rawParam (id[11]);
+            g.scan       = *rpar (id[0]);
+            g.density    = *rpar (id[1]);
+            g.size       = *rpar (id[2]);
+            g.spray      = *rpar (id[3]);
+            g.shape      = *rpar (id[4]);
+            g.key        = (int) *rpar (id[5]);   // choice → index
+            g.position   = *rpar (id[6]);
+            g.pitch      = *rpar (id[7]);
+            g.pitchSpray = *rpar (id[8]);
+            g.width      = *rpar (id[9]);
+            g.dir        = *rpar (id[10]);
+            g.skew       = *rpar (id[11]);
             return g;
         };
         // Patch Air/Stretch/StretchMode + region from the Sample params so the granular engine
@@ -10947,7 +11086,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         float fmVals[4][12];
         for (int o = 0; o < 4; ++o)
             for (int k = 0; k < 12; ++k)
-                fmVals[o][k] = *rawParam (FM_IDS[o][k]);
+                fmVals[o][k] = *rpar (FM_IDS[o][k]);
         // fb75/78 — FM knob mod (block-rate): ratios/depths (k=1..4), fb (k=5), WEATHERING (k=6..11). algo untouched.
         for (int o = 0; o < 4; ++o)
         {
@@ -10978,21 +11117,21 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const char* const* id = GEODE_IDS[o];
             tw::ResynthParams g;
-            g.start   = *rawParam (id[0]);  g.stretch = *rawParam (id[1]);  g.scan    = *rawParam (id[2]);
-            g.crush   = *rawParam (id[3]);  g.formant = *rawParam (id[4]);  /* id[5] GEODE_CUT retired (fb598) — Low/High below */
-            g.sieve   = *rawParam (id[6]);  g.shape   = *rawParam (id[7]);  g.drive   = *rawParam (id[8]);
-            g.smear   = *rawParam (id[9]);  g.tilt    = *rawParam (id[10]); g.quality = *rawParam (id[11]);   // id[9] = FRACTURE repurposed as MELT
-            g.formantKeep = *rawParam (id[12]) > 0.5f;
+            g.start   = *rpar (id[0]);  g.stretch = *rpar (id[1]);  g.scan    = *rpar (id[2]);
+            g.crush   = *rpar (id[3]);  g.formant = *rpar (id[4]);  /* id[5] GEODE_CUT retired (fb598) — Low/High below */
+            g.sieve   = *rpar (id[6]);  g.shape   = *rpar (id[7]);  g.drive   = *rpar (id[8]);
+            g.smear   = *rpar (id[9]);  g.tilt    = *rpar (id[10]); g.quality = *rpar (id[11]);   // id[9] = FRACTURE repurposed as MELT
+            g.formantKeep = *rpar (id[12]) > 0.5f;
             /* id[13] GEODE_LOOP retired (kept for preset compat) · id[14] BEDROCK reserved */
-            g.shapeTarget = (int) *rawParam (id[15]);   /* id[16] GEODE_CUT_MODE retired (fb598) */
-            g.driveMode   = (int) *rawParam (id[17]);   g.sieveMode = (int) *rawParam (id[18]);
+            g.shapeTarget = (int) *rpar (id[15]);   /* id[16] GEODE_CUT_MODE retired (fb598) */
+            g.driveMode   = (int) *rpar (id[17]);   g.sieveMode = (int) *rpar (id[18]);
             // SAMPLER-PARITY region/loop/fades — SHARED with the Sample engine's params (idle while
             // this osc runs Resynth): one region UI, one preset story (rs7).
-            g.regionStart = *rawParam (id[19]);  g.regionEnd    = *rawParam (id[20]);
-            g.loopStart   = *rawParam (id[21]);  g.loopEnd      = *rawParam (id[22]);
-            g.loopMode    = (int) *rawParam (id[23]);
-            g.fadeIn      = *rawParam (id[24]);  g.fadeOut      = *rawParam (id[25]);
-            g.fadeInCurve = *rawParam (id[26]);  g.fadeOutCurve = *rawParam (id[27]);
+            g.regionStart = *rpar (id[19]);  g.regionEnd    = *rpar (id[20]);
+            g.loopStart   = *rpar (id[21]);  g.loopEnd      = *rpar (id[22]);
+            g.loopMode    = (int) *rpar (id[23]);
+            g.fadeIn      = *rpar (id[24]);  g.fadeOut      = *rpar (id[25]);
+            g.fadeInCurve = *rpar (id[26]);  g.fadeOutCurve = *rpar (id[27]);
             // fb75 — RESYNTH knob mod (block-rate; struct fields are all 0..1)
             g.quality = ownM (g.quality, (int) wc::ModDest::GeoQualityA + o, 0.0f, 1.0f);
             g.formant = ownM (g.formant, (int) wc::ModDest::GeoFormantA + o, 0.0f, 1.0f);
@@ -11004,7 +11143,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             /* fb598 — the Resynth cut is the BACK ROW's Low/High now, two coexisting stages (HP by Low, LP by High) on the Cut's own
                DSP. Their MODULATED edges are already published per block as specLoEff_/specHiEff_ (mod dests 1846..1853) a few
                hundred lines above; read them here so Resynth hears the mod matrix on them exactly as the wavetable engine does. */
-            { const float eLo = specLoEff_[o].load (std::memory_order_relaxed), eHi = specHiEff_[o].load (std::memory_order_relaxed);
+            { const float eLo = specLoEff_[OB + o].load (std::memory_order_relaxed), eHi = specHiEff_[OB + o].load (std::memory_order_relaxed);
               g.lo = eLo >= 0.0f ? eLo : 0.0f;  g.hi = eHi >= 0.0f ? eHi : 1.0f; }
             g.shape   = ownM (g.shape, (int) wc::ModDest::GeoShapeA + o, 0.0f, 1.0f);
             g.stretch = ownM (g.stretch, (int) wc::ModDest::GeoStretchA + o, 0.0f, 1.0f);
@@ -11033,10 +11172,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             // it ever reads sculptMode — so only a patch with a non-Keel sculpt AND Carve up moves.
             h.mainMode   = 6;
             h.sculptMode = 0;
-            h.hue   = *rawParam (id[2]);  h.count = *rawParam (id[3]);  h.lean  = *rawParam (id[4]);
-            h.fan   = *rawParam (id[5]);  h.grit  = *rawParam (id[6]);  h.braid = *rawParam (id[7]);
-            h.carve = *rawParam (id[8]);  h.churn = *rawParam (id[9]);  h.root  = *rawParam (id[10]);
-            h.shine = *rawParam (id[11]); h.wilt  = *rawParam (id[12]); h.forge = *rawParam (id[13]);
+            h.hue   = *rpar (id[2]);  h.count = *rpar (id[3]);  h.lean  = *rpar (id[4]);
+            h.fan   = *rpar (id[5]);  h.grit  = *rpar (id[6]);  h.braid = *rpar (id[7]);
+            h.carve = *rpar (id[8]);  h.churn = *rpar (id[9]);  h.root  = *rpar (id[10]);
+            h.shine = *rpar (id[11]); h.wilt  = *rpar (id[12]); h.forge = *rpar (id[13]);
             // fb75 — HARMONIC knob mod (block-rate; all fields 0..1, knobs MORPH not switch)
             h.hue   = ownM (h.hue, (int) wc::ModDest::HarmHueA + o, 0.0f, 1.0f);
             h.count = ownM (h.count, (int) wc::ModDest::HarmCountA + o, 0.0f, 1.0f);
@@ -11057,13 +11196,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             //  modulatable. The message thread did the expensive conversion; this is a lerp.
             if (h.mainMode == 6)
             {
-                if (const tw::HarmTableSource::Grid* g = harmTable_[o].live.load (std::memory_order_acquire))
+                if (const tw::HarmTableSource::Grid* g = harmTable_[OB + o].live.load (std::memory_order_acquire))
                 {
-                    h.tableN     = tw::HarmTableSource::blend (*g, h.hue, harmAmpScratch_[o],
-                                                               harmPhaseScratch_[o],
+                    h.tableN     = tw::HarmTableSource::blend (*g, h.hue, harmAmpScratch_[OB + o],
+                                                               harmPhaseScratch_[OB + o],
                                                                tw::HarmTableSource::kMaxN);
-                    h.tableAmp   = harmAmpScratch_[o];
-                    h.tablePhase = harmPhaseScratch_[o];
+                    h.tableAmp   = harmAmpScratch_[OB + o];
+                    h.tablePhase = harmPhaseScratch_[OB + o];
                     // The rebuild gate is content-identity: the SOURCE plus where in it we are.
                     h.tableSig   = g->sig + h.hue * 1024.0f;
                     // fb599 CHURN — the whole frame stack, so a voice can scan it on its own between
@@ -11087,8 +11226,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             }
             harmP[o] = h;
         }
-        harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread
-        harmDisplayParams_[2] = harmP[2]; harmDisplayParams_[3] = harmP[3];   // display engines read these
+        harmDisplayParams_[OB + 0] = harmP[0]; harmDisplayParams_[OB + 1] = harmP[1];   // HARM-VIZ — message-thread
+        harmDisplayParams_[OB + 2] = harmP[2]; harmDisplayParams_[OB + 3] = harmP[3];   // display engines read these
         // ── MODAL engine: gather the physical-model params per OSC (MODAL-ENGINE-GATHER) ──
         static const char* const MODAL_IDS[4][13] = {
             { ParameterIDs::SYN_OSC_A_MODAL_FAMILY, ParameterIDs::SYN_OSC_A_MODAL_FORM, ParameterIDs::SYN_OSC_A_MODAL_SOURCE, ParameterIDs::SYN_OSC_A_MODAL_HARD, ParameterIDs::SYN_OSC_A_MODAL_POS, ParameterIDs::SYN_OSC_A_MODAL_DECAY, ParameterIDs::SYN_OSC_A_MODAL_MATERIAL, ParameterIDs::SYN_OSC_A_MODAL_BREATH, ParameterIDs::SYN_OSC_A_MODAL_STRETCH, ParameterIDs::SYN_OSC_A_MODAL_BLOOM, ParameterIDs::SYN_OSC_A_MODAL_HALO, ParameterIDs::SYN_OSC_A_MODAL_AGE, ParameterIDs::SYN_OSC_A_MODAL_BODY },
@@ -11111,17 +11250,17 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const char* const* id = MODAL_IDS[o];
             tw::ModalParams m;
-            m.family = (int) *rawParam (id[0]);
-            m.form   = (int) *rawParam (id[1]);
-            m.source = (int) *rawParam (id[2]);
-            m.hard     = *rawParam (id[3]);  m.pos     = *rawParam (id[4]);  m.decay   = *rawParam (id[5]);
-            m.material = *rawParam (id[6]);  m.breath  = *rawParam (id[7]);  m.stretch = *rawParam (id[8]);
-            m.bloom    = *rawParam (id[9]);  m.halo    = *rawParam (id[10]); m.age     = *rawParam (id[11]);
-            m.body     = *rawParam (id[12]);
-            const int lm = (int) *rawParam (MODAL_LOOP_IDS[o]);   // exciter loop mode (from the samp-head loop header)
+            m.family = (int) *rpar (id[0]);
+            m.form   = (int) *rpar (id[1]);
+            m.source = (int) *rpar (id[2]);
+            m.hard     = *rpar (id[3]);  m.pos     = *rpar (id[4]);  m.decay   = *rpar (id[5]);
+            m.material = *rpar (id[6]);  m.breath  = *rpar (id[7]);  m.stretch = *rpar (id[8]);
+            m.bloom    = *rpar (id[9]);  m.halo    = *rpar (id[10]); m.age     = *rpar (id[11]);
+            m.body     = *rpar (id[12]);
+            const int lm = (int) *rpar (MODAL_LOOP_IDS[o]);   // exciter loop mode (from the samp-head loop header)
             m.loopMode = (lm >= 0 && lm <= 3) ? lm : 0;           // 0..3 One-Shot/Fwd/Rev/PingPong (Tailed=4 → One-Shot)
-            m.loopStart = *rawParam (MODAL_LOOPSTART_IDS[o]);      // purple-box start → exciter loops CONFINED here
-            m.loopEnd   = *rawParam (MODAL_LOOPEND_IDS[o]);        // purple-box end
+            m.loopStart = *rpar (MODAL_LOOPSTART_IDS[o]);      // purple-box start → exciter loops CONFINED here
+            m.loopEnd   = *rpar (MODAL_LOOPEND_IDS[o]);        // purple-box end
             modalP[o] = m;
         }
         // ── BLEND MODES: gather the 4 warp slots × 4 oscs once (cross-osc FM/PD/AM/RM) ──
@@ -11137,7 +11276,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             for (int s = 0; s < 4; ++s)
             {
                 const char* const* id = WSLOT_IDS[o];
-                blendCfg[o][s] = { (int) *rawParam (id[s * 3 + 0]), (int) *rawParam (id[s * 3 + 1]), *rawParam (id[s * 3 + 2]) };
+                blendCfg[o][s] = { (int) *rpar (id[s * 3 + 0]), (int) *rpar (id[s * 3 + 1]), *rpar (id[s * 3 + 2]) };
                 blendCfg[o][s].depth = ownM (blendCfg[o][s].depth, (int) wc::ModDest::BlendDepthA1 + o * 4 + s, 0.0f, 1.0f);   // fb75 blend-slot depth mod · fb184 ownership
             }
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
@@ -11163,14 +11302,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             int na = 0;
             for (int i = 0; i < wc::NUM_LFOS; ++i)
             {
-                const int  sh = (int) *rawParam (lp[i].shape);
-                const bool sy =       *rawParam (lp[i].sync) > 0.5f;
-                const int  dv = (int) *rawParam (lp[i].div);
+                const int  sh = (int) *rpar (lp[i].shape);
+                const bool sy =       *rpar (lp[i].sync) > 0.5f;
+                const int  dv = (int) *rpar (lp[i].div);
                 synModCfg.lfos[i].shape       = (wc::LFOShape) juce::jlimit (0, (int) wc::LFOShape::NumShapes - 1, sh);
                 synModCfg.lfos[i].sync        = sy;
-                synModCfg.lfos[i].rateHz      = modP (lp[i].rate, *rawParam (lp[i].rate), (int) wc::ModDest::LfoRateBase + i);   // fb196 — env-on-RATE (Hz mode; sync stays grid-locked until the LFO arc)
+                synModCfg.lfos[i].rateHz      = modP (lp[i].rate, *rpar (lp[i].rate), (int) wc::ModDest::LfoRateBase + i);   // fb196 — env-on-RATE (Hz mode; sync stays grid-locked until the LFO arc)
                 synModCfg.lfos[i].syncIdx     = juce::jlimit (0, wc::kNumSyncDivisions - 1, dv);
-                synModCfg.lfos[i].phaseOffset = modP (lp[i].phase, *rawParam (lp[i].phase), (int) wc::ModDest::LfoPhaseBase + i);   // fb245 — env/LFO on PHASE (read-phase shift, block-rate; output slew smooths)
+                synModCfg.lfos[i].phaseOffset = modP (lp[i].phase, *rpar (lp[i].phase), (int) wc::ModDest::LfoPhaseBase + i);   // fb245 — env/LFO on PHASE (read-phase shift, block-rate; output slew smooths)
                 {   // fb228 — L5 MOTION feeds the config (the Free-forcing is DEAD; RETRIG is the default)
                     const auto& mo = lfoMotionAudio_[i];
                     synModCfg.lfos[i].trigger   = mo.mn ? wc::LFOTrigger::Free                      // MONO: a Free pool is phase-locked = one shared LFO
@@ -11196,7 +11335,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             // via LFO→LFO so you can put an LFO on an LFO's depth).
             {
                 const juce::ScopedLock sl (synModLock);
-                refreshModCurveAudio(); rebakeModCurveAudio();   // fb573 — an edit between the two lock scopes lands here, one block sooner
+                if (! isB) { refreshModCurveAudio(); rebakeModCurveAudio(); }   // fb573 — an edit between the two lock scopes lands here, one block sooner
                 for (const auto& r : synModRoutes)
                 {
                     if (na >= wc::MAX_ASSIGNMENTS) break;
@@ -11255,7 +11394,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                         ++na; continue;
                     }
                     if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
-                    const float master = *rawParam (lp[r.src].depth);
+                    const float master = *rpar (lp[r.src].depth);
                     synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + r.src);
                         synModCfg.assignments[na].curve   = r.curve;   // fb554
                     synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
@@ -11272,50 +11411,65 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             //  the wavetables is retired; the drift lanes stay published as mod-matrix sources.)
             synModCfg.numAssignments = na;
         }
+        if (isB)   // tp20 — bank 1's per-voice matrix: mirror dests rebased to the legacy ints, A–D's own dests dropped, globals kept
+        {
+            synModCfgB_ = synModCfg; int nb = 0;
+            for (int a = 0; a < synModCfg.numAssignments; ++a)
+            {
+                const int dT = wc::destForBank (1, (int) synModCfg.assignments[a].dest);
+                if (dT < 0) continue;
+                synModCfgB_.assignments[nb] = synModCfg.assignments[a];
+                synModCfgB_.assignments[nb].dest = (wc::ModDest) dT;
+                ++nb;
+            }
+            for (int a = nb; a < synModCfg.numAssignments; ++a) synModCfgB_.assignments[a] = wc::Assignment {};
+            synModCfgB_.numAssignments = nb;
+        }
+        const wc::ModConfig& cfgRef = isB ? synModCfgB_ : synModCfg;
         synModBpm = currentBPM.load();   // (declared in outer scope — hoisted for FLOW ARP)
 
         // CPU: change-gates for the HEAVY pushes below. Idle blocks (no knob/BPM movement —
         // the overwhelming majority) skip the ModConfig copy + 10 LFO reconfigs and the 8
         // engine-param struct copies on all 96 voices. Any change re-broadcasts to the FULL
         // pool, so a voice can never render with stale config.
-        const bool synCfgChanged = ! synCfgPushed_
-                                   || synModBpm != lastSynModBpm_
-                                   || ! modCfgEq (synModCfg, lastSynModCfg_);
-        if (synCfgChanged) { lastSynModCfg_ = synModCfg; lastSynModBpm_ = synModBpm; synCfgPushed_ = true; }
-        const bool engChanged = ! engParamsPushed_
-                                || ! (spA == lastSpA_) || ! (spB == lastSpB_) || ! (spC == lastSpC_) || ! (spD == lastSpD_)
-                                || ! (gpA == lastGpA_) || ! (gpB == lastGpB_) || ! (gpC == lastGpC_) || ! (gpD == lastGpD_);
+        const bool synCfgChanged = ! BG.synCfgPushed
+                                   || synModBpm != BG.lastSynModBpm
+                                   || ! modCfgEq (cfgRef, BG.lastSynModCfg);
+        if (synCfgChanged) { BG.lastSynModCfg = cfgRef; BG.lastSynModBpm = synModBpm; BG.synCfgPushed = true; }
+        const bool engChanged = ! BG.engParamsPushed
+                                || ! (spA == BG.spA) || ! (spB == BG.spB) || ! (spC == BG.spC) || ! (spD == BG.spD)
+                                || ! (gpA == BG.gpA) || ! (gpB == BG.gpB) || ! (gpC == BG.gpC) || ! (gpD == BG.gpD);
         if (engChanged)
         {
-            lastSpA_ = spA; lastSpB_ = spB; lastSpC_ = spC; lastSpD_ = spD;
-            lastGpA_ = gpA; lastGpB_ = gpB; lastGpC_ = gpC; lastGpD_ = gpD;
-            engParamsPushed_ = true;
+            BG.spA = spA; BG.spB = spB; BG.spC = spC; BG.spD = spD;
+            BG.gpA = gpA; BG.gpB = gpB; BG.gpC = gpC; BG.gpD = gpD;
+            BG.engParamsPushed = true;
         }
         // ── UNIVERSAL OSC BOXES — COARSE folds into the cents lane (±6400 c: one term,
         //    every engine); SUB params push straight to the voice lanes. Read once per block.
-        const float coarseA = *rawParam (ParameterIDs::SYN_OSC_A_COARSE);
-        const float coarseB = *rawParam (ParameterIDs::SYN_OSC_B_COARSE);
-        const float coarseC = *rawParam (ParameterIDs::SYN_OSC_C_COARSE);
-        const float coarseD = *rawParam (ParameterIDs::SYN_OSC_D_COARSE);
-        const int   subRngA = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_A_SUB_RANGE), (int) wc::ModDest::SubRangeA + 0, 0.0f, 8.0f))), subFrmA = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_A_SUB_FORM), (int) wc::ModDest::SubFormA + 0, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
-        const int   subRngB = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_B_SUB_RANGE), (int) wc::ModDest::SubRangeA + 1, 0.0f, 8.0f))), subFrmB = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_B_SUB_FORM), (int) wc::ModDest::SubFormA + 1, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
-        const int   subRngC = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_SUB_RANGE), (int) wc::ModDest::SubRangeA + 2, 0.0f, 8.0f))), subFrmC = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_SUB_FORM), (int) wc::ModDest::SubFormA + 2, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
-        const int   subRngD = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_SUB_RANGE), (int) wc::ModDest::SubRangeA + 3, 0.0f, 8.0f))), subFrmD = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_SUB_FORM), (int) wc::ModDest::SubFormA + 3, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
-        const float subWgtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_WEIGHT), subHtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_HEAT);
-        const float subWgtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_HEAT);
-        const float subWgtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_HEAT);
-        const float subWgtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_WEIGHT), subHtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_HEAT);
+        const float coarseA = *rpar (ParameterIDs::SYN_OSC_A_COARSE);
+        const float coarseB = *rpar (ParameterIDs::SYN_OSC_B_COARSE);
+        const float coarseC = *rpar (ParameterIDs::SYN_OSC_C_COARSE);
+        const float coarseD = *rpar (ParameterIDs::SYN_OSC_D_COARSE);
+        const int   subRngA = juce::jlimit (0, 8, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_A_SUB_RANGE), (int) wc::ModDest::SubRangeA + 0, 0.0f, 8.0f))), subFrmA = juce::jlimit (0, 3, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_A_SUB_FORM), (int) wc::ModDest::SubFormA + 0, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
+        const int   subRngB = juce::jlimit (0, 8, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_B_SUB_RANGE), (int) wc::ModDest::SubRangeA + 1, 0.0f, 8.0f))), subFrmB = juce::jlimit (0, 3, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_B_SUB_FORM), (int) wc::ModDest::SubFormA + 1, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
+        const int   subRngC = juce::jlimit (0, 8, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_C_SUB_RANGE), (int) wc::ModDest::SubRangeA + 2, 0.0f, 8.0f))), subFrmC = juce::jlimit (0, 3, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_C_SUB_FORM), (int) wc::ModDest::SubFormA + 2, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
+        const int   subRngD = juce::jlimit (0, 8, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_D_SUB_RANGE), (int) wc::ModDest::SubRangeA + 3, 0.0f, 8.0f))), subFrmD = juce::jlimit (0, 3, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_D_SUB_FORM), (int) wc::ModDest::SubFormA + 3, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
+        const float subWgtA = *rpar (ParameterIDs::SYN_OSC_A_SUB_WEIGHT), subHtA = *rpar (ParameterIDs::SYN_OSC_A_SUB_HEAT);
+        const float subWgtB = *rpar (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rpar (ParameterIDs::SYN_OSC_B_SUB_HEAT);
+        const float subWgtC = *rpar (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rpar (ParameterIDs::SYN_OSC_C_SUB_HEAT);
+        const float subWgtD = *rpar (ParameterIDs::SYN_OSC_D_SUB_WEIGHT), subHtD = *rpar (ParameterIDs::SYN_OSC_D_SUB_HEAT);
         // ── NOISE ENGINE reads ──
         // getRawParameterValue() for an AudioParameterChoice returns the INDEX (0..N-1) directly —
         // exactly like SYN_FILTER*_DRIVETYPE / _POLES / SYN_OSC_*_ENGINE are read below. The old
         // `lround(raw * 12)` (from a wrong CLAUDE.md note claiming raw is normalised) pushed indices
         // 2..12 to 24..144 → every type but White(0)/Pink(→12=SpaceWind) collapsed to the switch default (White).
-        const bool  noiseOn    = *rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f;
-        const int   noiseType  = (int) *rawParam (ParameterIDs::SYN_NOISE_TYPE);   // choice index 0..12
+        const bool  noiseOn    = *rpar (ParameterIDs::SYN_NOISE_ON) > 0.5f;
+        const int   noiseType  = (int) *rpar (ParameterIDs::SYN_NOISE_TYPE);   // choice index 0..12
         const float noiseLevel = mdP (ParameterIDs::SYN_NOISE_LEVEL, wc::ModDest::NoiseLevel, 0.0f, 1.0f);
         const float noisePitch = mdP (ParameterIDs::SYN_NOISE_PITCH, wc::ModDest::NoiseScan, 0.0f, 1.0f);
         const float noisePan   = mdP (ParameterIDs::SYN_NOISE_PAN, wc::ModDest::NoisePan, 0.0f, 1.0f);
-        const int   noisePlayMode = (int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE);   // fb66 — 0 Random · 1 Envelope · 2 Free
+        const int   noisePlayMode = (int) *rpar (ParameterIDs::SYN_NOISE_PLAYMODE);   // fb66 — 0 Random · 1 Envelope · 2 Free
         const float noiseWidth    = mdP (ParameterIDs::SYN_NOISE_WIDTH, wc::ModDest::NoiseWidth, 0.0f, 2.0f);   // fb69 — stereo width 0..2 (M/S)
         // fb66 — FREE play mode: a GLOBAL always-running tape playhead. Advanced once per block (even with
         // no notes) at the rate the voices read the loop, wrapped to length. Voices in Free mode resync to
@@ -11333,7 +11487,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 const double nativeOverOut = (nnr > 0.0 && sr > 0.0) ? (nnr / sr) : 1.0;
                 const float  sc   = juce::jlimit (0.0f, 1.0f, noisePitch);
                 const double rate = (sc < 0.5f) ? (0.1 + 1.8 * (double) sc) : (1.0 + 2.0 * ((double) sc - 0.5));
-                noiseFreePos_ += (double) gatherSpanSamples * rate * nativeOverOut;   // fb492 — the span, not this block
+                if (! isB) noiseFreePos_ += (double) gatherSpanSamples * rate * nativeOverOut;   // fb492 — the span, not this block
                 while (noiseFreePos_ >= (double) nlen) noiseFreePos_ -= (double) nlen;
                 if (noiseFreePos_ < 0.0) noiseFreePos_ = 0.0;
                 noiseFreeNorm_.store ((float) (noiseFreePos_ / (double) nlen), std::memory_order_relaxed);
@@ -11350,8 +11504,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             juce::uint32 bestHeld = 0, bestAny = 0;
             tw::SynthVoice* held = nullptr; tw::SynthVoice* anyv = nullptr;
-            for (int i = 0; i < synthEngine.getNumVoices(); ++i)
-                if (auto* sv = synthVoices_[(size_t) i])
+            for (int i = 0; i < eng.getNumVoices(); ++i)
+                if (auto* sv = vs[(size_t) i])
                     if (sv->isAmpEnvActive())
                     {
                         const juce::uint32 st = sv->getNoteStartStamp();
@@ -11373,20 +11527,20 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         for (int o = 0; o < 4; ++o)
         {
             const float octSt = 12.0f * std::round (juce::jlimit (-48.0f, 48.0f,
-                                    modSums[(int) wc::ModDest::OctA + o]) * (1.0f / 12.0f));   // fb233 — snap to whole octaves, rail ±4
+                                    mSum[(int) wc::ModDest::OctA + o]) * (1.0f / 12.0f));   // fb233 — snap to whole octaves, rail ±4
             tuneModCents[o] = (octSt
-                             + modSums[(int) wc::ModDest::SemiA + o]
-                             + modSums[(int) wc::ModDest::CentA + o]) * 100.0f;
+                             + mSum[(int) wc::ModDest::SemiA + o]
+                             + mSum[(int) wc::ModDest::CentA + o]) * 100.0f;
         }
-        if (flowChain.robin)                                                // fb122 ROBIN (fb131: chain-aware)
+        if (flowChain.robin && ! isB)                                                // fb122 ROBIN (fb131: chain-aware)
             for (int o = 0; o < 4; ++o) tuneModCents[o] += robinDriftCents_[o];   // per-station wander
-        for (int i = 0; i < synthEngine.getNumVoices(); ++i)
+        for (int i = 0; i < eng.getNumVoices(); ++i)
         {
-            if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
+            if (auto* sv = vs[(size_t) i])   // typed array — no per-voice RTTI
             {
                 tiProf_.accStart();
                 if (synCfgChanged)
-                    sv->setModConfig          (synModCfg, synModBpm);
+                    sv->setModConfig          (cfgRef, synModBpm);
                 tiProf_.acc (0, "modcfg");
                 tiProf_.acc (8, "dyn");
                 sv->setTuning                 (oct, semi, cent + coarseA * 100.0f + tuneModCents[0]);   // + COARSE + Oct/Semi/Cent mod (cents lane)
@@ -11465,16 +11619,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setSub (1, subRngB, subFrmB, subWgtB, subHtB);
                 sv->setSub (2, subRngC, subFrmC, subWgtC, subHtC);
                 sv->setSub (3, subRngD, subFrmD, subWgtD, subHtD);
-                sv->setNoise (noiseOn, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
+                sv->setNoise (noiseOn && ! isB, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
                 sv->setNoiseSampleSource (&noiseSampleBuffer_);   // NOISE IMPORT (P5) — looping-sample override (empty buffer = algorithmic type)
                 tiProf_.acc (3, "cd+sub+noise");
                 sv->setNoisePlayMode      (noisePlayMode);        // fb66 — Random / Envelope / Free (sample playback)
                 sv->setNoiseFreePos       (noiseFreePos_);        // fb66/fb67 — latest global tape position (a Free note reads it once at note-on; no per-block resync)
                 sv->setNoiseCarrier       (! monoNoise || (sv == noiseCarrierVoice));   // fb68 — Free = only the newest voice sounds the noise (mono); poly modes = all carry
                 sv->setNoiseWidth         (noiseWidth);            // fb69 — noise stereo width (M/S)
-                sv->setRobin (flowChain.robin, &flowRobin_,     // fb122: the Wheel brain (fb131: chain-aware)
+                sv->setRobin (flowChain.robin && ! isB, &flowRobin_,     // fb122: the Wheel brain (fb131: chain-aware)
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
-                flowRobin_.setAudible (gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
+                if (! isB) flowRobin_.setAudible (gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setFlowWave (arpWaveMod_);        // FLOW · ARP WAVE lane → wavetable frame offset (last block's value)
                 sv->setPanC (panC);                   sv->setPanD (panD);
                 sv->setWavetableC (wtC);              sv->setWavetableD (wtD);
@@ -11513,29 +11667,29 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     sv->setFMOsc2 (o, fmVals[o][6], fmVals[o][7], fmVals[o][8],   // WEATHERING page
                                    fmVals[o][9], fmVals[o][10], fmVals[o][11]);
                 }
-                sv->setSampleSources (&getOscSampleBuffer (0), &getOscSampleBuffer (1),
-                                      &getOscSampleBuffer (2), &getOscSampleBuffer (3));
+                sv->setSampleSources (&getOscSampleBuffer (OB + 0), &getOscSampleBuffer (OB + 1),
+                                      &getOscSampleBuffer (OB + 2), &getOscSampleBuffer (OB + 3));
                 tiProf_.acc (7, "smp/gran/fm/src");   // PEROSC-PUSH
             }
         }
         // Phase 8b — Voice settings: UNISON+SPREAD pushed per-voice (in-voice unison).
         // The voice computes per-sine detune+pan internally and renders all sines as one note.
-        const int   unisonCount = (int) *rawParam (ParameterIDs::SYN_UNISON);
-        const float spreadPct   =       *rawParam (ParameterIDs::SYN_SPREAD);
-        const float erosionPct  =       *rawParam (ParameterIDs::SYN_EROSION);
-        const float horizonPct  =       *rawParam (ParameterIDs::SYN_HORIZON);
+        const int   unisonCount = (int) *rpar (ParameterIDs::SYN_UNISON);
+        const float spreadPct   =       *rpar (ParameterIDs::SYN_SPREAD);
+        const float erosionPct  =       *rpar (ParameterIDs::SYN_EROSION);
+        const float horizonPct  =       *rpar (ParameterIDs::SYN_HORIZON);
         const float unisonSpread01 = spreadPct / 100.0f;
         juce::ignoreUnused (unisonCount, unisonSpread01);   // global UNISON/SPREAD retired → per-OSC below
 
         // Per-OSC UNISON (replaces global). Voices 1..16 + Detune/Blend/Width (0..100 %→0..1).
-        const int   uniCountA = juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_A_UNISON), (int) wc::ModDest::UniVoicesA + 0, 1.0f, 16.0f)));   // fb78 — stepped voices mod
-        const float uniDetA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetA, 0.0f, 1.0f);     // fb77 — unison pill mod
-        const float uniBlnA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendA, 0.0f, 1.0f);
-        const float uniWidA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthA, -1.0f, 1.0f);   // fb522 — UWIDTH is bipolar now; the clamp floor moved with the range. Default +50 still reads exactly 0.5, so nothing sounds different until the knob goes negative.
-        const int   uniCountB = juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_B_UNISON), (int) wc::ModDest::UniVoicesA + 1, 1.0f, 16.0f)));   // fb78 — stepped voices mod
-        const float uniDetB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetB, 0.0f, 1.0f);
-        const float uniBlnB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendB, 0.0f, 1.0f);
-        const float uniWidB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthB, -1.0f, 1.0f);   // fb522 — bipolar
+        const int   uniCountA = juce::jlimit (1, 16, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_A_UNISON), (int) wc::ModDest::UniVoicesA + 0, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetA   =       ownM (*rpar (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetA, 0.0f, 1.0f);     // fb77 — unison pill mod
+        const float uniBlnA   =       ownM (*rpar (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendA, 0.0f, 1.0f);
+        const float uniWidA   =       ownM (*rpar (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthA, -1.0f, 1.0f);   // fb522 — UWIDTH is bipolar now; the clamp floor moved with the range. Default +50 still reads exactly 0.5, so nothing sounds different until the knob goes negative.
+        const int   uniCountB = juce::jlimit (1, 16, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_B_UNISON), (int) wc::ModDest::UniVoicesA + 1, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetB   =       ownM (*rpar (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetB, 0.0f, 1.0f);
+        const float uniBlnB   =       ownM (*rpar (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendB, 0.0f, 1.0f);
+        const float uniWidB   =       ownM (*rpar (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthB, -1.0f, 1.0f);   // fb522 — bipolar
         // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
         // have no audio-thread effect yet — render path will start reading them
@@ -11544,31 +11698,31 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float blurB = mdP (ParameterIDs::SYN_OSC_B_FRAME_SPREAD, wc::ModDest::BlurB, 0.0f, 1.0f);
 
         // Phase 11d — FOLD per OSC.
-        const int   foldShapeA  = (int) *rawParam (ParameterIDs::SYN_OSC_A_FOLD_SHAPE);
-        const float foldAmtA    =       *rawParam (ParameterIDs::SYN_OSC_A_FOLD_AMT);
-        const int   foldShapeB  = (int) *rawParam (ParameterIDs::SYN_OSC_B_FOLD_SHAPE);
-        const float foldAmtB    =       *rawParam (ParameterIDs::SYN_OSC_B_FOLD_AMT);
+        const int   foldShapeA  = (int) *rpar (ParameterIDs::SYN_OSC_A_FOLD_SHAPE);
+        const float foldAmtA    =       *rpar (ParameterIDs::SYN_OSC_A_FOLD_AMT);
+        const int   foldShapeB  = (int) *rpar (ParameterIDs::SYN_OSC_B_FOLD_SHAPE);
+        const float foldAmtB    =       *rpar (ParameterIDs::SYN_OSC_B_FOLD_AMT);
 
         // Phase 11c — SPECTRAL MORPH per OSC is now applied to the wavetable spectrum
         // off the audio thread (see timerCallback / resolveMorphTable). The TYPE/AMT
         // params are read on the message thread; nothing to push per-voice here.
 
         // Phase 11g — INTERP per OSC.
-        const int interpModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_INTERP_MODE);
-        const int interpModeB = (int) *rawParam (ParameterIDs::SYN_OSC_B_INTERP_MODE);
+        const int interpModeA = (int) *rpar (ParameterIDs::SYN_OSC_A_INTERP_MODE);
+        const int interpModeB = (int) *rpar (ParameterIDs::SYN_OSC_B_INTERP_MODE);
         // OSC C / D — unison / blur / fold / interp (4-osc)
-        const int   uniCountC=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_UNISON), (int) wc::ModDest::UniVoicesA + 2, 1.0f, 16.0f)));   // fb78 — stepped voices mod
-        const float uniDetC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, (int) wc::ModDest::UniDetC, 0.0f, 1.0f), uniBlnC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, (int) wc::ModDest::UniBlendC, 0.0f, 1.0f), uniWidC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthC, -1.0f, 1.0f);   // fb522 — bipolar
+        const int   uniCountC=juce::jlimit (1, 16, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_C_UNISON), (int) wc::ModDest::UniVoicesA + 2, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetC=ownM (*rpar (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, (int) wc::ModDest::UniDetC, 0.0f, 1.0f), uniBlnC=ownM (*rpar (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, (int) wc::ModDest::UniBlendC, 0.0f, 1.0f), uniWidC=ownM (*rpar (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthC, -1.0f, 1.0f);   // fb522 — bipolar
         const float blurC=mdP (ParameterIDs::SYN_OSC_C_FRAME_SPREAD, wc::ModDest::BlurC, 0.0f, 1.0f);
-        const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
-        const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
-        const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
-        const int   uniCountD=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_UNISON), (int) wc::ModDest::UniVoicesA + 3, 1.0f, 16.0f)));   // fb78 — stepped voices mod
-        const float uniDetD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, (int) wc::ModDest::UniDetD, 0.0f, 1.0f), uniBlnD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, (int) wc::ModDest::UniBlendD, 0.0f, 1.0f), uniWidD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthD, -1.0f, 1.0f);   // fb522 — bipolar
+        const int   foldShapeC=(int)*rpar (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
+        const float foldAmtC=*rpar (ParameterIDs::SYN_OSC_C_FOLD_AMT);
+        const int   interpModeC=(int)*rpar (ParameterIDs::SYN_OSC_C_INTERP_MODE);
+        const int   uniCountD=juce::jlimit (1, 16, (int) std::lround (ownM (*rpar (ParameterIDs::SYN_OSC_D_UNISON), (int) wc::ModDest::UniVoicesA + 3, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetD=ownM (*rpar (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, (int) wc::ModDest::UniDetD, 0.0f, 1.0f), uniBlnD=ownM (*rpar (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, (int) wc::ModDest::UniBlendD, 0.0f, 1.0f), uniWidD=ownM (*rpar (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthD, -1.0f, 1.0f);   // fb522 — bipolar
         const float blurD=mdP (ParameterIDs::SYN_OSC_D_FRAME_SPREAD, wc::ModDest::BlurD, 0.0f, 1.0f);
-        const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
-        const float foldAmtD=*rawParam (ParameterIDs::SYN_OSC_D_FOLD_AMT);
-        const int   interpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_INTERP_MODE);
+        const int   foldShapeD=(int)*rpar (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
+        const float foldAmtD=*rpar (ParameterIDs::SYN_OSC_D_FOLD_AMT);
+        const int   interpModeD=(int)*rpar (ParameterIDs::SYN_OSC_D_INTERP_MODE);
 
         // ── fb522 · LANE P — THE OVERPASS READS. All block-rate, all defaulted to today's
         //    behaviour, all staged into overpassOsc_[] for the voice push.
@@ -11585,11 +11739,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             // Unrouted returns the raw value EXACTLY, so an unmodulated knob cannot drift.
             auto modWinP = [&] (juce::RangedAudioParameter* prm, float raw, int d) -> float
             {
-                const float w0 = envOwnW[d];
-                if ((w0 <= 0.0f && modSums[d] == 0.0f) || prm == nullptr) return raw;
+                const float w0 = mOwnW[d];
+                if ((w0 <= 0.0f && mSum[d] == 0.0f) || prm == nullptr) return raw;
                 const float w = w0 > 1.0f ? 1.0f : w0;
                 const float nrm = prm->convertTo0to1 (raw);
-                return prm->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (nrm + modSums[d]) * (1.0f - w) + envOwnV[d]));
+                return prm->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (nrm + mSum[d]) * (1.0f - w) + mOwnV[d]));
             };
             struct OverpassIds { const char* urange; const char* uwarp; const char* ustack;
                                  const char* wvar;   const char* w2var; const char* phase; const char* phaseAmt; };
@@ -11608,47 +11762,47 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                   ParameterIDs::SYN_OSC_D_PHASE_AMT } };
             for (int o = 0; o < 4; ++o)
             {
-                auto& opStage = overpassOsc_[o];
+                auto& opStage = overpassOsc_[OB + o];
                 opStage.uniRangeCents = juce::jlimit (5.0f, 4800.0f,
-                    modWinP (uniRangeParam_[o], *rawParam (kOP[o].urange), (int) wc::ModDest::UniRangeA + o));
-                opStage.uniWarp   = ownM (*rawParam (kOP[o].uwarp)    / 100.0f, (int) wc::ModDest::UniWarpA  + o, -1.0f, 1.0f);
-                opStage.warpVar   = ownM (*rawParam (kOP[o].wvar)     / 100.0f, (int) wc::ModDest::WarpVarA  + o,  0.0f, 1.0f);
-                opStage.warp2Var  = ownM (*rawParam (kOP[o].w2var)    / 100.0f, (int) wc::ModDest::Warp2VarA + o,  0.0f, 1.0f);
+                    modWinP (uniRangeParam_[OB + o], *rpar (kOP[o].urange), (int) wc::ModDest::UniRangeA + o));
+                opStage.uniWarp   = ownM (*rpar (kOP[o].uwarp)    / 100.0f, (int) wc::ModDest::UniWarpA  + o, -1.0f, 1.0f);
+                opStage.warpVar   = ownM (*rpar (kOP[o].wvar)     / 100.0f, (int) wc::ModDest::WarpVarA  + o,  0.0f, 1.0f);
+                opStage.warp2Var  = ownM (*rpar (kOP[o].w2var)    / 100.0f, (int) wc::ModDest::Warp2VarA + o,  0.0f, 1.0f);
                 // fb538 — the /100 is gone: the parameter is 0..1 now, like Serum's.
-                opStage.phaseAmt  = ownM (*rawParam (kOP[o].phaseAmt), (int) wc::ModDest::PhaseAmtA + o,  0.0f, 1.0f);
+                opStage.phaseAmt  = ownM (*rpar (kOP[o].phaseAmt), (int) wc::ModDest::PhaseAmtA + o,  0.0f, 1.0f);
                 // fb538 — the parameter is CYCLES (0..1) now; SynthVoice still speaks degrees,
                 // so the x360 lives here at the seam and the DSP is untouched.
                 opStage.phaseOffDeg = juce::jlimit (0.0f, 360.0f, 360.0f *
-                    modWinP (phaseOffParam_[o], *rawParam (kOP[o].phase), (int) wc::ModDest::PhaseOffA + o));
+                    modWinP (phaseOffParam_[OB + o], *rpar (kOP[o].phase), (int) wc::ModDest::PhaseOffA + o));
                 // STACK is a switch, not a knob: no mod destination, and the clamp is the parameter's
                 // own cardinality so a stale JS option list can never index past the table (fb373).
-                opStage.uniStack  = juce::jlimit (0, 8, (int) *rawParam (kOP[o].ustack));
+                opStage.uniStack  = juce::jlimit (0, 8, (int) *rpar (kOP[o].ustack));
             }
         }
 
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
-        const int voiceCap = (int) *rawParam (ParameterIDs::SYN_VOICES);
-        synthEngine.setVoiceCap (voiceCap);
+        const int voiceCap = (int) *rpar (ParameterIDs::SYN_VOICES);
+        eng.setVoiceCap (voiceCap);
 
         // VOICING — MONO/LEGATO voice modes (last-note priority + legato retarget).
-        const bool synMono   = (*rawParam (ParameterIDs::SYN_MONO))   > 0.5f;
-        const bool synLegato = (*rawParam (ParameterIDs::SYN_LEGATO)) > 0.5f;
-        synthEngine.setVoiceModes (synMono, synLegato);
+        const bool synMono   = (*rpar (ParameterIDs::SYN_MONO))   > 0.5f;
+        const bool synLegato = (*rpar (ParameterIDs::SYN_LEGATO)) > 0.5f;
+        eng.setVoiceModes (synMono, synLegato);
 
         // VOICING / PORTAMENTO — glide context broadcast to every voice this block.
-        const float portaPct  =       *rawParam (ParameterIDs::SYN_PORTA);
-        const float glCurvePct =      *rawParam (ParameterIDs::SYN_GLIDE_CURVE);
-        const bool  glAlways  = (*rawParam (ParameterIDs::SYN_GLIDE_ALWAYS)) > 0.5f;
-        const bool  glScaled  = (*rawParam (ParameterIDs::SYN_GLIDE_SCALED)) > 0.5f;
+        const float portaPct  =       *rpar (ParameterIDs::SYN_PORTA);
+        const float glCurvePct =      *rpar (ParameterIDs::SYN_GLIDE_CURVE);
+        const bool  glAlways  = (*rpar (ParameterIDs::SYN_GLIDE_ALWAYS)) > 0.5f;
+        const bool  glScaled  = (*rpar (ParameterIDs::SYN_GLIDE_SCALED)) > 0.5f;
         const float portaSec  = std::pow (portaPct * 0.01f, 2.0f) * 2.0f;   // squared → fine low end, ~2 s max
         const float glCurve01 = glCurvePct / 100.0f;
-        const float velDepth01 = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb260 — vel→amp depth 0..1
+        const float velDepth01 = *rpar (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb260 — vel→amp depth 0..1
         const bool  glAnyHeld = synthNotesHeld_ > 0;
         TI_PROF ("synth:pull");
-        for (int v = 0; v < synthEngine.getNumVoices(); ++v)
+        for (int v = 0; v < eng.getNumVoices(); ++v)
         {
-            if (auto* tv = synthVoices_[(size_t) v])   // typed array — no per-voice RTTI
+            if (auto* tv = vs[(size_t) v])   // typed array — no per-voice RTTI
             {
                 tv->setUnisonA (uniCountA, uniDetA, uniBlnA, uniWidA);   // per-OSC UNISON
                 tv->setUnisonB (uniCountB, uniDetB, uniBlnB, uniWidB);
@@ -11695,12 +11849,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
         // Track the last synth note + held count for glide. Updated AFTER the broadcast so
         // this block's note-ons glide from the PREVIOUS note (the origin), not themselves.
+        if (bank == nBanks - 1)   // tp20 — once per block, after every bank read it
         for (const auto meta : midiMessages)
         {
             const auto m = meta.getMessage();
             if (m.isNoteOn())       { synthGlideFrom_ = (float) m.getNoteNumber(); ++synthNotesHeld_; }
             else if (m.isNoteOff()) { synthNotesHeld_ = juce::jmax (0, synthNotesHeld_ - 1); }
         }
+    }   // tp20 — end of the per-bank gather
         }   // ══ fb492 — CONTROL-RATE GATHER GUARD CLOSES ═══════════════════════════════════
     }
 
@@ -11994,13 +12150,19 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     hallRvbG_[3] = rawParam (ParameterIDs::SYN_RVB_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
     hallRvbG_[4] = rawParam (ParameterIDs::SYN_RVB_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
     hallRvbG_[5] = rawParam (ParameterIDs::SYN_RVB_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
+    hallRvbGB_[0] = rawParam (ParameterIDs::SYN_RVB_SRC_E)->load() > 0.5f ? 1.0f : 0.0f;   // tp20 — bank 1's pills
+    hallRvbGB_[1] = rawParam (ParameterIDs::SYN_RVB_SRC_F)->load() > 0.5f ? 1.0f : 0.0f;
+    hallRvbGB_[2] = rawParam (ParameterIDs::SYN_RVB_SRC_G)->load() > 0.5f ? 1.0f : 0.0f;
+    hallRvbGB_[3] = rawParam (ParameterIDs::SYN_RVB_SRC_H)->load() > 0.5f ? 1.0f : 0.0f;
     // fb287 — POWER GATES EVERYTHING (Max): the device power pill OFF fully bypasses the reverb AND
     // disables its per-osc routing — zero the send gains so nothing passes regardless of the A/B/C/D/S/N
     // pills (the routing OBEYS the power button; you never turn it off by clearing already-grayed routes).
     hallPower_ = rawParam (ParameterIDs::SYN_RVB_POWER)->load() > 0.5f;
     if (! hallPower_)
-        for (int k = 0; k < 6; ++k) hallRvbG_[k] = 0.0f;
-    hallRouteActive_ = (hallRvbG_[0] + hallRvbG_[1] + hallRvbG_[2] + hallRvbG_[3] + hallRvbG_[4] + hallRvbG_[5]) > 0.0f;
+    {   for (int k = 0; k < 6; ++k) hallRvbG_[k] = 0.0f;
+        for (int k = 0; k < 4; ++k) hallRvbGB_[k] = 0.0f; }
+    hallRouteActive_ = (hallRvbG_[0] + hallRvbG_[1] + hallRvbG_[2] + hallRvbG_[3] + hallRvbG_[4] + hallRvbG_[5]
+                      + hallRvbGB_[0] + hallRvbGB_[1] + hallRvbGB_[2] + hallRvbGB_[3]) > 0.0f;
     // fb351 — MAIN SEND is retired: since fb348 an unrouted device is SILENT, so this branch
     // could never be taken, and the serial behaviour it used to give one device is now what the
     // chain does for ALL of them. The flag is gone so nobody wires a new device to it.
@@ -12014,10 +12176,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     dlyG_[3] = rawParam (ParameterIDs::SYN_DLY_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
     dlyG_[4] = rawParam (ParameterIDs::SYN_DLY_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
     dlyG_[5] = rawParam (ParameterIDs::SYN_DLY_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
+    dlyGB_[0] = rawParam (ParameterIDs::SYN_DLY_SRC_E)->load() > 0.5f ? 1.0f : 0.0f;   // tp20 — bank 1's pills
+    dlyGB_[1] = rawParam (ParameterIDs::SYN_DLY_SRC_F)->load() > 0.5f ? 1.0f : 0.0f;
+    dlyGB_[2] = rawParam (ParameterIDs::SYN_DLY_SRC_G)->load() > 0.5f ? 1.0f : 0.0f;
+    dlyGB_[3] = rawParam (ParameterIDs::SYN_DLY_SRC_H)->load() > 0.5f ? 1.0f : 0.0f;
     dlyPower_ = rawParam (ParameterIDs::SYN_DLY_POWER)->load() > 0.5f;
     if (! dlyPower_)          // power gates routing (same law as reverb)
-        for (int k = 0; k < 6; ++k) dlyG_[k] = 0.0f;
-    dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
+    {   for (int k = 0; k < 6; ++k) dlyG_[k] = 0.0f;
+        for (int k = 0; k < 4; ++k) dlyGB_[k] = 0.0f; }
+    dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]
+                     + dlyGB_[0] + dlyGB_[1] + dlyGB_[2] + dlyGB_[3]) > 0.0f;
     fxPerm_ = juce::jlimit (0, 5, (int) rawParam (ParameterIDs::SYN_FX_ORDER)->load());   // fb341 — choice INDEX (the AudioParameterChoice law: raw = index)
     rebuildChainOrder();   // fb346 — once per block: sort the ACTIVE devices by float _RANK. Audio-thread
                            // safe (cached pointers, fixed array, no alloc). The UI only writes params;
@@ -12034,9 +12202,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     dstG_[3] = rawParam (ParameterIDs::SYN_DST_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
     dstG_[4] = rawParam (ParameterIDs::SYN_DST_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
     dstG_[5] = rawParam (ParameterIDs::SYN_DST_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
+    dstGB_[0] = rawParam (ParameterIDs::SYN_DST_SRC_E)->load() > 0.5f ? 1.0f : 0.0f;   // tp20 — bank 1's pills
+    dstGB_[1] = rawParam (ParameterIDs::SYN_DST_SRC_F)->load() > 0.5f ? 1.0f : 0.0f;
+    dstGB_[2] = rawParam (ParameterIDs::SYN_DST_SRC_G)->load() > 0.5f ? 1.0f : 0.0f;
+    dstGB_[3] = rawParam (ParameterIDs::SYN_DST_SRC_H)->load() > 0.5f ? 1.0f : 0.0f;
     if (! dstPower_)          // power gates routing (same law as reverb/delay)
-        for (int k = 0; k < 6; ++k) dstG_[k] = 0.0f;
-    dstRouteActive_ = (dstG_[0] + dstG_[1] + dstG_[2] + dstG_[3] + dstG_[4] + dstG_[5]) > 0.0f;
+    {   for (int k = 0; k < 6; ++k) dstG_[k] = 0.0f;
+        for (int k = 0; k < 4; ++k) dstGB_[k] = 0.0f; }
+    dstRouteActive_ = (dstG_[0] + dstG_[1] + dstG_[2] + dstG_[3] + dstG_[4] + dstG_[5]
+                     + dstGB_[0] + dstGB_[1] + dstGB_[2] + dstGB_[3]) > 0.0f;
 
     TI_PROF ("rackmod");
     // ════════ fb347 — THE UNION MASK for the shared routed-dry exclusion bus ════════
@@ -12061,6 +12235,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             poolRouteG_[(size_t) ((kFxExtra + e) * 6 + k)]     = tg; ts += tg;
             poolRouteG_[(size_t) ((2 * kFxExtra + e) * 6 + k)] = vg; vs += vg;
         }
+        for (int k = 0; k < 4; ++k)   // tp20 — bank 1's pills (E–H); the ANY flag is the union of both banks
+        {
+            const float dg = (dR.srcB[k] != nullptr && dR.srcB[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            const float tg = (tR.srcB[k] != nullptr && tR.srcB[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            const float vg = (vR.srcB[k] != nullptr && vR.srcB[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteGB_[(size_t) (e * 4 + k)]                  = dg; ds += dg;
+            poolRouteGB_[(size_t) ((kFxExtra + e) * 4 + k)]     = tg; ts += tg;
+            poolRouteGB_[(size_t) ((2 * kFxExtra + e) * 4 + k)] = vg; vs += vg;
+        }
         poolRouteAny_[(size_t) e]                  = ds > 0.0f;
         poolRouteAny_[(size_t) (kFxExtra + e)]     = ts > 0.0f;
         poolRouteAny_[(size_t) (2 * kFxExtra + e)] = vs > 0.0f;
@@ -12075,6 +12258,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const float gg = (gR.src[k] != nullptr && gR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
             poolRouteG_[(size_t) (q * 6 + k)] = gg; gs += gg;
+        }
+        for (int k = 0; k < 4; ++k)   // tp20 — bank 1
+        {
+            const float gg = (gR.srcB[k] != nullptr && gR.srcB[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteGB_[(size_t) (q * 4 + k)] = gg; gs += gg;
         }
         poolRouteAny_[(size_t) q] = gs > 0.0f;
     }
@@ -12091,6 +12279,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const float pg = (tpR.src[k] != nullptr && tpR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
             poolRouteG_[(size_t) (q2 * 6 + k)] = pg; ps += pg;
+        }
+        for (int k = 0; k < 4; ++k)   // tp20 — bank 1
+        {
+            const float pg = (tpR.srcB[k] != nullptr && tpR.srcB[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteGB_[(size_t) (q2 * 4 + k)] = pg; ps += pg;
         }
         poolRouteAny_[(size_t) q2] = ps > 0.0f;
     }
@@ -12123,6 +12316,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const float pg = (fR.src[k] != nullptr && fR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
             poolRouteG_[(size_t) (q3 * 6 + k)] = pg; ps += pg;
+        }
+        for (int k = 0; k < 4; ++k)   // tp20 — bank 1
+        {
+            const float pg = (fR.srcB[k] != nullptr && fR.srcB[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteGB_[(size_t) (q3 * 4 + k)] = pg; ps += pg;
         }
         poolRouteAny_[(size_t) q3] = ps > 0.0f;
     }
@@ -12158,6 +12356,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                                bodRefs_[(size_t) i].src,
                                                utlRefs_[(size_t) i].src,
                                                splRefs_[(size_t) i].src };
+        std::atomic<float>* const* srcsB[10] = { choRefs_[(size_t) i].srcB, flaRefs_[(size_t) i].srcB, phaRefs_[(size_t) i].srcB,
+                                                eqzRefs_[(size_t) i].srcB, widRefs_[(size_t) i].srcB, cmpRefs_[(size_t) i].srcB,
+                                                ottRefs_[(size_t) i].srcB, bodRefs_[(size_t) i].srcB, utlRefs_[(size_t) i].srcB,
+                                                splRefs_[(size_t) i].srcB };   // tp20 — bank 1's pills
         // fb444 — the loop bound is DERIVED, never a literal. `bases[7]`/`srcs[7]`/`dv < 7`
         //   was three hand-maintained copies of one number, and fb435 is what happens when a
         //   device is added to two of them. Now adding a kind is one entry in each array and
@@ -12173,6 +12375,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 const float pg = (srcs[dv][k] != nullptr && srcs[dv][k]->load() > 0.5f) ? 1.0f : 0.0f;
                 poolRouteG_[(size_t) (bases[dv] * 6 + k)] = pg; ps += pg;
             }
+            for (int k = 0; k < 4; ++k)   // tp20 — bank 1
+            {
+                const float pg = (srcsB[dv][k] != nullptr && srcsB[dv][k]->load() > 0.5f) ? 1.0f : 0.0f;
+                poolRouteGB_[(size_t) (bases[dv] * 4 + k)] = pg; ps += pg;
+            }
             poolRouteAny_[(size_t) bases[dv]] = ps > 0.0f;
         }
     }
@@ -12184,7 +12391,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // (b) whose output feeds whom. Without this every device tapped its own sources and added to the
     // output in parallel, so dragging a card changed nothing: Max's "it doesn't do any of that".
     {
-        auto maskOf = [this] (const ChainEntry& ce) -> uint8_t
+        static constexpr int kBaseOf[16] = { -1, -1, -1, kGrnSendBase, kTpeSendBase, kFltSendBase, kChoSendBase, kFlaSendBase,
+                                             kPhaSendBase, kEqzSendBase, kWidSendBase, kCmpSendBase, kOttSendBase, kBodSendBase,
+                                             kUtlSendBase, kSplSendBase };   // tp20 — pool send base per kind (3..15)
+        auto maskOf = [this] (const ChainEntry& ce) -> uint16_t
         {
             const float* g = nullptr;
             if      (ce.kind == 0) g = (ce.inst == 1) ? hallRvbG_ : &poolRouteG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
@@ -12203,11 +12413,19 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else if (ce.kind == 14) g = &poolRouteG_[(size_t) ((kUtlSendBase + ce.inst - 1) * 6)];   // fb444
             else if (ce.kind == 15) g = &poolRouteG_[(size_t) ((kSplSendBase + ce.inst - 1) * 6)];   // fb444
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
-            uint8_t m = 0;
-            for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
+            // tp20 — bank 1's pills for the same device ride bits 6..9 (E F G H) of the one mask
+            const float* gB = nullptr;
+            if      (ce.kind == 0) gB = (ce.inst == 1) ? hallRvbGB_ : &poolRouteGB_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 4)];
+            else if (ce.kind == 1) gB = (ce.inst == 1) ? dlyGB_     : &poolRouteGB_[(size_t) ((ce.inst - 2) * 4)];
+            else if (ce.kind == 2) gB = (ce.inst == 1) ? dstGB_     : &poolRouteGB_[(size_t) ((kFxExtra + ce.inst - 2) * 4)];
+            else if (ce.kind >= 3 && ce.kind < 16) gB = &poolRouteGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 4)];
+            uint16_t m = 0;
+            for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint16_t) (m | (1u << (unsigned) s));
+            if (gB != nullptr)
+                for (int s = 0; s < 4; ++s) if (gB[s] > 0.0f) m = (uint16_t) (m | (1u << (unsigned) (tw::FxChainTopology::kBank1Shift + s)));
             return m;
         };
-        uint8_t masks[(size_t) kChainMax] = {};
+        uint16_t masks[(size_t) kChainMax] = {};
         const int n = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
         for (int c = 0; c < n; ++c) masks[c] = maskOf (chainOrder_[(size_t) c]);
         fxTopo_.build (masks, n);
@@ -12215,12 +12433,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
         // Scatter the ENTRY masks back to per-device arrays — these, not the full route masks, are
         // what the voices tap, so a source routed to three devices is still summed only ONCE.
-        for (int s = 0; s < 6; ++s) { hallEntryG_[s] = 0.0f; dlyEntryG_[s] = 0.0f; dstEntryG_[s] = 0.0f; }
-        poolEntryG_.fill (0.0f);
+        for (int s = 0; s < 6; ++s) { hallEntryG_[s] = 0.0f; dlyEntryG_[s] = 0.0f; dstEntryG_[s] = 0.0f;
+                                      hallEntryGB_[s] = 0.0f; dlyEntryGB_[s] = 0.0f; dstEntryGB_[s] = 0.0f; }
+        poolEntryG_.fill (0.0f); poolEntryGB_.fill (0.0f);
         for (int c = 0; c < n; ++c)
         {
             const auto& ce = chainOrder_[(size_t) c];
             float* dstArr = nullptr;
+            float* dstArrB = nullptr;   // tp20 — bank 1's entry gains for the same device (slots 0..3 = E..H, 4 = Sub, 5 = 0)
+            if      (ce.kind == 0) dstArrB = (ce.inst == 1) ? hallEntryGB_ : &poolEntryGB_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
+            else if (ce.kind == 1) dstArrB = (ce.inst == 1) ? dlyEntryGB_  : &poolEntryGB_[(size_t) ((ce.inst - 2) * 6)];
+            else if (ce.kind == 2) dstArrB = (ce.inst == 1) ? dstEntryGB_  : &poolEntryGB_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
+            else if (ce.kind >= 3 && ce.kind < 16) dstArrB = &poolEntryGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 6)];
             if      (ce.kind == 0) dstArr = (ce.inst == 1) ? hallEntryG_ : &poolEntryG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 3) dstArr = &poolEntryG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
@@ -12239,6 +12463,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
+            if (dstArrB != nullptr)   // tp20
+            {
+                for (int s = 0; s < 4; ++s)
+                    dstArrB[s] = (fxTopo_.entry[c] & (1u << (unsigned) (tw::FxChainTopology::kBank1Shift + s))) ? 1.0f : 0.0f;
+                dstArrB[4] = (fxTopo_.entry[c] & (1u << 4)) ? 1.0f : 0.0f;   // the S pill is shared
+                dstArrB[5] = 0.0f;                                            // bank 1 has no noise layer
+            }
         }
     }
     // ═══ fb414 — WHICH OSCILLATORS ACTUALLY LEAVE THE MAIN MIX ═════════════════════════════
@@ -12257,11 +12488,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // through poolSendBuf_ and is subtracted through routedDryBuf_ — so this is genuinely just
     // "don't add it to the union", not a signal-path rewrite.
     exUnionAny_ = false;
-    { uint8_t insertMask = 0;
+    { uint16_t insertMask = 0;   // tp20 — 10 bits
       const int nT = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
       for (int c = 0; c < nT; ++c)
       {
-          const uint8_t e = fxTopo_.entry[c];
+          const uint16_t e = fxTopo_.entry[c];
           if (e == 0) continue;                                   // this slot taps nothing
           // 🔑 fb415 — THE FIRST-SLOT LAW (Max, HARD RULE). Only the FIRST device in the chain
           // can be a send tap; every device after it is an insert, always. `c == 0` is the
@@ -12276,7 +12507,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                              && ki >= 0 && ki < kFxKinds && ii >= 0 && ii < ParameterIDs::kFxInstances
                              && sendRef_[(size_t) ki][(size_t) ii] != nullptr
                              && sendRef_[(size_t) ki][(size_t) ii]->load() > 0.5f;
-          if (! sendMode) insertMask = (uint8_t) (insertMask | e);
+          if (! sendMode) insertMask = (uint16_t) (insertMask | e);
       }
       for (int s = 0; s < 6; ++s)
       {
@@ -12284,6 +12515,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
           exUnionG_[s] = pulled ? 1.0f : 0.0f;
           exUnionAny_ = exUnionAny_ || pulled;
       }
+      for (int s = 0; s < 4; ++s)   // tp20 — bank 1's pull (E–H), Sub shared, no noise
+      {
+          const bool pulled = (insertMask & (1u << (unsigned) (tw::FxChainTopology::kBank1Shift + s))) != 0;
+          exUnionGB_[s] = pulled ? 1.0f : 0.0f;
+          exUnionAny_ = exUnionAny_ || pulled;
+      }
+      exUnionGB_[4] = exUnionG_[4]; exUnionGB_[5] = 0.0f;
     }
     for (int q = 0; q < kPoolSendCount; ++q)                          // per-instance send buses
     {
@@ -12317,7 +12555,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         bool routesDirty = ! poolPushValid_;
         for (int k = 0; k < 6 && ! routesDirty; ++k)
             routesDirty = (hallEntryG_[k] != lastHallEntryG_[k]) || (dlyEntryG_[k] != lastDlyEntryG_[k])
-                       || (dstEntryG_[k] != lastDstEntryG_[k])   || (exUnionG_[k]  != lastExUnionG_[k]);
+                       || (dstEntryG_[k] != lastDstEntryG_[k])   || (exUnionG_[k]  != lastExUnionG_[k])
+                       || (hallEntryGB_[k] != lastHallEntryGB_[k]) || (dlyEntryGB_[k] != lastDlyEntryGB_[k])     // tp20 — bank 1
+                       || (dstEntryGB_[k] != lastDstEntryGB_[k])   || (exUnionGB_[k]  != lastExUnionGB_[k]);
         if (! routesDirty)
             routesDirty = (rsL != lastRsL_) || (rsR != lastRsR_) || (dsL != lastDsL_) || (dsR != lastDsR_)
                        || (dtL != lastDtL_) || (dtR != lastDtR_) || (exL != lastExL_) || (exR != lastExR_);
@@ -12328,7 +12568,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             float* pr = poolRouteAny_[(size_t) q] ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr;
             if (pl != lastPoolPtrL_[(size_t) q] || pr != lastPoolPtrR_[(size_t) q]) { routesDirty = true; break; }
             for (int k = 0; k < 6; ++k)
-                if (poolEntryG_[(size_t) (q * 6 + k)] != lastPoolEntryG_[(size_t) (q * 6 + k)]) { routesDirty = true; break; }
+                if (poolEntryG_[(size_t) (q * 6 + k)] != lastPoolEntryG_[(size_t) (q * 6 + k)]
+                 || poolEntryGB_[(size_t) (q * 6 + k)] != lastPoolEntryGB_[(size_t) (q * 6 + k)]) { routesDirty = true; break; }   // tp20
         }
         if (routesDirty)
         {
@@ -12385,12 +12626,29 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             for (int vi = 0; vi < kSynthVoiceCount; ++vi)
                 if (auto* sv = synthVoices_[(size_t) vi])
                     if (sv->isVoiceActive()) sv->pullRoutes (R);          // the sounding few; the rest catch up at note-on
+            {   // tp20 — bank 1's snapshot: the same buses, ITS entry gains (E–H in slots 0..3)
+                auto& RB = routeSnapB_;
+                for (int k = 0; k < 6; ++k) { RB.hall[k] = hallEntryGB_[k]; RB.dly[k] = dlyEntryGB_[k]; RB.dst[k] = dstEntryGB_[k]; RB.ex[k] = exUnionGB_[k]; }
+                RB.rsL = rsL; RB.rsR = rsR; RB.dsL = dsL; RB.dsR = dsR; RB.dtL = dtL; RB.dtR = dtR; RB.exL = exL; RB.exR = exR;
+                for (int q = 0; q < kPoolSendCount; ++q)
+                {
+                    for (int k = 0; k < 6; ++k) RB.poolG[q * 6 + k] = poolEntryGB_[(size_t) (q * 6 + k)];
+                    RB.poolL[q] = R.poolL[q]; RB.poolR[q] = R.poolR[q];
+                }
+                RB.version.fetch_add (1, std::memory_order_release);
+                if (bankB_.load (std::memory_order_acquire) != nullptr)
+                    for (int vi = 0; vi < kSynthVoiceCount; ++vi)
+                        if (auto* sv = synthVoicesB_[(size_t) vi])
+                            if (sv->isVoiceActive()) sv->pullRoutes (RB);
+            }
         }
         // fb495 — the push happened, so the cache now describes what every voice holds.
         for (int k = 0; k < 6; ++k)
         {
             lastHallEntryG_[k] = hallEntryG_[k]; lastDlyEntryG_[k] = dlyEntryG_[k];
             lastDstEntryG_[k]  = dstEntryG_[k];  lastExUnionG_[k]  = exUnionG_[k];
+            lastHallEntryGB_[k] = hallEntryGB_[k]; lastDlyEntryGB_[k] = dlyEntryGB_[k];   // tp20
+            lastDstEntryGB_[k]  = dstEntryGB_[k];  lastExUnionGB_[k]  = exUnionGB_[k];
         }
         lastRsL_ = rsL; lastRsR_ = rsR; lastDsL_ = dsL; lastDsR_ = dsR;
         lastDtL_ = dtL; lastDtR_ = dtR; lastExL_ = exL; lastExR_ = exR;
@@ -12400,7 +12658,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             lastPoolPtrL_[(size_t) q] = poolRouteAny_[(size_t) q] ? poolSendBuf_[(size_t) q].getWritePointer (0) : nullptr;
             lastPoolPtrR_[(size_t) q] = poolRouteAny_[(size_t) q] ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr;
             for (int k = 0; k < 6; ++k)
-                lastPoolEntryG_[(size_t) (q * 6 + k)] = poolEntryG_[(size_t) (q * 6 + k)];
+            {   lastPoolEntryG_[(size_t) (q * 6 + k)]  = poolEntryG_[(size_t) (q * 6 + k)];
+                lastPoolEntryGB_[(size_t) (q * 6 + k)] = poolEntryGB_[(size_t) (q * 6 + k)]; }   // tp20
         }
         poolPushValid_ = true;
         }
@@ -12558,6 +12817,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         TI_PROF ("synth:params");
         synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
+        if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, flowMidi, 0, numSamples);   // tp20 — bank 1, same MIDI, same scratch
 
         // publish the live playhead/fire feed (UI rAF-polls getArpFeed) + the WAVE
         // lane's frame-offset for the voices (consumed NEXT block — drift-lane pattern)
@@ -12581,9 +12841,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             mixed.addEvents (midiMessages, 0, numSamples, 0);
             for (int i = 0; i < an; ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, arel[i].note), 0);
             synthEngine.renderNextBlock (synthScratch, mixed, 0, numSamples);
+            if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, mixed, 0, numSamples);   // tp20
         }
         else
             synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples);
+            if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, midiMessages, 0, numSamples);   // tp20
     }
 
     TI_PROF ("flow");
@@ -14650,7 +14912,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const double sr = getSampleRate();
         auto startWtPreview = [this, sr]()
         {
-            wtAudOsc_   = juce::jlimit (0, 3, wtAudReqOsc_.load (std::memory_order_relaxed));
+            wtAudOsc_   = juce::jlimit (0, ParameterIDs::kOscCount - 1, wtAudReqOsc_.load (std::memory_order_relaxed));
             wtAudPhase_ = 0.0;
             wtAudInc_   = 130.81 / sr;                 // C3
             wtAudCtr_   = (int) (sr * 0.95);
@@ -14719,7 +14981,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const double sr = getSampleRate();
         auto startSampPreview = [this, sr]()
         {
-            sampAudOsc_   = juce::jlimit (0, 3, sampAudReqOsc_.load (std::memory_order_relaxed));
+            sampAudOsc_   = juce::jlimit (0, ParameterIDs::kOscCount - 1, sampAudReqOsc_.load (std::memory_order_relaxed));
             sampAudPos_   = 0.0;
             sampAudHeld_  = oscSampleBuffers_[(size_t) sampAudOsc_].load();
             const double srcRate = oscSampleBuffers_[(size_t) sampAudOsc_].getSampleRate();
@@ -14921,10 +15183,9 @@ void TerrainAudioProcessor::ensureCaptureBufferAllocated()
 // so the audio thread never has to. See WavetableBank.h and wavetableForOsc().
 int TerrainAudioProcessor::prefetchOscWavetables (int budget)
 {
-    static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                        ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const auto* WTP = ParameterIDs::kOsc_WT_PRESET;   // tp20 — 8 wide
     int builtNow = 0;
-    for (int o = 0; o < 4 && builtNow < budget; ++o)
+    for (int o = 0; o < ParameterIDs::kOscCount && builtNow < budget; ++o)
     {
         auto* rp = rawParam (WTP[o]);
         if (rp == nullptr) continue;
@@ -15274,17 +15535,17 @@ juce::String TerrainAudioProcessor::getMacroNamesJson() const
 
 bool TerrainAudioProcessor::hasOscImport (int osc) const noexcept
 {
-    return ! importedPcm_[(size_t) juce::jlimit (0, 3, osc)].empty();
+    return ! importedPcm_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)].empty();
 }
 
 juce::String TerrainAudioProcessor::getImportName (int osc) const
 {
-    return importName_[juce::jlimit (0, 3, osc)];
+    return importName_[juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)];
 }
 
 void TerrainAudioProcessor::copyOscImport (int src, int dst)
 {
-    src = juce::jlimit (0, 3, src); dst = juce::jlimit (0, 3, dst);
+    src = juce::jlimit (0, ParameterIDs::kOscCount - 1, src); dst = juce::jlimit (0, ParameterIDs::kOscCount - 1, dst);
     if (src == dst) return;
     if (! hasOscImport (src)) { if (hasOscImport (dst)) clearImportedWavetable (dst); return; }   // the target sounds like the source: no import there either
     importedPcm_[dst]  = importedPcm_[src];
@@ -16918,7 +17179,7 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
     // fb550 — DRAWN WARP CURVES. Written ONLY when something was actually drawn: a curve that is
     // the identity publishes nullptr, so an untouched patch gains not one byte and old patches
     // load byte-identically.
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 2 * ParameterIDs::kOscCount; ++i)
         if (drawTable_[i].load (std::memory_order_acquire) != nullptr)
             state.setProperty ("warpDraw" + juce::String (i), getWarpDrawCurveCsv (i / 2, i % 2), nullptr);
         else state.removeProperty ("warpDraw" + juce::String (i), nullptr);   // fb618
@@ -18775,7 +19036,7 @@ void TerrainAudioProcessor::clearPatchBlobs()
     dstPtHasModShared_ = false;
     dstPtVersion_.fetch_add (1, std::memory_order_release);
     setDistortionTableSrc (-1);
-    for (int i = 0; i < 8; ++i) drawTable_[i].store (nullptr, std::memory_order_release);   // the identity warp
+    for (int i = 0; i < 2 * ParameterIDs::kOscCount; ++i) drawTable_[i].store (nullptr, std::memory_order_release);   // the identity warp
     { const juce::ScopedLock sl (arpLaneLock_); arpLanesShared_ = wc::ArpLaneData{}; arpLanesJson_.clear(); }
     arpLanesVersion_.fetch_add (1, std::memory_order_release);
     { const juce::ScopedLock sl (cardStateLock_); cardStates_.clear(); }

@@ -120,25 +120,28 @@ struct FxChainTopology
     // the static_assert below is what makes that a build error rather than silent UB.
     static constexpr int kMaxSlots    = 128;
     static_assert (kMaxSlots <= 128, "kMaxSlots cannot exceed the SlotMask bit width");
-    static constexpr uint8_t kAllSrc  = 0x3F; // all six sources: A B C D Sub Noise
+    // tp20 — TEN sources now: bits 0..5 = A B C D Sub Noise (bank 0, unchanged), bits 6..9 = E F G H (bank 1).
+    //        One topology for the rack's mixer; each bank reads its own bits back out of entry[].
+    static constexpr uint16_t kAllSrc  = 0x3FF;
+    static constexpr int      kBank1Shift = 6;   // bit of E
 
     int      count = 0;
-    uint8_t  entry    [kMaxSlots] = {};       // sources that TAP the oscillators at this slot
+    uint16_t entry    [kMaxSlots] = {};       // sources that TAP the oscillators at this slot
     SlotMask feed     [kMaxSlots] = {};       // bitmask of upstream slots whose output this slot eats
     bool     consumed [kMaxSlots] = {};       // this slot's output is eaten downstream ⇒ NOT summed to the main mix
-    uint8_t  eff      [kMaxSlots] = {};       // sources this slot's output actually carries (its own + everything it ate)
+    uint16_t eff      [kMaxSlots] = {};       // sources this slot's output actually carries (its own + everything it ate)
 
     // masks[] must be in CHAIN ORDER (already sorted by _RANK). Every device kind goes through
     // here — filter included (fb376). There is no second signature and no device class flag.
-    void build (const uint8_t* masks, int n) noexcept
+    void build (const uint16_t* masks, int n) noexcept
     {
         count = n < kMaxSlots ? (n < 0 ? 0 : n) : kMaxSlots;
         for (int c = 0; c < count; ++c) { entry[c] = 0; feed[c] = {}; consumed[c] = false; eff[c] = 0; }
 
-        uint8_t claimed = 0;                  // sources that have already entered the rack
+        uint16_t claimed = 0;                  // sources that have already entered the rack
         for (int c = 0; c < count; ++c)
         {
-            entry[c]  = (uint8_t) (masks[c] & ~claimed);   // first device routed to a source taps it
+            entry[c]  = (uint16_t) (masks[c] & ~claimed);   // first device routed to a source taps it
             claimed  |= masks[c];
             eff[c]    = masks[c];
             // Eat every upstream output still looking for a home that shares a source with us.
@@ -146,11 +149,11 @@ struct FxChainTopology
             // if j merged A+B and k took it for B, a later device routed to A must still find it
             // in k — otherwise that device would be fed silence.
             for (int j = 0; j < c; ++j)
-                if (! consumed[j] && (uint8_t) (eff[j] & masks[c]) != 0)
+                if (! consumed[j] && (uint16_t) (eff[j] & masks[c]) != 0)
                 {
                     feed[c] |= SlotMask::bit (j);        // fb420 — 128-bit: j can now reach 95
                     consumed[j] = true;
-                    eff[c] = (uint8_t) (eff[c] | eff[j]);
+                    eff[c] = (uint16_t) (eff[c] | eff[j]);
                 }
         }
     }
