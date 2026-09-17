@@ -230,5 +230,30 @@ chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — rout
       '[8] and the roll still says what it did, with the canvas hidden');
 }
 
+
+// ── 9 · FLOW INSTANCES NEVER REACH THE SYNTH PAGE ────────────────────────────────────────────
+//   Max's standing rule after tp23 put two glitches in a chain: "please don't add flow cards to the
+//   synth page. Only add flow cards to the patcher page." The tile grid lives on the synth page
+//   whenever the canvas is shut, so an instance tile added a row there and pushed the filter beside
+//   it out of shape. And its number badge re-broke fb136, which had already removed numbers from
+//   these tiles at Max's request.
+{
+  chk(/t\.classList\.add\('flow-inst'\)/.test(SRC),
+      '[9] a minted instance tile is marked flow-inst');
+  chk(/#syn-panel \.flow-mode\.flow-inst \{ display: none; \}/.test(SRC),
+      '[9] and the synth page refuses it — no extra tile, no number, no shifted layout');
+  chk(/#tp-page \.tp-node > \.tp-body > \.flow-mode\.flow-inst \{ display: flex; \}/.test(SRC),
+      '[9] while the Patcher canvas still shows it as a node');
+  const hideAt = SRC.indexOf('#syn-panel .flow-mode.flow-inst');
+  const showAt = SRC.indexOf('#tp-page .tp-node > .tp-body > .flow-mode.flow-inst');
+  chk(hideAt >= 0 && showAt > hideAt,
+      '[9] the reveal comes AFTER the hide (#tp-page is nested inside #syn-panel)');
+  // the dice button Max asked to keep, at the size he asked for
+  chk(/\.dice-btn svg \{ width: 23px; height: 23px;/.test(SRC),
+      '[9] the dice glyph matches the gear rather than reading small beside it');
+  chk(/#dice-btn \+ \.settings-btn \{ margin-left: 0; \}/.test(SRC),
+      '[9] and the two buttons sit together');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

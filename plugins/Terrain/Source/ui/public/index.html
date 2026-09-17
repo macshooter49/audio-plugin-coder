@@ -3487,11 +3487,17 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
   background: none;
   opacity: .8;
 }
-/* tp25 — the dice wears the gear's box exactly, so the two read as a pair */
+/* tp25 — the dice wears the gear's box exactly, so the two read as a pair.
+   tp26 — Max: "make it thinner and clearer ... as big as the settings button, because right now it's
+   smaller than the settings and it looks weird ... and it needs to be closer to the settings button."
+   The gear paints a 28px canvas, so 19px read visibly small beside it; 23px matches its weight, the
+   stroke thins to 1.6, and the pair closes up by dropping the gear's own left margin when the dice
+   precedes it (header-right's 6px gap is then all that separates them, half what it was). */
 .dice-btn { color: var(--text-muted); }
-.dice-btn svg { width: 19px; height: 19px; display: block; }
+.dice-btn svg { width: 23px; height: 23px; display: block; }
 .dice-btn:hover { color: var(--text-primary); }
 .dice-btn.rolling { opacity: .45; pointer-events: none; }
+#dice-btn + .settings-btn { margin-left: 0; }
 /* the roll's notice, for when it is fired with the Patcher shut and its own toast is hidden */
 #tp-page-toast {
   position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
@@ -6918,7 +6924,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
            buttons ... make sure everything is spaced out evenly and equally and it doesn't touch that terrain in
            the middle." Same .settings-btn box as the gear, so .header-right's 6 px gap + the 6 px margin puts the
            same air on both sides of it; the gear stays last, keeping its 16 px right inset. -->
-      <button class="settings-btn dice-btn" id="dice-btn" title="Roll the dice — right-click to aim it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></button>
+      <button class="settings-btn dice-btn" id="dice-btn" title="Roll the dice — right-click to aim it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="4.4"/><circle cx="8.4" cy="8.4" r="1.05" fill="currentColor"/><circle cx="15.6" cy="15.6" r="1.05" fill="currentColor"/><circle cx="15.6" cy="8.4" r="1.05" fill="currentColor"/><circle cx="8.4" cy="15.6" r="1.05" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg></button>
       <button class="settings-btn" id="settings-btn" title="Settings">
         <canvas id="settings-icon" width="28" height="28"></canvas>
       </button>
@@ -23345,36 +23351,43 @@ setTimeout(function wireSynControls () {
              and no host automation lane is renumbered — a 619-entry choice list would have repointed every
              filter-type lane ever recorded. The roster's own map (FILTER_TYPES) is untouched and still covers
              0..N-1 exactly once, which is what flt_cardinality_gate checks.
-             The built-in names are read off the oscillator preset <select> BY OPTION VALUE — the option order
-             in the DOM is not the parameter order (fb529 moves options between optgroups), the value IS. */
-          const tblIdx = FLT_ENGINES.indexOf('Filter Table');
-          if (tblIdx >= 0) {
-            const builtins = [];
-            try {
+
+             🚨 THE WHOLE THING IS WRAPPED, AND THE INDEX COMES FROM FILTER_TYPES.
+             The first cut of this read FLT_ENGINES — which is declared in a DIFFERENT <script> block and is
+             not in scope here. That threw a ReferenceError before openTwoPaneBrowser was ever called, so the
+             filter browser stopped opening AT ALL: a decorative extra category took out the picker itself.
+             FILTER_TYPES is the list this function already walks two lines above, so it is the right source;
+             and the try/catch is the structural half of the fix — whatever goes wrong while BUILDING this
+             category, the browser must still open with the engine list it always had. */
+          try {
+            const tblRow = FILTER_TYPES.filter((t) => t.label === 'Filter Table')[0];
+            const tblIdx = tblRow ? tblRow.idx : -1;
+            if (tblIdx >= 0) {
+              const builtins = [];
               document.querySelectorAll('#osc-a-preset-select option').forEach((o) => {
                 const v = parseInt(o.value, 10);
-                if (!isNaN(v)) builtins[v] = (o.textContent || '').trim();
+                if (!isNaN(v) && v >= 0) builtins[v] = (o.textContent || '').trim();
               });
-            } catch (e) {}
-            const names = [];
-            for (let i = 0; i < builtins.length; i++) names.push(builtins[i] || ('Table ' + i));
-            (window.__factoryTables || []).forEach((n) => names.push(n));
-            if (names.length) {
-              const nT = names.length;
-              const curTbl = (() => { try { return Math.round(filterStTbl.getNormalisedValue() * (nT - 1)); }
-                                      catch (e) { return -1; } })();
-              const onTable = (currentIdx === tblIdx);
-              cats.push({ label: 'Tables', items: names.map((nm, i) => ({
-                name: nm, sel: onTable && i === curTbl,
-                pick: () => {
-                  try { filterStTbl.setNormalisedValue(nT > 1 ? i / (nT - 1) : 0); } catch (e) {}
-                  setFilterTypeIdx(tblIdx); refreshDdLabel();
-                  /* the bake happens on the processor's timer, so ask twice: once for the fast case
-                     and once after it has certainly run. */
-                  try { setTimeout(window.__fltTblPoll, 90); setTimeout(window.__fltTblPoll, 420); } catch (e) {}
-                } })) });
+              const names = [];
+              for (let i = 0; i < builtins.length; i++) names.push(builtins[i] || ('Table ' + i));
+              (window.__factoryTables || []).forEach((n) => names.push(n));
+              if (names.length) {
+                const nT = names.length;
+                let curTbl = -1;
+                try { curTbl = Math.round(filterStTbl.getNormalisedValue() * (nT - 1)); } catch (e) {}
+                const onTable = (currentIdx === tblIdx);
+                cats.push({ label: 'Tables', items: names.map((nm, i) => ({
+                  name: nm, sel: onTable && i === curTbl,
+                  pick: () => {
+                    try { filterStTbl.setNormalisedValue(nT > 1 ? i / (nT - 1) : 0); } catch (e) {}
+                    setFilterTypeIdx(tblIdx); refreshDdLabel();
+                    /* the bake happens on the processor's timer, so ask twice: once for the fast case
+                       and once after it has certainly run. */
+                    try { setTimeout(window.__fltTblPoll, 90); setTimeout(window.__fltTblPoll, 420); } catch (e) {}
+                  } })) });
+              }
             }
-          }
+          } catch (e) { try { console.warn('Tables category skipped:', e); } catch (e2) {} }
           let openCat = 0;
           for (let k = 0; k < cats.length; k++) if (cats[k].items.some((it) => it.sel)) { openCat = k; break; }
           window.openTwoPaneBrowser(ev, { cats: cats, openCat: openCat,
@@ -42474,6 +42487,17 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tape-loop-content .tape-feed-btn:hover, #tape-loop-content .tape-undo-btn:hover, #tape-loop-content .transport-btn:hover { border-color: transparent !important; opacity: 1; }
 /* the FLOW modules — a small tile on the canvas, the card when extended (tp6, Max: "nodes should be smaller … theirs are just extended") */
 #tp-page .tp-node > .tp-body > .flow-mode { position: relative; width: 100%; height: 100%; min-height: 0; border: none; background: transparent; border-radius: 13px; display: flex; align-items: center; justify-content: center; top: 0 !important; cursor: default; }
+/* tp26 — FLOW INSTANCES ARE THE PATCHER'S, AND SO ARE THEIR NUMBERS.
+   Max: "the filter extends, everything shifts ... please don't add flow cards to the synth page, only
+   add flow cards to the patcher page."  The dice can put Glitch 2 in the chain (tp23), which mints a
+   tile; #flow-modes lives on the synth page whenever the canvas is shut, so that tile landed in the
+   grid, added a row, and pushed everything beside it — which is the filter 'stretching'.
+   The numbers were already settled once: fb136 took the order badges off these tiles because Max said
+   "forget the numbers — people can tell which ones they picked". tp20's instance badge put numbers
+   back. Off the synth page they go, with the tiles that carry them.
+   #tp-page is nested INSIDE #syn-panel, so hide first and let the canvas rule win. */
+#syn-panel .flow-mode.flow-inst { display: none; }
+#tp-page .tp-node > .tp-body > .flow-mode.flow-inst { display: flex; }
 #tp-page .tp-node > .tp-body > .flow-mode .emb { width: 52px; height: 52px; }
 #tp-page .tp-node[data-kind="flow"].ext > .tp-body > .flow-mode { display: none; }
 #tp-page .tp-node > .tp-body > .ti-card { position: relative !important; left: 0 !important; top: 0 !important; zoom: 1.2 !important; width: 316px; display: block !important; border: none; box-shadow: none; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 13px; }
@@ -42827,7 +42851,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function flowLabel(m){ var n=fInst(m); return (FLOWNAME[fKind(m)]||'Flow')+(n>1?' '+n:''); }
   function mkInstTile(m){ var k=fKind(m), n=fInst(m), base=tileHome&&tileHome[k]; if(!base||n<=1||k==='drift') return null;
     var t=base.cloneNode(true); t.setAttribute('data-mode',m); t.classList.remove('act'); t.title=flowLabel(m);
-    var b=document.createElement('span'); b.className='tp-inst'; b.textContent=String(n); t.appendChild(b); t.__inst=1; tileHome[m]=t; return t; }
+    var b=document.createElement('span'); b.className='tp-inst'; b.textContent=String(n); t.appendChild(b);
+    t.classList.add('flow-inst');   /* tp26 — an INSTANCE tile: the synth page refuses it, the canvas shows it */
+    t.__inst=1; tileHome[m]=t; return t; }
   function adoptFlowNode(m,at){ if(nodeByKey('flow-'+m)||!modesEl) return null; var tile=tileHome[m]||mkInstTile(m); if(!tile) return null;   /* tp20 — instance tiles are minted here */
     var n=mkNode('flow-'+m,'flow',tile,{sub:m,parent:modesEl,at:at}); n.tile=tile; n.home=null; n.ext=false; markViz(n);
     if(layout.ext['flow-'+m]) setFlowExt(n,true); return n; }
