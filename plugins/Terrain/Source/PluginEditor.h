@@ -1681,6 +1681,9 @@ private:
     int  intendedW_ = 820;
     bool userSized_ = false;
     int  healTicks_ = 0;
+    int  reShowHeal_ = 0;   // tp33 — ticks left defending the remembered width after a re-show
+    int  tracedW_ = -1;
+    void traceSize (const char* why);   // tp33 — one line per size decision, opt-in
 
     // fb516d -- Component::visibilityChanged only reports the OWN flag; SHOWING transitions
     // (window hidden/shown above us -- FL's close path) need a movement watcher.

@@ -42845,7 +42845,20 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function soon(){ clearTimeout(syncT); syncT=setTimeout(sync,40); }
 
   /* ── the eye — visualizers only: each picture is RE-LAID OUT to its glass (the painters draw it at that size, crisp), then slid to the middle ── */
-  function layoutIn(el,root){ var x=0,y=0,e=el; while(e&&e!==root){ x+=e.offsetLeft; y+=e.offsetTop; e=e.offsetParent; } return {x:x,y:y,w:el.offsetWidth,h:el.offsetHeight}; }   /* layout offsets: a transform in flight does not touch them */
+  /* 🚨 tp33 — THE OFFSET WALK CANNOT SEE CSS `zoom`, AND ONE CARD USES IT. An adopted FLOW card
+     carries `zoom: 1.2 !important` (the .tp-node > .tp-body > .ti-card rule), and offsetLeft /
+     offsetWidth are reported in the card's OWN un-zoomed space while the node was sized from a
+     getBoundingClientRect (which IS zoomed). vizFit then divided the node's real width by a box
+     1.2x too small, scaled the picture 1.2x too big, and the eye's "cover" was overflowed by the
+     card's own UI: MEASURED at 77 px outside a 431 px node — 18 %, which is that 1.2 (Max: "the
+     UI pops out of the emblem mode so it comes over the cover and it looks terrible").
+     Multiplying by the chain's accumulated zoom is a no-op everywhere else: every other node's
+     zoom is 1, so this is exact for the broken case and byte-identical for the rest. */
+  function zoomIn(el,root){ var z=1,e=el?el.parentElement:null;
+    while(e&&e!==root){ try{ var cz=parseFloat(getComputedStyle(e).zoom); if(cz>0&&cz!==1) z*=cz; }catch(x){} e=e.parentElement; }
+    return z; }
+  function layoutIn(el,root){ var x=0,y=0,e=el; while(e&&e!==root){ x+=e.offsetLeft; y+=e.offsetTop; e=e.offsetParent; }
+    var z=zoomIn(el,root); return {x:x*z,y:y*z,w:el.offsetWidth*z,h:el.offsetHeight*z}; }   /* layout offsets: a transform in flight does not touch them */
   function clearVizStyle(v){ try{ v.style.removeProperty('--vz'); v.style.width=''; v.style.height=''; v.style.minHeight=''; v.style.maxHeight=''; v.style.flex=''; }catch(e){} }
   function vizFit(n){ if(!n.viz||n.kind==='midi'||n.kind==='out'||n.kind==='rnd'||(n.kind==='flow'&&!n.ext)) return; var v=n.viz; unclip(n);
     try{ var pad=10, W=n.w-2*pad, H=n.h-2*pad;

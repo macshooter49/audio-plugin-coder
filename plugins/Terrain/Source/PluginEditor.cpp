@@ -15230,6 +15230,7 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     setResizable (true, true);
     intendedW_ = core_->bootWidth();   // fb103 -- the self-heal defends this against host junk
     setSize (intendedW_, juce::roundToInt ((double) intendedW_ * kBaseH / kBaseW));
+    traceSize ("boot (from the saved width)");   // tp33
 }
 
 TerrainAudioProcessorEditor::~TerrainAudioProcessorEditor()
@@ -15282,13 +15283,38 @@ void TerrainAudioProcessorEditor::resized()
     auto* tiUnder = tiMs.getComponentUnderMouse();
     const bool tiLocalDrag = tiMs.isDragging() && tiUnder != nullptr
                              && (tiUnder == this || isParentOf (tiUnder));
-    const bool tiHostGrow  = healTicks_ >= 240 && getWidth() > intendedW_ + 4;
+    /* 🚨 tp33 — THE REOPEN RATCHET. Max: "every time I open up Terrain for the first instance
+       it's at that one size, then when I close the window and open up again, it gets bigger."
+       MEASURED (Tests/mac_reopen.mm --sizesw): one instance, hidden and shown four times with the
+       host asking for +40 px each time, went 820 -> 860 -> 900 -> 940 -> 980 and wrote every step
+       into the saved state, so the next session started from the grown size and grew again.
+
+       Two things were wrong and both are fixed here.
+       ⚠️ HONESTY FIRST: this was NOT reproduced here. A raw AU host (Tests/mac_reopen.mm --sizesw)
+       shows the size surviving close/reopen correctly both before and after this change, so the
+       growth needs something a real host does that the harness does not. What IS certain by
+       reading is the hole below, and it is the only path by which a size nobody chose can become
+       the size that is remembered — so it is closed, conservatively, and a trace is shipped
+       alongside (sizeTrace_) so the next reopen in Live says plainly which size came from where.
+       (a) THE ADOPT-ON-GROW STAYS — a user may resize by the host's own window frame, which is not
+           a drag over this editor, and that choice must still be remembered. It is now merely
+           forbidden during the settle after a show.
+       (b) THE HEAL WINDOW ONLY EVER EXISTED FOR THE FIRST OPEN. healTicks_ lives on the shell,
+           and a host that HIDES and RE-SHOWS keeps the same shell (onShowingChanged parks and
+           re-adopts the core) — so every reopen after the first had no size defence at all and
+           took whatever frame the host handed it. reShowHeal_ below re-arms that defence on
+           every show, and unlike healTicks_ it runs even once the user HAS sized the window,
+           because a remembered size deserves defending exactly as much as the default does. */
+    const bool tiHostGrow  = reShowHeal_ == 0 && healTicks_ >= 240 && getWidth() > intendedW_ + 4;
     if (tiLocalDrag || tiHostGrow)
     {
         userSized_ = true;
         intendedW_ = getWidth();
-        audioProcessor.editorWidth.store (getWidth());
+        audioProcessor.editorWidth.store (intendedW_);
+        traceSize (tiLocalDrag ? "adopt:drag" : "adopt:hostgrow");
     }
+    else if (getWidth() != tracedW_)
+        traceSize (reShowHeal_ > 0 ? "host (defended)" : "host (kept, not remembered)");
 }
 
 void TerrainAudioProcessorEditor::onShowingChanged()
@@ -15302,8 +15328,10 @@ void TerrainAudioProcessorEditor::onShowingChanged()
        now map to park/adopt cycles with live HWNDs on both edges. */
     if (! isShowing() && core_ != nullptr)
     {
+        // tp33 — the INTENDED width, not getWidth(). At hide time the frame may already be one
+        // the host imposed; only a local drag is allowed to move what gets remembered.
         if (userSized_)
-            audioProcessor.editorWidth.store (getWidth());
+            audioProcessor.editorWidth.store (intendedW_);
         core_->detach();
         audioProcessor.parkUiCore();   // synchronous; our HWND is alive right now
         core_ = nullptr;
@@ -15314,11 +15342,45 @@ void TerrainAudioProcessorEditor::onShowingChanged()
         addAndMakeVisible (*core_);
         core_->setBounds (getLocalBounds());
         core_->attach (this);
+        reShowHeal_ = 150;   // tp33 — ~2.5 s of defending the remembered width on THIS show
+        traceSize ("re-show");
     }
+}
+
+/*  tp33 — WHERE DID THIS SIZE COME FROM? One line per change, appended to
+    ~/Library/Caches/Terrain/terrain-size.txt while the CPU-probe marker exists (the same opt-in
+    switch, so nothing is written on a normal user's machine). Reopen the window twice in the host
+    and the file says whether the size was chosen, imposed, defended, or remembered. */
+void TerrainAudioProcessorEditor::traceSize (const char* why)
+{
+    tracedW_ = getWidth();
+    static const bool on = juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+                               .getChildFile ("Library/Caches/Terrain/terrain-cpu-on.txt").existsAsFile()
+                        || std::getenv ("TERRAIN_CPU_PROBE") != nullptr;
+    if (! on) return;
+    juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+        .getChildFile ("Library/Caches/Terrain/terrain-size.txt")
+        .appendText (juce::String (juce::Time::getMillisecondCounter()) + "  w=" + juce::String (getWidth())
+                     + "  intended=" + juce::String (intendedW_)
+                     + "  saved=" + juce::String (audioProcessor.editorWidth.load())
+                     + "  userSized=" + juce::String (userSized_ ? 1 : 0)
+                     + "  heal=" + juce::String (healTicks_) + "/" + juce::String (reShowHeal_)
+                     + "  " + why + "\n");
 }
 
 void TerrainAudioProcessorEditor::tickSizeHeal()
 {
+    // tp33 — THE RE-SHOW DEFENCE. Runs on every show, including one where the user has already
+    // chosen a size, because the size to defend is the remembered one either way. A local drag
+    // still wins instantly: resized() sets intendedW_ from the drag, and this then re-asserts
+    // that same value, so the grip stays live while the heal is counting down.
+    if (reShowHeal_ > 0)
+    {
+        --reShowHeal_;
+        if (std::abs (getWidth() - intendedW_) > 4)
+            setSize (intendedW_, juce::roundToInt (intendedW_ * 672.0 / 820.0));
+        return;
+    }
     if (healTicks_ < 240 && ! userSized_)
     {
         ++healTicks_;

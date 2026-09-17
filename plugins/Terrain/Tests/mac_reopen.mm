@@ -115,9 +115,12 @@ int main (int argc, char** argv)
         [NSApp activateIgnoringOtherApps: YES];
 
         bool two = false, probe = false;
+        bool sizes = false, sizesw = false; int sizeN = 4;   // tp33 — the reopen-size ratchet
         for (int i = 1; i < argc; ++i)
         {
             if (std::strcmp (argv[i], "--reopen2") == 0) two = true;
+            if (std::strcmp (argv[i], "--sizes") == 0) { sizes = true; if (i + 1 < argc) sizeN = atoi (argv[i + 1]); }
+            if (std::strcmp (argv[i], "--sizesw") == 0) { sizesw = true; if (i + 1 < argc) sizeN = atoi (argv[i + 1]); }
             if (std::strcmp (argv[i], "--probe") == 0) probe = true;
         }
 
@@ -160,6 +163,106 @@ int main (int argc, char** argv)
             }
             std::printf ("── probe B done (did shell dtor fire above?)\n"); std::fflush (stdout);
             return 0;
+        }
+
+        // ── tp33 — DOES THE WINDOW GROW EVERY TIME IT IS REOPENED? Max: "every time I open up
+        //    Terrain for the first instance it's at that one size, then when I close the window
+        //    and open up again, it gets bigger." One instance, opened and closed N times, the
+        //    view's width printed each time. A stable number means the size is remembered; a
+        //    rising one is a ratchet and the size the user sees is nobody's choice.
+        if (sizes)
+        {
+            AuHost h; if (! h.init()) return 1;
+            std::printf ("  open/close the SAME instance %d times, printing the view width each open:\n\n", sizeN);
+            double first = 0.0, prev = 0.0;
+            for (int k = 0; k < sizeN; ++k)
+            {
+                NSView* v = nil;
+                [[NSFileManager defaultManager] removeItemAtPath: resPath error: nil];
+                [@"'sz'" writeToFile: expPath atomically: YES encoding: NSUTF8StringEncoding error: nil];
+                @autoreleasepool { v = h.makeView(); }
+                if (v == nil) { std::printf ("  !! open %d returned no view\n", k + 1); return 1; }
+                const double t0 = nowMs();
+                while (! [[NSFileManager defaultManager] fileExistsAtPath: resPath])
+                { pumpMs (50); if (nowMs() - t0 > 30000.0) break; }
+                pumpMs (5200);          // past the 240-tick (4 s) heal window, where the grow-adopt arms
+                const double w = v.frame.size.width, hh = v.frame.size.height;
+                if (k == 0) first = w;
+                std::printf ("    open %2d :  %6.1f x %6.1f   zoom %.3f%s\n", k + 1, w, hh, w / 820.0,
+                             k == 0 ? "" : (w > prev + 0.5 ? "   <-- GREW" : (w < prev - 0.5 ? "   <-- shrank" : "   (same)")));
+                std::fflush (stdout);
+                prev = w;
+                v = nil; pumpMs (700);   // the close
+            }
+            std::printf ("\n  first %.0f -> last %.0f  (%+.0f px, %+.1f %%)\n", first, prev, prev - first,
+                         first > 0 ? 100.0 * (prev - first) / first : 0.0);
+            std::printf ("  verdict: %s\n\n", std::abs (prev - first) < 1.0 ? "STABLE - the size is remembered"
+                                                                             : "RATCHET - every open changes the size");
+            return std::abs (prev - first) < 1.0 ? 0 : 2;
+        }
+
+        // ── tp33 — THE HIDE/SHOW PATH, which is the one a real host uses and the one the size
+        //    defence forgot. Max: "every time I open up Terrain for the first instance it's at
+        //    that one size, then when I close the window and open up again, it gets bigger."
+        //    ONE instance, ONE view, ONE window, hidden and shown N times. Between hides the HOST
+        //    imposes a slightly bigger frame — exactly what a host that remembers its own window
+        //    size does on reopen. A plugin that remembers ITS size snaps back to it; one that
+        //    adopts the imposed size ratchets, and writes the new size into the saved state, so
+        //    the next open starts from there and grows again.
+        if (sizesw)
+        {
+            // ── tp33 — WHAT DOES THE PLUGIN REMEMBER? Max: "every time I open up Terrain for the
+            //    first instance it's at that one size, then when I close the window and open up
+            //    again, it gets bigger." The frame following the host while the window is open is
+            //    normal — the host owns the frame. The BUG is what survives a close: if an
+            //    unattended host resize is recorded as the user's chosen size, the next open
+            //    starts there, the host nudges it again, and the window ratchets open by open and
+            //    across sessions (editorWidth is saved in the plugin state).
+            //    So: open, let the host impose a bigger frame with nobody dragging, CLOSE, reopen,
+            //    and ask what width it came back at.
+            AuHost h; if (! h.init()) return 1;
+            // ⚠️ THE AUTORELEASE TRAP AGAIN (this file's oldest lesson, re-learned the hard way):
+            //    an `NSView**` parameter is __autoreleasing under ARC, so the write-back to the
+            //    caller's strong ref only happens AFTER the lambda returns — and the creation pool
+            //    drains first, freeing the view while the function is still pumping it. Segfault.
+            //    Capture the strong ref instead, so the assignment retains immediately.
+            NSView* v = nil;
+            auto open1 = [&] () -> bool {
+                [[NSFileManager defaultManager] removeItemAtPath: resPath error: nil];
+                [@"'szw'" writeToFile: expPath atomically: YES encoding: NSUTF8StringEncoding error: nil];
+                @autoreleasepool { v = h.makeView(); }
+                if (v == nil) return false;
+                const double t0 = nowMs();
+                while (! [[NSFileManager defaultManager] fileExistsAtPath: resPath])
+                { pumpMs (50); if (nowMs() - t0 > 30000.0) return false; }
+                pumpMs (5200);                      // past the 4 s heal window, where the adopt used to arm
+                return true;
+            };
+            if (! open1()) { std::printf ("  !! first open failed\n"); std::fflush (stdout); return 1; }
+            const double base = v.frame.size.width;
+            std::printf ("  open 1: the plugin chose %.0f\n", base); std::fflush (stdout);
+            double prev = base; int grew = 0;
+            for (int k = 0; k < sizeN; ++k)
+            {
+                const double imposed = prev + 40.0;
+                [v setFrame: NSMakeRect (0, 0, imposed, imposed * 672.0 / 820.0)];   // the host, unattended
+                pumpMs (1200);
+                std::printf ("    host imposes %.0f while it is open  (frame now %.0f)\n", imposed, v.frame.size.width); std::fflush (stdout);
+                v = nil; pumpMs (800);                                               // the close
+                if (! open1()) { std::printf ("  !! reopen %d failed\n", k + 2); return 1; }
+                const double got = v.frame.size.width;
+                const bool kept = std::abs (got - base) < 5.0;
+                if (! kept) ++grew;
+                std::printf ("    reopen %d: came back at %6.0f   %s\n\n", k + 2, got,
+                             kept ? "kept the remembered size" : "REMEMBERED THE HOST'S NUDGE");
+                std::fflush (stdout);
+                prev = got;
+            }
+            v = nil; pumpMs (400);
+            std::printf ("  first %.0f -> last %.0f  (%+.0f px)\n", base, prev, prev - base);
+            std::printf ("  verdict: %s\n\n", grew == 0 ? "STABLE - an unattended host resize is never remembered"
+                                                          : "RATCHET - the window grows every time it is reopened");
+            return grew == 0 ? 0 : 2;
         }
 
         const int N = two ? 2 : 1;
