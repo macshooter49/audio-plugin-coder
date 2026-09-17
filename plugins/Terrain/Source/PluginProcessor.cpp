@@ -478,11 +478,42 @@ TerrainAudioProcessor::TerrainAudioProcessor()
             { kEqzSendBase, "SYN_EQZ" }, { kWidSendBase, "SYN_WID" }, { kCmpSendBase, "SYN_CMP" },
             { kOttSendBase, "SYN_OTT" }, { kBodSendBase, "SYN_BOD" }, { kUtlSendBase, "SYN_UTL" },
             { kSplSendBase, "SYN_SPL" } };
-        static_assert (3 * kFxExtra == kGrnSendBase && kSplSendBase + ParameterIDs::kFxInstances == kPoolSendCount,
+        static_assert (3 * kFxExtra == kGrnSendBase && kSplSendBase + ParameterIDs::kFxInstances == kChpSendBase,
                        "the table covers every pooled send exactly once");
         for (const auto& [base, pfx] : kAll)
             for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
                 add (base + i, juce::String (pfx) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_");
+        // tp30 — THE AUDIO FLOW CARDS' SENDS. Same table, two differences worth naming: four
+        //  instances rather than six, and the flow ids spell the last two pills SRC_S / SRC_N
+        //  (the rack spells them SRC_SUB / SRC_NOISE). Everything downstream of this — the lazy
+        //  send-filter builder, poolQOfParam_, the state migration — then treats them as it treats
+        //  any other routed device, which is the whole point of giving them the same grammar.
+        {
+            static const char* fsfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_S","SRC_N" };
+            auto addFlow = [this] (int q, const juce::String& pfx)
+            {
+                for (int k = 0; k < 6; ++k)
+                {
+                    const juce::String id = pfx + fsfx[k];
+                    auto* p = apvts.getParameter (id);
+                    jassert (p != nullptr);
+                    if (p == nullptr) continue;
+                    poolSrcRaw_[q][k] = apvts.getRawParameterValue (id);
+                    poolSrcDef_[q][k] = p->convertFrom0to1 (p->getDefaultValue()) > 0.5f;
+                    poolSrcSlot_[id]  = q * 6 + k;
+                    const int idx = p->getParameterIndex();
+                    if (idx >= 0 && idx < (int) poolQOfParam_.size()) poolQOfParam_[(size_t) idx] = q;
+                }
+            };
+            static_assert (kGliSendBase + wc::kFlowInstances == kPoolSendCount,
+                           "the flow sends must be the LAST thing in the pool");
+            for (int i = 0; i < wc::kFlowInstances; ++i)
+            {
+                const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+                addFlow (kChpSendBase + i, "FLOW_CHOP" + nn + "_");
+                addFlow (kGliSendBase + i, "FLOW_GLI"  + nn + "_");
+            }
+        }
     }
 
     // Spectral-morph rebuild runs on the message thread (the rebuild is ~2.3 ms since fb467,
@@ -7207,6 +7238,37 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                 juce::ParameterID { ids[o], 1 }, nms[o], wtRoster, defTable));
     }
 
+    // ══ tp30 — THE FLOW CARDS' ROUTE PILLS + THE OUTPUT CABLE ═══════════════════════════════════
+    //  Ten pills per audio FLOW card (instance 1 here; the pool block below clones 2..4), all ON by
+    //  default so an untouched card eats the whole instrument exactly as it always did. And one
+    //  "reaches Audio Out" bool per source, also ON — a patch that never opens the Patcher is
+    //  unchanged. Declared HERE, immediately above the pool block, because that block snapshots
+    //  `layout.seen` and clones what it finds.
+    {
+        static const char* const kChopSrc[10] = { ParameterIDs::FLOW_CHOP_SRC_A, ParameterIDs::FLOW_CHOP_SRC_B,
+            ParameterIDs::FLOW_CHOP_SRC_C, ParameterIDs::FLOW_CHOP_SRC_D, ParameterIDs::FLOW_CHOP_SRC_S,
+            ParameterIDs::FLOW_CHOP_SRC_N, ParameterIDs::FLOW_CHOP_SRC_E, ParameterIDs::FLOW_CHOP_SRC_F,
+            ParameterIDs::FLOW_CHOP_SRC_G, ParameterIDs::FLOW_CHOP_SRC_H };
+        static const char* const kGliSrc[10]  = { ParameterIDs::FLOW_GLI_SRC_A, ParameterIDs::FLOW_GLI_SRC_B,
+            ParameterIDs::FLOW_GLI_SRC_C, ParameterIDs::FLOW_GLI_SRC_D, ParameterIDs::FLOW_GLI_SRC_S,
+            ParameterIDs::FLOW_GLI_SRC_N, ParameterIDs::FLOW_GLI_SRC_E, ParameterIDs::FLOW_GLI_SRC_F,
+            ParameterIDs::FLOW_GLI_SRC_G, ParameterIDs::FLOW_GLI_SRC_H };
+        static const char* const kSrcNm[10] = { "A", "B", "C", "D", "Sub", "Noise", "E", "F", "G", "H" };
+        for (int k = 0; k < 10; ++k)
+        {
+            layout.add (std::make_unique<juce::AudioParameterBool> (
+                juce::ParameterID { kChopSrc[k], 1 }, juce::String ("Flow Chop Src ") + kSrcNm[k], true));
+            layout.add (std::make_unique<juce::AudioParameterBool> (
+                juce::ParameterID { kGliSrc[k], 1 },  juce::String ("Flow Glitch Src ") + kSrcNm[k], true));
+        }
+        static const char* const kOutId[6] = { ParameterIDs::SYN_OSC_A_OUT, ParameterIDs::SYN_OSC_B_OUT,
+            ParameterIDs::SYN_OSC_C_OUT, ParameterIDs::SYN_OSC_D_OUT, ParameterIDs::SYN_SUB_OUT, ParameterIDs::SYN_NOISE_OUT };
+        static const char* const kOutNm[6] = { "Synth OSC A Out", "Synth OSC B Out", "Synth OSC C Out",
+            "Synth OSC D Out", "Synth Sub Out", "Synth Noise Out" };
+        for (int k = 0; k < 6; ++k)
+            layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { kOutId[k], 1 }, kOutNm[k], true));
+    }
+
     // ══ tp20 — THE POOL. Appended AFTER every hand-written parameter (the parameter law: IDs are append-only;
     //    instance 1 keeps its bare id). A clone carries the source's type, range/choices, default and label.
     {
@@ -7942,6 +8004,7 @@ int TerrainAudioProcessor::poolBaseForKind (int kind) noexcept
         case 9:  return kEqzSendBase;   case 10: return kWidSendBase;   case 11: return kCmpSendBase;
         case 12: return kOttSendBase;   case 13: return kBodSendBase;   case 14: return kUtlSendBase;
         case 15: return kSplSendBase;
+        case 16: return kChpSendBase;  case 17: return kGliSendBase;   // tp30 — the audio flow cards
         default: return -1;
     }
 }
@@ -8073,6 +8136,33 @@ void TerrainAudioProcessor::cacheSplRefs()
     }
 }
 
+// tp30 — THE FLOW CARDS' ROUTE PILLS + THE PER-SOURCE OUTPUT CABLE. Instance 1 keeps the bare id
+//  (FLOW_CHOP_SRC_A); 2..4 are the tp20 clones (FLOW_CHOP2_SRC_A). Message thread only — the audio
+//  thread never builds a juce::String.
+void TerrainAudioProcessor::cacheFlowRouteRefs()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* const sfx [6] = { "SRC_A", "SRC_B", "SRC_C", "SRC_D", "SRC_S", "SRC_N" };
+    static const char* const sfxB[4] = { "SRC_E", "SRC_F", "SRC_G", "SRC_H" };
+    for (int i = 0; i < wc::kFlowInstances; ++i)
+    {
+        const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+        for (int kind = 0; kind < 2; ++kind)
+        {
+            const juce::String g = (kind == 0 ? "FLOW_CHOP" : "FLOW_GLI") + nn + "_";
+            auto& v = (kind == 0 ? chpRouteRefs_ : gliRouteRefs_)[(size_t) i];
+            for (int k = 0; k < 6; ++k) v.src [k] = R (g + sfx [k]);
+            for (int k = 0; k < 4; ++k) v.srcB[k] = R (g + sfxB[k]);
+        }
+    }
+    static const char* const kOut [6] = { ParameterIDs::SYN_OSC_A_OUT, ParameterIDs::SYN_OSC_B_OUT,
+                                          ParameterIDs::SYN_OSC_C_OUT, ParameterIDs::SYN_OSC_D_OUT,
+                                          ParameterIDs::SYN_SUB_OUT,   ParameterIDs::SYN_NOISE_OUT };
+    static const char* const kOutB[4] = { "SYN_OSC_E_OUT", "SYN_OSC_F_OUT", "SYN_OSC_G_OUT", "SYN_OSC_H_OUT" };
+    for (int k = 0; k < 6; ++k) outCableRef_ [k] = R (kOut [k]);
+    for (int k = 0; k < 4; ++k) outCableRefB_[k] = R (kOutB[k]);
+}
+
 void TerrainAudioProcessor::cacheSendRefs()
 {
     // fb435 — was a SECOND hand-copied list, still nine kinds long: the fx4 four had SEND
@@ -8150,7 +8240,9 @@ std::atomic<float>* TerrainAudioProcessor::poolSrcRef (int q, int k) const noexc
     if (q < kBodSendBase)  return ottRefs_[I (q, kOttSendBase)].src[k];
     if (q < kUtlSendBase)  return bodRefs_[I (q, kBodSendBase)].src[k];
     if (q < kSplSendBase)  return utlRefs_[I (q, kUtlSendBase)].src[k];
-    return splRefs_[I (q, kSplSendBase)].src[k];
+    if (q < kChpSendBase)  return splRefs_[I (q, kSplSendBase)].src[k];
+    if (q < kGliSendBase)  return chpRouteRefs_[I (q, kChpSendBase)].src[k];   // tp30 — flow chop
+    return gliRouteRefs_[I (q, kGliSendBase)].src[k];                          // tp30 — flow glitch
 }
 
 // The sends whose pills are lit RIGHT NOW, read exactly as processBlock reads them (> 0.5f, no power
@@ -8982,6 +9074,31 @@ void TerrainAudioProcessor::rebuildChainOrder() noexcept
         add (14, i + 1, utlRefs_[(size_t) i].active, utlRefs_[(size_t) i].rank);
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (15, i + 1, splRefs_[(size_t) i].active, splRefs_[(size_t) i].rank);
+    // ── tp30 — THE AUDIO FLOW CARDS (16 = Chop, 17 = Glitch) ────────────────────────────────────
+    //  They are not rack cards: a flow card is "in the chain" exactly when the FLOW CHAIN holds it
+    //  (FlowChain.h resolves the click order), and its order among the flow cards is that same click
+    //  order. So membership and rank are derived here rather than read from an _ACTIVE/_RANK pair.
+    //  kFlowRankBase is above every reachable device rank, which is what makes a flow card ALWAYS
+    //  the last thing in the rack — the position it has always occupied — and that in turn is what
+    //  lets its DSP be deferred out of the per-sample loop (see kFlowRankBase in the header).
+    {
+        for (auto& f : flowChainActive_) f.store (0.0f, std::memory_order_relaxed);
+        const wc::FlowChainState fc = flowChainNow();
+        for (int ci = 0; ci < fc.len; ++ci)
+        {
+            const int m = fc.order[ci];
+            if (m != 2 && m != 3) continue;                         // note stages (Arp/Robin) make no audio
+            const int fk = flowFlat (m == 2 ? kFlowKindChop : kFlowKindGli, fc.inst[ci]);
+            flowChainActive_[(size_t) fk].store (1.0f, std::memory_order_relaxed);
+            flowChainRank_  [(size_t) fk].store (kFlowRankBase + 0.001f * (float) ci, std::memory_order_relaxed);
+        }
+        for (int i = 0; i < wc::kFlowInstances; ++i)
+        {
+            const int fc0 = flowFlat (kFlowKindChop, i), fg0 = flowFlat (kFlowKindGli, i);
+            add (16, i + 1, &flowChainActive_[(size_t) fc0], &flowChainRank_[(size_t) fc0]);
+            add (17, i + 1, &flowChainActive_[(size_t) fg0], &flowChainRank_[(size_t) fg0]);
+        }
+    }
     // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
     // tie can never reshuffle audibly between blocks).
     for (int i = 1; i < chainCount_; ++i)
@@ -9150,6 +9267,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     }
     cacheUtlRefs();      // fb444 — Utility's six-pill roster
     cacheSplRefs();      // fb444 — the Splitter's own roster shape
+    cacheFlowRouteRefs();   // tp30 — the audio FLOW cards' ten route pills + the per-source output cable
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
     // fb636 bugA — the constructor's pill table must BE the pointers processBlock just cached; then build
     // every lit send's pair now, under this prepGuard, at the rate the voices were prepared at above.
@@ -12416,6 +12534,30 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    // tp30 — THE FLOW CARDS' ROUTE GATES. Same per-instance shape as every rack device (fb435's
+    //  lesson: pills that nothing consumes are a SILENT control, not a dead one). Four instances
+    //  each, chop then glitch, into the two send bases minted for them.
+    for (int i = 0; i < wc::kFlowInstances; ++i)
+    {
+        const int qq[2] = { kChpSendBase + i, kGliSendBase + i };
+        const FlowRouteRefs* rr[2] = { &chpRouteRefs_[(size_t) i], &gliRouteRefs_[(size_t) i] };
+        for (int d = 0; d < 2; ++d)
+        {
+            float ps = 0.0f;
+            for (int k = 0; k < 6; ++k)
+            {
+                const float pg = (rr[d]->src[k] != nullptr && rr[d]->src[k]->load() > 0.5f) ? 1.0f : 0.0f;
+                poolRouteG_[(size_t) (qq[d] * 6 + k)] = pg; ps += pg;
+            }
+            for (int k = 0; k < 4; ++k)
+            {
+                const float pg = (rr[d]->srcB[k] != nullptr && rr[d]->srcB[k]->load() > 0.5f) ? 1.0f : 0.0f;
+                poolRouteGB_[(size_t) (qq[d] * 4 + k)] = pg; ps += pg;
+            }
+            poolRouteAny_[(size_t) qq[d]] = ps > 0.0f;
+        }
+    }
+
     pushFx3Params();     // fb413 — ONE setParams per instance per block, not per sample
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
     // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
@@ -12423,9 +12565,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // (b) whose output feeds whom. Without this every device tapped its own sources and added to the
     // output in parallel, so dragging a card changed nothing: Max's "it doesn't do any of that".
     {
-        static constexpr int kBaseOf[16] = { -1, -1, -1, kGrnSendBase, kTpeSendBase, kFltSendBase, kChoSendBase, kFlaSendBase,
+        static constexpr int kBaseOf[18] = { -1, -1, -1, kGrnSendBase, kTpeSendBase, kFltSendBase, kChoSendBase, kFlaSendBase,
                                              kPhaSendBase, kEqzSendBase, kWidSendBase, kCmpSendBase, kOttSendBase, kBodSendBase,
-                                             kUtlSendBase, kSplSendBase };   // tp20 — pool send base per kind (3..15)
+                                             kUtlSendBase, kSplSendBase,
+                                             kChpSendBase, kGliSendBase };   // tp20 — pool send base per kind (3..15) · tp30 — 16/17 flow
         auto maskOf = [this] (const ChainEntry& ce) -> uint16_t
         {
             const float* g = nullptr;
@@ -12444,13 +12587,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else if (ce.kind == 13) g = &poolRouteG_[(size_t) ((kBodSendBase + ce.inst - 1) * 6)];   // fb444
             else if (ce.kind == 14) g = &poolRouteG_[(size_t) ((kUtlSendBase + ce.inst - 1) * 6)];   // fb444
             else if (ce.kind == 15) g = &poolRouteG_[(size_t) ((kSplSendBase + ce.inst - 1) * 6)];   // fb444
+            else if (ce.kind == 16) g = &poolRouteG_[(size_t) ((kChpSendBase + ce.inst - 1) * 6)];   // tp30 — flow chop
+            else if (ce.kind == 17) g = &poolRouteG_[(size_t) ((kGliSendBase + ce.inst - 1) * 6)];   // tp30 — flow glitch
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             // tp20 — bank 1's pills for the same device ride bits 6..9 (E F G H) of the one mask
             const float* gB = nullptr;
             if      (ce.kind == 0) gB = (ce.inst == 1) ? hallRvbGB_ : &poolRouteGB_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 4)];
             else if (ce.kind == 1) gB = (ce.inst == 1) ? dlyGB_     : &poolRouteGB_[(size_t) ((ce.inst - 2) * 4)];
             else if (ce.kind == 2) gB = (ce.inst == 1) ? dstGB_     : &poolRouteGB_[(size_t) ((kFxExtra + ce.inst - 2) * 4)];
-            else if (ce.kind >= 3 && ce.kind < 16) gB = &poolRouteGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 4)];
+            else if (ce.kind >= 3 && ce.kind < 18) gB = &poolRouteGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 4)];
             uint16_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint16_t) (m | (1u << (unsigned) s));
             if (gB != nullptr)
@@ -12462,6 +12607,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         for (int c = 0; c < n; ++c) masks[c] = maskOf (chainOrder_[(size_t) c]);
         fxTopo_.build (masks, n);
         resolveLanes();   // fb444 — turn the flat card list into Splitter lane ownership
+        // tp30 — which chain slot each audio FLOW card landed in this block (-1 = not in the chain).
+        //  The deferred pass walks THIS, in chain order, so a flow card fed by an upstream flow card
+        //  reads the output that card actually produced rather than the zero its slot left behind.
+        flowSlotOf_.fill (-1);
+        flowAnyRouted_ = false;
+        for (int c = 0; c < n; ++c)
+        {
+            const auto& ce = chainOrder_[(size_t) c];
+            if (ce.kind != kFlowKindChop && ce.kind != kFlowKindGli) continue;
+            const int fk = flowFlat (ce.kind, ce.inst - 1);
+            if ((unsigned) fk < (unsigned) kFlowSlots) { flowSlotOf_[(size_t) fk] = c; flowAnyRouted_ = true; }
+        }
 
         // Scatter the ENTRY masks back to per-device arrays — these, not the full route masks, are
         // what the voices tap, so a source routed to three devices is still summed only ONCE.
@@ -12476,7 +12633,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if      (ce.kind == 0) dstArrB = (ce.inst == 1) ? hallEntryGB_ : &poolEntryGB_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArrB = (ce.inst == 1) ? dlyEntryGB_  : &poolEntryGB_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 2) dstArrB = (ce.inst == 1) ? dstEntryGB_  : &poolEntryGB_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
-            else if (ce.kind >= 3 && ce.kind < 16) dstArrB = &poolEntryGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 6)];
+            else if (ce.kind >= 3 && ce.kind < 18) dstArrB = &poolEntryGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 6)];
             if      (ce.kind == 0) dstArr = (ce.inst == 1) ? hallEntryG_ : &poolEntryG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 3) dstArr = &poolEntryG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
@@ -12492,6 +12649,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else if (ce.kind == 13) dstArr = &poolEntryG_[(size_t) ((kBodSendBase + ce.inst - 1) * 6)];   // fb444
             else if (ce.kind == 14) dstArr = &poolEntryG_[(size_t) ((kUtlSendBase + ce.inst - 1) * 6)];   // fb444
             else if (ce.kind == 15) dstArr = &poolEntryG_[(size_t) ((kSplSendBase + ce.inst - 1) * 6)];   // fb444
+            else if (ce.kind == 16) dstArr = &poolEntryG_[(size_t) ((kChpSendBase + ce.inst - 1) * 6)];   // tp30 — flow chop
+            else if (ce.kind == 17) dstArr = &poolEntryG_[(size_t) ((kGliSendBase + ce.inst - 1) * 6)];   // tp30 — flow glitch
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -12541,6 +12700,26 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                              && sendRef_[(size_t) ki][(size_t) ii]->load() > 0.5f;
           if (! sendMode) insertMask = (uint16_t) (insertMask | e);
       }
+      // ── tp30 — THE OUTPUT CABLE IS THE SAME MECHANISM ──────────────────────────────────────
+      //  Max: "if some things don't have a node it has to just stop, it has to have no sound,
+      //  because it's not hooked up to anything." A source whose cable to Audio Out is CUT leaves
+      //  the main buses exactly the way a rack-tapped source does — so it is one more bit in this
+      //  mask, not a new signal path. The two cases then fall out on their own:
+      //    · cut, and some card claims it  → it is audible THROUGH that card (it was leaving anyway);
+      //    · cut, and nothing claims it    → no bus, no send: SILENT, which is the whole request.
+      //  Default is connected, so every patch that never opens the Patcher is untouched.
+      for (int s = 0; s < 6; ++s)
+      {
+          const auto* oc = outCableRef_[s];
+          cutG_[s] = (oc != nullptr && oc->load() <= 0.5f) ? 1.0f : 0.0f;
+      }
+      for (int s = 0; s < 4; ++s)
+      {
+          const auto* oc = outCableRefB_[s];
+          cutGB_[s] = (oc != nullptr && oc->load() <= 0.5f) ? 1.0f : 0.0f;
+      }
+      cutGB_[4] = cutG_[4];    // the Sub is shared across the banks
+      cutGB_[5] = 0.0f;        // bank 1 has no noise layer
       for (int s = 0; s < 6; ++s)
       {
           const bool pulled = (insertMask & (1u << (unsigned) s)) != 0;
@@ -12589,7 +12768,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             routesDirty = (hallEntryG_[k] != lastHallEntryG_[k]) || (dlyEntryG_[k] != lastDlyEntryG_[k])
                        || (dstEntryG_[k] != lastDstEntryG_[k])   || (exUnionG_[k]  != lastExUnionG_[k])
                        || (hallEntryGB_[k] != lastHallEntryGB_[k]) || (dlyEntryGB_[k] != lastDlyEntryGB_[k])     // tp20 — bank 1
-                       || (dstEntryGB_[k] != lastDstEntryGB_[k])   || (exUnionGB_[k]  != lastExUnionGB_[k]);
+                       || (dstEntryGB_[k] != lastDstEntryGB_[k])   || (exUnionGB_[k]  != lastExUnionGB_[k])
+                       || (cutG_[k] != lastCutG_[k]) || (cutGB_[k] != lastCutGB_[k]);   // tp30 — the output cables
         if (! routesDirty)
             routesDirty = (rsL != lastRsL_) || (rsR != lastRsR_) || (dsL != lastDsL_) || (dsR != lastDsR_)
                        || (dtL != lastDtL_) || (dtR != lastDtR_) || (exL != lastExL_) || (exR != lastExR_);
@@ -12613,7 +12793,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // by the timer, off the audio thread, from the wanted-send mask published here.
         {
             auto& R = routeSnap_;
-            for (int k = 0; k < 6; ++k) { R.hall[k] = hallEntryG_[k]; R.dly[k] = dlyEntryG_[k]; R.dst[k] = dstEntryG_[k]; R.ex[k] = exUnionG_[k]; }
+            for (int k = 0; k < 6; ++k) { R.hall[k] = hallEntryG_[k]; R.dly[k] = dlyEntryG_[k]; R.dst[k] = dstEntryG_[k]; R.ex[k] = exUnionG_[k]; R.cut[k] = cutG_[k]; }   // tp30 — the cable
             R.rsL = rsL; R.rsR = rsR; R.dsL = dsL; R.dsR = dsR; R.dtL = dtL; R.dtR = dtR; R.exL = exL; R.exR = exR;
             juce::uint64 m0 = 0, m1 = 0;
             for (int q = 0; q < kPoolSendCount; ++q)
@@ -12660,7 +12840,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     if (sv->isVoiceActive()) sv->pullRoutes (R);          // the sounding few; the rest catch up at note-on
             {   // tp20 — bank 1's snapshot: the same buses, ITS entry gains (E–H in slots 0..3)
                 auto& RB = routeSnapB_;
-                for (int k = 0; k < 6; ++k) { RB.hall[k] = hallEntryGB_[k]; RB.dly[k] = dlyEntryGB_[k]; RB.dst[k] = dstEntryGB_[k]; RB.ex[k] = exUnionGB_[k]; }
+                for (int k = 0; k < 6; ++k) { RB.hall[k] = hallEntryGB_[k]; RB.dly[k] = dlyEntryGB_[k]; RB.dst[k] = dstEntryGB_[k]; RB.ex[k] = exUnionGB_[k]; RB.cut[k] = cutGB_[k]; }   // tp30
                 RB.rsL = rsL; RB.rsR = rsR; RB.dsL = dsL; RB.dsR = dsR; RB.dtL = dtL; RB.dtR = dtR; RB.exL = exL; RB.exR = exR;
                 for (int q = 0; q < kPoolSendCount; ++q)
                 {
@@ -12681,6 +12861,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             lastDstEntryG_[k]  = dstEntryG_[k];  lastExUnionG_[k]  = exUnionG_[k];
             lastHallEntryGB_[k] = hallEntryGB_[k]; lastDlyEntryGB_[k] = dlyEntryGB_[k];   // tp20
             lastDstEntryGB_[k]  = dstEntryGB_[k];  lastExUnionGB_[k]  = exUnionGB_[k];
+            lastCutG_[k] = cutG_[k]; lastCutGB_[k] = cutGB_[k];   // tp30
         }
         lastRsL_ = rsL; lastRsR_ = rsR; lastDsL_ = dsL; lastDsR_ = dsR;
         lastDtL_ = dtL; lastDtR_ = dtR; lastExL_ = exL; lastExR_ = exR;
@@ -13380,6 +13561,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 15) { const int q = kSplSendBase + ce.inst - 1;     // fb444 — splitter
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 16) { const int q = kChpSendBase + ce.inst - 1;     // tp30 — flow chop
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 17) { const int q = kGliSendBase + ce.inst - 1;     // tp30 — flow glitch
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
         if (b != nullptr && b->getNumSamples() >= numSamples && b->getNumChannels() >= 2)
@@ -13508,6 +13693,22 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
       for (int b = 0; b < 7; ++b) eqBandBypBlk[b] = rawParam (kBandByp[b])->load() > 0.5f; }
     bool  eqMemoOn = false, eqMemoMaster = false, eqMemoHpB = false, eqMemoLpB = false;
     float eqMemoHp = 0.0f, eqMemoLp = 0.0f, eqMemoF[7] = {}, eqMemoG[7] = {}, eqMemoQ[7] = {}; bool eqMemoB[7] = {};
+    // ── tp30 — THE AUDIO FLOW CARDS' CAPTURE BUSES ──────────────────────────────────────────────
+    //  A flow slot does not process inside this loop; it CAPTURES the input the chain hands it, and
+    //  the block-rate chopStage()/glitchStage() below run on the capture. Grown on the message
+    //  thread's terms (setSize keeps the allocation once it is big enough), cleared per block.
+    float* fInL[(size_t) kFlowSlots] = {};
+    float* fInR[(size_t) kFlowSlots] = {};
+    if (flowAnyRouted_)
+        for (int fk = 0; fk < kFlowSlots; ++fk)
+        {
+            if (flowSlotOf_[(size_t) fk] < 0) continue;
+            auto& b = flowInBuf_[(size_t) fk];
+            if (b.getNumSamples() < numSamples || b.getNumChannels() < 2) b.setSize (2, numSamples, false, true, true);
+            b.clear (0, numSamples);
+            fInL[(size_t) fk] = b.getWritePointer (0);
+            fInR[(size_t) fk] = b.getWritePointer (1);
+        }
     for (int i = 0; i < numSamples; ++i)
     {
         // Advance LFOs and compute per-param offsets
@@ -14405,6 +14606,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // and added straight to the mix, so the devices ran in parallel and chain order was inaudible
         // (Max: "if the distortion is at the beginning it should then hit that delay — it doesn't do
         // any of that"). Slots whose output feeds a later device do NOT reach the mix on their own.
+        float fSumL = 0.0f, fSumR = 0.0f;   // tp30 — what the flow cards took out of this sample's mix
         if (chainCount_ > 0 || exUnionAny_)   // fb494 — an empty rack provably does nothing here:
         {                                    // no exclusion subtract, zero chain iterations, zero
                                              // claims. Skips a 960-byte stack zero-init per sample.
@@ -14447,6 +14649,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 }
 
                 float oL = inL, oR = inR;
+                // tp30 — A FLOW SLOT IS A CAPTURE, NOT AN INSERT. It hands back silence here so
+                //  nothing double-counts; its real output is added after the block stage runs.
+                if (ce.kind == kFlowKindChop || ce.kind == kFlowKindGli)
+                {
+                    const int fk = flowFlat (ce.kind, ce.inst - 1);
+                    if ((unsigned) fk < (unsigned) kFlowSlots && fInL[(size_t) fk] != nullptr)
+                    { fInL[(size_t) fk][i] = inL; fInR[(size_t) fk][i] = inR; fSumL += inL; fSumR += inR; }
+                    pendL[c] = 0.0f; pendR[c] = 0.0f;
+                    continue;
+                }
                 if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
                 else if (ce.kind == 4) applyTpe (ce.inst - 1, inL, inR, oL, oR);   // fb365 — ditto
                 else if (ce.kind == 5) applyFlt (ce.inst - 1, inL, inR, oL, oR);   // fb377 — ditto
@@ -14566,8 +14778,20 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // peak LIMITER (gain-reduction) so dense chords stay loud without the tanh squaring them
         // into a hard-clip buzz, THEN the transparent-knee clip as a final transient safety catch.
         // Output knob (outputGain) already applied above, so it keeps full authority over this stage.
-        const float mL = leftChannel[i] * kInstrumentMakeup;
-        const float mR = (rightChannel != nullptr) ? rightChannel[i] * kInstrumentMakeup : mL;
+        // tp30 — the makeup/limiter/clip stage now serves TWO paths: what stayed in the mix, and
+        //  what a flow card took out of it. The peak detector still sees the WHOLE instrument
+        //  (dry + every capture) and the ONE shared limGain_ is applied to both, so a card that
+        //  claims everything — the default, and every patch that predates the pills — gets exactly
+        //  the master it always got. Only the soft clip runs per path, because it is the last
+        //  safety stage and each path reaches the output on its own.
+        //  ⚠️ The peak is taken from (mix + captures) BEFORE the makeup multiply, not from two
+        //  separately-scaled halves — that is the same expression the single-path code evaluated,
+        //  so the limiter's recursive envelope tracks the identical float and the null holds to
+        //  the bit rather than to "inaudibly close".
+        const float dL = leftChannel[i] * kInstrumentMakeup;
+        const float dR = (rightChannel != nullptr) ? rightChannel[i] * kInstrumentMakeup : dL;
+        const float mL = (leftChannel[i] + fSumL) * kInstrumentMakeup;
+        const float mR = (rightChannel != nullptr) ? (rightChannel[i] + fSumR) * kInstrumentMakeup : mL;
         // Stereo-linked peak detector — one shared gain preserves the stereo image.
         const float mPeak = juce::jmax (std::abs (mL), std::abs (mR));
         limEnv_ = mPeak + (mPeak > limEnv_ ? limAtkCoef_ : limRelCoef_) * (limEnv_ - mPeak);
@@ -14575,14 +14799,29 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // Fast attack (pull down now), slow release (recover smoothly — click-free per the declick rule).
         limGain_ = (limTarget < limGain_) ? (limAtkCoef_ * limGain_ + (1.0f - limAtkCoef_) * limTarget)
                                           : (limRelCoef_ * limGain_ + (1.0f - limRelCoef_) * limTarget);
-        leftChannel[i]  = masterSoftClip (mL * limGain_);
+        leftChannel[i]  = masterSoftClip (dL * limGain_);
         if (rightChannel != nullptr)
-            rightChannel[i] = masterSoftClip (mR * limGain_);
+            rightChannel[i] = masterSoftClip (dR * limGain_);
+        float fClipL = 0.0f, fClipR = 0.0f;
+        if (flowAnyRouted_)
+            for (int fk = 0; fk < kFlowSlots; ++fk)
+            {
+                if (fInL[(size_t) fk] == nullptr) continue;
+                const float a = masterSoftClip (fInL[(size_t) fk][i] * kInstrumentMakeup * limGain_);
+                const float b = masterSoftClip (fInR[(size_t) fk][i] * kInstrumentMakeup * limGain_);
+                fInL[(size_t) fk][i] = a; fInR[(size_t) fk][i] = b;
+                fClipL += a; fClipR += b;
+            }
 
         // Write to scope buffer (mono mix for visualization)
         if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
         {
-            float scopeSample = rightChannel != nullptr ? (leftChannel[i] + rightChannel[i]) * 0.5f : leftChannel[i];
+            // tp30 — the scope reads the WHOLE instrument, flow captures included. Without this a
+            //  patch whose oscillators all run through a Glitch card would show a dead waterfall,
+            //  because the mix buffer legitimately holds nothing at this point.
+            const float scL = leftChannel[i] + fClipL;
+            const float scR = (rightChannel != nullptr) ? rightChannel[i] + fClipR : scL;
+            float scopeSample = rightChannel != nullptr ? (scL + scR) * 0.5f : scL;
             scopeBuffer[static_cast<size_t>(scopePos)].store(scopeSample, std::memory_order_relaxed);
             scopePos = (scopePos + 1) % SCOPE_SIZE;
         }
@@ -14620,6 +14859,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (! flowChain.chopOn[n]) chopVizActive_[n].store (0, std::memory_order_relaxed);
         if (! flowChain.gliOn[n])  gliVizActive_[n].store (0, std::memory_order_relaxed);
     }
+    // tp30 — the buffer the stage about to run works on. Set by the dispatch below, which walks the
+    //  flow cards in chain order and hands each the bus the rack captured for it.
+    float* flowStageL = nullptr;
+    float* flowStageR = nullptr;
     auto chopStage = [&] (int inst)   // fb131 — dispatched in chain order below · tp20 — per instance
     {
         auto& chop = chops_[inst];
@@ -14667,8 +14910,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (chopWipeReq_[inst].exchange (false)) chop.wipe();     // Wipe button (UI native)
         }
 
-        float* cl = buffer.getWritePointer (0);
-        float* cr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : cl;
+        float* cl = flowStageL;   // tp30 — this card's own capture bus (the whole master when every pill is on)
+        float* cr = flowStageR;
         chop.process (cRate, cGate, cVary, cTraj, cMorph,
                       flowPpq, flowBpm, getSampleRate(), cl, cr, numSamples, flowPlaying);
 
@@ -14748,8 +14991,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (gliRollReq_[inst].exchange (false)) glitch.rollNow();   // Roll button (UI native, quantized)
         }
 
-        float* gl = buffer.getWritePointer (0);
-        float* gr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : gl;
+        float* gl = flowStageL;   // tp30 — this card's own capture bus
+        float* gr = flowStageR;
         glitch.process (gRate, gGate, gVary, gTraj, gMorph,
                         flowPpq, flowBpm, getSampleRate(), gl, gr, numSamples, flowPlaying);
 
@@ -14769,11 +15012,56 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // fb131 — MODE CHAIN dispatch: the audio stages run in CLICK ORDER. Chop-then-glitch
     // stutters the chopped groove; glitch-then-chop re-grooves the stutters. Each stage is
     // the untouched fb106/fb115 insert — the chain only decides who reads the buffer first.
-    for (int ci = 0; ci < flowChain.len; ++ci)
+    // tp30 — THE DISPATCH IS NOW PER-BUS, AND STILL IN CHAIN ORDER. Each audio flow card owns a
+    //  capture bus that the rack filled with exactly the oscillators cabled to it (routed through
+    //  whatever rack devices sit upstream of it). We walk the cards in chain order so that:
+    //    · a card fed by an EARLIER flow card reads what that card actually produced — which is
+    //      what makes "glitch into glitch, like some shaper box" real rather than decorative;
+    //    · a card whose output some later card eats does NOT also reach the mix (fxTopo_.consumed);
+    //    · a card nothing eats adds its result to the master, exactly where the old in-place
+    //      insert used to leave it.
+    //  With every pill on, the first card in the chain claims all ten sources, its bus holds the
+    //  whole master, and the mix buffer holds nothing — so this is the old code path, sample for
+    //  sample. That equivalence is the acceptance gate (Tests/au_flow_route.cpp).
+    if (flowAnyRouted_)
     {
-        if      (flowChain.order[ci] == 2) chopStage   (flowChain.inst[ci]);   // tp20 — the slot's instance
-        else if (flowChain.order[ci] == 3) glitchStage (flowChain.inst[ci]);
+        const int nSlotsF = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
+        for (int c = 0; c < nSlotsF; ++c)
+        {
+            const auto& ce = chainOrder_[(size_t) c];
+            if (ce.kind != kFlowKindChop && ce.kind != kFlowKindGli) continue;
+            const int fk = flowFlat (ce.kind, ce.inst - 1);
+            if ((unsigned) fk >= (unsigned) kFlowSlots || flowInBuf_[(size_t) fk].getNumSamples() < numSamples) continue;
+            auto& me = flowInBuf_[(size_t) fk];
+            // fold in every UPSTREAM FLOW card this one eats (rack slots already folded in per sample)
+            for (int j = 0; j < c; ++j)
+            {
+                const auto& up = chainOrder_[(size_t) j];
+                if (up.kind != kFlowKindChop && up.kind != kFlowKindGli) continue;
+                if (! fxTopo_.feed[c].test (j)) continue;
+                const int uk = flowFlat (up.kind, up.inst - 1);
+                if ((unsigned) uk >= (unsigned) kFlowSlots || flowInBuf_[(size_t) uk].getNumSamples() < numSamples) continue;
+                me.addFrom (0, 0, flowInBuf_[(size_t) uk], 0, 0, numSamples);
+                me.addFrom (1, 0, flowInBuf_[(size_t) uk], 1, 0, numSamples);
+            }
+            flowStageL = me.getWritePointer (0);
+            flowStageR = me.getWritePointer (1);
+            if (ce.kind == kFlowKindChop) chopStage   (ce.inst - 1);
+            else                          glitchStage (ce.inst - 1);
+        }
+        // whatever nothing downstream claimed comes back to the mix — the same claim rule the rack uses
+        for (int c = 0; c < nSlotsF; ++c)
+        {
+            const auto& ce = chainOrder_[(size_t) c];
+            if (ce.kind != kFlowKindChop && ce.kind != kFlowKindGli) continue;
+            if (fxTopo_.consumed[c]) continue;
+            const int fk = flowFlat (ce.kind, ce.inst - 1);
+            if ((unsigned) fk >= (unsigned) kFlowSlots || flowInBuf_[(size_t) fk].getNumSamples() < numSamples) continue;
+            buffer.addFrom (0, 0, flowInBuf_[(size_t) fk], 0, 0, numSamples);
+            if (buffer.getNumChannels() > 1) buffer.addFrom (1, 0, flowInBuf_[(size_t) fk], 1, 0, numSamples);
+        }
     }
+    juce::ignoreUnused (chopStage, glitchStage);
 
     // 🎚️ fb636e (clean-up) — THE masterFx RING. The WET stem export attributes each layer's share of the shared FX
     //    against it, so it is written HERE: after the FLOW Chop/Glitch stages (the WET stems carry them) and ABOVE the

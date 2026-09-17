@@ -264,6 +264,34 @@ namespace ParameterIDs
     constexpr char FLOW_RBN_PAN[]    = "FLOW_RBN_PAN";     constexpr char FLOW_RBN_AFTER[]  = "FLOW_RBN_AFTER";
     constexpr char FLOW_RBN_GLIDE[]  = "FLOW_RBN_GLIDE";   constexpr char FLOW_RBN_OVERLAP[]= "FLOW_RBN_OVERLAP";
     constexpr char FLOW_RBN_FADE[]   = "FLOW_RBN_FADE";
+    // ══ tp30 — THE FLOW CARDS GET ROUTE PILLS ═══════════════════════════════════════════════════
+    //  Max (2026-09-16): "if I make another glitch flow card ... every single oscillator routes to
+    //  that flow card ... I want the complete opposite. It can default to it, but I have to be able
+    //  to cut the cable to oscillator B and put it to audio out, or to another glitch card."
+    //  So an audio FLOW card carries the SAME ten route pills every rack device carries — one
+    //  grammar for the whole instrument (FxChainTopology.h's fb376 law) — and the Chop/Glitch
+    //  engines become chain kinds 16/17 with their own per-instance send bus. All ten default ON,
+    //  so an untouched card behaves exactly as it always has.
+    //  Instances 2..4 are CLONED from these by the tp20 layout tap (FLOW_CHOP_SRC_A → FLOW_CHOP2_SRC_A),
+    //  which is why all ten (E–H included) are written out here: the SYN_*_SRC_B → E..H clone rule in
+    //  block (1) only fires for SYN_ ids, and it runs off a snapshot taken before block (2).
+    constexpr char FLOW_CHOP_SRC_A[] = "FLOW_CHOP_SRC_A";   constexpr char FLOW_CHOP_SRC_B[] = "FLOW_CHOP_SRC_B";
+    constexpr char FLOW_CHOP_SRC_C[] = "FLOW_CHOP_SRC_C";   constexpr char FLOW_CHOP_SRC_D[] = "FLOW_CHOP_SRC_D";
+    constexpr char FLOW_CHOP_SRC_S[] = "FLOW_CHOP_SRC_S";   constexpr char FLOW_CHOP_SRC_N[] = "FLOW_CHOP_SRC_N";
+    constexpr char FLOW_CHOP_SRC_E[] = "FLOW_CHOP_SRC_E";   constexpr char FLOW_CHOP_SRC_F[] = "FLOW_CHOP_SRC_F";
+    constexpr char FLOW_CHOP_SRC_G[] = "FLOW_CHOP_SRC_G";   constexpr char FLOW_CHOP_SRC_H[] = "FLOW_CHOP_SRC_H";
+    constexpr char FLOW_GLI_SRC_A[]  = "FLOW_GLI_SRC_A";    constexpr char FLOW_GLI_SRC_B[]  = "FLOW_GLI_SRC_B";
+    constexpr char FLOW_GLI_SRC_C[]  = "FLOW_GLI_SRC_C";    constexpr char FLOW_GLI_SRC_D[]  = "FLOW_GLI_SRC_D";
+    constexpr char FLOW_GLI_SRC_S[]  = "FLOW_GLI_SRC_S";    constexpr char FLOW_GLI_SRC_N[]  = "FLOW_GLI_SRC_N";
+    constexpr char FLOW_GLI_SRC_E[]  = "FLOW_GLI_SRC_E";    constexpr char FLOW_GLI_SRC_F[]  = "FLOW_GLI_SRC_F";
+    constexpr char FLOW_GLI_SRC_G[]  = "FLOW_GLI_SRC_G";    constexpr char FLOW_GLI_SRC_H[]  = "FLOW_GLI_SRC_H";
+    // tp30 — THE OUTPUT CABLE. "if some things don't have a node it has to just stop, it has to have
+    //  no sound, because it's not hooked up to anything." A source with no cable to Audio Out and no
+    //  flow card claiming it is SILENT. Default ON: every existing patch reaches the output.
+    //  E–H are cloned from SYN_OSC_B_OUT by block (1).
+    constexpr char SYN_OSC_A_OUT[] = "SYN_OSC_A_OUT";   constexpr char SYN_OSC_B_OUT[] = "SYN_OSC_B_OUT";
+    constexpr char SYN_OSC_C_OUT[] = "SYN_OSC_C_OUT";   constexpr char SYN_OSC_D_OUT[] = "SYN_OSC_D_OUT";
+    constexpr char SYN_SUB_OUT[]   = "SYN_SUB_OUT";     constexpr char SYN_NOISE_OUT[] = "SYN_NOISE_OUT";
     // ── ANNULUS resonator — global key-tracked physical-modeling node (ResonatorNode.h) ──
     constexpr char SYN_RESO_STRUCTURE[]  = "SYN_RESO_STRUCTURE";   // float 0..1 — harmonic↔material morph
     constexpr char SYN_RESO_BRIGHTNESS[] = "SYN_RESO_BRIGHTNESS";  // float 0..1 — mode count + spectral tilt

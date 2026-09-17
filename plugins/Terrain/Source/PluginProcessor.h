@@ -2696,8 +2696,13 @@ private:
     static constexpr int kSplSendBase  = kUtlSendBase + ParameterIDs::kFxInstances;    // 87 — splitter
     static_assert (kSplSendBase + ParameterIDs::kFxInstances
                    <= tw::SynthVoice::kPoolSends, "pool send bases outgrew kPoolSends");
-    static constexpr int kPoolSendCount = kSplSendBase + ParameterIDs::kFxInstances;   // 93
-    static_assert (kPoolSendCount >= kSplSendBase + ParameterIDs::kFxInstances,
+    // tp30 — THE AUDIO FLOW CARDS ARE ROUTED DEVICES. Chop and Glitch get the same per-instance
+    //  send bus every rack device has, so an oscillator can be cut from one card and handed to
+    //  another. Four instances each (wc::kFlowInstances), not six — the pool is settled at 4.
+    static constexpr int kChpSendBase  = kSplSendBase + ParameterIDs::kFxInstances;    // 93 — tp30 flow chop
+    static constexpr int kGliSendBase  = kChpSendBase + wc::kFlowInstances;            // 97 — tp30 flow glitch
+    static constexpr int kPoolSendCount = kGliSendBase + wc::kFlowInstances;           // 101
+    static_assert (kPoolSendCount >= kGliSendBase + wc::kFlowInstances,
                    "kPoolSendCount must cover the LAST send base + its instances");
     static_assert (kPoolSendCount <= tw::SynthVoice::kPoolSends,
                    "the voice's kPoolSends must cover every pool send the processor writes");
@@ -2735,8 +2740,12 @@ private:
     // at :4392/:4417 and vanished with no message. The guard fails safe (no overflow — that was
     // checked) but a silently-dropped device reads as "the rack is broken". Derive it from the kind
     // count instead of hand-maintaining a number: 6 kinds x 6 instances, ~432 bytes.
-    static constexpr int kFxKinds  = 16;     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12 · fb444 — + bode 13, utility 14, splitter 15
-    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;    // 96 (16 x 6)
+    static constexpr int kFxKinds  = 18;     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12 · fb444 — + bode 13, utility 14, splitter 15 · tp30 — + flow chop 16, flow glitch 17
+    // tp30 — the flow kinds carry 4 instances, not 6, so the bound is the honest sum rather than
+    //  kFxKinds x 6. It must stay <= FxChainTopology::kMaxSlots (128) — the static_assert says so.
+    static constexpr int kChainMax = 16 * ParameterIDs::kFxInstances + 2 * wc::kFlowInstances;   // 104
+    static_assert (kChainMax <= (int) tw::FxChainTopology::kMaxSlots,
+                   "kChainMax must fit FxChainTopology's per-slot bitmask");
     static_assert (kChainMax <= tw::FxChainTopology::kMaxSlots,
                    "every activatable device must fit in the topology's slot table");
     std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};
@@ -3040,6 +3049,54 @@ private:
     std::array<SplRefs, (size_t) ParameterIDs::kFxInstances> splRefs_ {};
     std::array<float,   (size_t) ParameterIDs::kFxInstances> splEnv_  {};
     void cacheSplRefs();
+
+    // ══ tp30 — THE AUDIO FLOW CARDS AS ROUTED CHAIN DEVICES (kind 16 = Chop, 17 = Glitch) ═══════
+    //  A Chop/Glitch card now carries the same ten route pills every rack device carries, so it
+    //  taps only the oscillators it is cabled to. It joins chainOrder_ like any other device —
+    //  which buys the whole fb351 topology for free (a source enters the rack ONCE, at its first
+    //  device; a card fed by an upstream card eats that card's output) — but its DSP is DEFERRED:
+    //  the per-sample chain loop only CAPTURES the slot's input into flowInBuf_, and the existing
+    //  block-rate chopStage()/glitchStage() run afterwards, exactly where they always have.
+    //
+    //  Why deferred rather than per-sample like every other device: FlowChop/FlowGlitch are
+    //  block manglers (circular buffers, tape-stop ramps, beat-quantised fires) with a block API,
+    //  and rewriting them per-sample would be a second, unrelated risk. Deferral is SAFE because a
+    //  flow slot is forced to the END of the chain (kFlowRankBase below), so nothing downstream of
+    //  it needs its output inside the sample loop — only other flow slots can, and those are
+    //  resolved in the deferred pass.
+    //
+    //  🔑 THE NULL PROPERTY: with every pill on (the default) the FIRST flow card in the chain
+    //  claims all ten sources, so the main mix carries nothing and its bus carries exactly the
+    //  master the card used to be handed. Identical output, which is the acceptance gate.
+    static constexpr int kFlowKinds    = 2;                                     // chop, glitch
+    static constexpr int kFlowSlots    = kFlowKinds * wc::kFlowInstances;       // 8
+    static constexpr int kFlowKindChop = 16;
+    static constexpr int kFlowKindGli  = 17;
+    // Above every reachable device rank (_RANK is a 0..1 float), so a flow card always sorts last.
+    static constexpr float kFlowRankBase = 2.0f;
+    static constexpr int flowFlat (int kind, int inst0) noexcept
+    { return (kind == kFlowKindGli ? wc::kFlowInstances : 0) + inst0; }
+
+    struct FlowRouteRefs { std::atomic<float>* src[6] {}; std::atomic<float>* srcB[4] {}; };
+    std::array<FlowRouteRefs, (size_t) wc::kFlowInstances> chpRouteRefs_ {};
+    std::array<FlowRouteRefs, (size_t) wc::kFlowInstances> gliRouteRefs_ {};
+    void cacheFlowRouteRefs();
+    // rebuildChainOrder() reads atomics only, so chain membership and order arrive as atomics that
+    // the block writes just before it. (Same thread; atomic purely to match add()'s signature.)
+    std::array<std::atomic<float>, (size_t) kFlowSlots> flowChainActive_ {};
+    std::array<std::atomic<float>, (size_t) kFlowSlots> flowChainRank_   {};
+    // The card mangles its capture IN PLACE, so the capture IS the output — no second buffer.
+    std::array<juce::AudioBuffer<float>, (size_t) kFlowSlots> flowInBuf_  {};   // captured slot input
+    std::array<int, (size_t) kFlowSlots> flowSlotOf_ {};    // chain slot index of each flow card, -1 = not in the chain
+    bool flowAnyRouted_ = false;                            // any flow card in the chain this block
+    // tp30 — THE OUTPUT CABLE, per source (A..D, Sub, Noise / E..H). 0 = cut: the source reaches the
+    //  master only through whatever flow card or rack device claims it, and is SILENT if none does.
+    std::atomic<float>* outCableRef_ [6] {};
+    std::atomic<float>* outCableRefB_[4] {};
+    float cutG_ [6] = { 0, 0, 0, 0, 0, 0 };   // 1 = that source's cable to Audio Out is cut
+    float cutGB_[6] = { 0, 0, 0, 0, 0, 0 };
+    float lastCutG_ [6] = { -1, -1, -1, -1, -1, -1 };   // the route push is change-gated; seed to "never pushed"
+    float lastCutGB_[6] = { -1, -1, -1, -1, -1, -1 };
     // The Splitter is the ONE device that is not a one-in-one-out insert, so it cannot use
     // TW_FX4_APPLY. It splits at its own slot and merges after the whole chain has run.
     void applySplSplit (int inst0, float inL, float inR,

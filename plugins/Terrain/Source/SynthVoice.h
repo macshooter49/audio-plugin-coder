@@ -139,8 +139,10 @@ namespace tw
 //    sides are the audio thread; the version is what tells a voice it is behind.
 struct RouteSnapshot
 {
-    static constexpr int kPools = 93;
+    static constexpr int kPools = 101;   // tp30 — + 4 Flow Chop + 4 Flow Glitch send buses
     float hall[6] {}, dly[6] {}, dst[6] {}, ex[6] {};
+    float cut[6] {};   // tp30 — the OUTPUT CABLE, per source. 1 = cut: never reaches the main buses,
+                       //  whatever the rack is or is not doing. See setCutRoutes.
     float* rsL = nullptr; float* rsR = nullptr; float* dsL = nullptr; float* dsR = nullptr;
     float* dtL = nullptr; float* dtR = nullptr; float* exL = nullptr; float* exR = nullptr;
     float  poolG[kPools * 6] {};
@@ -3374,7 +3376,7 @@ class SynthVoice : public juce::SynthesiserVoice
         // The filter pair is heap-allocated ON DEMAND (message thread) the first time that
         // instance is routed, so an unrouted instance costs nothing: eager members would be
         // 10 extra FilterSlot PAIRS x 96 voices.
-        static constexpr int kPoolSends = 93;              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape · fb377 — + 6 filter · fb413 — + 6 chorus + 6 flanger + 6 phaser · fb426 — + 6 equalizer + 6 widen + 6 compress + 6 ott · fb444 — + 6 bode + 6 utility + 6 splitter
+        static constexpr int kPoolSends = 101;              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape · fb377 — + 6 filter · fb413 — + 6 chorus + 6 flanger + 6 phaser · fb426 — + 6 equalizer + 6 widen + 6 compress + 6 ott · fb444 — + 6 bode + 6 utility + 6 splitter · tp30 — + 4 flow chop + 4 flow glitch
                                                            // ⚠️ must equal PluginProcessor::kPoolSendCount
         void setPoolSendTarget (int s, float* L, float* R) noexcept
         { if ((unsigned) s < kPoolSends) { poolSend_[s].L = L; poolSend_[s].R = R; } }
@@ -3412,15 +3414,26 @@ class SynthVoice : public juce::SynthesiserVoice
             setReverbRoutes     (R.hall[0], R.hall[1], R.hall[2], R.hall[3], R.hall[4], R.hall[5]); setReverbSendTarget     (R.rsL, R.rsR);
             setDelayRoutes      (R.dly[0],  R.dly[1],  R.dly[2],  R.dly[3],  R.dly[4],  R.dly[5]);  setDelaySendTarget      (R.dsL, R.dsR);
             setDistortionRoutes (R.dst[0],  R.dst[1],  R.dst[2],  R.dst[3],  R.dst[4],  R.dst[5]);  setDistortionSendTarget (R.dtL, R.dtR);
+            setCutRoutes        (R.cut);   // tp30 — BEFORE the exclusion: setExclusionRoutes folds it in
             setExclusionRoutes  (R.ex[0],   R.ex[1],   R.ex[2],   R.ex[3],   R.ex[4],   R.ex[5]);   setExclusionSendTarget  (R.exL, R.exR);
             for (int q = 0; q < kPoolSends; ++q) { setPoolSendRoutes (q, &R.poolG[q * 6]); setPoolSendTarget (q, R.poolL[q], R.poolR[q]); }
             routesSeen_ = R.version.load (std::memory_order_acquire);
+        }
+        // ── tp30 — THE OUTPUT CABLE. A source whose cable to Audio Out is cut leaves the main buses
+        //  the way a rack-tapped source does, with ONE decisive difference: the tp19 rule below caps
+        //  the rack's pull by the sends that are actually running, so that an unbuilt send bypasses
+        //  instead of swallowing the oscillator. A cut cable has no send to wait for — nothing is
+        //  ever going to carry it — so it must NOT be capped, or "cut the cable" would silently do
+        //  nothing at all. Hence a second gate rather than another bit in exG_.
+        void setCutRoutes (const float* c6) noexcept
+        {
+            for (int k = 0; k < 6; ++k) cutKeep_[k] = (c6 != nullptr && c6[k] > 0.5f) ? 0.0f : 1.0f;
         }
         void setExclusionRoutes (float a, float b, float c, float d, float sub, float noise) noexcept
         {
             exG_[0] = a; exG_[1] = b; exG_[2] = c; exG_[3] = d; exG_[4] = sub; exG_[5] = noise;
             exAny_ = (a + b + c + d + sub + noise) > 0.0f;
-            for (int k = 0; k < 6; ++k) exKeep_[k] = 1.0f - juce::jlimit (0.0f, 1.0f, exG_[k]);   // tp12 — see exKeep_
+            for (int k = 0; k < 6; ++k) exKeep_[k] = cutKeep_[k] * (1.0f - juce::jlimit (0.0f, 1.0f, exG_[k]));   // tp12 — see exKeep_ · tp30 — x the cable
         }
 
         void renderNextBlock (juce::AudioBuffer<float>& out,
@@ -3549,7 +3562,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 if (dlySendActive) for (int k = 0; k < 6; ++k) lit[k] = std::max (lit[k], dlyG_[k]);
                 if (dstSendActive) for (int k = 0; k < 6; ++k) lit[k] = std::max (lit[k], dstG_[k]);
                 for (int k = 0; k < 6; ++k)
-                    exKeep_[k] = 1.0f - juce::jlimit (0.0f, 1.0f, std::min (exG_[k], lit[k]));
+                    exKeep_[k] = cutKeep_[k] * (1.0f - juce::jlimit (0.0f, 1.0f, std::min (exG_[k], lit[k])));   // tp30 — x the cable
             }
             // Per-block routing coefficients (independent + dry-bypass model): each source
             // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
@@ -7403,6 +7416,7 @@ class SynthVoice : public juce::SynthesiserVoice
         //  half-band converters shift the phase toward the top: the subtraction cancelled the lows and left the filtered
         //  highs untouched, so a rack LP after a Ladder cut nothing (measured −2.8 dB vs 94 dB on SVF). No subtraction now.
         float                   exKeep_[6] = { 1, 1, 1, 1, 1, 1 };
+        float                   cutKeep_[6] = { 1, 1, 1, 1, 1, 1 };   // tp30 — 0 = this source's output cable is cut
         bool                    exAny_ = false;
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
