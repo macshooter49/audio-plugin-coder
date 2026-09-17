@@ -64,7 +64,7 @@ const pick = a => a[Math.floor(rnd() * a.length)];
 // read whatever `seng` is actually assigned — anchoring on the VALUE would make a changed value
 // invisible to this gate (it did, once).
 const engineSrc = (() => {
-  const i = SRC.indexOf("var modal=((aim==='keys'");
+  const i = SRC.indexOf("var wildUp=(lvl==='wild'");   // the block starts at the reach test, not at `modal`
   const j = SRC.indexOf('var seng=', i);
   const k = SRC.indexOf(';', j);
   if (i < 0 || j < 0 || k < 0) throw new Error('engine block anchors not found');
@@ -79,14 +79,21 @@ for (const lvl of LEVELS)
     for (let n = 0; n < 4000; n++)
       seen[lvl].add(chooseEngine(aim, lvl, REACH[lvl], rnd, pick, SAMPR).engine);
 
-// tp24 — Max: "only the sampler engine, not granular, not resynth."
-for (const lvl of LEVELS) {
-  const banned = [...seen[lvl]].filter(e => e === 2 || e === 3);
-  chk(banned.length === 0, `[1] ${lvl}: Granular and Resynth are never chosen`,
-      banned.length ? `engine index(es) ${banned.join(', ')} leaked` : '');
+// tp29 — Max: "Light, medium, and heavy can literally just be oscillators, effects, all that, but no
+// sort of like sampling engines ... all the sample engines can be crazy or wild, all of it."
+const SAMPLE_FAMILY = new Set([1, 2, 3]);          // Sample · Granular · Resynth
+for (const lvl of ['light', 'medium', 'heavy']) {
+  const leaked = [...seen[lvl]].filter(e => SAMPLE_FAMILY.has(e));
+  chk(leaked.length === 0, `[1] ${lvl}: no sample-based engine at all`,
+      leaked.length ? `leaked ${leaked.join(', ')} (1=Sample 2=Granular 3=Resynth)` : '');
 }
-chk(LEVELS.every(l => seen[l].has(1)), '[1] the SAMPLE engine is available at every reach (Max gave it another shot)',
-    LEVELS.map(l => `${l}:${[...seen[l]].sort().join('/')}`).join('  '));
+for (const lvl of ['wild', 'crazy']) {
+  const got = [...seen[lvl]].filter(e => SAMPLE_FAMILY.has(e)).sort();
+  chk(got.length === 3, `[1] ${lvl}: the WHOLE sample family is on the table (Sample, Granular, Resynth)`,
+      `saw ${got.join('/') || 'none'}`);
+}
+chk(['light', 'medium', 'heavy', 'wild', 'crazy'].every(l => seen[l].has(6)),
+    '[1] Modal stays at every reach (Max keeps it by name)');
 for (const e of [0, 4, 5, 6]) {
   const name = { 0: 'Wavetable', 4: 'FM', 5: 'Additive', 6: 'Modal' }[e];
   chk([...seen.medium].includes(e), `[1] the synthesis pool still reaches ${name} at medium`);
@@ -253,6 +260,23 @@ chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — rout
       '[9] the dice glyph matches the gear rather than reading small beside it');
   chk(/#dice-btn \+ \.settings-btn \{ margin-left: 0; \}/.test(SRC),
       '[9] and the two buttons sit together');
+}
+
+
+// ── 10 · A SAMPLER ALWAYS GETS A ONE-SHOT, OR STOPS BEING A SAMPLER ──────────────────────────
+//   Max: "sometimes it randomizes stuff and there's no one shot ... I think we came to a fuck up."
+//   A sample engine with nothing loaded is a silent oscillator in the patch. The load is async, so
+//   the failure path has to write the engine back itself.
+{
+  chk(/function oneShot\(o,aim,onFail\)/.test(SRC), '[10] oneShot takes a failure callback');
+  const body = SRC.slice(SRC.indexOf('function oneShot(o,aim,onFail)'), SRC.indexOf('var SAMPR='));
+  const bails = (body.match(/\breturn;/g) || []).length;
+  const fails = (body.match(/fail\(\);/g) || []).length;
+  chk(fails >= bails, `[10] every bail-out reports it (${fails} fail() for ${bails} return;)`);
+  chk(/if\(samp\)\{ rollSample[\s\S]{0,200}oneShot\(o,aim,function\(\)\{/.test(SRC),
+      '[10] and the dice passes one when it picks a sampler');
+  chk(/setP\(X\+'ENGINE', choiceNorm\(X\+'ENGINE', 0, 7\)\)/.test(SRC),
+      '[10] whose fallback puts the oscillator back on a wavetable');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

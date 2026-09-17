@@ -9367,6 +9367,38 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
 
 }
 
+// ══ tp29 — EMPTY EVERY TAIL. AUDIO THREAD, once, when a patch load asks for it.
+//  A preset load rewrites parameters; it never emptied the things that HOLD SOUND — the delay
+//  lines, the reverb tails, the tape loop, the chorus/flanger/phaser buffers. So the previous
+//  preset went on sounding through the new one, which is what Max heard and what makes preset
+//  auditioning unusable. Clearing them from the message thread would wipe a buffer under the
+//  audio thread's reader, so the flag is set there and the work happens here.
+void TerrainAudioProcessor::flushAudioTails() noexcept
+{
+    grainEngineL.reset(); grainEngineR.reset();
+    tapeProcessorL.reset(); tapeProcessorR.reset();
+    spaceReverb.reset();
+    moogDelay.reset();
+    terrainChorus.reset();
+    eqL.reset(); eqR.reset();
+    for (auto& d : delayPool_) d.reset();
+    // distPool_ is deliberately absent: a waveshaper has no tail to empty, and tw::DistortionEngine
+    // has no reset() to call.
+    for (auto& f : fltPool_)   f.reset();
+    for (auto& c : choPool_)   c.reset();
+    for (auto& f : flaPool_)   f.reset();
+    for (auto& p : phaPool_)   p.reset();
+    for (auto& e : eqzPool_)   e.reset();
+    for (auto& w : widPool_)   w.reset();
+    for (auto& c : cmpPool_)   c.reset();
+    for (auto& o : ottPool_)   o.reset();
+    for (auto& b : bodPool_)   b.reset();
+    for (auto& s : splPool_)   s.reset();
+    for (auto& u : utlPool_)   u.reset();
+    for (auto& g : grnPool_)   if (g) g->reset();
+    for (auto& t : tpePool_)   if (t) t->reset();
+}
+
 void TerrainAudioProcessor::releaseResources()
 {
     grainEngineL.reset();
@@ -9779,6 +9811,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         ~AudioSeqScope() { n.fetch_add (1, std::memory_order_seq_cst); }
     } audioSeqScope (audioSeq_);
     tiProf_.begin();
+    // tp29 — a patch load asked for the tails to go. Do it HERE, before anything reads them.
+    if (tailFlushPending_.exchange (false, std::memory_order_acq_rel)) flushAudioTails();
     ++fxBlockGen_;   // fb636 — keys the rack's once-per-block parameter builds (applyTpe / applyGrn)
     const bool vizLive = vizConsumersLive();   // fb148 — no UI, no viz work (Serum does the same)
 
@@ -17560,6 +17594,10 @@ void TerrainAudioProcessor::migrateBlobToVersion3 (juce::ValueTree& state)
 
 void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
+    // tp29 — ANY state restore empties the tails, not only the in-plugin browser's. The browser goes
+    //   through resetPatchState(), but a HOST switching programs or reloading a project lands here
+    //   directly, and a reverb still ringing from the last patch is the same complaint either way.
+    tailFlushPending_.store (true, std::memory_order_release);
     std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
 
     if (xmlState != nullptr)
@@ -19079,16 +19117,21 @@ void TerrainAudioProcessor::resetPatchState()
     // The .terrain path: the blobs, then every decoded audio slot and the loaders that could still
     // land into one. Message thread — the same thread the restore code documents.
     clearPatchBlobs();
+    // tp29 — and empty everything that HOLDS SOUND. Max: "every time I choose a preset it should
+    //   simply reset everything ... there's no bleeding over." The audio thread does the clearing.
+    tailFlushPending_.store (true, std::memory_order_release);
     for (int ci = 1; ci <= ParameterIDs::kFxInstances; ++ci) clearConvUserIR (ci);
     noiseSampleSelJson_.clear(); noiseLoadedSel_.clear();
     noiseSampleBuffer_.store (nullptr); noiseSampleBuffer_.setSampleRate (0.0);
-    for (int o = 0; o < 4; ++o)
+    // tp29 — kOscCount, not 4. The arrays have been eight wide since tp20, so a patch load was
+    //   leaving oscillators E–H holding the PREVIOUS patch's imported wavetable and sample.
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
     {
         clearImportedWavetable (o);
         importFrames_[o] = 40;                                     // neither clear path resets this
         wtBuildReq_[o].fetch_add (1, std::memory_order_acq_rel);   // supersede any queued async bake
     }
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)
     {
         oscSampleLoaders_[(size_t) oi].cancel();                   // join an in-flight load first
         oscSampleBuffers_[(size_t) oi].store (nullptr); oscSampleBuffers_[(size_t) oi].setSampleRate (0.0);

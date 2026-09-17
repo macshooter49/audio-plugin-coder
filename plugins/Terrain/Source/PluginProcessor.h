@@ -2701,6 +2701,15 @@ private:
                    "kPoolSendCount must cover the LAST send base + its instances");
     static_assert (kPoolSendCount <= tw::SynthVoice::kPoolSends,
                    "the voice's kPoolSends must cover every pool send the processor writes");
+    /* tp29 — PRESET BLEED. Max: "every time I switch to a preset that has a delay, I can still hear
+       the delay, and it takes a long time for the other preset to go away." A patch load rewrites
+       parameters but never emptied a delay line or a reverb tail, so the previous preset kept
+       sounding through the new one. Set on the message thread by resetPatchState(); the AUDIO
+       thread does the clearing at the top of the next block, so no buffer is wiped under a
+       reader. */
+    std::atomic<bool> tailFlushPending_ { false };
+    void flushAudioTails() noexcept;
+
     std::array<DelayEngine, (size_t) kFxExtra>          delayPool_;
     std::array<tw::DistortionEngine, (size_t) kFxExtra> distPool_;
     // per-extra-instance runtime state, mirroring the instance-1 members below
