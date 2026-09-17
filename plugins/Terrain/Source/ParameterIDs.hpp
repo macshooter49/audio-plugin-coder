@@ -113,6 +113,13 @@ namespace ParameterIDs
     constexpr char LFO1_SHAPE[]        = "LFO1_SHAPE";         // Mod redesign — L1 shape (Sine..Random, 7 choices)
     constexpr char LFO1_SYNC[]         = "LFO1_SYNC";          // Mod redesign — L1 tempo-sync on/off (BPM vs HZ)
     constexpr char LFO1_DIV[]          = "LFO1_DIV";           // Mod redesign — L1 sync division index (1/4, 1/8, trip, dot…)
+    // tp37 — THE GLOBAL LFO RATE (Max: "take all 10 of the LFOs and globally change them"). With LFO_GLOBAL on, every LFO
+    //  runs at LFO_GLOBAL_RATE (Hz) or the LFO_GLOBAL_DIV division (LFO_GLOBAL_SYNC), its own rate/sync/div ignored; the
+    //  global rate is a mod destination (ModDest::LfoRateGlobal) so an envelope or an LFO can ride it.
+    constexpr char LFO_GLOBAL[]        = "LFO_GLOBAL";         // bool — all ten LFOs follow the global clock
+    constexpr char LFO_GLOBAL_SYNC[]   = "LFO_GLOBAL_SYNC";    // bool — the global clock is a BPM division (else Hz)
+    constexpr char LFO_GLOBAL_DIV[]    = "LFO_GLOBAL_DIV";     // choice — the same 19 divisions as LFOn_DIV
+    constexpr char LFO_GLOBAL_RATE[]   = "LFO_GLOBAL_RATE";    // float 0.01..40 Hz, the same skew as LFOn_RATE
     // Mod redesign Stage 2 — LFOs 2..5 (same per-LFO param set as L1). All route to Filter 1 cutoff for now.
     constexpr char LFO2_RATE[]  = "LFO2_RATE";   constexpr char LFO2_DEPTH[] = "LFO2_DEPTH";
     constexpr char LFO2_SHAPE[] = "LFO2_SHAPE";  constexpr char LFO2_SYNC[]  = "LFO2_SYNC";   constexpr char LFO2_DIV[] = "LFO2_DIV";

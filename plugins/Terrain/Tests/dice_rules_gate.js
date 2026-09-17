@@ -156,7 +156,7 @@ chk(/function rollDice\(\)\{[\s\S]{0,220}layout\.aim/.test(SRC),
 const FLOW_INST_MAX = eval('(' + span("FLOW_INST_MAX={", "}").replace(/^FLOW_INST_MAX=/, '') + ')');
 const flowSrc = span("var FLOWBAG={", "chain=shuffle(chain);");
 const buildChain = new Function('aim', 'R', 'rnd', 'pick', 'shuffle', 'ispan', 'FLOW_INST_MAX',
-  flowSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return chain;');
+  'var rollInfo={};\n' + flowSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return chain;');   // tp36 — the flow step now prices the roll through rollInfo (a module var)
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const ispan = r => Math.round(r[0] + rnd() * (r[1] - r[0]));
 let sawMulti = false, sawTwoOfKind = false, overCeiling = null, maxLen = 0;

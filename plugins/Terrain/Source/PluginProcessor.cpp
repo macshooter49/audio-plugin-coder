@@ -4018,6 +4018,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         "LFO 1 Division",
         juce::StringArray { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T","32 bar","16 bar","1/64","1/128","1/256" },   // fb219 — appended (must match kSyncDivisions + the lambda list)
         5));
+    // tp37 — the global LFO clock (see ParameterIDs::LFO_GLOBAL)
+    layout.add (std::make_unique<juce::AudioParameterBool>  (juce::ParameterID { ParameterIDs::LFO_GLOBAL, 1 },      "LFO Global", false));
+    layout.add (std::make_unique<juce::AudioParameterBool>  (juce::ParameterID { ParameterIDs::LFO_GLOBAL_SYNC, 1 }, "LFO Global Sync", false));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { ParameterIDs::LFO_GLOBAL_DIV, 1 }, "LFO Global Division",
+        juce::StringArray { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T","32 bar","16 bar","1/64","1/128","1/256" }, 5));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ParameterIDs::LFO_GLOBAL_RATE, 1 }, "LFO Global Rate",
+        juce::NormalisableRange<float> (0.01f, 40.0f, 0.0f, 0.3f), 2.0f));
     // Per-LFO PHASE (slides the waveform). 0..1, default 0.
     for (auto* pid : { ParameterIDs::LFO1_PHASE, ParameterIDs::LFO2_PHASE, ParameterIDs::LFO3_PHASE, ParameterIDs::LFO4_PHASE, ParameterIDs::LFO5_PHASE,
                        ParameterIDs::LFO6_PHASE, ParameterIDs::LFO7_PHASE, ParameterIDs::LFO8_PHASE, ParameterIDs::LFO9_PHASE, ParameterIDs::LFO10_PHASE })
@@ -11451,14 +11458,21 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 { ParameterIDs::LFO10_SHAPE,ParameterIDs::LFO10_SYNC,ParameterIDs::LFO10_DIV,ParameterIDs::LFO10_RATE,ParameterIDs::LFO10_DEPTH,ParameterIDs::LFO10_PHASE },
             };
             int na = 0;
+            /* tp37 — THE GLOBAL CLOCK. With LFO_GLOBAL on, every LFO takes the global sync / division / rate (the global rate
+               is its own mod destination, LfoRateGlobal; the per-LFO rate routes are not applied while global is on —
+               "all of them attached to that" was the ask, one clock to turn). Off = exactly the per-LFO reads below. */
+            const bool  gOn   = *rpar (ParameterIDs::LFO_GLOBAL) > 0.5f;
+            const bool  gSync = *rpar (ParameterIDs::LFO_GLOBAL_SYNC) > 0.5f;
+            const int   gDiv  = juce::jlimit (0, wc::kNumSyncDivisions - 1, (int) *rpar (ParameterIDs::LFO_GLOBAL_DIV));
+            const float gRate = gOn ? modP (ParameterIDs::LFO_GLOBAL_RATE, *rpar (ParameterIDs::LFO_GLOBAL_RATE), (int) wc::ModDest::LfoRateGlobal) : 0.0f;
             for (int i = 0; i < wc::NUM_LFOS; ++i)
             {
                 const int  sh = (int) *rpar (lp[i].shape);
-                const bool sy =       *rpar (lp[i].sync) > 0.5f;
-                const int  dv = (int) *rpar (lp[i].div);
+                const bool sy = gOn ? gSync : *rpar (lp[i].sync) > 0.5f;
+                const int  dv = gOn ? gDiv  : (int) *rpar (lp[i].div);
                 synModCfg.lfos[i].shape       = (wc::LFOShape) juce::jlimit (0, (int) wc::LFOShape::NumShapes - 1, sh);
                 synModCfg.lfos[i].sync        = sy;
-                synModCfg.lfos[i].rateHz      = modP (lp[i].rate, *rpar (lp[i].rate), (int) wc::ModDest::LfoRateBase + i);   // fb196 — env-on-RATE (Hz mode; sync stays grid-locked until the LFO arc)
+                synModCfg.lfos[i].rateHz      = gOn ? gRate : modP (lp[i].rate, *rpar (lp[i].rate), (int) wc::ModDest::LfoRateBase + i);   // fb196 — env-on-RATE (Hz mode; sync stays grid-locked until the LFO arc)
                 synModCfg.lfos[i].syncIdx     = juce::jlimit (0, wc::kNumSyncDivisions - 1, dv);
                 synModCfg.lfos[i].phaseOffset = modP (lp[i].phase, *rpar (lp[i].phase), (int) wc::ModDest::LfoPhaseBase + i);   // fb245 — env/LFO on PHASE (read-phase shift, block-rate; output slew smooths)
                 {   // fb228 — L5 MOTION feeds the config (the Free-forcing is DEAD; RETRIG is the default)

@@ -3621,6 +3621,7 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
 #mod-engine .mv-c .ic{display:inline-flex;width:20px;height:11px;color:inherit;}
 #mod-engine .mv-seg{font-size:9px;letter-spacing:1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-seg b{cursor:pointer;font-weight:300;} #mod-engine .mv-seg .on{color:#fff;} #mod-engine .mv-seg .off{color:var(--ghost-dim);}
+#mod-engine .mv-seg.glob .on{color:#c9b8ff;text-shadow:0 0 6px rgba(160,130,255,.9),0 1px 3px rgba(0,0,0,.9);}   /* tp37 — the GLOBAL clock: every LFO follows this pill */
 /* fb206 — THE SHAPER (custom LFO editor) */
 #mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
 #mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-0.6px;height:1px;background:rgba(255,255,255,.075);}   /* fb211 — THE RULER, re-measured collinear after the footer lift (env 711.5 vs overlay 712.1) */
@@ -14558,7 +14559,7 @@ window.__oscPool = OSC_LETTERS.slice();                                     /* t
 window.__oscBank = function(o){ return 'efgh'.indexOf(String(o||'').toLowerCase()) >= 0 ? 1 : 0; };
 window.__oscBankLetters = function(o){ return window.__oscBank(o) ? ['e','f','g','h'] : OSC_LETTERS; };
 window.__oscBankIndex = function(o){ var i = 'abcdefgh'.indexOf(String(o||'').toLowerCase()); return i < 0 ? -1 : i % 4; };
-window.OSCBANK2_BASE = 1890; window.FLOWINST_BASE = 3780; window.FLOW_SPAN = 473; window.FLOW_TIME_DEST = 8;   /* mirrors SynthModConfig.h (static_assert-pinned) */
+window.OSCBANK2_BASE = 1890; window.FLOWINST_BASE = 3780; window.FLOW_SPAN = 473; window.FLOW_TIME_DEST = 8; window.__LFO_GLOBAL_DEST = 5199;   /* tp37 — ModDest::LfoRateGlobal (static_assert in SynthModConfig.h) */   /* mirrors SynthModConfig.h (static_assert-pinned) */
 window.__oscDestOf = function(o, legacyDest){ return window.__oscBank(o) ? window.OSCBANK2_BASE + legacyDest : legacyDest; };
 window.__flowInstDest = function(inst, d){ inst = inst|0; if (inst <= 1 || d < window.FLOW_TIME_DEST || d >= 481) return d; return window.FLOWINST_BASE + (inst - 2) * window.FLOW_SPAN + (d - window.FLOW_TIME_DEST); };
 (function(){
@@ -31916,7 +31917,28 @@ restoreThemeFromBackend();
     if(C.rate)  st.rateHz=C.rate.getScaledValue();
     if(C.depth) st.depth=C.depth.getScaledValue();
     if(C.phase) st.phase=C.phase.getScaledValue();
+    st.global=isG();   /* tp37 — under the global clock every tab shows the global sync / division / rate */
+    if(st.global){ var g=gcur(); if(g.sync) st.sync=g.sync.getNormalisedValue()>0.5; if(g.div) st.div=Math.round(g.div.getNormalisedValue()*(NDIV-1)); if(g.rate) st.rateHz=g.rate.getScaledValue(); }
   }
+  /* ══ tp37 — THE GLOBAL LFO CLOCK (Max: "take all 10 of the LFOs and globally change them ... right click BPM on the LFO
+     and I select global mode"). Four parameters — LFO_GLOBAL (on), LFO_GLOBAL_SYNC (BPM vs Hz), LFO_GLOBAL_DIV,
+     LFO_GLOBAL_RATE — that every LFO follows while global is on (PluginProcessor's LFO config build). In the card the
+     BPM · Hz pill glows, reads G·BPM / G·Hz, and the rate / division / BPM controls of EVERY tab drive the global
+     parameters; the rate knob's mod destination becomes the global rate (ModDest::LfoRateGlobal) so an envelope can
+     ride the one clock. Right-click the pill: Global clock on/off, Global BPM, Global Hz. Off = exactly the old card. */
+  var G=null;
+  function mkShimG(){ function w(id,d,sc){ var sh0=window.__synSliderShim(id,d);
+      return { getNormalisedValue:sh0.getNormalisedValue, setNormalisedValue:sh0.setNormalisedValue, valueChangedEvent:sh0.valueChangedEvent,
+               getScaledValue:function(){ return sc(sh0.getNormalisedValue()); } }; }
+    function lin(p){ return p; }
+    return { on:w('LFO_GLOBAL',0,lin), sync:w('LFO_GLOBAL_SYNC',0,lin), div:w('LFO_GLOBAL_DIV',5/(NDIV-1),lin),
+             rate:w('LFO_GLOBAL_RATE',0.407,function(p){ return 0.01+39.99*Math.pow(Math.max(0,p),1/0.3); }) }; }
+  function gcur(){ if(!G){ G=(window.__cardOnly==='lfo'&&window.__synSliderShim)?mkShimG():{ on:ssGet('LFO_GLOBAL'), sync:ssGet('LFO_GLOBAL_SYNC'), div:ssGet('LFO_GLOBAL_DIV'), rate:ssGet('LFO_GLOBAL_RATE') };
+      ['on','sync','div','rate'].forEach(function(k){ var s2=G[k]; if(s2&&s2.valueChangedEvent&&s2.valueChangedEvent.addListener) s2.valueChangedEvent.addListener(function(){ pull(); render(); try{ extKnPaint(); }catch(e){} }); }); }
+    return G; }
+  function isG(){ var g=gcur(); return !!(g.on&&g.on.getNormalisedValue()>0.5); }
+  function tgt(){ return isG()?gcur():cur(); }   /* the writer set the sync / div / rate controls drive: the global clock or this LFO */
+  window.__lfoGlobalOn=isG;
   function setNorm(s,v){if(s){try{s.setNormalisedValue(Math.max(0,Math.min(1,v)));}catch(e){}}}
 
   var MID=44;   // biased slightly up so the wave leaves room for the bottom control row
@@ -31931,7 +31953,7 @@ restoreThemeFromBackend();
       +'<div class="mv-ov bot">'
         +'<span class="mv-c" id="mv-shape"><span class="ic">'+icon(st.shape)+'</span> '+(st.shape===7?((shapes[st.tab]&&shapes[st.tab].nm)||'Custom'):SHORT[st.shape])+' '+CHEV+'</span>'
         +rate
-        +'<span class="mv-seg"><b class="'+(st.sync?'on':'off')+'" id="mv-bpm">BPM</b> · <b class="'+(st.sync?'off':'on')+'" id="mv-hz">Hz</b></span>'
+        +'<span class="mv-seg'+(st.global?' glob':'')+'" id="mv-seg" title="'+(st.global?'GLOBAL clock \u2014 every LFO follows this. Right-click: options':'Right-click: one clock for every LFO')+'"><b class="'+(st.sync?'on':'off')+'" id="mv-bpm">'+(st.global?'G\u00b7BPM':'BPM')+'</b> · <b class="'+(st.sync?'off':'on')+'" id="mv-hz">'+(st.global?'G\u00b7Hz':'Hz')+'</b></span>'
         +'<span class="mv-c drag" id="mv-shift" title="slide the LFO"><svg viewBox="0 0 14 10" width="13" height="9" style="opacity:.8" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3 L1 5 L4 7 M10 3 L13 5 L10 7 M1 5 H13"/></svg> <span id="mv-shv">'+Math.round(st.phase*360)+'°</span></span>'
         +tabs
         +'<div class="mv-dep"><span class="l">Dep</span><div class="mv-ring" id="mv-depth" style="background:'+RINGBG(st.depth)+'"></div></div>'
@@ -31943,6 +31965,11 @@ restoreThemeFromBackend();
 
   // ---- body-level menu (glass) ----
   var menu=document.createElement('div'); menu.className='mv-menu'; document.body.appendChild(menu);
+  function globalMenu(atEl){ var on=isG(); var g=gcur();
+    openMenu([{t:(on?'\u25cf ':'\u25cb ')+'Global clock \u2014 every LFO follows one rate'},{t:'Global: BPM'},{t:'Global: Hz'}], on?(g.sync&&g.sync.getNormalisedValue()>0.5?1:2):-1, atEl, function(i){
+      if(i===0){ setNorm(g.on,on?0:1); }
+      else { setNorm(g.on,1); setNorm(g.sync,i===1?1:0); }
+      pull(); render(); try{ extKnPaint(); extPush(); }catch(e){} }); }   /* tp37 */
   function openMenu(items,cur,atEl,cb,fit){
     menu.innerHTML=items.map(function(it,i){return '<div class="'+(i===cur?'cur':'')+'" data-i="'+i+'">'+(it.ic||'')+'<span>'+it.t+'</span></div>';}).join('');
     var r=atEl.getBoundingClientRect();
@@ -31964,12 +31991,13 @@ restoreThemeFromBackend();
     // fb239 — the picker router: 0-4 editable seeds · 7 Custom shaper · 8 Path free-draw · 5/6/9/10 generative
     if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s2,i){return {t:s2,ic:icon(i)};}), st.shape, sb, function(i){ pickShape(i); }, true); };
     var dv=root.querySelector('#mv-div');
-    if(dv)dv.onclick=function(){ openMenu(DIVORD.map(function(ri){return {t:DIVS[ri]};}), DIVORD.indexOf(st.div), dv, function(i){ var ri=DIVORD[i]; setNorm(cur().div,ri/(NDIV-1)); st.div=ri; render(); }); };   // fb219 — ladder-ordered display
+    if(dv)dv.onclick=function(){ openMenu(DIVORD.map(function(ri){return {t:DIVS[ri]};}), DIVORD.indexOf(st.div), dv, function(i){ var ri=DIVORD[i]; setNorm(tgt().div,ri/(NDIV-1)); st.div=ri; render(); }); };   // fb219 — ladder-ordered display
     var bpm=root.querySelector('#mv-bpm'), hz=root.querySelector('#mv-hz');
-    if(bpm)bpm.onclick=function(){ setNorm(cur().sync,1); st.sync=true; render(); };
-    if(hz)hz.onclick=function(){ setNorm(cur().sync,0); st.sync=false; render(); };
+    if(bpm)bpm.onclick=function(){ setNorm(tgt().sync,1); st.sync=true; render(); };
+    if(hz)hz.onclick=function(){ setNorm(tgt().sync,0); st.sync=false; render(); };
+    var seg=root.querySelector('#mv-seg'); if(seg) seg.oncontextmenu=function(ev){ ev.preventDefault(); ev.stopPropagation(); globalMenu(seg); };   /* tp37 */
     var rt=root.querySelector('#mv-rate');
-    if(rt)rt.onmousedown=function(e){ e.preventDefault(); var R=cur().rate, y0=e.clientY, v0=R?R.getNormalisedValue():0;
+    if(rt)rt.onmousedown=function(e){ e.preventDefault(); var R=tgt().rate, y0=e.clientY, v0=R?R.getNormalisedValue():0;
       function mv(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.005)); setNorm(R,nv); if(R){st.rateHz=R.getScaledValue(); var rv=root.querySelector('#mv-rv'); if(rv)rv.textContent=st.rateHz.toFixed(2);} }
       function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
@@ -32061,9 +32089,10 @@ restoreThemeFromBackend();
       trip:MO(function(m){ m.td=(m.td===1)?0:1; }), dot:MO(function(m){ m.td=(m.td===2)?0:2; }),
       reseed:MO(function(m){ m.rs=m.rs?0:1; }),   // fb245 — per-note reseed toggle
       pol:MO(function(m){ m.pol=m.pol?0:1; }),     // fb246 — Bi(0) / Uni+(1) polarity toggle
-      bpm:function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); extPush(); render(); } };
+      bpm:function(){ st.sync=!st.sync; setNorm(tgt().sync, st.sync?1:0); extPush(); render(); } };
     function mkRow(row,defs){ defs.forEach(function(d){ var b=T.el('<span class="fxb">'+d[1]+'</span>');
-      b.addEventListener('click',function(){ ACT[d[0]](); }); extBtn[d[0]]=b; row.appendChild(b); }); }
+      b.addEventListener('click',function(){ ACT[d[0]](); }); if(d[0]==='bpm') b.addEventListener('contextmenu',function(ev){ ev.preventDefault(); ev.stopPropagation(); globalMenu(b); });   /* tp37 */
+      extBtn[d[0]]=b; row.appendChild(b); }); }
     mkRow(bank.querySelector('.r1'),R1); mkRow(bank.querySelector('.r2'),R2);
     extSh.body.appendChild(bank);
     var kr=T.el('<div class="gr6"></div>');
@@ -32072,9 +32101,9 @@ restoreThemeFromBackend();
     lknob('rate','Rate'); lknob('rise','Rise'); lknob('delay','Delay');
     lknob('smooth','Smooth'); lknob('phase','Phase'); lknob('swing','Swing');
     T.dragify(extKn.rate.cell.querySelector('svg'),{ span:140,
-      get:function(){ return st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (cur().rate?cur().rate.getNormalisedValue():0.3); },
-      set:function(v){ if(st.sync){ var ri=DIVORD[Math.round(v*(NDIV-1))]; if(ri!==st.div){ st.div=ri; setNorm(cur().div,ri/(NDIV-1)); } }
-        else { setNorm(cur().rate,v); if(cur().rate&&cur().rate.getScaledValue)st.rateHz=cur().rate.getScaledValue(); }
+      get:function(){ return st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (tgt().rate?tgt().rate.getNormalisedValue():0.3); },
+      set:function(v){ if(st.sync){ var ri=DIVORD[Math.round(v*(NDIV-1))]; if(ri!==st.div){ st.div=ri; setNorm(tgt().div,ri/(NDIV-1)); } }
+        else { setNorm(tgt().rate,v); if(tgt().rate&&tgt().rate.getScaledValue)st.rateHz=tgt().rate.getScaledValue(); }
         extKnPaint(); extPush(); },
       reset:DIVORD.indexOf(5)/(NDIV-1) });
     function mkMoKnob(key,mkey,scale,fmt){ T.dragify(extKn[key].cell.querySelector('svg'),{ span:140,
@@ -32101,7 +32130,7 @@ restoreThemeFromBackend();
     extRefresh0(); }
   function extKnPaint(){ if(!extKn.rate)return; var T=window.__TIC, m=moGet();
     function ring(key,n,txt){ if(!extKn[key])return; T.setRing(extKn[key].cell,n); extKn[key].vl.textContent=txt; }
-    ring('rate', st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (cur().rate?cur().rate.getNormalisedValue():0.3),
+    ring('rate', st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (tgt().rate?tgt().rate.getNormalisedValue():0.3),
       st.sync? DIVS[st.div] : (st.rateHz||1).toFixed(2)+' Hz');
     ring('rise', Math.max(0,Math.min(1,m.ri/2000)), fmtMs2(m.ri));
     ring('delay', Math.max(0,Math.min(1,m.de/2000)), fmtMs2(m.de));
@@ -32122,12 +32151,12 @@ restoreThemeFromBackend();
     on('mono',m.mn); on('host',m.ho); on('reseed',m.rs);   // fb245
     on('fwd',m.dir===0); on('rev',m.dir===1); on('ping',m.dir===2);
     on('trip',m.td===1); on('dot',m.td===2); on('pol',m.pol);   // fb246 — Uni highlighted when unipolar
-    if(extBtn.bpm){ extBtn.bpm.classList.toggle('on',!!st.sync); extBtn.bpm.textContent=st.sync?'BPM':'Hz'; }
+    if(extBtn.bpm){ extBtn.bpm.classList.toggle('on',!!st.sync); extBtn.bpm.classList.toggle('glob',!!st.global); extBtn.bpm.textContent=(st.global?'G\u00b7':'')+(st.sync?'BPM':'Hz'); }
     // fb245 — CARD KNOBS AS MOD TARGETS (docked): Rate→LfoRate, Phase→LfoPhase, Depth(MIX)→LfoAmt, tracking the
     // selected LFO (the card edits 1..10, so the dest tracks st.tab). Drop works docked; a popped card lives in
     // another window, out of the main mod-drag's reach — the same limit every card knob has had since fb145.
     (function(){ var t=st.tab;
-      if(extKn.rate) extKn.rate.cell.setAttribute('data-mod-dest', String(672+t));   // 673..682 = LfoRate1..10
+      if(extKn.rate) extKn.rate.cell.setAttribute('data-mod-dest', String(isG()?(window.__LFO_GLOBAL_DEST||5199):672+t));   // 673..682 = LfoRate1..10 · tp37: the GLOBAL rate under the global clock
       if(extKn.phase) extKn.phase.cell.setAttribute('data-mod-dest', String(682+t));  // 683..692 = LfoPhase1..10
       var mxe=ext.querySelector('.mix'); if(mxe) mxe.setAttribute('data-mod-dest', String(11+t)); })();   // 12..21 = LfoAmt1..10
     extKnPaint(); }
@@ -33320,6 +33349,7 @@ restoreThemeFromBackend();
     if(k===6){var f=t*(RPA.length-1),i=Math.floor(f),fr=f-i,x=RPA[i],y=RPA[Math.min(i+1,RPA.length-1)],m=(1-Math.cos(fr*Math.PI))/2;return (x+(y-x)*m)*2-1;}
     return 0; }
   function lfoHz(n){ var sy=ss('LFO'+n+'_SYNC'), rt=ss('LFO'+n+'_RATE'), dv=ss('LFO'+n+'_DIV');
+    var gOn=ss('LFO_GLOBAL'); if(gOn&&gOn.getNormalisedValue()>0.5){ sy=ss('LFO_GLOBAL_SYNC'); rt=ss('LFO_GLOBAL_RATE'); dv=ss('LFO_GLOBAL_DIV'); }   /* tp37 — one clock */
     if(sy&&sy.getNormalisedValue()>0.5){ var di=dv?Math.round(dv.getNormalisedValue()*(DIVB.length-1)):5; return (120/60)/(DIVB[di]||1); }   // fb219 — norm scale = N-1, never a hardcode (the *13 trap)
     return rt?rt.getScaledValue():1; }
   function lfoShape(n){ var s=ss('LFO'+n+'_SHAPE'); return s?Math.round(s.getNormalisedValue()*((window.__LFO_NSHAPE||11)-1)):0; }   /* fb635 — 11 choices since fb239/fb240 (Path · Lorenz · Rossler): the *7 read Custom as S&H and Path as Random; norm scale = N-1 */
@@ -33508,7 +33538,7 @@ restoreThemeFromBackend();
     (function(){ var atG=document.querySelector('#mod-engine .mv-tabs .t.act'), dpG=document.querySelector('#mod-engine .mv-dep');
       if(atG&&dpG) out.push({el:dpG,dest:11+(+atG.getAttribute('data-tab')),kind:'knob'});
       var rtG=document.getElementById('mv-rate')||document.getElementById('mv-div');
-      if(atG&&rtG) out.push({el:rtG,dest:673+(+atG.getAttribute('data-tab'))-1,kind:'knob'}); })();   /* fb195/196 — Dep + RATE target the SELECTED LFO */
+      if(atG&&rtG) out.push({el:rtG,dest:(window.__lfoGlobalOn&&window.__lfoGlobalOn())?(window.__LFO_GLOBAL_DEST||5199):673+(+atG.getAttribute('data-tab'))-1,kind:'knob'}); })();   /* tp37 */   /* fb195/196 — Dep + RATE target the SELECTED LFO */
     return out; }
   /* ═══ fb580 — A TARGET YOU CANNOT SEE IS NOT A DROP TARGET ═══════════════════════════════════
      hit() is pure rect geometry over this list, and fb453 taught it about OVERFLOW (a knob scrolled

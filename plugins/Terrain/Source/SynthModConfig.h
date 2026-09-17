@@ -272,7 +272,10 @@ enum class ModDest : int
     //    + (d - FlowTime). Instance 1 keeps its legacy ints.
     FlowInstBase = OscBank2End,
     FlowInstEnd  = FlowInstBase + 3 * (EnvPBase - FlowTime),
-    NumDests = FlowInstEnd
+    // ── tp37 · THE GLOBAL LFO RATE. Appended at the tail (saved routes carry dest ints). index.html mirrors it as
+    //    window.__LFO_GLOBAL_DEST; makeDestInfo() gives it its Linear01 x 1.0 row explicitly (the pool loops stop before it).
+    LfoRateGlobal = FlowInstEnd,
+    NumDests = LfoRateGlobal + 1
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
@@ -297,8 +300,8 @@ inline constexpr int kFlowSpan = (int) ModDest::EnvPBase - (int) ModDest::FlowTi
 static_assert ((int) ModDest::OscBank2Base == 1890 && (int) ModDest::FlowInstBase == 3780 && kFlowSpan == 473
             && (int) ModDest::FlowInstEnd == 3780 + 3 * 473,
     "tp20 - index.html mirrors OSCBANK2_BASE=1890, FLOWINST_BASE=3780, FLOW_SPAN=473; a shift here re-points every saved pool route");
-static_assert ((int) ModDest::NumDests == 5199,
-    "tp28 - the filter table is withdrawn; its two tail dests go with it and NumDests returns to the pool's end");
+static_assert ((int) ModDest::LfoRateGlobal == 5199 && (int) ModDest::NumDests == 5200,
+    "tp37 - index.html mirrors window.__LFO_GLOBAL_DEST=5199 (the global LFO rate, appended after the flow pool); a shift here re-points saved routes");
 /** A destination that belongs to ONE oscillator (its letter is in its name). Every such family is
  *  laid out A,B,C,D contiguously, so the ranges below are the families' first A and last D. */
 inline constexpr bool isOscLetteredDest (int d) noexcept
@@ -1073,6 +1076,10 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     for (int n = 0; n < 3; ++n)
         for (int k = 0; k < kFlowSpan; ++k)
             a[(size_t) ((int) ModDest::FlowInstBase + n * kFlowSpan + k)] = a[(size_t) ((int) ModDest::FlowTime + k)];
+    // tp37 — the global LFO rate: read through modP() in the LFO config build, so Linear01 in the parameter's own
+    //   normalised space, like LfoRate1..10. (A dest past the pool that is NOT given a row here is value-initialised
+    //   to scale 0 — an envelope routed to it would silently contribute nothing; measured, Tests/_tp37d_lfoglobal_env.js.)
+    a[(size_t) ModDest::LfoRateGlobal] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;
 }
 static constexpr auto kDestInfo = makeDestInfo();

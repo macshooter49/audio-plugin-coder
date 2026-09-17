@@ -209,6 +209,7 @@ private:
     juce::WebSliderRelay lfo9RateRelay { ParameterIDs::LFO9_RATE };  juce::WebSliderRelay lfo9DepthRelay { ParameterIDs::LFO9_DEPTH };
     juce::WebSliderRelay lfo9ShapeRelay{ ParameterIDs::LFO9_SHAPE }; juce::WebSliderRelay lfo9SyncRelay  { ParameterIDs::LFO9_SYNC };  juce::WebSliderRelay lfo9DivRelay { ParameterIDs::LFO9_DIV };  juce::WebSliderRelay lfo9PhaseRelay{ ParameterIDs::LFO9_PHASE };
     juce::WebSliderRelay lfo10RateRelay{ ParameterIDs::LFO10_RATE }; juce::WebSliderRelay lfo10DepthRelay{ ParameterIDs::LFO10_DEPTH };
+    juce::WebSliderRelay lfoGlobalRelay{ ParameterIDs::LFO_GLOBAL }; juce::WebSliderRelay lfoGlobalSyncRelay{ ParameterIDs::LFO_GLOBAL_SYNC }; juce::WebSliderRelay lfoGlobalDivRelay{ ParameterIDs::LFO_GLOBAL_DIV }; juce::WebSliderRelay lfoGlobalRateRelay{ ParameterIDs::LFO_GLOBAL_RATE };   // tp37
     juce::WebSliderRelay lfo10ShapeRelay{ParameterIDs::LFO10_SHAPE };juce::WebSliderRelay lfo10SyncRelay { ParameterIDs::LFO10_SYNC }; juce::WebSliderRelay lfo10DivRelay{ ParameterIDs::LFO10_DIV }; juce::WebSliderRelay lfo10PhaseRelay{ ParameterIDs::LFO10_PHASE };
     // Batch 1 Filter — without these relays the JUCE WebView backend doesn't
     // know about the new JS slider state, so setNormalisedValue from the
@@ -1055,6 +1056,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> lfo8RateAttachment, lfo8DepthAttachment, lfo8ShapeAttachment, lfo8SyncAttachment, lfo8DivAttachment, lfo8PhaseAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> lfo9RateAttachment, lfo9DepthAttachment, lfo9ShapeAttachment, lfo9SyncAttachment, lfo9DivAttachment, lfo9PhaseAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> lfo10RateAttachment, lfo10DepthAttachment, lfo10ShapeAttachment, lfo10SyncAttachment, lfo10DivAttachment, lfo10PhaseAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfoGlobalAttachment, lfoGlobalSyncAttachment, lfoGlobalDivAttachment, lfoGlobalRateAttachment;   // tp37
     std::unique_ptr<juce::WebSliderParameterAttachment> wanderAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> freezeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> grainFilterAttachment;
