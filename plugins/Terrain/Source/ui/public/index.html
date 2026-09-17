@@ -42685,6 +42685,35 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      kind's tile with a badge; they live on the canvas only (the synth page's 2x2 grid stays the four kinds). */
   function fKind(m){ return String(m||'').replace(/\d+$/,''); }
   function fInst(m){ var x=/(\d+)$/.exec(String(m||'')); return x?Math.max(1,parseInt(x[1],10)):1; }
+  /* ═══ tp30 — AN AUDIO FLOW CARD IS CABLED PER OSCILLATOR ═══════════════════════════════════
+     Max: "every oscillator routes to that flow card — I want the complete opposite. It can
+     default to it, but I have to be able to cut the cable to oscillator B and put it to audio
+     out, or to another glitch card."  A Chop/Glitch card now carries the same ten route pills
+     every rack device carries (FLOW_CHOP2_SRC_B and friends), so a cable into one NAMES an
+     oscillator instead of swallowing the master. These are the only four things the canvas
+     needs to know about them. */
+  var FSRC=['SRC_A','SRC_B','SRC_C','SRC_D','SRC_S','SRC_N','SRC_E','SRC_F','SRC_G','SRC_H'];
+  /* The route index of an oscillator letter. 0..3 = A–D, 6..9 = E–H (4 = Sub, 5 = Noise) — the
+     same ten-wide numbering the rack's route array uses, so one index serves both. */
+  function srcIdx(sub){ var t=String(sub||'').toLowerCase();
+    var i='abcd'.indexOf(t); if(i>=0) return i; var j='efgh'.indexOf(t); return j>=0?6+j:-1; }
+  function flowSrcId(m,i){ var k=fKind(m); if(k!=='chop'&&k!=='glitch') return null; if(!(i>=0&&i<10)) return null;
+    var n=fInst(m); return (k==='chop'?'FLOW_CHOP':'FLOW_GLI')+(n>1?n:'')+'_'+FSRC[i]; }
+  function flowSrcIds(m){ var out=[]; for(var i=0;i<10;i++){ var id=flowSrcId(m,i); if(id) out.push(id); } return out; }
+  /* 🪤 THESE PARAMETERS DEFAULT ON, AND THE SHIM REMEMBERS THE FIRST DEFAULT IT IS GIVEN. readP's
+     300 ms fallback calls pv(id) with no default, so a value read before anyone asked properly
+     would cache a 0 and every cable would look cut. seedOn claims them at 1 first — it is called
+     from both track sites and from the readers themselves, so no call order can lose. */
+  function seedOn(ids){ try{ (ids||[]).forEach(function(id){ if(id) shim(id,1); }); }catch(e){} }
+  function flowSrcOn(m,i){ var id=flowSrcId(m,i); if(!id) return false; seedOn([id]); return pv(id,1)>0.5; }
+  function flowSetSrc(m,i,on){ var id=flowSrcId(m,i); if(id) setP(id,on?1:0); }
+  function flowMaskOf(m){ var o=[]; for(var i=0;i<10;i++) o.push(flowSrcOn(m,i)?1:0); return o; }
+  function masksShare(a,b){ for(var i=0;i<10;i++) if(a[i]&&b[i]) return true; return false; }
+  /* THE OUTPUT CABLE. Cut it and the oscillator reaches Out only through whatever card claims
+     it — claimed by nothing, it is silent, which is Max's "if it isn't hooked up to anything it
+     has to have no sound". Default on, so a patch that never opens the canvas is untouched. */
+  function oscOutId(sub){ var t=String(sub||'').toLowerCase(); return 'abcdefgh'.indexOf(t)<0?null:('SYN_OSC_'+t.toUpperCase()+'_OUT'); }
+  function oscOutOn(sub){ var id=oscOutId(sub); if(!id) return true; seedOn([id]); return pv(id,1)>0.5; }
   function cardPidOf(m){ var n=fInst(m), k=fKind(m); return CARDPID[k]+(n>1&&k!=='drift'?n:''); }
   function cardElOf(m){ var n=fInst(m), cls=CARDCLS[fKind(m)]; if(!cls) return null; return document.querySelector('.ti-card.'+cls+(n>1?'.ti-inst'+n:':not(.ti-inst)')); }
   function flowLabel(m){ var n=fInst(m); return (FLOWNAME[fKind(m)]||'Flow')+(n>1?' '+n:''); }
@@ -42693,7 +42722,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var b=document.createElement('span'); b.className='tp-inst'; b.textContent=String(n); t.appendChild(b);
     t.classList.add('flow-inst');   /* tp26 — an INSTANCE tile: the synth page refuses it, the canvas shows it */
     t.__inst=1; tileHome[m]=t; return t; }
-  function adoptFlowNode(m,at){ if(nodeByKey('flow-'+m)||!modesEl) return null; var tile=tileHome[m]||mkInstTile(m); if(!tile) return null;   /* tp20 — instance tiles are minted here */
+  function adoptFlowNode(m,at){ if(nodeByKey('flow-'+m)||!modesEl) return null; var tile=tileHome[m]||mkInstTile(m); if(!tile) return null;
+    try{ var fids=flowSrcIds(m); seedOn(fids); if(fids.length) track(fids,function(){}); }catch(e){}   /* tp30 — its ten pills become undoable state the moment it lands */   /* tp20 — instance tiles are minted here */
     var n=mkNode('flow-'+m,'flow',tile,{sub:m,parent:modesEl,at:at}); n.tile=tile; n.home=null; n.ext=false; markViz(n);
     if(layout.ext['flow-'+m]) setFlowExt(n,true); return n; }
   function setFlowExt(n,ext){ if(!!n.ext===!!ext) return;
@@ -42746,17 +42776,38 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var src=midi; noteT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(!t) return; add(src,'out',0,t,'in',0,'n',{flow:m}); src=t; });
     var oscs=nodes.filter(function(n){ return n.kind==='osc'; });
     oscs.forEach(function(o){ add(src,'out',0,o,'in',0,'n',null,true); });
-    var masterHead=outN, prev=null; audioT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(!t) return; if(!prev) masterHead=t; else add(prev,'out',0,t,'in',0,'a',{flow:m}); prev=t; }); if(prev) add(prev,'out',0,outN,'in',0,'a',null,true);
+    /* tp30 — THE AUDIO FLOW CARDS NO LONGER SIT IN FRONT OF EVERYTHING. Each one takes exactly
+       the oscillators whose pills it has lit, and hands on to the next card that shares one of
+       them (the rack's own feed rule) — otherwise straight to Out. Nothing is a "master head"
+       any more, which is the whole of Max's complaint. */
+    var FA=[]; audioT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(t) FA.push({m:m,node:t,mask:flowMaskOf(m)}); });
+    function firstFlowFor(idxs){ for(var fi=0;fi<FA.length;fi++) for(var fj=0;fj<idxs.length;fj++) if(idxs[fj]>=0&&FA[fi].mask[idxs[fj]]) return fi; return -1; }
+    for(var fa=0;fa<FA.length;fa++){ var nxt=-1;
+      for(var fb=fa+1;fb<FA.length;fb++) if(masksShare(FA[fa].mask,FA[fb].mask)){ nxt=fb; break; }
+      if(nxt>=0) add(FA[fa].node,'out',0,FA[nxt].node,'in',0,'a',{flow:FA[fa].m});
+      else       add(FA[fa].node,'out',0,outN,'in',0,'a',null,true); }
     var ins=[]; var tp=nodeByKey('tape'), tl=nodeByKey('tapeloop'); if(tp) ins.push(tp); if(tl) ins.push(tl);
-    for(var ii=0;ii<ins.length;ii++) add(ins[ii],'out',0,ii+1<ins.length?ins[ii+1]:masterHead,'in',0,'a',null,true);
-    var dryHead=ins.length?ins[0]:masterHead;
+    /* the tape machines carry material that has no cable of its own (the loop, audio in), so they
+       run to Out beside the flow cards rather than through them — which is what the engine does. */
+    for(var ii=0;ii<ins.length;ii++) add(ins[ii],'out',0,ii+1<ins.length?ins[ii+1]:outN,'in',0,'a',null,true);
+    var dryHead=ins.length?ins[0]:outN;
     var devs=window.__fxrDevs?window.__fxrDevs():[]; var fxN=devs.map(function(d){ return d?nodeByKey('fx-'+d.core+'-'+d.inst):null; });
-    for(var i=0;i<fxN.length;i++){ if(!fxN[i]) continue; var nx=null; for(var j=i+1;j<fxN.length;j++){ if(fxN[j]){ nx=fxN[j]; break; } } if(nx) add(fxN[i],'out',0,nx,'in',0,'a',{fxorder:1}); else add(fxN[i],'out',0,dryHead,'in',0,'a',null,true); }
+    /* tp30 — where the rack's last card goes. It carries every oscillator the rack taps, so it
+       lands on the first flow card that claims any of them; if none does, it goes to Out. */
+    var fxSrcs=[]; devs.forEach(function(d){ if(d&&d.route) d.route.forEach(function(on,ri){ if(on&&fxSrcs.indexOf(ri)<0) fxSrcs.push(ri); }); });
+    var fxTailI=firstFlowFor(fxSrcs), fxTail=fxTailI>=0?FA[fxTailI].node:dryHead;
+    for(var i=0;i<fxN.length;i++){ if(!fxN[i]) continue; var nx=null; for(var j=i+1;j<fxN.length;j++){ if(fxN[j]){ nx=fxN[j]; break; } } if(nx) add(fxN[i],'out',0,nx,'in',0,'a',{fxorder:1}); else add(fxN[i],'out',0,fxTail,'in',0,'a',null,true); }
     var flt=nodeByKey('filter');
-    oscs.forEach(function(o){ var xi=OSC.indexOf(o.sub); var filtered=(pv(OX(o.sub)+'F1MIX')>0.001)||(pv(OX(o.sub)+'F2MIX')>0.001); var stage=o;
+    oscs.forEach(function(o){ var xi=srcIdx(o.sub); var filtered=(pv(OX(o.sub)+'F1MIX')>0.001)||(pv(OX(o.sub)+'F2MIX')>0.001); var stage=o;
       if(filtered&&flt){ add(o,'out',0,flt,'in',0,'a',{fmix:o.sub}); stage=flt; }
       var first=-1; if(xi>=0) for(var k=0;k<devs.length;k++){ if(devs[k]&&devs[k].route&&devs[k].route[xi]===1&&fxN[k]){ first=k; break; } }
-      if(first>=0) add(stage,'out',0,fxN[first],'in',0,'a',{route:{dev:first,osc:xi}}); else add(stage,'out',0,dryHead,'in',0,'a',{dry:o.sub}); });
+      if(first>=0){ add(stage,'out',0,fxN[first],'in',0,'a',{route:{dev:first,osc:xi}}); return; }
+      /* tp30 — no rack device wants it, so: its own flow card if one claims it, else Out if its
+         output cable is still connected, else NO CABLE AT ALL — hooked up to nothing, and the
+         engine agrees: SYN_OSC_x_OUT off with nothing claiming it renders silence. */
+      var fh=firstFlowFor([xi]);
+      if(fh>=0) add(stage,'out',0,FA[fh].node,'in',0,'a',{frt:{m:FA[fh].m,osc:xi}});
+      else if(oscOutOn(o.sub)) add(stage,'out',0,dryHead,'in',0,'a',{dry:o.sub}); });
     var routes=window.__tiRoutes?window.__tiRoutes():[]; var env=nodeByKey('env'), lfoN=nodeByKey('lfo');
     routes.forEach(function(r){ var m=/^lfo(\d+)$/.exec(r.s), e=/^env(\d+)$/.exec(r.s); if(!m&&!e) return; var sN=m?lfoN:env; if(!sN) return;
       var el=window.__tiElForDest?window.__tiElForDest(r.d):null; if(!el||!el.closest) return; var tn=nodeOf(el); if(!tn) return; var mp=modPortFor(tn,r.d); if(!mp) return;
@@ -42821,18 +42872,39 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         oscIdx=oscIdx.filter(function(i){ return i>=0; }); if(oscIdx.length){ oscIdx.forEach(function(i){ window.__fxrSetRoute&&window.__fxrSetRoute(b.idx,i,1); }); return true; }
         if(a.kind==='fx'){ var devs=window.__fxrDevs?window.__fxrDevs():[]; var order=[]; for(var i=0;i<devs.length;i++) order.push(i); order.splice(order.indexOf(b.idx),1); order.splice(order.indexOf(a.idx)+1,0,b.idx); window.__fxrReorder&&window.__fxrReorder(order); return true; }
         if(a.kind==='flow'){ toast('Chop and Glitch run after the rack'); return true; } return false; }
-      if(b.kind==='flow'){ var ch2=window.__flowChain?window.__flowChain():[]; if(ch2.indexOf(b.sub)<0){ ch2.push(b.sub); window.__flowSetChain&&window.__flowSetChain(ch2); } return true; }
+      if(b.kind==='flow'){ var ch2=window.__flowChain?window.__flowChain():[]; if(ch2.indexOf(b.sub)<0){ ch2.push(b.sub); window.__flowSetChain&&window.__flowSetChain(ch2); }
+        /* tp30 — THE CABLE NAMES THE OSCILLATOR. Dropping osc B on a Glitch lights B's pill on
+           THAT card; it does not hand the card the whole instrument. A card you added from the
+           browser still arrives with all ten lit ("it can default to it"), so this only ever
+           turns something ON — you take things away by cutting their cables. */
+        var bk=fKind(b.sub);
+        if(bk==='chop'||bk==='glitch'){
+          var idxs=[];
+          if(a.kind==='osc'){ var si=srcIdx(a.sub); if(si>=0) idxs=[si]; }
+          else if(a.kind==='filter'||a.kind==='fx'||a.kind==='tape'||a.kind==='tapeloop')
+            idxs=oscList().map(srcIdx).filter(function(i){ return i>=0; });
+          if(idxs.length){ var fi2=flowSrcIds(b.sub); seedOn(fi2); track(fi2,function(){}); idxs.forEach(function(i){ flowSetSrc(b.sub,i,1); }); }
+        }
+        return true; }
       if(b.kind==='tape'||b.kind==='tapeloop'){ toast('Everything runs through it while it is on the canvas'); return true; }
-      if(b.kind==='out'){ toast('It already reaches Out'); return true; } }
+      /* tp30 — Out is a real destination now: re-cabling an oscillator to it reconnects the
+         output cable this canvas can cut. */
+      if(b.kind==='out'){ if(a.kind==='osc'){ var oid=oscOutId(a.sub);
+          if(oid&&!oscOutOn(a.sub)){ seedOn([oid]); track([oid],function(){}); setP(oid,1); toast('Oscillator '+String(a.sub).toUpperCase()+' → Out'); return true; } }
+        toast('It already reaches Out'); return true; } }
     return false; }
   function cut(c,quiet){ var e=c.edit; if(!e){ if(!quiet) toast('The engine draws that one'); return false; }
     if(e.fmix){ setP(OX(e.fmix)+'F1MIX',0); setP(OX(e.fmix)+'F2MIX',0); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(x){} }
     else if(e.route){ window.__fxrSetRoute&&window.__fxrSetRoute(e.route.dev,e.route.osc,0); }
+    else if(e.frt){ var fi3=flowSrcIds(e.frt.m); seedOn(fi3); track(fi3,function(){}); flowSetSrc(e.frt.m,e.frt.osc,0); }   /* tp30 — cut one oscillator out of one card */
     else if(e.flow){ var ch=window.__flowChain?window.__flowChain():[]; window.__flowSetChain&&window.__flowSetChain(ch.filter(function(m){return m!==e.flow;})); }
     else if(e.mod){ window.__tiRemoveRoute&&window.__tiRemoveRoute(e.mod,e.dest); }
     else if(e.rlink){ layout.rlinks=(layout.rlinks||[]).filter(function(k){ return k!==e.rlink; }); saveLayout(); }   /* tp11 */
     else if(e.fxorder){ if(!quiet) toast('Cable a card onto another to reorder'); return false; }
-    else if(e.dry){ if(!quiet) toast('An oscillator with no effect goes straight to Out'); return false; }
+    /* tp30 — the last cable an oscillator has. Cutting it is the "not hooked up to anything"
+       case: nothing claims it, nothing carries it, and the engine renders silence. */
+    else if(e.dry){ var did=oscOutId(e.dry); if(!did){ if(!quiet) toast('An oscillator with no effect goes straight to Out'); return false; }
+      seedOn([did]); track([did],function(){}); setP(did,0); if(!quiet) toast('Oscillator '+String(e.dry).toUpperCase()+' is hooked up to nothing — it makes no sound'); }
     if(!quiet){ commit(); soon(); } return true; }
   /* tp11 — a PORT unpatches (Max: "right click on a node … delete it"; click it and ⌫): every cable on it the canvas can cut, as one undo step */
   function cablesAt(key,kind,i){ return cables.filter(function(c){ return (c.from.key===key&&c.fk===kind&&c.fi===i)||(c.to.key===key&&c.tk===kind&&c.ti===i); }); }
@@ -42846,6 +42918,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var params={}; for(var id in tracked) params[id]=pv(id); var S=ST();
     return {devs:devs,fm:fm,en:en,tape:toggleOn('tape-toggle')?1:0,mach:S?S.tapeMachine|0:0,loop:toggleOn('loop-toggle')?1:0,chain:window.__flowChain?window.__flowChain():[],mod:(window.__tiRoutes?window.__tiRoutes():[]).map(function(r){return {s:r.s,d:r.d};}),pos:JSON.parse(JSON.stringify(layout.pos)),ext:JSON.parse(JSON.stringify(layout.ext)),rl:(layout.rlinks||[]).slice(),params:params}; }
   function commit(){ if(applying) return; if(hist.cur) hist.undo.push(hist.cur); hist.cur=snapshot(); if(hist.undo.length>60) hist.undo.shift(); hist.redo=[]; paintTools(); }
+  /* tp30 — every id a flow cable can write. Registered when the canvas opens (and again when a
+     flow card is adopted) so that cutting a cable is an UNDOABLE edit: `tracked` is what snapshot()
+     stores, and an id first seen at the moment of the write would be read back AFTER it. */
+  function trackFlowCables(){ try{
+    var ids=[]; oscList().forEach(function(o){ var id=oscOutId(o); if(id) ids.push(id); });
+    (window.__flowChain?window.__flowChain():[]).forEach(function(m){ ids=ids.concat(flowSrcIds(m)); });
+    seedOn(ids); if(ids.length) track(ids,function(){});
+  }catch(e){} }
   function track(ids,cb){ var fresh=ids.filter(function(id){ return !(id in tracked); }); if(!fresh.length){ cb(); return; }
     Promise.all(fresh.map(readP)).then(function(vals){ fresh.forEach(function(id,i){ tracked[id]=1; var v=vals[i]; shim(id,v); [hist.cur].concat(hist.undo,hist.redo).forEach(function(S){ if(S&&S.params&&!(id in S.params)) S.params[id]=v; }); }); cb(); }).catch(cb); }
   function apply(S){ applying=true; try{
@@ -43451,7 +43531,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function openPage(){ build(); if(!page||isOpen) return; isOpen=true;
     loadLayout(function(){ if(!isOpen) return; try{ adoptAll(); }catch(e){ try{ console.warn('[tp] adopt',e); }catch(_){} }
       if(layout.view){ view.x=layout.view.x; view.y=layout.view.y; view.z=layout.view.z||0.6; applyView(); } else fit();
-      setViz(!!layout.viz,true); sync(); setTimeout(sync,120); setTimeout(sync,900); hist={undo:[],redo:[],cur:null}; setTimeout(function(){ hist.cur=snapshot(); paintTools(); },200); if(window.__tiFrameReg) window.__tiFrameReg('tp',frame); else if(!raf) raf=requestAnimationFrame(function loop(ts){ frame(ts); if(isOpen) raf=requestAnimationFrame(loop); else raf=0; }); requestAnimationFrame(frame); }); }
+      setViz(!!layout.viz,true); sync(); setTimeout(sync,120); setTimeout(sync,900); hist={undo:[],redo:[],cur:null};
+      trackFlowCables();   /* tp30 — the pills and the output cables join the undo snapshot BEFORE the first edit can move them */
+      setTimeout(function(){ hist.cur=snapshot(); paintTools(); },200); if(window.__tiFrameReg) window.__tiFrameReg('tp',frame); else if(!raf) raf=requestAnimationFrame(function loop(ts){ frame(ts); if(isOpen) raf=requestAnimationFrame(loop); else raf=0; }); requestAnimationFrame(frame); }); }
   function closePage(){ if(!isOpen) return; isOpen=false; closeMenus(); try{ if(window.__tiFrameUnreg) window.__tiFrameUnreg('tp'); }catch(e){} try{ returnAll(); }catch(e){ try{ console.warn('[tp] return',e); }catch(_){} } if(raf){ cancelAnimationFrame(raf); raf=0; } lastT=0; }
   window.__tpOpen=openPage; window.__tpClose=closePage; window.__tpNodes=function(){ return nodes.map(function(n){ return {key:n.key,x:n.x,y:n.y,w:n.w,h:n.h,ext:!!n.ext}; }); }; window.__tpCables=function(){ return cables.map(function(c){ return c.id; }); }; window.__tpSync=sync; window.__tpDrag=function(){ return drag?{kind:drag.kind,moved:!!drag.moved,ctl:!!drag.ctl}:null; };
   window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpLayout=function(){ return layout; }; window.__tpAdd=function(k,x,y){ addFromList(k,x||200,y||200); }; window.__tpRemove=function(key){ var n=nodeByKey(key); if(n) removeNode(n); }; window.__tpExt=function(key,on){ var n=nodeByKey(key); if(n&&n.kind==='flow') setFlowExt(n,!!on); }; window.__tpTidy=glideTidy; window.__tpRollOsc=rollOscNow; window.__tpOscList=function(){ return nodes.filter(function(n){return n.kind==='osc';}).map(function(n){return n.sub;}); };
