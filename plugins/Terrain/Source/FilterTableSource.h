@@ -48,9 +48,52 @@ struct FilterTableSource
     static constexpr int kFrames = WavetableSpec::kNumFrames;
     static constexpr int kMaxN   = HarmTableSource::kMaxN;   // 512 harmonics per frame
 
-    /** The curve, in dB relative to the frame's own mean. Storing the DEVIATION rather than an
-     *  absolute level is what makes RESONANCE a single multiply at the read site and what keeps a
-     *  quiet table and a loud one equally usable: the shape is the content, the level is not. */
+    /** tp27 — WHAT RESONANCE 1.0 MEANS, in dB of peak deviation. The curve below is stored as a
+     *  UNIT shape (peak magnitude exactly 1), so this is the only place the depth is decided and the
+     *  drawing and the DSP cannot disagree about it. 20 dB is dramatic and still clear of the
+     *  per-band clamp (kTblMaxDb = 24 in TerrainFilters), which matters: the previous version
+     *  multiplied a raw 30-46 dB curve by 2.5 and pinned 70 % of its bands ON that clamp at full
+     *  resonance, so the extremes of every table were the same saturated shape. */
+    static constexpr float kDepthDb = 20.0f;
+
+    /** The smallest peak deviation (dB) the normaliser will divide by — see bake(). A table whose
+     *  spectrum is the library average has only noise left after the reference is removed, and
+     *  dividing by noise would turn it into a full-depth random comb. */
+    static constexpr float kMinPeakDb = 3.0f;
+
+    /** tp27 — THE REFERENCE SPECTRUM: the average band curve of the whole factory library
+     *  (454 tables x 16 frames, scripts/gen_filter_ref.py).
+     *
+     *  🚨 THIS IS THE FIX FOR "ALL 500 SOUND THE SAME". Max: "these do not sound different
+     *  whatsoever ... as a wavetable you're supposed to sound different."  He was right and the
+     *  numbers say why: EVERY wavetable's spectrum falls with harmonic number, so every curve was
+     *  dominated by the same +25 dB -> -12 dB slope. Measured across the library, any two tables'
+     *  curves correlated 0.735 and 58 % of each curve WAS that shared slope — what you heard was a
+     *  fixed lowpass, identical on all 500, with the table's own voice buried underneath it.
+     *
+     *  A falling slope is what a CUTOFF is for. The table's job is the structure ON TOP of it: the
+     *  formants, the notches, the resonant shelves that make one wavetable sound unlike another.
+     *  Subtracting this reference leaves exactly that. Same measurement after the change: mean
+     *  correlation 0.006 — uncorrelated — and distinctiveness doubled.
+     *
+     *  Subtracting the LIBRARY AVERAGE rather than each curve's own straight-line fit is deliberate:
+     *  the fit also flattens a genuinely dark or genuinely bright table into the same nothing
+     *  (measured 0.268 correlation but a third less distinctiveness). Against a fixed reference, a
+     *  dark table still reads dark — it is dark RELATIVE TO A TYPICAL TABLE, which is the useful
+     *  comparison. */
+    static const float* referenceDb() noexcept
+    {
+        static const float r[kBands] = {
+            14.996f, 14.996f, 14.996f, 15.134f,  6.308f,  9.305f,  6.609f,  8.108f,
+             6.580f,  5.838f,  5.308f,  4.124f,  2.869f,  2.205f,  1.068f,  0.122f,
+            -0.543f, -2.000f, -2.954f, -4.013f, -5.258f, -6.071f, -7.074f, -7.838f,
+            -8.467f, -9.234f, -9.819f,-10.372f,-10.680f,-11.164f,-11.430f,-11.652f };
+        return r;
+    }
+
+    /** The curve, as a UNIT shape: the table's deviation from referenceDb(), centred on zero and
+     *  scaled so its peak magnitude over the whole table is exactly 1. The read site multiplies by
+     *  kDepthDb * resonance, so the shape is the content and the depth is one constant. */
     struct Curve
     {
         float db  [kFrames][kBands] {};   // per frame, per band: dB above/below that frame's mean
@@ -114,7 +157,39 @@ struct FilterTableSource
                 mean += db;
             }
             mean /= (float) kBands;
-            for (int k = 0; k < kBands; ++k) { c.db[f][k] -= mean; acc += (double) c.db[f][k] * (1.0 + 0.001 * k); }
+            const float* ref = referenceDb();
+            for (int k = 0; k < kBands; ++k)
+            {
+                // centre it, then take out what EVERY wavetable has in common — see referenceDb()
+                c.db[f][k] = (c.db[f][k] - mean) - ref[k];
+                acc += (double) c.db[f][k] * (1.0 + 0.001 * k);
+            }
+            float m2 = 0.0f;
+            for (int k = 0; k < kBands; ++k) m2 += c.db[f][k];
+            m2 /= (float) kBands;
+            for (int k = 0; k < kBands; ++k) c.db[f][k] -= m2;   // re-centre: the reference has its own mean
+        }
+        // NORMALISE THE WHOLE TABLE to a unit peak, so resonance means the same depth on every table
+        // and no table lives at the clamp. Across the table, not per frame, so scanning still changes
+        // how STRONG the shaping is and not only its shape.
+        float peak = 0.0f;
+        for (int f = 0; f < kFrames; ++f)
+            for (int k = 0; k < kBands; ++k)
+                peak = std::max (peak, std::fabs (c.db[f][k]));
+        // 🚨 THE DIVISOR HAS A FLOOR, and it is load-bearing. Normalising by the peak alone means a
+        //    table that sits ON the reference — one whose spectrum IS the library average — has only
+        //    rounding noise left, and dividing by that noise amplifies it to FULL DEPTH. Such a table
+        //    would come out as a full-strength random comb. Measured: a table constructed to equal
+        //    referenceDb() baked to a curve of +/-1.0000 before this floor existed.
+        //    With the floor, a typical table (peak ~14 dB after subtraction) still normalises to
+        //    unit, an extreme one likewise, and a table that really has nothing to say stays quiet
+        //    instead of shouting noise.
+        const float denom = std::max (peak, kMinPeakDb);
+        if (denom > 0.0f)
+        {
+            const float inv = 1.0f / denom;
+            for (int f = 0; f < kFrames; ++f)
+                for (int k = 0; k < kBands; ++k) c.db[f][k] *= inv;
         }
         c.sig = (float) acc;
     }

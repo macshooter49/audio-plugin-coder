@@ -159,6 +159,25 @@ static std::vector<float> run (bool tableType, const Sets& sets, const std::vect
     a.chord(); auto out = a.render(); a.close(); return out;
 }
 
+/** tp27 — a BROADBAND probe for the "do they sound different" question. A chord is harmonics with
+    silence between them, so most FFT bins carry no signal and their "response" is 0 dB for every
+    table — shared zeros that swamp any comparison (they put two clearly different tables at +0.998).
+    Noise fills every bin, so the filter's response is simply readable, with no masking to get wrong. */
+static std::vector<float> runNoise (const Sets& sets, const std::vector<std::pair<std::string,float>>& raws = {}, bool tableType = true)
+{
+    Au a; a.open();
+    a.set ("Noise On", 1.0f);
+    a.set ("Noise Level", 0.9f);
+    a.set ("Noise Type", 0.0f);
+    a.set ("Synth Filter 1 Source Noise", 1.0f);
+    a.set ("Synth OSC A Level", 0.0f);          // the oscillator steps aside; noise is the probe
+    if (tableType) a.setRaw ("Synth Filter 1 Type", (float) FILTER_TABLE_TYPE);
+    for (auto& r : raws) a.setRaw (r.first.c_str(), r.second);
+    for (auto& s : sets) a.set (s.first.c_str(), s.second);
+    a.pump (1.2);
+    a.chord(); auto out = a.render(); a.close(); return out;
+}
+
 int main()
 {
     int fails = 0;
@@ -197,6 +216,88 @@ int main()
     expect (specDiffDb (f46,  t0)  > 1.5, "2b. a FACTORY table (46) shapes the sound");
     expect (specDiffDb (f300, t0)  > 1.5, "2b. and one from the middle of the library (300)");
     expect (specDiffDb (f499, f46) > 1.5, "2b. and two factory tables differ from EACH OTHER");
+
+    // ══ 2c · tp27 — DO THEY ACTUALLY SOUND DIFFERENT FROM ONE ANOTHER? ═══════════════════════
+    //  This is the bar the old test did not set, and it is the one that mattered. "table 46 differs
+    //  from table 0 by more than 1.5 dB" passed happily while all 500 factory tables sounded like
+    //  the same lowpass, because every one of them differed from a BUILT-IN in the same way. The
+    //  question is whether they differ from EACH OTHER — so: render a spread of the library and
+    //  measure the SHAPE correlation between every pair. Two filters that are the same shape are
+    //  the same filter however far apart their averages sit.
+    {
+        const int idx[] = { 60, 110, 170, 230, 290, 350, 410, 470 };
+        const int NT = (int) (sizeof (idx) / sizeof (idx[0]));
+        //  ⚠️ CORRELATE THE FILTER'S RESPONSE, NOT THE OUTPUT SPECTRUM. Every one of these renders the
+        //  SAME oscillator, so the source dominates the output and any two runs correlate highly no
+        //  matter what the filter did — measured +0.774 mean that way, which says almost nothing.
+        //  Dividing by the UNFILTERED spectrum leaves exactly what the filter contributed, in dB,
+        //  and that is the thing that has to differ from table to table.
+        auto corr = [] (const std::vector<double>& a, const std::vector<double>& b)
+        {
+            const int n = (int) std::min (a.size(), b.size());
+            if (n < 8) return 1.0;
+            double ma = 0, mb = 0;
+            for (int k = 0; k < n; ++k) { ma += a[k]; mb += b[k]; }
+            ma /= n; mb /= n;
+            double num = 0, da = 0, db = 0;
+            for (int k = 0; k < n; ++k) { const double x = a[k] - ma, y = b[k] - mb; num += x * y; da += x * x; db += y * y; }
+            return (da > 0 && db > 0) ? num / std::sqrt (da * db) : 1.0;
+        };
+        const auto noneN = spectrum (runNoise ({ { "Synth Filter 1 Resonance", 0.0f }, { "Synth Filter 1 Cutoff", 0.5f } }));
+        double nonePk = 0.0;
+        for (double v : noneN) nonePk = std::max (nonePk, v);
+        std::vector<int> keep;
+        for (size_t k = 0; k < noneN.size(); ++k) if (noneN[k] > nonePk * 1.0e-4) keep.push_back ((int) k);
+        printf ("   broadband probe: %d of %d bins carry signal\n", (int) keep.size(), (int) noneN.size());
+
+        std::vector<std::vector<double>> sp;
+        for (int i = 0; i < NT; ++i)
+        {
+            auto out = spectrum (runNoise (full, { { "Synth Filter 1 Table", (float) idx[i] } }));
+            std::vector<double> resp; resp.reserve (keep.size());
+            for (int k : keep)
+                resp.push_back (std::max (-60.0, std::min (60.0, 20.0 * std::log10 (std::max (out[(size_t) k], 1e-12) / noneN[(size_t) k]))));
+            sp.push_back (resp);
+        }
+        for (int i = 0; i < NT; ++i)
+        {
+            double pk = 0.0, acc = 0.0; int cnt = 0;
+            for (double v : sp[(size_t) i]) { pk = std::max (pk, std::fabs (v)); acc += v * v; ++cnt; }
+            printf ("   table %3d  response peak %6.2f dB   rms %5.2f dB\n", idx[i], pk, cnt ? std::sqrt (acc / cnt) : 0.0);
+        }
+        // A BASELINE FIRST. "0.03 dB apart" means nothing without knowing what the SAME table twice
+        // measures — render-to-render noise, the bake's own timing, the chord's phase. Compare table
+        // 60 against itself before comparing it to anything else.
+        {
+            auto out2 = spectrum (runNoise (full, { { "Synth Filter 1 Table", 60.0f } }));
+            std::vector<double> r2; r2.reserve (keep.size());
+            for (int k : keep)
+                r2.push_back (std::max (-60.0, std::min (60.0, 20.0 * std::log10 (std::max (out2[(size_t) k], 1e-12) / noneN[(size_t) k]))));
+            double acc = 0.0; int cnt = 0;
+            for (size_t k = 0; k < r2.size() && k < sp[0].size(); ++k) { const double d = sp[0][k] - r2[k]; acc += d * d; ++cnt; }
+            printf ("   baseline: table 60 vs ITSELF  corr %+.4f   RMS %.3f dB\n", corr (sp[0], r2), cnt ? std::sqrt (acc / cnt) : 0.0);
+        }
+        double sum = 0, worstC = -2; int pairs = 0; double minDiff = 1e9;
+        for (int i = 0; i < NT; ++i)
+            for (int j = i + 1; j < NT; ++j)
+            {
+                const double c = corr (sp[(size_t) i], sp[(size_t) j]);
+                sum += c; ++pairs;
+                if (c > 0.95) printf ("     near-copy: table %d vs %d  corr %+.4f\n", idx[i], idx[j], c);
+                if (c > worstC) worstC = c;
+                double acc = 0.0; int cnt = 0;
+                for (size_t k = 0; k < sp[(size_t) i].size() && k < sp[(size_t) j].size(); ++k)
+                { const double d = sp[(size_t) i][k] - sp[(size_t) j][k]; acc += d * d; ++cnt; }
+                minDiff = std::min (minDiff, cnt ? std::sqrt (acc / cnt) : 0.0);
+            }
+        const double meanC = sum / pairs;
+        printf ("\n   %d tables across the library, %d pairs:\n", NT, pairs);
+        printf ("   mean RESPONSE correlation %+.3f   worst (most alike) pair %+.3f   smallest RMS difference %.2f dB\n",
+                meanC, worstC, minDiff);
+        expect (meanC   < 0.80, "2c. tables across the library are not all the same shape");
+        expect (worstC  < 0.95, "2c. not even the most alike PAIR is a near-copy");
+        expect (minDiff > 1.0,  "2c. and every pair differs audibly");
+    }
 
     // 3 · resonance: 0 flat, 100% dramatic (the lifeguard law)
     const auto r0 = spectrum (run (true, { { "Synth Filter 1 Resonance", 0.0f }, { "Synth Filter 1 Cutoff", 0.5f } }));

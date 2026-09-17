@@ -50,7 +50,7 @@ static int armBank (tw::filters::TableBank& bank, const Curve& c, float pos01, f
 {
     constexpr float kTblQ = 4.9f, kTblMaxDb = 24.0f;
     float db[B] = {};
-    tw::FilterTableSource::blend (c, pos01, res * 2.5f, db);
+    tw::FilterTableSource::blend (c, pos01, res * tw::FilterTableSource::kDepthDb, db);   /* tp27 — the shipped depth */
     const float* ratio = tw::FilterTableSource::bandRatios();
     const float fLo = 20.0f, fHi = 0.45f * (float) FS;
     float g[B] = {};

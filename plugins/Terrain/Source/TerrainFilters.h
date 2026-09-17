@@ -2854,7 +2854,7 @@ public:
                 const auto* curve = tblCurve_.load (std::memory_order_acquire);
                 float db[TableBank::kB] = {};
                 if (curve != nullptr)
-                    tw::FilterTableSource::blend (*curve, tblFrame_, res01 * 2.5f, db);
+                    tw::FilterTableSource::blend (*curve, tblFrame_, res01 * tw::FilterTableSource::kDepthDb, db);   /* tp27 — a UNIT shape x the one depth constant; the old x2.5 on a raw 40 dB curve pinned most bands on the clamp */
                 //  ⚠️ A BAND THAT DOES NOT FIT MUST BE BYPASSED, NOT CLAMPED. BellEQ pins fc into
                 //     [20, 0.45 fs], so with the cutoff up high a dozen bands all land ON that ceiling
                 //     and stack into one enormous resonance at Nyquist — measured as the curve moving

@@ -32738,7 +32738,7 @@ restoreThemeFromBackend();
     if(type==='tbl'){
       var C=window.__fltTblCurve?window.__fltTblCurve():null;
       if(!C||!C.length){ A=1; }                       /* not baked yet ⇒ flat, which is what it sounds like */
-      else { var acc=1, rs=res*2.5, fHi=0.45*48000;
+      else { var acc=1, rs=res*20.0, fHi=0.45*48000;   /* tp27 — FilterTableSource::kDepthDb; the CSV is a UNIT shape */
         for(var bk=0;bk<C.length&&bk<32;bk++){
           var fk=fc*__fltTblRatio[bk];
           if(fk<20||fk>fHi) continue;                 /* the engine BYPASSES a band that does not fit */
