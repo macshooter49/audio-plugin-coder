@@ -1819,10 +1819,42 @@ struct BellEQ
 struct TableBank
 {
     static constexpr int kB = FilterTableSource::kBands;
+
+    /** tp25 — ONLY THE BANDS THAT DO SOMETHING ARE RUN.
+     *
+     *  This bank is PER VOICE and PER CHANNEL, so a fixed 32-biquad cascade is 64 biquads per
+     *  sounding voice whatever the table says — and a table curve is mean-centred, so a large
+     *  share of its bands sit within a fraction of a dB of flat at any one frame. A bell at 0 dB
+     *  is an identity: its coefficients are b0=1, b1=a1, b2=a2, and running it costs five
+     *  multiply-adds to return (almost exactly) the input.
+     *
+     *  So setParams records which bands are actually shaping the sound and process() walks only
+     *  those. RESONANCE 0 makes the whole curve flat, which now costs nothing at all rather than
+     *  64 biquads of nothing — and that is the setting a filter sits at whenever the table is
+     *  being used gently.
+     *
+     *  kSkipDb is the threshold. 0.2 dB through one RBJ bell is far below audibility (the bank's
+     *  own clamp is +/-24 dB), and Tests/au_filter_table_cpu.cpp measures the full bank against
+     *  the pruned one on the magnitude spectrum rather than trusting that claim.
+     */
+    static constexpr float kSkipDb = 0.2f;
+
     BellEQ band[kB];
+    int    live[kB] {};
+    int    nLive = 0;
+
     void reset() noexcept { for (auto& b : band) b.reset(); }
+
+    /** Call after every setBell pass: decides which bands process() will walk. */
+    inline void arm (const float* gainDb) noexcept
+    {
+        int n = 0;
+        for (int k = 0; k < kB; ++k)
+            if (gainDb[k] > kSkipDb || gainDb[k] < -kSkipDb) live[n++] = k;
+        nLive = n;
+    }
     inline float process (float x) noexcept
-    { for (int k = 0; k < kB; ++k) x = band[k].process (x); return x; }
+    { for (int i = 0; i < nLive; ++i) x = band[live[i]].process (x); return x; }
 };
 
 
@@ -2830,13 +2862,19 @@ public:
                 //     range means the table has nothing to say there, and 0 dB is how a bell says nothing.
                 const float* ratio = tw::FilterTableSource::bandRatios();
                 const float fLo = 20.0f, fHi = 0.45f * (float) fs;
+                float gL[TableBank::kB] = {}, gR[TableBank::kB] = {};
                 for (int k = 0; k < TableBank::kB; ++k)
                 {
                     const float g  = juce::jlimit (-kTblMaxDb, kTblMaxDb, db[k]);
                     const float fL = cutHzL * ratio[k], fR = cutHzR * ratio[k];
-                    tblL_.band[k].setBell (juce::jlimit (fLo, fHi, fL), (fL >= fLo && fL <= fHi) ? g : 0.0f, kTblQ, fs);
-                    tblR_.band[k].setBell (juce::jlimit (fLo, fHi, fR), (fR >= fLo && fR <= fHi) ? g : 0.0f, kTblQ, fs);
+                    gL[k] = (fL >= fLo && fL <= fHi) ? g : 0.0f;
+                    gR[k] = (fR >= fLo && fR <= fHi) ? g : 0.0f;
+                    tblL_.band[k].setBell (juce::jlimit (fLo, fHi, fL), gL[k], kTblQ, fs);
+                    tblR_.band[k].setBell (juce::jlimit (fLo, fHi, fR), gR[k], kTblQ, fs);
                 }
+                //  tp25 — and now record which of them are worth running. An out-of-range band was
+                //  already written as 0 dB above, so the Nyquist bypass prunes itself for free.
+                tblL_.arm (gL); tblR_.arm (gR);
                 preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             }

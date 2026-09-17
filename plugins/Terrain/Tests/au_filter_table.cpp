@@ -183,6 +183,21 @@ int main()
     expect (specDiffDb (t9, t0)  > 1.5, "2. table 9 sounds different from table 0");
     expect (specDiffDb (t30, t0) > 1.5, "2. table 30 sounds different from table 0");
 
+    // 2b · tp25 — THE FACTORY LIBRARY. Indices 0..45 are the built-in roster (recipes, generated at
+    //      launch); 46 and up are the 454 factory .flac tables, which reach the curve down a COMPLETELY
+    //      DIFFERENT path — read off disk, one cycle per frame, FFT'd onto the harmonic grid. A built-in
+    //      that works proves nothing about them, so they are measured on their own: the file has to be
+    //      found, decoded, analysed, baked and published, or these read as silence-vs-silence.
+    const auto f46  = spectrum (run (true, full, { { "Synth Filter 1 Table",  46.0f } }));
+    const auto f300 = spectrum (run (true, full, { { "Synth Filter 1 Table", 300.0f } }));
+    const auto f499 = spectrum (run (true, full, { { "Synth Filter 1 Table", 499.0f } }));
+    printf ("\n   factory 46           centroid %7.0f Hz   vs table 0: %5.2f dB\n", centroid (f46),  specDiffDb (f46,  t0));
+    printf ("   factory 300          centroid %7.0f Hz   vs table 0: %5.2f dB\n", centroid (f300), specDiffDb (f300, t0));
+    printf ("   factory 499          centroid %7.0f Hz   vs factory 46: %5.2f dB\n", centroid (f499), specDiffDb (f499, f46));
+    expect (specDiffDb (f46,  t0)  > 1.5, "2b. a FACTORY table (46) shapes the sound");
+    expect (specDiffDb (f300, t0)  > 1.5, "2b. and one from the middle of the library (300)");
+    expect (specDiffDb (f499, f46) > 1.5, "2b. and two factory tables differ from EACH OTHER");
+
     // 3 · resonance: 0 flat, 100% dramatic (the lifeguard law)
     const auto r0 = spectrum (run (true, { { "Synth Filter 1 Resonance", 0.0f }, { "Synth Filter 1 Cutoff", 0.5f } }));
     const auto r1 = tbl;

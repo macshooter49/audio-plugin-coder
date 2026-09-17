@@ -2212,6 +2212,9 @@ private:
     std::unique_ptr<tw::HarmTableSource::Grid> fltBakeGrid_;       // message thread only — the intermediate
     std::unique_ptr<tw::WavetableSpec>         fltBakeSpec_;       // heap: a spec is ~229 KB (the MSVC stack law)
     void rebuildFilterTableIfNeeded (int slot);                    // message thread (timerCallback)
+    /** tp25 — a factory .flac (128 cycles x 2048) onto the harmonic grid. Message thread; returns
+        false and touches nothing if the file is missing or unreadable. */
+    bool bakeFactoryTableGrid (int factoryIdx, tw::HarmTableSource::Grid& g) noexcept;
 
     // fb589 — THE ADDITIVE WATERFALL. Its own engine instance, deliberately NOT the editor's
     // harmDispEng_[]: that one is mid-flight every 60 Hz tick baking the bars, and a 16-row HUE

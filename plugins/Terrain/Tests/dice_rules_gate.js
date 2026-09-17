@@ -206,5 +206,29 @@ chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — rout
   chk(!/DRUMCATS/.test(SRC), '[7] the drum path is gone entirely (Max: "we\'re not using drums")');
 }
 
+
+// ── 8 · THE DICE ON THE SYNTH PAGE ───────────────────────────────────────────────────────────
+{
+  const hdr = SRC.slice(SRC.indexOf('<div class="header-right">'), SRC.indexOf('</div>', SRC.indexOf('id="settings-btn"')));
+  chk(/id="dice-btn"/.test(hdr), '[8] a dice button exists in the header');
+  chk(hdr.indexOf('id="dice-btn"') < hdr.indexOf('id="settings-btn"'),
+      '[8] it sits immediately beside the gear, and the gear stays last (its 16px inset)');
+  chk(/class="settings-btn dice-btn"/.test(hdr),
+      '[8] it wears the gear\'s own box, so header-right\'s gap spaces them equally');
+  chk(/db\.addEventListener\('click'[\s\S]{0,240}window\.__tpDice\(\)/.test(SRC),
+      '[8] left-click rolls through the Patcher module (no second copy of the dice)');
+  chk(/db\.addEventListener\('contextmenu'[\s\S]{0,200}__tpDiceMenu/.test(SRC),
+      '[8] right-click aims it');
+  // the trap this guards: generate() ends by ADOPTING the rack cards onto the canvas. Fired from
+  // the synth page with the canvas shut, that would move the user's cards out from under them.
+  chk(/if\(isOpen\)\{ adoptFx\(\); syncPresence\(\); sync\(\); \}\s*\n\s*commit\(\);/.test(SRC),
+      '[8] a roll with the Patcher SHUT never adopts or re-seats the canvas');
+  chk(/if\(isOpen\) glideTidy\(\);/.test(SRC), '[8] and never re-tidies it');
+  chk(/window\.__tpDice=function\(\)\{ try\{ build\(\); \}catch\(e\)\{\} try\{ rollDice\(\); \}/.test(SRC),
+      '[8] the export builds the canvas DOM (which does not adopt) before rolling');
+  chk(/function pageToast\(s\)/.test(SRC) && /if\(!isOpen\)\{ pageToast\(s\); return; \}/.test(SRC),
+      '[8] and the roll still says what it did, with the canvas hidden');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
