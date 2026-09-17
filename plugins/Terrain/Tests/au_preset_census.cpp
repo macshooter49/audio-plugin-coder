@@ -222,6 +222,35 @@ int main (int argc, char** argv)
         }
         return 0;
     }
+    if (mode == "params")   // params <preset> <substr>: every parameter containing <substr> whose value differs from its default
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }
+        Au a; if (! a.open() || ! a.loadChunk (ps[0].chunk)) return 1; a.pump (0.8); a.render (10, nullptr);
+        printf ("== %s: non-default parameters containing '%s' ==\n", ps[0].name.c_str(), argc > 3 ? argv[3] : "");
+        for (auto& kv : a.byName) { if (argc > 3 && ! strcasestr (kv.first.c_str(), argv[3])) continue; const auto& pi = a.info.at (kv.second); const float v = a.get (kv.first);
+            if (std::fabs (v - pi.defaultValue) > 1e-4f) printf ("  %-34s %8.3f  (def %g)\n", kv.first.c_str(), v, pi.defaultValue); }
+        a.close(); return 0;
+    }
+    if (mode == "oscgate")   // tp36b — Max: "I had four loaded but two active — something is bleeding through." Does OFF really skip the work, and the sound?
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }
+        const Preset& p = ps[0]; printf ("\n== oscgate: %s ==\n", p.name.c_str());
+        auto fresh = [&] () { Au* a = new Au(); if (! a->open() || ! a->loadChunk (p.chunk)) { delete a; return (Au*) nullptr; } a->pump (0.8); a->render (20, nullptr); a->pump (0.4); return a; };
+        auto chord = [&] (Au& a, const char* label) { for (int n : CHORD8) a.note (n, 100); a.render (12, nullptr); std::vector<double> t; float pk = 0; a.render (50, &t, &pk);
+            printf ("  %-52s %6.0f us %5.1f%%   peak %7.2f dBFS\n", label, median (t), cpu (median (t)), pk > 1e-9f ? 20.0 * std::log10 (pk) : -240.0); a.allOff(); a.render (240, nullptr); };
+        { Au* a = fresh(); if (! a) return 1;
+          printf ("  enables as saved:"); for (char o = 'A'; o <= 'H'; ++o) printf ("  %c=%.0f", o, a->get (std::string ("Osc ") + o + " Enable")); printf ("\n");
+          chord (*a, "as saved"); a->close(); delete a; }
+        { Au* a = fresh(); if (! a) return 1; for (char o = 'A'; o <= 'H'; ++o) a->setRaw (std::string ("Osc ") + o + " Enable", 0.0f); a->render (20, nullptr);
+          chord (*a, "EVERY oscillator OFF (should be ~idle, silent)"); a->close(); delete a; }
+        for (char o = 'A'; o <= 'H'; ++o)
+        { Au* a = fresh(); if (! a) return 1; const float was = a->get (std::string ("Osc ") + o + " Enable"); if (was < 0.5f) { a->close(); delete a; continue; }
+          a->setRaw (std::string ("Osc ") + o + " Enable", 0.0f); a->render (20, nullptr); chord (*a, (std::string ("only osc ") + o + " turned OFF").c_str()); a->close(); delete a; }
+        for (char o = 'A'; o <= 'H'; ++o)
+        { Au* a = fresh(); if (! a) return 1; const float was = a->get (std::string ("Osc ") + o + " Enable"); if (was > 0.5f) { a->close(); delete a; continue; }
+          a->setRaw (std::string ("Osc ") + o + " Enable", 1.0f); a->render (20, nullptr); chord (*a, (std::string ("only osc ") + o + " turned ON").c_str()); a->close(); delete a; }
+        return 0;
+    }
     if (mode == "hold")   // hold an 8-note chord and render at wall pace for <secs> — for `sample <pid>` from outside
     {
         auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }
@@ -230,6 +259,7 @@ int main (int argc, char** argv)
         for (int i = 0; i < notes; ++i) a.note (CHORD8[i], 100);
         printf ("holding %d notes of %s for %.0f s (pid %d)\n", notes, ps[0].name.c_str(), secs, (int) getpid()); fflush (stdout);
         if (argc > 5 && std::string (argv[5]) == "shortrel") { a.setNorm ("Synth Amp Release", 0.02f); a.render (10, nullptr); printf ("  (amp release -> short)\n"); }
+        if (argc > 5 && std::string (argv[5]) == "alloff") { for (char o = 'A'; o <= 'H'; ++o) a.setRaw (std::string ("Osc ") + o + " Enable", 0.0f); a.render (20, nullptr); printf ("  (every oscillator OFF)\n"); }
         const double t0 = nowUs(); std::vector<double> t, sec;
         int lastS = -1;
         while (nowUs() - t0 < secs * 1e6) { a.render (1, &sec); t.push_back (sec.back());   /* the cost second by second: does it CLIMB while the same notes are held? */

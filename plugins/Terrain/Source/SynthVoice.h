@@ -4334,11 +4334,32 @@ class SynthVoice : public juce::SynthesiserVoice
                         if (! blendIsLive (b.mode) || b.depth < 1.0e-6f) continue;        // armed FM/PD/AM/RM/EXP/CLAMP only
                         if (blendIsPhase (b.mode) && isBlock (eng[c]))
                             blkCarrierArmed_[c] = true;                                   // FM/PD phase-modulate c's block (AM/RM don't need the ring)
+                        /* tp36b — A DEAD CARRIER FORCES NOTHING. Max: "I had four loaded but two active — something is
+                           bleeding through." Measured on Second Coming (A, D off; B, C on): every oscillator OFF still
+                           cost 55% of a core, silent. The dice wires every oscillator to blend from the others, so an OFF
+                           oscillator whose carrier is itself OFF was still rendered as that carrier's source — and the
+                           carrier's own output is gated to zero, so the source's work fed nothing. Only a LIVE carrier
+                           (or one whose gate has not settled yet) may force a source; the forcing is transitive below.
+                           An OFF source that a LIVE carrier blends from still renders — that is the carrier's sound. */
+                        if (oscDead_[c]) continue;
                         if      (b.src < 4)  modSrcForce_[b.src] = true;                  // Osc A..D as source
                         else if (b.src == 5) noiseForce_         = true;                  // Noise as source (fb64)
                         else if (b.src == 6) modSrcForce_[c]     = true;                  // Self
                         // b.src == 4 (Sub) is handled earlier — it has to be known before
                         // prepareSubBlock() runs. See the subForce_ scan there.
+                    }
+                /* tp36b — transitive: a source forced alive by a live carrier is itself a carrier for its own sources */
+                for (int pass = 0; pass < 3; ++pass)
+                    for (int c = 0; c < 4; ++c)
+                    {
+                        if (! (oscDead_[c] && modSrcForce_[c])) continue;                  // only the dead-but-forced need a second look
+                        for (int s = 0; s < 4; ++s)
+                        {
+                            const BlendSlotV& b = blendSlot_[c][s];
+                            if (! blendIsLive (b.mode) || b.depth < 1.0e-6f) continue;
+                            if      (b.src < 4)  modSrcForce_[b.src] = true;
+                            else if (b.src == 5) noiseForce_         = true;
+                        }
                     }
                 // fb552 — FOLLOWERS ARM THE SAME WAY A BLEND SLOT DOES, and they must, for the same
                 //  reason: a follower on an oscillator you have turned down to 0 has to keep
