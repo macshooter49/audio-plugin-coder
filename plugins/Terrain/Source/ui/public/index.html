@@ -14373,7 +14373,13 @@ if (
      per quote, and the escape held the host's UI thread ~720 ms on every open of the wavetable browser (measured:
      Tests/browser_freeze_sim.cpp). Base64 has nothing to escape. Decoded HERE, for exactly these natives, so every
      reader of these lists still receives the JSON text it always did; any other string passes through untouched. */
-  const B64_LISTS = { listWtImports: 1, listNoiseImports: 1, listSampleImports: 1, listImports: 1 };
+  /* tp35 — the same disease, four more natives: getPresets (a flow card's 25 presets, 68 KB: 1.63 s), listPresets (the
+     bank catalogue, 58 KB: 0.95 s), scanSampleFactory / scanNoiseFactory (0.5 s). Measured in the real WebView by
+     Tests/_tp35_measure.js; the message thread was blocked for the whole of each, which is what made a card's first
+     open, a preset pick and a pop-out "load" — and let the fb520 watchdog reload the page when two of them landed
+     back to back. */
+  const B64_LISTS = { listWtImports: 1, listNoiseImports: 1, listSampleImports: 1, listImports: 1,
+                      getPresets: 1, listPresets: 1, scanSampleFactory: 1, scanNoiseFactory: 1 };
   function b64Text(v) {
     if (typeof v !== "string" || v.lastIndexOf("b64:", 0) !== 0) return v;
     const bin = atob(v.slice(4)), u = new Uint8Array(bin.length);
@@ -14898,13 +14904,17 @@ function initSettingsPanel() {
   (function(){
     var db = document.getElementById('dice-btn');
     if (!db) return;
+    /* tp35 — the lock lifts when the roll reports its end (__tpDiceDone, from the Patcher module's last step); a fixed
+       1.7 s used to keep the dice dead after a roll that now finishes in ~80 ms. 1.5 s is the backstop for a roll that
+       never reports. */
+    function unlock(){ db.classList.remove('rolling'); }
+    function arm(){ var t = setTimeout(unlock, 1500); window.__tpDiceDone = function(){ clearTimeout(t); setTimeout(unlock, 120); }; }
     db.addEventListener('click', function(e){
       e.preventDefault(); e.stopPropagation();
       if (db.classList.contains('rolling')) return;
       if (!window.__tpDice) return;
-      db.classList.add('rolling');
-      try { window.__tpDice(); } catch (x) {}
-      setTimeout(function(){ db.classList.remove('rolling'); }, 1700);
+      db.classList.add('rolling'); arm();
+      try { if (!window.__tpDice()) unlock(); } catch (x) { unlock(); }
     });
     db.addEventListener('contextmenu', function(e){
       e.preventDefault(); e.stopPropagation();
@@ -38748,10 +38758,18 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
        dead native would have killed the arrows outright instead of just the import half. 250 ms,
        then carry on with whatever we have — the factory folders come from the <select> and need no
        native at all, so the arrow still works with the backend on fire. */
+    /* tp35 — THE ARROW WENT TO A "RANDOM" TABLE (Max, on the Patcher). Measured (Tests/_tp35e_measure.js): press the
+       arrow while the host thread is inside a slow native (a card's 1.6 s getPresets was one) and the two registry
+       calls below miss the 250 ms cut — cats then holds only the factory folders, the current IMPORT is in none of
+       them, and the old fallback stepped the flat factory list from its head: "Butterfly Curve" -> the first sine.
+       Two changes: the last complete answer is kept (window.__wtCatsLast) and stands in for a late one, and with no
+       answer at all the wait is 1500 ms rather than a jump. wtStepPreset below adds the other half: an import the
+       registry does not know never leaves its folder. */
+    var haveLast = !! (window.__wtCatsLast && window.__wtCatsLast.length);
     var pj = function (fn) { var f = wtNfn (fn);
       if (! f) return Promise.resolve (null);
       return new Promise (function (res) { var done = false;
-        var t = setTimeout (function () { if (! done) { done = true; res (null); } }, 250);
+        var t = setTimeout (function () { if (! done) { done = true; res (null); } }, haveLast ? 250 : 1500);
         var land = function (v) { if (done) return; done = true; clearTimeout (t); res (v); };
         try { Promise.resolve (f ()).then (function (js) { var o = null;
                 try { o = JSON.parse (js); } catch (e) {} land (o); })
@@ -38767,6 +38785,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
          arrow did nothing. Headless never saw it: with no backend `pj` times out, `legacy` falls
          back to [], and `.map` is fine — which is exactly why every gate stayed green.
          Both shapes are accepted now, and cb() is guaranteed to fire exactly once below. */
+      if (r[0] == null && haveLast) { cb (window.__wtCatsLast); return; }   /* tp35 — a late registry: the last complete answer */
       var reg = r[0] || {}, legacy = r[1];
       (reg.folders || []).forEach (function (f) {
         cats.push ({ label: f.name, items: (f.items || []).map (function (it) { return { kind: 'import', name: it.name, path: it.path }; }) }); });
@@ -38784,6 +38803,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var loose = (reg.files || []).map (function (it) { return { kind: 'import', name: it.name, path: it.path }; })
         .concat (legacyItems);
       if (loose.length) cats.push ({ label: 'Imports', items: loose });
+      if (r[0] != null) window.__wtCatsLast = cats;   /* tp35 — a complete answer is remembered for the next late one */
       cb (cats);   // fb607 — latched: safe even if a shape below ever changes again
     /* ⚠️ fb562 — .then(f).catch(g) IS NOT try/catch. If cb() itself throws inside the then, the
        catch fires and calls cb() A SECOND TIME — one arrow press, two steps. The two-argument
@@ -38820,11 +38840,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     try { Promise.resolve (it.path ? f (o, it.path) : f (o, it.name)).then (land).catch (function () {}); } catch (e) {}
   }
 
+  var wtStepPending = {};   /* tp35 — a press that lands mid-step is kept: one step, in the last direction pressed */
   window.wtStepPreset = function (o, dir) {
-    if (wtStepBusy[o]) return;                      // one step per click: the list is fetched async
+    if (wtStepBusy[o]) { wtStepPending[o] = dir; return; }   // one step per click: the list is fetched async — the press is not lost (tp35)
     wtStepBusy[o] = 1;
     var released = false;
-    var done = function () { if (released) return; released = true; wtStepBusy[o] = 0; };
+    var done = function () { if (released) return; released = true; wtStepBusy[o] = 0;
+      var pd = wtStepPending[o]; wtStepPending[o] = 0; if (pd) setTimeout (function () { window.wtStepPreset (o, pd); }, 0); };
     setTimeout (done, 1500);   /* fb562 — a backstop: if the collector never answers at all, the arrow must not be dead for the session */
     window.__wtAllCats (o, function (cats) {
       try {
@@ -38858,7 +38880,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           if ((cats[c2].items || []).some (isExact)) list = cats[c2].items;
         if (! list) for (var c3 = 0; c3 < cats.length && ! list; c3++)
           if ((cats[c3].items || []).some (isCur)) list = cats[c3].items;
-        if (! list) list = flat();
+        /* tp35 — AN IMPORT THE REGISTRY DOES NOT KNOW NEVER LEAVES ITS FOLDER. Before: an import absent from every
+           category (a late registry, a table picked from outside the library) entered the FLAT list at its head — a
+           factory sine, from the middle of a 48-table folder. Now: the folder being browsed is entered at its head or
+           tail (the arrow still moves, inside the folder the user chose); with no folder chosen, the press is a no-op. */
+        if (! list) { if (onImport) { if (want && want !== 'All') for (var w2 = 0; w2 < cats.length; w2++) if (cats[w2].label === want) { list = cats[w2].items; break; }
+                                      if (! list) return; }
+                      else list = flat(); }
         if (! list.length) return;
 
         for (var k = 0; k < list.length; k++) if (isExact (list[k])) { at = k; break; }
@@ -43370,7 +43398,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             if((lvl==='wild'||lvl==='crazy')&&lfoN&&rnd()<.4) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },11+1,between(.3,.8)); });   /* wild: an envelope swells LFO 1's depth */
           setToggle('tape-toggle',tapeOn); if(tapeOn) setMachine(tapeMach); setToggle('loop-toggle',false); if(window.__tiBatchEnd) window.__tiBatchEnd(); },
       function(){ track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); pool.forEach(function(o){ var d=oscDev(o); if(d) d.classList.toggle('osc-off',on.indexOf(o)<0); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){}
-          setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },350);   /* the cards read back the knobs the dice wrote */
+          setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },0);   /* the cards read back the knobs the dice wrote — the writes are already in the JS model and queued ahead of any read on the message thread, so there is nothing to wait for (tp35: was 350 ms) */
           /* tp25 — the roll can now be fired from the SYNTH PAGE's dice, with this canvas shut. adoptFx()
              MOVES the rack's cards onto the canvas and glideTidy() re-seats every node; doing either while
              the user is looking at the rack would make their cards vanish. The parameter write and the undo
@@ -43378,8 +43406,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(isOpen){ adoptFx(); syncPresence(); sync(); }
           commit();
           if(isOpen) glideTidy();
-          if(tool) tool.classList.remove('dis'); toast('A new '+aim+' preset · '+lvl+' — play it'); }); } ];
-    (function next(){ var f=steps[step++]; if(!f) return; f(); setTimeout(next,260); })(); }
+          if(tool) tool.classList.remove('dis'); toast('A new '+aim+' preset · '+lvl+' — play it');
+          try{ if(window.__tpDiceDone) window.__tpDiceDone(); }catch(e){} }); } ];   /* tp35 — the roll reports its end (the synth dice's lock) */
+    /* tp35 — NO LATENT DICE (Max: "what are the chances that we can have a no latent dice roll"). The six steps ran one per
+       260 ms so their toasts could be read — 1.7 s of pacing around ~40 ms of work (measured per step in the real
+       WebView: 0-18 ms each, Tests/_tp35_measure.js). They run back to back now; the last toast is the one that stays.
+       The parameter writes are order-preserving on the message thread whatever the spacing, and track() still reads
+       back before the cards restore. */
+    while(step<steps.length){ var f=steps[step++]; f(); } }
 
   /* ── view — the mockup's: scroll pans, ⌃/⌘ scroll or a pinch zooms about the cursor; everything scales together, nothing hides ── */
   function applyView(){ if(!world) return; world.style.transform='translate('+view.x+'px,'+view.y+'px) scale('+view.z+')'; $('.tp-grid').style.backgroundSize=(26*view.z)+'px '+(26*view.z)+'px'; $('.tp-grid').style.backgroundPosition=view.x+'px '+view.y+'px'; page.classList.toggle('lod',view.z<0.55); drawMini(); zoomSettled(); }

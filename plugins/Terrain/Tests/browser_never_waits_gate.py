@@ -13,7 +13,8 @@ statically (comments and string literals blanked where code is read):
   [4] editImportsRegistry only ever try_locks importsLock_ (the message thread must not wait on a walk);
   [5] requestImportsJson itself does no I/O and no serialisation (no findChildFiles / getImportsJson / JSON::toString);
   [6] createEditor prefetches the lists;
-  [7] fb640 — all FOUR list natives (the three above + listImports) complete through tiListPayload, which sends
+  [7] fb640 — all the list natives (the three above + listImports; tp35: + getPresets, listPresets, scanSampleFactory,
+      scanNoiseFactory) complete through tiListPayload, which sends
       "b64:" + base64 — nothing for emitEvent's replace to find — and none completes with a raw juce::var of the JSON;
   [8] fb640 — the page decodes exactly those four in Juce.getNativeFunction, and the decoder really round-trips UTF-8
       JSON (run under node: control characters, accents, CJK, emoji, backslashes, apostrophes);
@@ -131,7 +132,8 @@ ce = body_after(pp, r'TerrainAudioProcessor::createEditor\s*\(\s*\)')
 bar(6, ce is not None and 'prefetchImportsJson' in ce, 'createEditor prefetches the browser lists off the message thread')
 
 # ── [7] the payload crosses as base64 ───────────────────────────────────────────────────────────────────────────────
-LISTS = ('listNoiseImports', 'listWtImports', 'listSampleImports', 'listImports')
+LISTS = ('listNoiseImports', 'listWtImports', 'listSampleImports', 'listImports',
+         'getPresets', 'listPresets', 'scanSampleFactory', 'scanNoiseFactory')   # tp35 — four more (measured 0.5-1.6 s each raw)
 hm = re.search(r'static\s+juce::var\s+tiListPayload\s*\(\s*const\s+juce::String\s*&\s*json\s*\)', ed_raw)
 hb = body_at(ed_raw, hm.end()) if hm else None                                  # raw: its "b64:" literal must be read
 helper_ok = hb is not None and '"b64:"' in hb and 'Base64::toBase64' in hb and 'toRawUTF8' in hb and 'getNumBytesAsUTF8' in hb
@@ -140,7 +142,7 @@ for nat in LISTS:
     b = native_body(nat)
     if b is None or 'tiListPayload' not in b or re.search(r'complete\s*\(\s*juce::var\s*\(\s*(js|audioProcessor)\b', b):
         bad7.append(nat)
-bar(7, helper_ok and not bad7, 'all four list natives complete through tiListPayload ("b64:" + base64 of the UTF-8 JSON)',
+bar(7, helper_ok and not bad7, 'all eight list natives complete through tiListPayload ("b64:" + base64 of the UTF-8 JSON)',
     ('helper missing or not base64/UTF-8; ' if not helper_ok else '') + 'offenders: %s' % bad7)
 
 # ── [8] the page decodes exactly those four, and the decoder is right ──────────────────────────────────────────────
@@ -169,7 +171,7 @@ elif fsrc:
         if plain != 'plain' or num != 42: problems.append('a non-b64 value was altered')
     except Exception as e:
         problems.append('node run failed: %s %s' % (e, r.stderr[:200]))
-bar(8, not problems, 'the page decodes exactly the four lists in Juce.getNativeFunction, and the decoder round-trips UTF-8 JSON',
+bar(8, not problems, 'the page decodes exactly the eight lists in Juce.getNativeFunction, and the decoder round-trips UTF-8 JSON',
     '; '.join(problems))
 
 # ── [9] listImports never walks on the message thread ───────────────────────────────────────────────────────────────

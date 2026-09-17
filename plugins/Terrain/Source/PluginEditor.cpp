@@ -129,6 +129,19 @@ static juce::var tiListPayload (const juce::String& json)
     return juce::var ("b64:" + juce::Base64::toBase64 (json.toRawUTF8(), json.getNumBytesAsUTF8()));
 }
 
+// tp35 — A FACTORY FOLDER'S LISTING, CACHED. scanSampleFactory walked ~1000 files on the message thread for EVERY open
+// of the sample browser (measured 0.46-0.51 s, Tests/_tp35_measure.js) for a folder that changes once in a blue moon. The
+// listing is names only, so a stamp of the root's and each category folder's mtime is exactly its identity: same stamp,
+// same JSON, no walk. A file added or removed touches its folder's mtime and misses the cache.
+static juce::String tiFolderListingStamp (const juce::File& root)
+{
+    juce::String st (root.getLastModificationTime().toMilliseconds());
+    if (root.isDirectory())
+        for (auto& sub : root.findChildFiles (juce::File::findDirectories, false))
+            st << "|" << sub.getFileName() << ":" << sub.getLastModificationTime().toMilliseconds();
+    return st;
+}
+
 static juce::File terrainWavetablesDir()
 {
     const auto nf     = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
@@ -934,7 +947,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             })
             // ═══ fb619 — BANKS: couriers over Source/PresetBank.h. Every write is confined to the user root. ═══
             .withNativeFunction ("listPresets", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
-            { complete (juce::var (audioProcessor.getPresetCatalogJson())); })
+            { complete (tiListPayload (audioProcessor.getPresetCatalogJson())); })   // tp35 — 0.95 s -> ms (fb640)
             .withNativeFunction ("savePresetToBank", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 juce::File out; juce::String err;
@@ -1544,7 +1557,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     }
                 }
                 out << "]";
-                complete (juce::var (out));
+                complete (tiListPayload (out));   // tp35 — fb640 pattern: a 68 KB preset list cost 1.6 s in JUCE's quadratic escape
             })
             // fb602 — was "deletePreset"; it collided with the patch-index deletePreset later in
             // this SAME chain (:~1690) and lost, so this courier was dead in the docked editor.
@@ -1763,6 +1776,9 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // NOISE FACTORY (P5d) — scan the CC0 library folder → { path, exists, total, cats:{Cat:[files]} }.
                 // Returns the RESOLVED path + count so the UI can breadcrumb WHERE it looked (diagnoses sandbox paths).
                 auto root = terrainDataDir().getChildFile ("Noise");   // fb602 — one root
+                static juce::String cacheStamp, cacheJson;   // tp35 — see tiFolderListingStamp
+                const auto stamp = tiFolderListingStamp (root);
+                if (stamp == cacheStamp && cacheJson.isNotEmpty()) { complete (tiListPayload (cacheJson)); return; }
                 juce::DynamicObject::Ptr cats = new juce::DynamicObject();
                 int total = 0;
                 if (root.isDirectory())
@@ -1779,7 +1795,8 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 obj->setProperty ("exists", root.isDirectory());
                 obj->setProperty ("total",  total);
                 obj->setProperty ("cats",   juce::var (cats.get()));
-                complete (juce::var (juce::JSON::toString (juce::var (obj.get()))));
+                cacheJson = juce::JSON::toString (juce::var (obj.get())); cacheStamp = stamp;
+                complete (tiListPayload (cacheJson));   // tp35 — fb640 pattern (b64, decoded by name in the page)
             })
             .withNativeFunction("scanSampleFactory", [](const juce::Array<juce::var>&,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1788,6 +1805,9 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // { path, exists, total, cats:{Category:[files]} } — the same shape as scanNoiseFactory, so the browser
                 // and the dice read it the same way. Textures (the CC0 Freesound set) is one of its categories.
                 auto root = sampleFactoryRoot();
+                static juce::String cacheStamp, cacheJson;   // tp35 — see tiFolderListingStamp
+                const auto stamp = tiFolderListingStamp (root);
+                if (stamp == cacheStamp && cacheJson.isNotEmpty()) { complete (tiListPayload (cacheJson)); return; }
                 juce::DynamicObject::Ptr cats = new juce::DynamicObject();
                 int total = 0;
                 if (root.isDirectory())
@@ -1804,7 +1824,8 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 obj->setProperty ("exists", root.isDirectory());
                 obj->setProperty ("total",  total);
                 obj->setProperty ("cats",   juce::var (cats.get()));
-                complete (juce::var (juce::JSON::toString (juce::var (obj.get()))));
+                cacheJson = juce::JSON::toString (juce::var (obj.get())); cacheStamp = stamp;
+                complete (tiListPayload (cacheJson));   // tp35 — fb640 pattern (b64, decoded by name in the page)
             })
             .withNativeFunction("loadNoiseFactory", [this](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -5554,6 +5575,54 @@ static void terrainCardLog (const juce::String& msg)
    #endif
 }
 
+// tp35 — POP-OUT TIMING (dev, opt-in). With TERRAIN_CARD_TRACE in the environment, every card window
+// appends ctor → native window → goToURL → page loaded → first getCardState to
+// ~/Library/Caches/Terrain/terrain-card-trace.txt, in ms from the ctor. No env, no behaviour.
+static void terrainCardTrace (const juce::String& msg)
+{
+    static const bool on = (std::getenv ("TERRAIN_CARD_TRACE") != nullptr);
+    if (! on) return;
+    auto f = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile ("Library/Caches/Terrain/terrain-card-trace.txt");
+    f.getParentDirectory().createDirectory();
+    f.appendText (juce::String (juce::Time::getMillisecondCounterHiRes(), 1) + "  " + msg + "\n");
+}
+#if JUCE_MAC
+// tp35 — THE WHITE FLASH. A WKWebView paints its own white background until the page's first paint — two seconds of
+// white when the host thread is busy (the trace: loaded +0.3 s, first native +2.0 s). The card window already fills
+// the card colour behind the view (paint() below), so the view is told to draw no background at all: KVC
+// drawsBackground=NO on the WKWebView, the switch every transparent-WebView app on macOS flips. Found by walking the
+// window's NSView tree, since JUCE does not hand out the WKWebView. Returns true once set.
+static bool tiWebViewNoBackground (void* nsViewRoot)
+{
+    if (nsViewRoot == nullptr) return false;
+    Class wk = objc_getClass ("WKWebView");
+    std::vector<id> stack { (id) nsViewRoot };
+    while (! stack.empty())
+    {
+        id v = stack.back(); stack.pop_back();
+        if (wk != nullptr && ((signed char (*) (id, SEL, Class)) objc_msgSend) (v, sel_registerName ("isKindOfClass:"), wk) != 0)
+        {
+            id no  = ((id (*) (id, SEL, signed char)) objc_msgSend) ((id) objc_getClass ("NSNumber"), sel_registerName ("numberWithBool:"), (signed char) 0);
+            id key = ((id (*) (id, SEL, const char*)) objc_msgSend) ((id) objc_getClass ("NSString"), sel_registerName ("stringWithUTF8String:"), "drawsBackground");
+            ((void (*) (id, SEL, id, id)) objc_msgSend) (v, sel_registerName ("setValue:forKey:"), no, key);
+            return true;
+        }
+        id subs = ((id (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("subviews"));
+        const auto n = subs != nullptr ? ((unsigned long (*) (id, SEL)) objc_msgSend) (subs, sel_registerName ("count")) : 0UL;
+        for (unsigned long i = 0; i < n; ++i)
+            stack.push_back (((id (*) (id, SEL, unsigned long)) objc_msgSend) (subs, sel_registerName ("objectAtIndex:"), i));
+    }
+    return false;
+}
+#endif
+
+struct TerrainCardWeb : public juce::WebBrowserComponent
+{
+    using juce::WebBrowserComponent::WebBrowserComponent;
+    std::function<void()> onLoaded;
+    void pageFinishedLoading (const juce::String&) override { if (onLoaded) onLoaded(); }
+};
+
 class TerrainCardWindow : public juce::TopLevelWindow, private juce::Timer
 {
 public:
@@ -5568,6 +5637,7 @@ public:
     {
         // fb86 — seed the drag offset from the tear-off grab point so a handoff drag
         // (dragMoveTo before any 'start') keeps the card pinned exactly under the cursor.
+        t0_ = juce::Time::getMillisecondCounterHiRes(); terrainCardTrace ("ctor " + cardId);
         dragOff_ = -grabOffset;
         setDropShadowEnabled (true);
         setOpaque (true);
@@ -5579,7 +5649,7 @@ public:
         juce::Component::SafePointer<juce::Component> self (this);
         const juce::String cid (cardId);
 
-        web = std::make_unique<juce::WebBrowserComponent>(
+        web = std::make_unique<TerrainCardWeb>(
             juce::WebBrowserComponent::Options()
                 .withKeepPageLoadedWhenBrowserIsHidden()   // fb148 — protect card pages from hide-triggered about:blank round-trips
                 .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
@@ -5761,9 +5831,10 @@ public:
                     if (args.size() >= 2) proc.setCardStateJson (args[0].toString(), args[1].toString());
                     complete (juce::var{});
                 })
-                .withNativeFunction ("getCardState", [&proc](const juce::Array<juce::var>& args,
+                .withNativeFunction ("getCardState", [&proc, this](const juce::Array<juce::var>& args,
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
+                    terrainCardTrace ("getCardState " + id_ + "  +" + juce::String (juce::Time::getMillisecondCounterHiRes() - t0_, 1) + " ms");
                     complete (juce::var (args.size() >= 1 ? proc.getCardStateJson (args[0].toString())
                                                           : juce::String()));
                 })
@@ -5808,7 +5879,7 @@ public:
                         }
                     }
                     out << "]";
-                    complete (juce::var (out));
+                    complete (tiListPayload (out));   // tp35 — fb640 pattern: a 68 KB preset list cost 1.6 s in JUCE's quadratic escape
                 })
                 // fb602 — SAME body under both names. The popped-card page is today's shipped
                 // index.html, which still asks for "deletePreset"; the alias keeps popped-out card
@@ -5962,6 +6033,8 @@ public:
                 })
         );
 
+        if (auto* cw = dynamic_cast<TerrainCardWeb*> (web.get()))
+            cw->onLoaded = [this] { terrainCardTrace ("loaded " + id_ + "  +" + juce::String (juce::Time::getMillisecondCounterHiRes() - t0_, 1) + " ms"); };
         addAndMakeVisible (*web);
         setBounds (screenBounds);
         setAlwaysOnTop (true);          // a floating tool palette — stays over the DAW
@@ -6009,7 +6082,12 @@ public:
        #endif
 
         terrainCardLog ("created " + id_ + "  bounds=" + getBounds().toString() + nsStateString());
+       #if JUCE_MAC
+        if (auto* peer = getPeer()) noBg_ = tiWebViewNoBackground (peer->getNativeHandle());   // tp35 — no white before the first paint
+       #endif
+        terrainCardTrace ("window " + id_ + "  +" + juce::String (juce::Time::getMillisecondCounterHiRes() - t0_, 1) + " ms  noBackground=" + (noBg_ ? "set" : "NOT FOUND"));
         web->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + "?card=" + cardId);
+        terrainCardTrace ("goToURL " + id_ + "  +" + juce::String (juce::Time::getMillisecondCounterHiRes() - t0_, 1) + " ms");
         startTimer (1000);   // fb88 — 1Hz truth-teller + self-revive (see timerCallback)
     }
 
@@ -6083,6 +6161,7 @@ public:
     void timerCallback() override
     {
        #if JUCE_MAC
+        if (! noBg_) if (auto* peer = getPeer()) noBg_ = tiWebViewNoBackground (peer->getNativeHandle());   // tp35
         long num = 0; bool vis = false, par = false;
         if (id w = nsWindow())
         {
@@ -6138,6 +6217,8 @@ private:
     std::atomic<bool> tiEditArmed_ { false };
 
     std::unique_ptr<juce::WebBrowserComponent> web;
+    double t0_ = 0;   // tp35 — the ctor's clock, for terrainCardTrace
+    bool   noBg_ = false;   // tp35 — the WKWebView was told to draw no background (retried from the timer until it is)
 };
 
 void TerrainUiCore::popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect,
@@ -6185,6 +6266,7 @@ void TerrainUiCore::popOutCardWindow (const juce::String& id, juce::Rectangle<in
         const auto tl = webView->localPointToGlobal (viewportRect.getTopLeft());
         screenRect = { tl.x, tl.y, viewportRect.getWidth(), viewportRect.getHeight() };
     }
+    terrainCardTrace ("popOut " + id);
     auto win = std::make_unique<TerrainCardWindow> (audioProcessor, id,
         getResource ("index.html"), screenRect,
         grabOffset.value_or (juce::Point<int> (158, 12)));
@@ -6449,6 +6531,8 @@ void TerrainUiCore::timerCallback()
 
     const double wdNowMs = juce::Time::getMillisecondCounterHiRes();
     if (lastEvalOkMs_ <= 0.0) lastEvalOkMs_ = wdNowMs;   // arm on first tick
+    { static bool wasShowing = true; const bool sh = isShowing();   // tp35 — dev trace: the view's showing state flipping is a page-suspension suspect
+      if (sh != wasShowing) { wasShowing = sh; terrainCardTrace (juce::String ("main isShowing=") + (sh ? "1" : "0")); } }
     // fb483 -- the heartbeat JS now rides the FRONT of the coalesced frame; its completion (the
     // single send at the end of this function) is both the fb482 ack and this watchdog's food.
     if (! isShowing())
@@ -6457,6 +6541,7 @@ void TerrainUiCore::timerCallback()
     {
         ++channelRecoveries_;
         lastRecoveryMs_ = wdNowMs;
+        terrainCardTrace ("main WATCHDOG: no eval ack for " + juce::String (wdNowMs - lastEvalOkMs_, 0) + " ms -> " + (! ackSinceAttach_ || wdTripsNoAck_ + 1 >= 2 ? "rebuild" : "reload"));   // tp35 — dev trace
         // fb520 -- ESCALATION (the white-block fix). A page that has NEVER acked since attach is
         // a DEAD park (the fb518 cache would otherwise serve the corpse forever -- Max: "no
         // matter how many times I open/close it"); a page whose reload already failed once has a
