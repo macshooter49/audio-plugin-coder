@@ -1984,9 +1984,5 @@ namespace ParameterIDs
     // ══ tp22 — THE FILTER TABLE. Which wavetable draws filter 1 / filter 2's response curve, and where
     //    the scan sits in it. FRAME is a real parameter (nothing is born at runtime) and is modulatable,
     //    which is what makes the curve sweep under an envelope the way the reference does.
-    constexpr char SYN_FILTER1_TBL[]       = "SYN_FILTER1_TBL";
-    constexpr char SYN_FILTER2_TBL[]       = "SYN_FILTER2_TBL";
-    constexpr char SYN_FILTER1_TBL_FRAME[] = "SYN_FILTER1_TBL_FRAME";
-    constexpr char SYN_FILTER2_TBL_FRAME[] = "SYN_FILTER2_TBL_FRAME";
 
 }

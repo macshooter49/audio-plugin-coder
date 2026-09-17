@@ -1268,11 +1268,6 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     }
                 complete (juce::var{});
             })
-            .withNativeFunction("getFilterTableCurve", [this](const juce::Array<juce::var>& args,
-                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
-            {   // tp22 — the FILTER TABLE's band curve, so the drawn response is the DSP's own numbers
-                complete (juce::var (audioProcessor.getFilterTableCurveCsv (args.size() > 0 ? (int) args[0] : 0)));
-            })
             .withNativeFunction("getSynParams", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {   // tp20 — the pool's batched read: one call for every E–H / Flow-instance slider state the page holds

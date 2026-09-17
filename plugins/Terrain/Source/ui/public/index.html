@@ -1087,7 +1087,7 @@ if(window.__cardOnly)document.documentElement.className+=' card-only';
    declaration, never a wrapper around it — Tests/flt_cardinality_gate.py extracts them by
    matching `NAME = [`, and a wrapper would make all four unparseable at once.
    ══════════════════════════════════════════════════════════════════════════════════════════ */
-window.FLT_TYPE_COUNT = 119;  /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  Grows HERE first.
+window.FLT_TYPE_COUNT = 118;  /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  Grows HERE first.
                                  fb604 — 94 → 118: twenty-four APPENDED at 94..117 (5 inverted-mix
                                  phasers · 24/32/48-stage phasers ± · the comb damping matrix ×
                                  polarity · 2 flangers · 2 first-order shelves · 3 formant
@@ -1109,7 +1109,7 @@ window.FLT_TYPE_COUNT = 119;  /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  
      after the count moved to 118: it only fires if the declaration above somehow did not run,
      and firing it silently would normalise every type index against the OLD cardinality —
      the exact fb373 failure this whole block exists to stop, hiding in its own safety net. */
-  function N () { return (window.FLT_TYPE_COUNT | 0) || 119; }
+  function N () { return (window.FLT_TYPE_COUNT | 0) || 118; }
 
   /* THE PARAMETER IS THE AUTHORITY (fb373).  0 = the WebView has not handed the properties
      over yet, which is unknowable, not wrong — so it is a PASS, never a guess. */
@@ -10518,12 +10518,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           // bug exactly, where Cassette wrote 1.0 and got clamped back to Studio. Handing the
           // writer all 94 makes opts.length === the param's cardinality, so the generic path is
           // correct by construction and needs no special case at all.
-          var FLT_ENGINES=['Ladder LP 24','Ladder LP 12','Ladder HP 24','Diode LP','Acid 303','SVF LP','SVF HP','SVF BP','SVF Notch','OB-X SVF','Comb +','Comb -','Comb Shimmer','Karplus-Strong','Formant A','Formant E','Formant I','Formant Morph','Reverb Filter','Phaser 4P','Phaser 8P','Ring Mod','Bode Shifter','Bit-Crush','Waveshaper','Grain Mask','Reverb Filter 2','None','Ladder LP 6','Ladder LP 18','German LP','Germanium LP','French LP','Acid Scream','Xpd HP 6','Xpd HP 12','Xpd HP 18','Xpd BP 12','Xpd BP 24','Xpd BP 6','Xpd Notch','Xpd Phase','Xpd 1-Pole','SVF LP 24','SVF HP 24','SVF BP 24','SVF Notch 24','SVF Peak','SEM LP','SEM Notch','SEM HP','SEM BP','Multi LP+HP','Multi LP+BP','Multi LP+Notch','Multi HP+BP','Multi HP+Notch','Multi BP+BP','Multi BP+Notch','Multi Peak+Peak','Multi Notch+Notch','Multi Peak+HP','Comb Wide','Comb Octave','Comb Fifth','Comb Damp','Karplus Bright','Karplus Mute','Formant O','Formant U','Formant Wide','Formant Growl','Phaser 6P','Phaser 12P','Phaser 16P','Diffusor','Bode Down','Tilt','Low EQ','High EQ','Band EQ','Air','Add Bass','Samp-Hold','Samp-Hold -','Scream LP','Scream BP','Wasp','MS-20 LP','Polivoks','Ring Mod X2','Radio','Reverb Dark','Reverb Metal','Phaser 4P N','Phaser 6P N','Phaser 8P N','Phaser 12P N','Phaser 16P N','Phaser 24P','Phaser 24P N','Phaser 32P','Phaser 32P N','Phaser 48P','Phaser 48P N','Comb Raw +','Comb Raw -','Comb Bright +','Comb Bright -','Comb Band +','Comb Band -','Flange +','Flange -','Low EQ 6','High EQ 6','Formant Soprano','Formant Tenor','Formant Alto','Filter Table'];   /* fb604 — 94..117 APPENDED · tp22 — 118 FILTER TABLE */
+          var FLT_ENGINES=['Ladder LP 24','Ladder LP 12','Ladder HP 24','Diode LP','Acid 303','SVF LP','SVF HP','SVF BP','SVF Notch','OB-X SVF','Comb +','Comb -','Comb Shimmer','Karplus-Strong','Formant A','Formant E','Formant I','Formant Morph','Reverb Filter','Phaser 4P','Phaser 8P','Ring Mod','Bode Shifter','Bit-Crush','Waveshaper','Grain Mask','Reverb Filter 2','None','Ladder LP 6','Ladder LP 18','German LP','Germanium LP','French LP','Acid Scream','Xpd HP 6','Xpd HP 12','Xpd HP 18','Xpd BP 12','Xpd BP 24','Xpd BP 6','Xpd Notch','Xpd Phase','Xpd 1-Pole','SVF LP 24','SVF HP 24','SVF BP 24','SVF Notch 24','SVF Peak','SEM LP','SEM Notch','SEM HP','SEM BP','Multi LP+HP','Multi LP+BP','Multi LP+Notch','Multi HP+BP','Multi HP+Notch','Multi BP+BP','Multi BP+Notch','Multi Peak+Peak','Multi Notch+Notch','Multi Peak+HP','Comb Wide','Comb Octave','Comb Fifth','Comb Damp','Karplus Bright','Karplus Mute','Formant O','Formant U','Formant Wide','Formant Growl','Phaser 6P','Phaser 12P','Phaser 16P','Diffusor','Bode Down','Tilt','Low EQ','High EQ','Band EQ','Air','Add Bass','Samp-Hold','Samp-Hold -','Scream LP','Scream BP','Wasp','MS-20 LP','Polivoks','Ring Mod X2','Radio','Reverb Dark','Reverb Metal','Phaser 4P N','Phaser 6P N','Phaser 8P N','Phaser 12P N','Phaser 16P N','Phaser 24P','Phaser 24P N','Phaser 32P','Phaser 32P N','Phaser 48P','Phaser 48P N','Comb Raw +','Comb Raw -','Comb Bright +','Comb Bright -','Comb Band +','Comb Band -','Flange +','Flange -','Low EQ 6','High EQ 6','Formant Soprano','Formant Tenor','Formant Alto'];   /* fb604 — 94..117 APPENDED · tp28 — the FILTER TABLE is withdrawn */
           // group index PER ENGINE, generated by classifying the enum-order names. The enum is
           // NOT grouped contiguously (Ladder LP 24 sits at 0, Comb - at 11), so a range table
           // is wrong by construction — this is a straight lookup.
           var FLT_GRPNAMES=['Ladder','Xpander','State-Var','Multi','Comb','Formant','Phase','EQ & Tone','Reverb','Dirty'];
-          var FLT_ENGGRP=[0,0,0,0,0,2,2,2,2,2,4,4,4,4,5,5,5,5,8,6,6,9,6,9,9,9,8,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,6,6,6,6,6,7,7,7,7,7,7,9,9,9,9,2,2,0,9,9,8,8,6,6,6,6,6,6,6,6,6,6,6,4,4,4,4,4,4,4,4,7,7,5,5,5,7];   /* fb604 — 94..117: 11 Phase, 8 Comb, 2 EQ & Tone, 3 Formant · tp22 — 118 EQ & Tone (it IS a bank of bells) */
+          var FLT_ENGGRP=[0,0,0,0,0,2,2,2,2,2,4,4,4,4,5,5,5,5,8,6,6,9,6,9,9,9,8,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,6,6,6,6,6,7,7,7,7,7,7,9,9,9,9,2,2,0,9,9,8,8,6,6,6,6,6,6,6,6,6,6,6,4,4,4,4,4,4,4,4,7,7,5,5,5];   /* fb604 — 94..117: 11 Phase, 8 Comb, 2 EQ & Tone, 3 Formant · tp28 — the FILTER TABLE is withdrawn */
           /* fb603 — both roster-length lists register against window.FLT_TYPE_COUNT. A short
              FLT_ENGGRP used to silently file every engine past the gap under group 0 ("Ladder");
              a short FLT_ENGINES made the FX picker write idx/(len-1) — a different engine. Now
@@ -23038,90 +23038,6 @@ setTimeout(function wireSynControls () {
       // don't reshuffle the enum (per the prompt §3 type list).
       // fb165 — THE FILTER EXPANSION: 94 types (enum idx FROZEN, display order curated).
       // Groups feed the cascading category menu (Serum-2 grammar, wavetable-menu clone).
-      /* @gen:factory-tables — generated by scripts/gen_factory_tables.py, do not hand-edit */
-      /* The 454 factory wavetables, in the SAME frozen order as Source/FactoryTableIds.h, which is the
-         order SYN_FILTER1/2_TBL appends them in after the built-in roster. The built-in names are NOT
-         repeated here: they are read off the oscillator preset <select> by option VALUE at use time, so
-         there is one roster, not a copy of one. */
-      window.__factoryTables=[
-        "Arrowhead Curve", "Blancmange", "Butterfly Curve", "Cantor Dust", "Canyon Orbit", "Circle Inversion",
-        "Clone Fan", "Contour Map", "Diffraction Grating", "Dragon Compass", "Dropped Ball", "Facet Prism",
-        "Ford Circles", "Gear Teeth", "Gosper Flowsnake", "Halftone Screen", "Hendecagram", "Heptagram",
-        "Hilbert Clock", "Kaleidoscope", "Kepler Orbit", "Knight's Tour", "Levy C Curve", "Lissajous Pen",
-        "Maurer Rose", "Minkowski Clock", "Minkowski Sausage", "Moire Fringes", "Op Art Current", "Paper Dragon",
-        "Pentagram Velocity", "Pixel Star", "Quasicrystal", "Razor Serration", "Ripple Tank", "Rolling Circle Pen",
-        "Scope Scribble", "Shattered Heart", "Skyline", "Spiral Of Theodorus", "Stacked Squares", "Superformula Bloom",
-        "Times Table", "Truchet Weave", "Voronoi Crystal", "Whirl Of Squares", "Winding Number", "Zone Plate",
-        "Brownout", "Cross FM Knot", "Diode Detector Clip", "Dirty Ladder Sweep", "Divider", "Dying Battery VCO",
-        "Filter FM Squelch", "Highpass Scream", "Iron Core Inrush", "Juno Chorus", "Ladder", "Mirror Sync",
-        "Notch Mode Sweep", "Phaser Feedback Howl", "Poly Mod Zap", "PWM Duo", "Square Sync Splinter", "Supersaw",
-        "Sync FM Triangle", "Sync Lead", "Tape Wow", "Through Zero FM", "Tri Core", "Triangle Sync Shriek",
-        "Twin Formant Sync", "Varishape", "VCO Drift", "VCO Sick", "Breadknife Triangle", "Class D Triangle",
-        "Count", "Drawbar", "Octave Tower", "Pulse Sweep", "Ramp Origami", "Rectify",
-        "Saw Steps", "Sine Bloom", "Square Accelerando", "Square Bit Counter", "Square Sub Snarl", "Stairs",
-        "Sub Crown", "Sub Gravel", "Sub Laser", "Sub Siren", "Tilt", "Tri Steel",
-        "Unison Braid", "Upshift", "Arrhythmia", "Bifurcate", "Bit Flip", "Bit Rot",
-        "Blood Cell Delay", "Buffer Overrun", "Cat Map Recurrence", "Chaos Game Dust", "Chirikov", "Chua Double Scroll",
-        "Circle Map Warp", "De Jong Shadow", "Delay Loop Howl", "Devil", "Dial Up Screech", "Diffuse",
-        "Double Pendulum", "Duffing Swing", "Dynamo Reversals", "Edge Storm", "Energy Cascade", "Flame Front",
-        "Float Rot", "Formant Flame", "Ginzburg Defects", "Gray Code", "Henon", "Ising Heatwave",
-        "Josephson Junction", "Julia Approach", "Langton Ant", "Laser Tremor", "Logistic Depth", "Logistic Grains",
-        "Lorenz Comparator", "Lyapunov Loop", "Neuron Burst", "Newton Basins", "Pi Digits", "Prime Gap",
-        "Richardson Cascade", "Rule 30", "Rule 54 Walk", "Sawtooth Hail", "Shatter", "Sierpinski",
-        "Sigma Delta Fizz", "Stadium Billiard", "Sub Grinder", "Sub Quake", "Sub Sizzle", "Sub Telegraph",
-        "Swinging Spring", "Synapse Storm", "Tent", "Thomas Labyrinth", "Van Der Pol Snap", "XOR Fold",
-        "Abyssal Pressure", "Ash Fall", "Aurora Curtain", "Bow To The Bridge", "Breath", "Cathedral",
-        "Choral Dawn", "Dread Chord", "Ember", "Event Horizon", "Falling Forever", "Glacier Fracture",
-        "Glass Edge", "Horizon", "Horn Rip", "Leviathan Roar", "Nebula", "Reverse Cymbal Rise",
-        "Semitone Vise", "Shimmer Ladder", "Shockwave", "Starfield", "Sunrise Chorale", "Supernova Remnant",
-        "Temporal Rift", "Thunderhead", "Tide", "Warp Streaks", "Alias Moire", "Bent FM",
-        "Bit Ladder", "Bit Plane Dive", "Bit Reversed Read", "Block Shuffle", "Branch Y", "Byte Rotate",
-        "Cheby Stack", "Chip Half Sine", "Chip Quarter Pulse", "Corrupted Shaper", "Cross Feedback Pair", "CZ Reso",
-        "Double FB", "Feedback Brick", "Feedback Saw", "Fold To Wrap", "Four Op Cascade", "Glitch Selector",
-        "Hundred Folds", "Jitter Clock", "Modulo Garden", "Nested Sines", "One Bit Stream", "Overload",
-        "PD Pulse", "Phase Winder", "Plateau FM", "Polarity Chopper", "Prime Comb", "PWM Converter",
-        "Ratio Staircase", "Resonant Gate", "Ring Overflow", "Shift Register Buzz", "Sideband Avalanche", "Sine Bomb",
-        "Square Bite", "Square On Square", "Stack Three", "Staircase Chirp", "Sub Reso Snarl", "Sub Under FM",
-        "Thirteen", "Triangle Saw Rake", "Walsh Glyphs", "Warp Fold", "XOR Dust", "XOR Sub",
-        "Blade Cull", "Blade Rise", "Blade Splay", "Bronze Rise", "Bronze Tide", "Carillon Storm",
-        "Chant Rise", "Chant Terrace", "Forged Swarm", "Fuzz Chant", "Glass Choir", "Hornet Cull",
-        "Hornet Rise", "Neon Rise", "Octave Ghost", "Overtone Arpeggio", "Overtone Chord", "Overtone Whistle",
-        "Plenum Collapse", "Prime Glass", "Sieve Fuzz", "Spinning Choir", "Swarm Shatter", "Tide Storm",
-        "Bell Array", "Bell Times Bell", "Cantilever Tine", "Cluster Forge", "Cowbell To Cymbal", "Cracked Carillon",
-        "Crystal Splinter", "Foundry Bell FM", "Golden Clang", "Gong Cascade", "Gong Wash", "Grinder Sparks",
-        "Hammer Mill", "Iron Lung", "Logic Gate Hi Hat", "Pelog Metallophone", "Pipe Resonant", "Ring Mod Anvil",
-        "Ring Mod Saw Ladder", "Sheet Rattle", "Shifted Saw Clang", "Shrapnel Bell", "Spring Coil Chirp", "Spring Tension",
-        "Steelpan Circle", "Stiff Bar", "Sub Anvil", "Turbine", "Undercut Bar", "Wind Chime Moire",
-        "Bars Glass", "Bars Wood", "Bells Gong", "Brass Blare", "Brass Lip Chaos", "Clarinet Blowout",
-        "Dropped Marble", "Flageolet Slide", "Flute Breath", "Flute Register Hop", "Grand Strike", "Impossible Bell",
-        "Mode Fan", "Pendulum Chain", "Pluck Nail", "Reed Bite", "Reed Collapse", "Rogue Wave",
-        "Skin Drum", "Skin Tension", "Soliton Train", "Spinning Disk Siren", "Sub Piano Clang", "Tom To Rim Shot",
-        "Bandpass Saw Ringer", "Bitcrushed Triangle", "Bode Down Square", "Bode Shifted Saw", "Chebyshev Sine", "Chebyshev Triangle",
-        "Comb Folded Sine", "Crushed Bandpass Sine", "Diode Ring Square", "Feedback Comb Saw", "Feedback FM Sine", "Flanger Pulse",
-        "Foldback Saw", "Formant Shifted Pulse", "Formant Shifted Saw", "Freeze Trail Saw", "Granular Pitch Saw", "Granular Pitch Square",
-        "Highpass Needle Square", "Noise FM Sine", "Octave Folded Sine", "Phaser Pulse", "Resonant Highpass Saw", "Reversed Grains Chord",
-        "Reversed Grains Sine", "Ring Modulated Square", "Sample And Hold Square", "Scream Bandpass Pulse", "Sine FM By Square", "Slewed Bitstream",
-        "Sliced Saw", "Soprano Formant Pulse", "Spectral Gate Noise", "Spectral Gate Supersaw", "Spectral Rotate Saw", "Square FM By Saw",
-        "Sub Crush Square", "Sub Fuzz Saw", "Vocoded Noise Chord", "Vowel Contrast", "Vowel Inversion", "Waveshaped Triangle",
-        "Arpeggio Inside", "Barber Pole Comb", "Bit Mask", "Burst Ladder", "Canyon Sub", "Carpet Tide",
-        "Chirp Braid", "Chord Cathedral", "Comb Walk", "Digit Sum Walk", "Dust", "Fibonacci",
-        "Formant Picket", "Fractal Shelf", "Golden Ratio Gate", "Hinge", "Holes", "Interval Shadow",
-        "Mirror Shift", "Moth-eaten Saw", "Odd Rotate", "Partial Crossfire", "Partial Migration", "Partial Sequencer",
-        "Pentatonic Partials", "Polyrhythm Partials", "Prime Factor Scan", "Prime Window", "Pulse Scale Run", "Saw Avalanche",
-        "Saw Cluster", "Scissor Tilt", "Seesaw Pivot", "Shear", "Shepard Spiral", "Sierpinski Spectral",
-        "Sieve", "Snap Grid", "Spark Rain", "Square Crown", "Sub Under Static", "Tilt Arc",
-        "Undertone Rain", "Wavelet Chirp", "Whole Tone Ladder", "Zipper", "Carved Rumble", "Chebyshev Rumble",
-        "Cranked Sub", "Crinkled Tape Sub", "Dub Stutter", "Faceted Bass", "Grain To Pulse", "Hall Of Mirrors",
-        "Jagged Transfer", "Negative Image", "Noise Tuned To Chord", "Pedal Fold", "Phrase Freeze", "Sample Shred",
-        "Self Composed", "Self Ring", "Shifted Undertow", "Sinking Voice", "Squeezed Chimes", "Stacked Periods",
-        "Sub Under Gravel", "Submerged", "Upside Down Bass", "White Static Bloom", "Choir", "Cloud",
-        "Comb Drift", "Consonant", "Death Growl Descent", "Density", "Gargle", "Ghost Hum",
-        "Grain Soprano", "Growl", "Hiss Chord", "Inside Out Vowel", "Nasal", "Open Fifth Monks",
-        "Pollen", "Sample Rate Speech", "Sandstorm", "Screaming Tenor", "Self Warped Vowel", "Shatter Vocal",
-        "Soprano To Banshee", "Talkbox Square", "Throat", "Tin Robot", "Tone Noise", "Voice Scrambler",
-        "Vosim Chatter", "Vox Mask", "Whisper Gate", "Yoi Talking Bass",
-      ];
-      /* @end:factory-tables */
       const FILTER_TYPES = [
         { idx: 27, label: 'None', group: '', active: true },
         { idx:  0, label: 'Ladder LP · 24', group: 'LADDER', active: true },
@@ -23263,7 +23179,6 @@ setTimeout(function wireSynControls () {
         { idx: 85, label: 'Scream LP', group: 'DIRTY & WEIRD', active: true },
         { idx: 86, label: 'Scream BP', group: 'DIRTY & WEIRD', active: true },
         { idx: 91, label: 'Radio', group: 'DIRTY & WEIRD', active: true },
-        { idx: 118, label: 'Filter Table', group: 'EQ & TONE', active: true },   /* tp22 — the curve IS a wavetable */
       ];
       /* fb603 — FILTER_TYPES is the CATEGORY BROWSER's map, so its failure mode is worse than a
          wrong length: a missing idx is an engine no menu can reach and a duplicate is one that
@@ -23301,7 +23216,6 @@ setTimeout(function wireSynControls () {
         };
       };
       const filterStType = mkSlotState('TYPE');
-      const filterStTbl  = mkSlotState('TBL');   /* tp25 — which wavetable the FILTER TABLE engine wears */
 
       const setFilterTypeIdx = (idx) => {
         try { filterStType.setNormalisedValue(window.__fltRoster.norm(idx)); } catch (e) {}
@@ -23343,51 +23257,6 @@ setTimeout(function wireSynControls () {
             byName[t.group].items.push({ name: t.label, sel: t.idx === currentIdx,
               pick: () => { setFilterTypeIdx(t.idx); refreshDdLabel(); } });
           });
-          /* ══ tp25 — TABLES. Max: "I want you to just dump all the tables in there. You don't even have to
-             subcategorize him ... and that's what I would choose between."  One category, every wavetable the
-             instrument owns, and picking one sets the ENGINE to Filter Table and the TABLE to that wave in a
-             single click.
-             These rows are NOT new filter-type indices. The type parameter stays 119 wide, so no saved patch
-             and no host automation lane is renumbered — a 619-entry choice list would have repointed every
-             filter-type lane ever recorded. The roster's own map (FILTER_TYPES) is untouched and still covers
-             0..N-1 exactly once, which is what flt_cardinality_gate checks.
-
-             🚨 THE WHOLE THING IS WRAPPED, AND THE INDEX COMES FROM FILTER_TYPES.
-             The first cut of this read FLT_ENGINES — which is declared in a DIFFERENT <script> block and is
-             not in scope here. That threw a ReferenceError before openTwoPaneBrowser was ever called, so the
-             filter browser stopped opening AT ALL: a decorative extra category took out the picker itself.
-             FILTER_TYPES is the list this function already walks two lines above, so it is the right source;
-             and the try/catch is the structural half of the fix — whatever goes wrong while BUILDING this
-             category, the browser must still open with the engine list it always had. */
-          try {
-            const tblRow = FILTER_TYPES.filter((t) => t.label === 'Filter Table')[0];
-            const tblIdx = tblRow ? tblRow.idx : -1;
-            if (tblIdx >= 0) {
-              const builtins = [];
-              document.querySelectorAll('#osc-a-preset-select option').forEach((o) => {
-                const v = parseInt(o.value, 10);
-                if (!isNaN(v) && v >= 0) builtins[v] = (o.textContent || '').trim();
-              });
-              const names = [];
-              for (let i = 0; i < builtins.length; i++) names.push(builtins[i] || ('Table ' + i));
-              (window.__factoryTables || []).forEach((n) => names.push(n));
-              if (names.length) {
-                const nT = names.length;
-                let curTbl = -1;
-                try { curTbl = Math.round(filterStTbl.getNormalisedValue() * (nT - 1)); } catch (e) {}
-                const onTable = (currentIdx === tblIdx);
-                cats.push({ label: 'Tables', items: names.map((nm, i) => ({
-                  name: nm, sel: onTable && i === curTbl,
-                  pick: () => {
-                    try { filterStTbl.setNormalisedValue(nT > 1 ? i / (nT - 1) : 0); } catch (e) {}
-                    setFilterTypeIdx(tblIdx); refreshDdLabel();
-                    /* the bake happens on the processor's timer, so ask twice: once for the fast case
-                       and once after it has certainly run. */
-                    try { setTimeout(window.__fltTblPoll, 90); setTimeout(window.__fltTblPoll, 420); } catch (e) {}
-                  } })) });
-              }
-            }
-          } catch (e) { try { console.warn('Tables category skipped:', e); } catch (e2) {} }
           let openCat = 0;
           for (let k = 0; k < cats.length; k++) if (cats[k].items.some((it) => it.sel)) { openCat = k; break; }
           window.openTwoPaneBrowser(ev, { cats: cats, openCat: openCat,
@@ -32501,7 +32370,7 @@ restoreThemeFromBackend();
     hard-coded 48000, so on a 44.1 k session every spectrum sat 8.8 % sharp against its own curve. */
   }catch(e){} if(base) base(d); };
   // Per-index category — every filter type gets its own representative, knob-reactive shape.
-  var CAT=['lp24','lp','hp24','lp24','acid','lp','hp','bp','notch','lp','comb','combn','shimmer','karplus','formanta','formante','formanti','formantm','reverb','phaser4','phaser8','ring','bode','crush','shaper','grain','creverb','none','lp6','lp18','lp24','lp24','lp24','acid','hp6','hp','hp18','bp','bp24','bp','notch','ap','lp6','lp24','hp24','bp24','notch24','peak','lp','notch','hp','bp','mLH','mLB','mLN','mHB','mHN','mBB','mBN','mPP','mNN','mPH','combwide','comboct','comb5th','combdamp','karplus','karplus','formanto','formantu','formantw','formantg','phaser6','phaser12','phaser16','diffusor','bode','tilt','loweq','higheq','bandeq','air','addbass','samphold','samphm','scream','screambp','lp','lp','lp24','ring','radio','reverbd','creverb','phaserN4','phaserN6','phaserN8','phaserN12','phaserN16','phaser24','phaserN24','phaser32','phaserN32','phaser48','phaserN48','combraw','combrawn','combbri','combbrin','combband','combbandn','flange','flangen','loweq6','higheq6','fmtsop','fmtten','fmtalt','tbl'];   // fb165 — enum order (display model key per type) · fb604 — 118 entries, 94..117 appended   /* tp22 — 118 FILTER TABLE */
+  var CAT=['lp24','lp','hp24','lp24','acid','lp','hp','bp','notch','lp','comb','combn','shimmer','karplus','formanta','formante','formanti','formantm','reverb','phaser4','phaser8','ring','bode','crush','shaper','grain','creverb','none','lp6','lp18','lp24','lp24','lp24','acid','hp6','hp','hp18','bp','bp24','bp','notch','ap','lp6','lp24','hp24','bp24','notch24','peak','lp','notch','hp','bp','mLH','mLB','mLN','mHB','mHN','mBB','mBN','mPP','mNN','mPH','combwide','comboct','comb5th','combdamp','karplus','karplus','formanto','formantu','formantw','formantg','phaser6','phaser12','phaser16','diffusor','bode','tilt','loweq','higheq','bandeq','air','addbass','samphold','samphm','scream','screambp','lp','lp','lp24','ring','radio','reverbd','creverb','phaserN4','phaserN6','phaserN8','phaserN12','phaserN16','phaser24','phaserN24','phaser32','phaserN32','phaser48','phaserN48','combraw','combrawn','combbri','combbrin','combband','combbandn','flange','flangen','loweq6','higheq6','fmtsop','fmtten','fmtalt'];   // fb165 — enum order (display model key per type) · fb604 — 118 entries, 94..117 appended   /* tp22 — 118 FILTER TABLE */
   /* fb603 — CAT is the fourth roster-length list: index N here is the DISPLAY MODEL for engine N.
      Short by one and every engine past the gap draws its NEIGHBOUR's curve — the "no flat
      placeholder lines, ever" law broken in the quietest possible way. It registers like the
@@ -32513,7 +32382,7 @@ restoreThemeFromBackend();
      phasers / grain / etc.) can never be cached across frames; every key ABSENT here is a pure
      static function of (type, fc, res, drv). ⚠️ Add any NEW t-reading type here or its idle
      motion freezes (knob response stays correct either way — all knob inputs are in the key). */
-  var MAG_ANIM={tbl:1,/* tp22 — the FRAME is modulatable, so this curve really does change over time */ combdamp:1,shimmer:1,karplus:1,reverb:1,reverbd:1,creverb:1,formanta:1,formante:1,formanti:1,formanto:1,formantu:1,formantm:1,formantw:1,formantg:1,fmtsop:1,fmtten:1,fmtalt:1,ring:1,bode:1,crush:1,shaper:1,grain:1,diffusor:1,addbass:1,samphold:1,samphm:1,radio:1};   /* fb603 — samphm joins; `ap` LEAVES: the new Xpd
+  var MAG_ANIM={combdamp:1,shimmer:1,karplus:1,reverb:1,reverbd:1,creverb:1,formanta:1,formante:1,formanti:1,formanto:1,formantu:1,formantm:1,formantw:1,formantg:1,fmtsop:1,fmtten:1,fmtalt:1,ring:1,bode:1,crush:1,shaper:1,grain:1,diffusor:1,addbass:1,samphold:1,samphm:1,radio:1};   /* fb603 — samphm joins; `ap` LEAVES: the new Xpd
      Phase model reads no t, so it caches like every other static shape.  fb604 — the SEVEN keys `comb`, `combn`
      and the five phasers LEAVE for the same reason: combMag() and apChain() are the DSP's own transfer
      functions and neither reads t, so those thirteen engines (2 combs + 4 comb aliases + … + 16 phaser keys)
@@ -32716,39 +32585,9 @@ restoreThemeFromBackend();
      reads the ENGINE'S OWN baked band numbers (getFilterTableCurve) and multiplies the same 32 RBJ
      bells the filter runs, at the same centres, with the same resonance scaling and the same
      out-of-range bypass. If the picture and the sound ever disagree, one of them is a bug. */
-  var __fltTblRatio=(function(){ var r=[]; for(var k=0;k<32;k++) r.push(Math.exp(k/31*Math.log(512))/24); return r; })();
-  (function(){
-    var cur=[], busy=false, fn=null;
-    function slot(){ try{ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?1:0; }catch(e){ return 0; } }
-    function poll(){
-      if(busy) return;
-      if(!fn){ try{ fn=window.Juce&&window.Juce.getNativeFunction?window.Juce.getNativeFunction('getFilterTableCurve'):null; }catch(e){ return; } }
-      if(!fn) return; busy=true;
-      try{ Promise.resolve(fn(slot())).then(function(csv){ busy=false;
-        var a=String(csv||'').split(',').map(parseFloat).filter(function(v){ return !isNaN(v); });
-        if(a.length) cur=a; }).catch(function(){ busy=false; }); }catch(e){ busy=false; }
-    }
-    window.__fltTblCurve=function(){ return cur; };
-    window.__fltTblPoll=poll;   /* tp25 — picking a table re-reads the curve at once instead of waiting out the 400 ms tick */
-    setInterval(function(){ if(window.__uiParked) return; poll(); },400);
-    window.addEventListener('tiactive',poll); setTimeout(poll,700); setTimeout(poll,2000);
-  })();
   function mag(type,f,fc,res,drv,t){ if(type==='none')return 1;
     var w=f/fc, Qf=Q(res), den=Math.sqrt((1-w*w)*(1-w*w)+(w/Qf)*(w/Qf)), A=1;
-    if(type==='tbl'){
-      var C=window.__fltTblCurve?window.__fltTblCurve():null;
-      if(!C||!C.length){ A=1; }                       /* not baked yet ⇒ flat, which is what it sounds like */
-      else { var acc=1, rs=res*20.0, fHi=0.45*48000;   /* tp27 — FilterTableSource::kDepthDb; the CSV is a UNIT shape */
-        for(var bk=0;bk<C.length&&bk<32;bk++){
-          var fk=fc*__fltTblRatio[bk];
-          if(fk<20||fk>fHi) continue;                 /* the engine BYPASSES a band that does not fit */
-          var g=Math.max(-24,Math.min(24,C[bk]*rs));
-          if(g>-0.01&&g<0.01) continue;
-          var Ag=Math.pow(10,g/40), wk=f/fk, w2=1-wk*wk, q=4.9;
-          var nu=w2*w2+(Ag*wk/q)*(Ag*wk/q), dd=w2*w2+(wk/(Ag*q))*(wk/(Ag*q));
-          acc*=Math.sqrt(nu/dd); }
-        A=acc; } }
-    else if(type==='lp'){ A=1/den; }
+    if(type==='lp'){ A=1/den; }
     else if(type==='lp6'){ A=ordA(0,w,res,0.5); }
     else if(type==='lp18'){ A=ordA(0,w,res,1.5); }
     else if(type==='lp24'){ A=ordA(0,w,res,2); }

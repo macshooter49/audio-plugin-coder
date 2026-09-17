@@ -272,11 +272,7 @@ enum class ModDest : int
     //    + (d - FlowTime). Instance 1 keeps its legacy ints.
     FlowInstBase = OscBank2End,
     FlowInstEnd  = FlowInstBase + 3 * (EnvPBase - FlowTime),
-    // ── tp22 · THE FILTER TABLE's scan. Appended at the very TAIL, after the pool mirrors, for the
-    //    same reason everything else is appended: saved routes store ints, and inserting anywhere
-    //    below would re-point every pool route as well as every legacy one.
-    FltTblFrame1 = FlowInstEnd, FltTblFrame2,
-    NumDests
+    NumDests = FlowInstEnd
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
@@ -301,8 +297,8 @@ inline constexpr int kFlowSpan = (int) ModDest::EnvPBase - (int) ModDest::FlowTi
 static_assert ((int) ModDest::OscBank2Base == 1890 && (int) ModDest::FlowInstBase == 3780 && kFlowSpan == 473
             && (int) ModDest::FlowInstEnd == 3780 + 3 * 473,
     "tp20 - index.html mirrors OSCBANK2_BASE=1890, FLOWINST_BASE=3780, FLOW_SPAN=473; a shift here re-points every saved pool route");
-static_assert ((int) ModDest::FltTblFrame1 == 5199 && (int) ModDest::NumDests == 5201,
-    "tp22 - index.html stamps the filter-table FRAME dests from these ints; a shift re-points a saved route");
+static_assert ((int) ModDest::NumDests == 5199,
+    "tp28 - the filter table is withdrawn; its two tail dests go with it and NumDests returns to the pool's end");
 /** A destination that belongs to ONE oscillator (its letter is in its name). Every such family is
  *  laid out A,B,C,D contiguously, so the ranges below are the families' first A and last D. */
 inline constexpr bool isOscLetteredDest (int d) noexcept
@@ -1077,9 +1073,6 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     for (int n = 0; n < 3; ++n)
         for (int k = 0; k < kFlowSpan; ++k)
             a[(size_t) ((int) ModDest::FlowInstBase + n * kFlowSpan + k)] = a[(size_t) ((int) ModDest::FlowTime + k)];
-    // tp22 — the tail dests appended after the pool mirrors take the same generated Linear01 row.
-    for (int i = (int) ModDest::FlowInstEnd; i < (int) ModDest::NumDests; ++i)
-        a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;
 }
 static constexpr auto kDestInfo = makeDestInfo();

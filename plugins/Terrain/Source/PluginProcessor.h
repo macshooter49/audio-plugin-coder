@@ -1086,7 +1086,6 @@ public:
     /** tp22 — the published curve for ONE main filter, at its CURRENT frame, as CSV of band dB.
      *  The drawn response reads this so the picture is the DSP's own numbers and not a lookalike
      *  (the house law: a filter's curve mirrors the DSP and moves with the knobs, never a placeholder). */
-    juce::String      getFilterTableCurveCsv (int slot) const;
     juce::String      getArpFeedJson (int inst = 0) const;              // playhead/fire/wave snapshot (rAF-polled) · tp20 inst
     juce::String      getChopFeedJson (int inst = 0) const;             // fb106: Ribbon playhead/slice/wet snapshot · tp20 inst
     void              requestChopWipe (int inst = 0) noexcept { chopWipeReq_[juce::jlimit (0, wc::kFlowInstances - 1, inst)].store (true); }   // Wipe button → audio thread
@@ -2201,20 +2200,6 @@ private:
     // ══ tp22 — THE FILTER TABLE's bake. Same contract as HarmTableSlot directly above, for the same
     //    reason: turning a table into a curve is 128 frames x 512 trig conversions, which is a message-
     //    thread job, and 96 voices x 10 slots must SHARE one read-only result rather than own copies.
-    //    Double-buffered with a retire cooldown so a voice mid-block never reads a buffer being rewritten.
-    struct FilterTableSlot
-    {
-        std::unique_ptr<tw::FilterTableSource::Curve>    curve[2];
-        std::atomic<const tw::FilterTableSource::Curve*> live { nullptr };
-        int buildIdx = 0, retireCooldown = 0, builtPreset = -2;   // -2 = nothing built yet
-    };
-    FilterTableSlot fltTable_[2];                                  // [0] = filter 1, [1] = filter 2
-    std::unique_ptr<tw::HarmTableSource::Grid> fltBakeGrid_;       // message thread only — the intermediate
-    std::unique_ptr<tw::WavetableSpec>         fltBakeSpec_;       // heap: a spec is ~229 KB (the MSVC stack law)
-    void rebuildFilterTableIfNeeded (int slot);                    // message thread (timerCallback)
-    /** tp25 — a factory .flac (128 cycles x 2048) onto the harmonic grid. Message thread; returns
-        false and touches nothing if the file is missing or unreadable. */
-    bool bakeFactoryTableGrid (int factoryIdx, tw::HarmTableSource::Grid& g) noexcept;
 
     // fb589 — THE ADDITIVE WATERFALL. Its own engine instance, deliberately NOT the editor's
     // harmDispEng_[]: that one is mid-flight every 60 Hz tick baking the bars, and a 16-row HUE
