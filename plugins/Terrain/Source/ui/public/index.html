@@ -32853,6 +32853,9 @@ restoreThemeFromBackend();
      (hz=-1) glides home to the base params — knob drags get the same silk. */
   var liveFn=null, liveV=null, liveFcS=0, liveRsS=0, liveInit=false, liveFc=-1, liveRes=0;
   function pollLive(){
+    /* tp34 — the engine pushes these four numbers in the frame now (fb354: push, never poll);
+       the native below stays only as the fallback for a page with no push lane */
+    var __pl=window.__fltLive; if(__pl&&__pl.length>=4){ liveV=__pl; return; }
     if(!liveFn){ try{ liveFn=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getFilterLive'):null; }catch(e){ liveFn=null; } if(!liveFn) return; }
     try{ Promise.resolve(liveFn()).then(function(x){ try{ var a=JSON.parse(String(x)); if(a&&a.length>=4) liveV=a; }catch(e){} }); }catch(e){}
   }
@@ -35669,7 +35672,9 @@ restoreThemeFromBackend();
         var acc=0, feed=null, feedBusy=false, lastC=-1, prevStp=0;
         var ARP_VMAX=Math.max.apply(null,RATE_LIST.map(TIC.stepsPerSec));   /* fb636 h3 — the playhead's fastest playing speed */
         var start=TIC.runLoop(sh.card,function(dt){
-          if(feedFn&&!feedBusy){ feedBusy=true;
+          /* tp34 — the engine PUSHES this feed in the frame now (fb354: push, never poll); the poll below is the fallback */
+            var __pf=window.__flowFeedPush; if(__pf&&__pf.arp&&__pf.arp[INST]){ feed=__pf.arp[INST]; }
+            else if(feedFn&&!feedBusy){ feedBusy=true;
             try{ Promise.resolve(feedFn(INST)).then(function(fs){ feedBusy=false;
               try{ feed=JSON.parse(fs); }catch(e){} }).catch(function(){ feedBusy=false; }); }
             catch(e){ feedBusy=false; } }
@@ -36050,7 +36055,9 @@ restoreThemeFromBackend();
         var acc=0, feed=null, feedBusy=false, prevLs=0, prevC=0, lastSlice=-1;
         var start=TIC.runLoop(sh.card,function(dt,t){
           sim.t=t;
-          if(gliFeedFn&&!feedBusy){ feedBusy=true;
+          /* tp34 — the engine PUSHES this feed in the frame now (fb354: push, never poll); the poll below is the fallback */
+            var __pf=window.__flowFeedPush; if(__pf&&__pf.gli&&__pf.gli[INST]){ feed=__pf.gli[INST]; }
+            else if(gliFeedFn&&!feedBusy){ feedBusy=true;
             try{ Promise.resolve(gliFeedFn(INST)).then(function(fs2){ feedBusy=false;
               try{ feed=JSON.parse(fs2); }catch(e){} }).catch(function(){ feedBusy=false; }); }
             catch(e){ feedBusy=false; } }
@@ -36672,7 +36679,9 @@ restoreThemeFromBackend();
           var ribE=feed?window.__tiEnv('card-chop-ribbon',window.__tiLive()):1;
           if(!S.v.freeze) sim.off+=dt*(22+S.v.feed*30)*ribE;
           sim.rw=1-ribE; if(ribE<=0) sim.off=0;
-          if(chopFeedFn&&!feedBusy){ feedBusy=true;
+          /* tp34 — the engine PUSHES this feed in the frame now (fb354: push, never poll); the poll below is the fallback */
+            var __pf=window.__flowFeedPush; if(__pf&&__pf.chop&&__pf.chop[INST]){ feed=__pf.chop[INST]; }
+            else if(chopFeedFn&&!feedBusy){ feedBusy=true;
             try{ Promise.resolve(chopFeedFn(INST)).then(function(fs){ feedBusy=false;
               try{ feed=JSON.parse(fs); }catch(e){} }).catch(function(){ feedBusy=false; }); }
             catch(e){ feedBusy=false; } }
@@ -37847,14 +37856,32 @@ restoreThemeFromBackend();
   // window has NO WebSliderRelays (a relay serves exactly one WebView), so the
   // cards' blend/latch hooks swap onto this in card-only mode. 700ms poll keeps
   // the readout honest if the param moves inside the plugin at the same time.
+  /* ═══ tp34 — ONE POLL FOR EVERY SHIM. Each shim used to run its own setInterval and its own
+     getSynParam native: the census on a 27-node Patcher counted ~80 of those a second at REST,
+     every one an IPC round trip whose result JUCE escapes on the message thread — the thread
+     that ships frames. The batched getSynParams native already exists (tp20 built it for the
+     pool relay), so every shim now registers itself and one shared timer reads them all in one
+     call. The per-shim behaviour is unchanged: same 700 ms cadence, same rest slowdown, same
+     'tiactive' wake, same 0.0005 change gate — only the transport is one call, not eighty. */
+  var __shimReg=[], __shimG=null, __shimGAll=null, __shimBusy=false, __shimN=0;
+  function __shimPollAll(){ if(!__shimReg.length||__shimBusy) return;
+    if(__shimGAll===null) __shimGAll=NF('getSynParams')||false;
+    if(!__shimGAll){ __shimReg.forEach(function(r){ r.one(); }); return; }
+    var list=__shimReg.slice(); __shimBusy=true;
+    try{ Promise.resolve(__shimGAll(list.map(function(r){ return r.id; }).join(','))).then(function(res){ __shimBusy=false;
+        var parts=String(res||'').split(','); if(parts.length!==list.length) return;
+        for(var i=0;i<list.length;i++){ var nv=parseFloat(parts[i]); if(!isNaN(nv)) list[i].got(nv); } }).catch(function(){ __shimBusy=false; }); }
+    catch(e){ __shimBusy=false; } }
+  setInterval(function(){ __shimN++; if(window.__uiParked)return; if((__shimN&3)&&window.__tiRest&&window.__tiRest())return; __shimPollAll(); },700);
+  window.addEventListener('tiactive',__shimPollAll);
   window.__synSliderShim=function(id,def){
     var v=(def==null?0.5:def), ls=[], g=NF('getSynParam'), s=NF('setSynParam');
     function fire(){ for(var i=0;i<ls.length;i++){ try{ls[i]();}catch(e){} } }
-    function poll(){ if(!g)return; try{ Promise.resolve(g(id)).then(function(nv){ nv=parseFloat(nv); if(!isNaN(nv)&&Math.abs(nv-v)>0.0005){ v=nv; fire(); } }).catch(function(){}); }catch(e){} }
+    function got(nv){ if(!isNaN(nv)&&Math.abs(nv-v)>0.0005){ v=nv; fire(); } }
+    function poll(){ if(!g)return; try{ Promise.resolve(g(id)).then(function(nv){ got(parseFloat(nv)); }).catch(function(){}); }catch(e){} }
     /* fb636 (M2) — at rest it looks every 2.8 s instead of every 0.7 s, and not at all while the editor is closed; the
        first frame / touch / note after rest ('tiactive') looks at once. 4 of these run at boot, ~46 once RBN/CHOP open. */
-    var nT=0; setInterval(function(){ nT++; if(window.__uiParked)return; if((nT&3)&&window.__tiRest&&window.__tiRest())return; poll(); },700); poll();
-    window.addEventListener('tiactive',poll);
+    __shimReg.push({ id:id, got:got, one:poll }); poll();   /* tp34 — one shared poll; the first read is still immediate */
     return { getNormalisedValue:function(){ return v; },
              setNormalisedValue:function(n){ v=Math.max(0,Math.min(1,n)); if(s){ try{ s(id,v); }catch(e){} } fire(); },
              valueChangedEvent:{ addListener:function(f){ ls.push(f); } } };
@@ -42951,8 +42978,17 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     (window.__flowChain?window.__flowChain():[]).forEach(function(m){ ids=ids.concat(flowSrcIds(m)); });
     seedOn(ids); if(ids.length) track(ids,function(){});
   }catch(e){} }
+  /* tp34 — a dice roll writes ~250 parameters and then this read them back ONE NATIVE EACH: the
+     census counted 377 getSynParam calls a second right after a roll, on the thread that ships
+     frames, and the page went 1.6 s without a frame. One batched getSynParams call now, with
+     readP's own 500 ms race as the fallback so a page with no backend still resolves. */
+  function readMany(idList){ var gf=NF('getSynParams'); if(!gf||!idList.length) return Promise.all(idList.map(readP));
+    var nat=new Promise(function(res,rej){ try{ Promise.resolve(gf(idList.join(','))).then(function(r){ var parts=String(r||'').split(',');
+        if(parts.length!==idList.length){ rej(new Error('short')); return; } res(parts.map(function(p,i){ var v=parseFloat(p); return isNaN(v)?pv(idList[i]):v; })); }).catch(rej); }catch(e){ rej(e); } });
+    var late=new Promise(function(res){ setTimeout(function(){ res(idList.map(function(id){ return pv(id); })); },500); });
+    return Promise.race([nat,late]).catch(function(){ return idList.map(function(id){ return pv(id); }); }); }
   function track(ids,cb){ var fresh=ids.filter(function(id){ return !(id in tracked); }); if(!fresh.length){ cb(); return; }
-    Promise.all(fresh.map(readP)).then(function(vals){ fresh.forEach(function(id,i){ tracked[id]=1; var v=vals[i]; shim(id,v); [hist.cur].concat(hist.undo,hist.redo).forEach(function(S){ if(S&&S.params&&!(id in S.params)) S.params[id]=v; }); }); cb(); }).catch(cb); }
+    readMany(fresh).then(function(vals){ fresh.forEach(function(id,i){ tracked[id]=1; var v=vals[i]; shim(id,v); [hist.cur].concat(hist.undo,hist.redo).forEach(function(S){ if(S&&S.params&&!(id in S.params)) S.params[id]=v; }); }); cb(); }).catch(cb); }
   function apply(S){ applying=true; try{
     var devs=window.__fxrDevs?window.__fxrDevs():[];
     for(var i=devs.length-1;i>=0;i--){ var d=devs[i]; if(d&&!S.devs.some(function(x){return x.core===d.core&&x.inst===d.inst;})) window.__fxrRemove&&window.__fxrRemove(i); }

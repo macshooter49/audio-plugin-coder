@@ -6731,6 +6731,11 @@ void TerrainUiCore::timerCallback()
            << "," << SF (audioProcessor.wtFrameVis (2), 4) << "," << SF (audioProcessor.wtFrameVis (3), 4) << "];";   // fb457
         // fb599 — the same lane for the HARMONIC engine's Hue, so an LFO on it moves the purple
         // position line. -1 = not on the Table family, and the page falls back to the knob.
+        // tp34 — the filter card's live cutoff/res, pushed (it polled getFilterLive per frame: 45 natives/s)
+        js << "window.__fltLive=[" << SF (audioProcessor.fltVisHz1_.load (std::memory_order_relaxed), 2)
+           << "," << SF (audioProcessor.fltVisRes1_.load (std::memory_order_relaxed), 4)
+           << "," << SF (audioProcessor.fltVisHz2_.load (std::memory_order_relaxed), 2)
+           << "," << SF (audioProcessor.fltVisRes2_.load (std::memory_order_relaxed), 4) << "];";
         js << "window.__harmHueEff=[" << SF (audioProcessor.harmHueVis (0), 4) << "," << SF (audioProcessor.harmHueVis (1), 4)
            << "," << SF (audioProcessor.harmHueVis (2), 4) << "," << SF (audioProcessor.harmHueVis (3), 4) << "];";
         // fb600 — CHURN, THE SAME LANE. __harmHueEff alone was lying once CHURN > 0: the bank is then
@@ -7493,12 +7498,54 @@ void TerrainUiCore::timerCallback()
         auto dj = audioProcessor.getDistortionCurveVizJson();
         if (dj != lastDstVizQuiet_) { lastDstVizQuiet_ = dj; js << "window.__dstVizPush=" << dj << ";"; }
     }
+        /* ═══ tp34 — THE FLOW CARDS' FEEDS RIDE THE FRAME ══════════════════════════════════════
+           The Arp constellation, the Chop ribbon and the Glitch monitor each rAF-POLLED a native
+           (getArpFeed / getChopFeed / getGliFeed) — one call per card per frame, its JSON escaped
+           by JUCE on this thread on the way back. A process sample during a 27-node Patcher put
+           ~45% of the message thread's busy time inside that escaping (emitCompletionEvent →
+           String::replace), starving the frame lane. fb354's law: a viz that must always be
+           visible rides the push, never a poll. So the feeds are pushed here, for every instance
+           the page can show, and the pollers read the push first (the poll stays as a fallback).
+           With the per-statement skip below, an instance whose feed did not change costs nothing. */
+        {
+            const int pgF = audioProcessor.uiPage.load (std::memory_order_relaxed);
+            if (pgF == 1 || pgF == 5)
+            {
+                // only the instances in the chain carry a feed; an idle one is a one-byte {"on":0}
+                // (the card reads on===0 and rests - and never falls back to the poll)
+                const auto fc = audioProcessor.flowChainState();
+                js << "window.__flowFeedPush={arp:[";
+                for (int n = 0; n < wc::kFlowInstances; ++n) { if (n) js << ","; js << (fc.arpOn[n]  ? audioProcessor.getArpFeedJson (n)  : juce::String ("{\"on\":0}")); }
+                js << "],chop:[";
+                for (int n = 0; n < wc::kFlowInstances; ++n) { if (n) js << ","; js << (fc.chopOn[n] ? audioProcessor.getChopFeedJson (n) : juce::String ("{\"on\":0}")); }
+                js << "],gli:[";
+                for (int n = 0; n < wc::kFlowInstances; ++n) { if (n) js << ","; js << (fc.gliOn[n]  ? audioProcessor.getGliFeedJson (n)  : juce::String ("{\"on\":0}")); }
+                js << "]};";
+            }
+        }
         js << ";window.__tiFrame&&window.__tiFrame();";
         lastFrameBytes_ = (int) js.getNumBytesAsUTF8();   // fb636 — sizes the next frame's one allocation
         uint64_t fh = 1469598103934665603ULL;
         for (const char* q = js.toRawUTF8(); *q != 0; ++q)
             fh = (fh ^ (uint64_t) (unsigned char) *q) * 1099511628211ULL;
-        const bool identical = pageReady && fh == lastFrameHash_;
+        /* ═══ tp34 — PER-STATEMENT IDLE-SKIP ═══════════════════════════════════════════════════
+           Max: "when I zoom out it's laggy... when I generate a random preset it lags." MEASURED in
+           the real WebView (Tests/mac_patcher_fps.mm): a 27-node Patcher with a chord sounding
+           shipped a 20 KB frame per tick and the lane averaged ~38 frames/s, because frames are
+           serialised (one in flight, the next waits for the ack) and the idle-skip above is
+           WHOLE-frame: one changing scope byte ships every static payload in the frame with it —
+           the distortion curve, the bloom arrays, the analyzer bins, every card's feed. The
+           frame-diff probe showed it plainly: idx=1543 of 13029, the first differing byte deep
+           in a frame that was otherwise identical.
+           So the frame is now diffed STATEMENT by statement (top-level ';' and '}' boundaries),
+           each keyed by its prefix, and only the statements whose bytes changed ship. Identical
+           by construction: a skipped statement is one the page already evaluated with these
+           exact bytes, so it holds that value. Two things always ship — the heartbeat that rides
+           the front of the frame (wd9's proof of life) and the dispatcher call at the end — and
+           nothing is reduced before pageReady (the RESTORE pushes must repeat, fb484). */
+        if (lastFrameHash_ == 0) segLast_.clear();     // the full-first-frame law, per statement
+        const juce::String ship = pageReady ? reduceFrame (js) : js;
+        const bool identical = pageReady && ship.isEmpty();
         // fb567 — THE FRAME-DIFF PROBE. Opt-in (TERRAIN_CPU_PROBE in the environment, the beacon's
         // switch): when a frame ships at idle, append the first bytes that differ from the last sent
         // frame to <tempDirectory>/terrain-frame-diff.txt, at most twice a second. Names the segment
@@ -7513,7 +7560,8 @@ void TerrainUiCore::timerCallback()
                     lastDiffDumpMs_ = nowMs;
                     const char* a = js.toRawUTF8(); const char* b = lastFrameJs_.toRawUTF8();
                     int i = 0; while (a[i] != 0 && b[i] != 0 && a[i] == b[i]) ++i;
-                    const juce::String ctx = juce::String::fromUTF8 (a + juce::jmax (0, i - 80)).substring (0, 220);
+                    static const bool fullDump = (std::getenv ("TERRAIN_FRAME_DUMP") != nullptr);   // tp34 — whole frames, so a parse error can be found offline
+                    const juce::String ctx = fullDump ? js : juce::String::fromUTF8 (a + juce::jmax (0, i - 80)).substring (0, 220);
                     juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("terrain-frame-diff.txt")
                         .appendText (juce::String::formatted ("t=%.0f len=%d idx=%d notes=%d quiet=%d | ", nowMs, (int) js.length(), i,
                                                               (audioProcessor.ampEnvVis.load (std::memory_order_relaxed) >= 0.0f) ? 1 : 0, (int) uiQuiet)
@@ -7522,11 +7570,21 @@ void TerrainUiCore::timerCallback()
                 lastFrameJs_ = js;
             }
         }
-        auto ack = [this] (juce::WebBrowserComponent::EvaluationResult)
+        static const bool evalDump = (std::getenv ("TERRAIN_FRAME_DUMP") != nullptr);   // tp34 — dev: keep the failing script
+        auto ack = [this, failCopy = evalDump ? ship : juce::String()] (juce::WebBrowserComponent::EvaluationResult r)
         {
             lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();
             evalInFlight_.store (0, std::memory_order_relaxed);
             audioProcessor.dbgAcks_.fetch_add (1, std::memory_order_relaxed);   // fb484 beacon v2
+            if (r.getError() != nullptr)
+            {
+                // tp34 — a frame that failed to evaluate left the page holding NONE of its statements:
+                // forget every remembered hash so the next frame ships in full. Never silent in dev.
+                segLast_.clear();
+                if (failCopy.isNotEmpty())
+                    juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("terrain-frame-fail.txt")
+                        .appendText ("ERR " + r.getError()->message + "\n" + failCopy + "\n---\n");
+            }
         };
         if (! identical)
         {
@@ -7534,15 +7592,15 @@ void TerrainUiCore::timerCallback()
             evalInFlight_.store (1, std::memory_order_relaxed);
             evalSentMs_ = juce::Time::getMillisecondCounterHiRes();
             audioProcessor.dbgFramesSent_.fetch_add (1, std::memory_order_relaxed);           // fb484
-            audioProcessor.dbgLastFrameB_.store ((uint32_t) js.length(), std::memory_order_relaxed);
+            audioProcessor.dbgLastFrameB_.store ((uint32_t) ship.length(), std::memory_order_relaxed);   // tp34 — bytes actually shipped
            #if JUCE_WINDOWS
             // fb485 — the frame rides WebView2's web-message lane: no per-frame script parse on the
             // host side, no completion bounced back through the host's message queue. FL's freeze
             // was input starvation under exactly that ExecuteScript ping-pong (proven: editor
             // closed = FL perfect). The page evals the payload and acks via terrainFrameAck.
-            webView->emitEventIfBrowserIsVisible (juce::Identifier ("terrainFrame"), juce::var (js));
+            webView->emitEventIfBrowserIsVisible (juce::Identifier ("terrainFrame"), juce::var (ship));   // tp34
            #else
-            webView->evaluateJavascript (js, ack);
+            webView->evaluateJavascript (ship, ack);   // tp34 — the changed statements only
            #endif
         }
         else if (++idleSkips_ >= 30)
@@ -7566,6 +7624,67 @@ void TerrainUiCore::paint (juce::Graphics& g)
     // fb102 — Terrain's own night, not LookAndFeel grey: during live resizes the
     // native webview lags a frame and this background flashes through ("gray bars").
     g.fillAll (juce::Colour (0xFF16141F));
+}
+
+// ══ tp34 — the per-statement reducer. See the ship site in timerCallback for why. ══════════════
+juce::String TerrainUiCore::reduceFrame (const juce::String& full)
+{
+    const char* s = full.toRawUTF8();
+    juce::MemoryOutputStream out (juce::jmax (256, (int) full.getNumBytesAsUTF8() / 4));
+    std::unordered_map<std::string, int> occ;
+    bool any = false;
+    auto flush = [&] (int a, int b)
+    {
+        while (a < b && (s[a] == ';' || s[a] == ' ' || s[a] == '\n')) ++a;
+        if (a >= b) return;
+        const std::string_view text (s + a, (size_t) (b - a));
+        if (text.find ("__tiFrame&&window.__tiFrame") != std::string_view::npos) return;   // appended once, below
+        const bool always = text.find ("__tickT") != std::string_view::npos || text.find ("__tiAlive") != std::string_view::npos
+                         || text.find ("performance.now") != std::string_view::npos || text.find ("Date.now") != std::string_view::npos;
+        int k = a; if (b - a > 4 && s[k] == 't' && s[k+1] == 'r' && s[k+2] == 'y' && s[k+3] == '{') k += 4;
+        const int k0 = k; while (k < b && k - k0 < 56 && s[k] != '=' && s[k] != '(') ++k;
+        std::string key (s + k0, (size_t) (k - k0)); key += '#'; key += std::to_string (occ[key]++);
+        uint64_t hsh = 1469598103934665603ULL;
+        for (int i = a; i < b; ++i) hsh = (hsh ^ (uint64_t) (unsigned char) s[i]) * 1099511628211ULL;
+        auto it = segLast_.find (key);
+        if (! always && it != segLast_.end() && it->second == hsh) return;
+        segLast_[key] = hsh;
+        // every statement is terminated: `window.__x={...}` followed straight by `window.__y=`
+        // is a SyntaxError (an object literal cannot end an unterminated statement), and one of
+        // those was in every frame. A ';' after a block is an empty statement — harmless.
+        out.write (s + a, (size_t) (b - a)); if (s[b - 1] != ';') out.writeByte (';');
+        any = true;
+    };
+    int depth = 0; char q = 0; int start = 0; int i = 0;
+    for (;; ++i)
+    {
+        const char c = s[i];
+        if (c == 0) { if (i > start) flush (start, i); break; }
+        if (q) { if (c == '\\' && s[i + 1] != 0) { ++i; continue; } if (c == q) q = 0; continue; }
+        if (c == '"' || c == '\'' || c == '`') { q = c; continue; }
+        if (c == '{' || c == '[' || c == '(') ++depth;
+        else if (c == ']' || c == ')') { if (depth > 0) --depth; }
+        else if (c == '}')
+        {
+            if (depth > 0) --depth;
+            // a top-level '}' ends a statement UNLESS what follows continues it: try{}catch, else,
+            // finally, do{}while, an IIFE call, or any operator — splitting a try from its catch
+            // shipped 'try{...}' alone, which is a SyntaxError and a frame in which nothing ran.
+            if (depth == 0)
+            {
+                int j = i + 1; while (s[j] == ' ' || s[j] == '\n') ++j;
+                const bool cont = std::strncmp (s + j, "catch", 5) == 0 || std::strncmp (s + j, "finally", 7) == 0
+                               || std::strncmp (s + j, "else", 4) == 0  || std::strncmp (s + j, "while", 5) == 0
+                               || s[j] == '.' || s[j] == ')' || s[j] == ']' || s[j] == ',' || s[j] == '&' || s[j] == '|'
+                               || s[j] == '?' || s[j] == ':' || s[j] == '(' || s[j] == '=';
+                if (! cont) { flush (start, i + 1); start = i + 1; }
+            }
+        }
+        else if (c == ';' && depth == 0) { flush (start, i + 1); start = i + 1; }
+    }
+    if (! any) return {};
+    out << ";window.__tiFrame&&window.__tiFrame();";
+    return out.toString();
 }
 
 void TerrainUiCore::resized()

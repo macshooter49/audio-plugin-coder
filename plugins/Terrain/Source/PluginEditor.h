@@ -4,6 +4,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <array>
 #include <map>
+#include <unordered_map>
 #include "PluginProcessor.h"
 #include "ParameterIDs.hpp"
 #include "BlendEngine.h"
@@ -961,7 +962,10 @@ private:
     // to the intended size until the user really drags
     double uiZoom_ = 1.0, restZoom_ = 1.0;
     juce::int64 lfoLiveSeen_ = 0;   // fb236 — last relayed live-stroke seq
-    int    zoomPushLeft_ = 0, zoomTick2_ = 0, settleTicks_ = 0;   // fb516 -- healTicks_ moved to the shell
+    int    zoomPushLeft_ = 0, zoomTick2_ = 0, settleTicks_ = 0;
+    // tp34 — PER-STATEMENT IDLE-SKIP (see reduceFrame): the last shipped hash of every frame statement, by key
+    std::unordered_map<std::string, uint64_t> segLast_;
+    juce::String reduceFrame (const juce::String& full);   // fb516 -- healTicks_ moved to the shell
     int    zoomVerifyTicks_ = 0;    // fb175 — countdown to the post-settle layout verify
     double pageVW_ = -1.0;          // fb175 — page-reported innerWidth (eval callback, message thread)
     // fb516 -- intendedW_/userSized_ moved to the shell: the FL junk-size war is a WINDOW

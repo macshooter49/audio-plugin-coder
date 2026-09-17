@@ -1089,7 +1089,8 @@ public:
     juce::String      getArpFeedJson (int inst = 0) const;              // playhead/fire/wave snapshot (rAF-polled) · tp20 inst
     juce::String      getChopFeedJson (int inst = 0) const;             // fb106: Ribbon playhead/slice/wet snapshot · tp20 inst
     void              requestChopWipe (int inst = 0) noexcept { chopWipeReq_[juce::jlimit (0, wc::kFlowInstances - 1, inst)].store (true); }   // Wipe button → audio thread
-    juce::String      getGliFeedJson (int inst = 0) const;              // fb115: Monitor playhead/fire/levels snapshot · tp20 inst
+    juce::String      getGliFeedJson (int inst = 0) const;
+    wc::FlowChainState flowChainState() const { return flowChainNow(); }   // tp34 — the editor trims the pushed flow feeds to chain members              // fb115: Monitor playhead/fire/levels snapshot · tp20 inst
     juce::String      getRbnFeedJson() const;                           // fb122: Wheel now/next/notes snapshot
     void              requestGliRoll (int inst = 0) noexcept { gliRollReq_[juce::jlimit (0, wc::kFlowInstances - 1, inst)].store (true); }     // Roll button → audio thread (quantized)
 
