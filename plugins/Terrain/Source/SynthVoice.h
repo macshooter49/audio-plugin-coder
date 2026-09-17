@@ -4292,6 +4292,18 @@ class SynthVoice : public juce::SynthesiserVoice
             // click-free; skipping only begins once the fade has actually finished.
             for (int g = 0; g < 4; ++g)
                 oscDead_[g] = robinGate (g) <= 0.0f && oscGate_[g] < 1.0e-4f;
+            /* tp38 — SILENT VOICE, SILENT FILTERS. Max: "what's still there with everything off" — 34% of a core, and
+               70% of it the two per-voice filters (PHASER_48P + COMB) running on silence for 8 voices (Tests/
+               au_preset_census.cpp oscgate / hold alloff, sampled). Measured, not reasoned: the main pair is skipped
+               for a block when the PREVIOUS block put numerically nothing into it (peak < 1e-12) and its output had
+               decayed under -120 dB (peak < 1e-6); the first non-zero sample wakes it and the frozen state simply resumes
+               (within 1e-5 of the truth; a reset would re-fire a biased core's onset — measured). A self-oscillating comb never decays, so it is never skipped; a
+               driven filter with a DC bias never reads silent, so it is never skipped. TERRAIN_NO_FLT_SKIP in the
+               environment disables it (Tests/flt_skip_gate.py renders both and diffs them). */
+            {
+                static const bool noFltSkip = std::getenv ("TERRAIN_NO_FLT_SKIP") != nullptr;
+                fltNoSkip_ = noFltSkip; ++fltBlockGen_;   // every pair decides for itself on its first call of the block (filterBuses)
+            }
 
             // ── BLEND MODES (all-engines): derive the two per-block flags from the warp matrix.
             //    Both stay false for any un-blended patch → the block renders + per-sample loop below
@@ -6692,6 +6704,20 @@ class SynthVoice : public juce::SynthesiserVoice
                     auto filterBuses = [&] (float b1L, float b1R, float b2L, float b2R, float& outL, float& outR,
                                             tw::filters::FilterSlot& f1, tw::filters::FilterSlot& f2)
                     {
+                        {   // tp38 — SILENT PAIR SKIP, for every pair this lambda serves (state on the pair's first slot)
+                            if (f1.skipGen != fltBlockGen_)
+                            {
+                                f1.skip = ! fltNoSkip_ && f1.skipInPk < 1.0e-12f && f1.skipOutPk < 1.0e-6f;   /* -120 dB: a send pair feeds a reverb, which scaled a -100 dB residual to 1.4e-5 (Baby Boi) */
+                                f1.skipInPk = 0.0f; f1.skipOutPk = 0.0f; f1.skipGen = fltBlockGen_;
+                            }
+                            const float inPk = std::fabs (b1L) + std::fabs (b1R) + std::fabs (b2L) + std::fabs (b2R);
+                            if (f1.skip)
+                            {
+                                if (inPk < 1.0e-12f) { outL = 0.0f; outR = 0.0f; return; }   // nothing in, nothing out, nothing ticked
+                                f1.skip = false;   /* the wake: the FROZEN state resumes — within 1e-5 of where it would have decayed to; a reset() re-fires a biased core's onset (Baby Boi's diode ladder measured 1e-4 with a reset, 0 without) */
+                            }
+                            if (inPk > f1.skipInPk) f1.skipInPk = inPk;
+                        }
                         if (! par)   // SERIES: F1(bus1) → drive1 → (+ bus2 F2-only) → F2 → drive2
                         {
                             float w1L = b1L, w1R = b1R;
@@ -6706,6 +6732,7 @@ class SynthVoice : public juce::SynthesiserVoice
                                       w2R = mixSm2_ * wr + (1.0f - mixSm2_) * pR; }
                             pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
                             outL = w2L; outR = w2R;
+                            { const float o = std::fabs (outL) + std::fabs (outR); if (o > f1.skipOutPk) f1.skipOutPk = o; }   // tp38
                             // fb556 — OVERPASS 4B: the filters as modulation sources. ⚠️ ONLY the
                             //  MAIN pair: this lambda also serves the SEND filters and every pooled
                             //  duplicate, and without the identity test the last one to run each
@@ -6726,6 +6753,7 @@ class SynthVoice : public juce::SynthesiserVoice
                                       w2R = mixSm2_ * wr + (1.0f - mixSm2_) * b2R; }
                             pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
                             outL = w1L + w2L; outR = w1R + w2R;
+                            { const float o = std::fabs (outL) + std::fabs (outR); if (o > f1.skipOutPk) f1.skipOutPk = o; }   // tp38
                             if (&f1 == &filterSlot_) { fltOut_[0] = 0.5f * (w1L + w1R); fltOut_[1] = 0.5f * (w2L + w2R); }   // fb556
                         }
                     };
@@ -7492,6 +7520,7 @@ class SynthVoice : public juce::SynthesiserVoice
         // SOLO/MUTE — per-osc (A,B,C,D) click-free gate (smoothed one-pole, ~4ms fade)
         float oscGate_[4]       { 1.0f, 1.0f, 1.0f, 1.0f };   // smoothed solo/mute gate (click-free)
         bool  oscDead_[4]       { false, false, false, false }; // gate fully settled at 0 → skip the osc's render entirely
+        unsigned fltBlockGen_ = 1; bool fltNoSkip_ = false;   // tp38 — the block generation the filter pairs key their silent-skip on (state lives on FilterSlot)
         float oscGateTarget_[4] { 1.0f, 1.0f, 1.0f, 1.0f };
         float flowWave_ = 0.0f;   // FLOW · ARP WAVE lane frame offset (fb105), block-pushed
 

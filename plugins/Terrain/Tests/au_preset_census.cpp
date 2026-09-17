@@ -222,6 +222,28 @@ int main (int argc, char** argv)
         }
         return 0;
     }
+    if (mode == "render")   // render <preset> <out.f32>: a fixed scenario (4-note chord 1 s, release 3 s, 8 notes 1 s, release 2 s), left channel as float32
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty() || argc < 4) { printf ("usage: render <preset> <out.f32>\n"); return 1; }
+        Au a; if (! a.open() || ! a.loadChunk (ps[0].chunk)) return 1; a.pump (0.8); a.render (20, nullptr); a.pump (0.4);
+        FILE* f = fopen (argv[3], "wb"); if (! f) return 1;
+        std::vector<float> bl ((size_t) BLK), br ((size_t) BLK);
+        AudioBufferList* abl = (AudioBufferList*) calloc (1, sizeof (AudioBufferList) + sizeof (AudioBuffer));
+        auto blocks = [&] (int n) { for (int b = 0; b < n; ++b) { abl->mNumberBuffers = 2;
+            abl->mBuffers[0].mNumberChannels = 1; abl->mBuffers[0].mDataByteSize = BLK * 4; abl->mBuffers[0].mData = bl.data();
+            abl->mBuffers[1].mNumberChannels = 1; abl->mBuffers[1].mDataByteSize = BLK * 4; abl->mBuffers[1].mData = br.data();
+            AudioUnitRenderActionFlags fl = 0; AudioTimeStamp ts {}; ts.mSampleTime = a.stamp; ts.mFlags = kAudioTimeStampSampleTimeValid;
+            AudioUnitRender (a.au, &fl, &ts, 0, BLK, abl); a.stamp += BLK; fwrite (bl.data(), 4, (size_t) BLK, f); } };
+        const int sec = (int) (SR / BLK);
+        const bool toggle = argc > 4 && std::string (argv[4]) == "toggle";   // every oscillator OFF at 1 s, back ON at 2.5 s (the filter skip's wake path)
+        float en[8]; for (char o = 'A'; o <= 'H'; ++o) en[o - 'A'] = a.get (std::string ("Osc ") + o + " Enable");
+        for (int n : CHORD4) a.note (n, 100); blocks (sec);
+        if (toggle) { for (char o = 'A'; o <= 'H'; ++o) a.setRaw (std::string ("Osc ") + o + " Enable", 0.0f); blocks ((int) (1.5 * sec)); for (char o = 'A'; o <= 'H'; ++o) a.setRaw (std::string ("Osc ") + o + " Enable", en[o - 'A']); blocks ((int) (1.5 * sec)); }
+        else blocks (sec);
+        a.allOff(); blocks (2 * sec);
+        for (int n : CHORD8) a.note (n, 100); blocks (sec); a.allOff(); blocks (2 * sec);
+        fclose (f); free (abl); a.close(); printf ("wrote %s (%d s)\n", argv[3], 7); return 0;
+    }
     if (mode == "params")   // params <preset> <substr>: every parameter containing <substr> whose value differs from its default
     {
         auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }

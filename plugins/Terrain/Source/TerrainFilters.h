@@ -1950,6 +1950,13 @@ public:
     static constexpr int kShare   = std::max ({ ReverbFilter::kFloats, CombReverb::kFloats,
                                                 DampComb<kDampLen>::kFloats, 4 * VarAllpass::LEN });   // fb636 — M1u: 5025
 
+    /* tp38 — SILENT PAIR SKIP (SynthVoice::filterBuses): a pair whose first slot is this one is skipped for a block when
+       the previous block put numerically nothing in (skipInPk < 1e-12) and its output had decayed under -100 dB
+       (skipOutPk < 1e-6, -120 dB); the first non-zero sample wakes it and the frozen state resumes. Kept on the slot so the main
+       pair, every send pair and every pooled duplicate the lambda serves each carry their own. */
+    float    skipInPk = 0.0f, skipOutPk = 0.0f;
+    unsigned skipGen  = 0;
+    bool     skip     = false;
     FilterSlot() = default;
     FilterSlot (const FilterSlot&) = delete;              // fb636 — M1u: the views would alias the source
     FilterSlot& operator= (const FilterSlot&) = delete;
