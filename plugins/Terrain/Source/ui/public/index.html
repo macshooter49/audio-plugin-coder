@@ -26007,10 +26007,16 @@ window.__terrainEqAnalyzer = function(data) {
   try { window.__eqDbgT = (window.performance && performance.now) ? performance.now() : 0; } catch (eT) {}
   var __n=(window.performance&&performance.now)?performance.now():Date.now();
   __eqTw.pP=eqState.preBins; __eqTw.pQ=eqState.postBins;
-  __eqTw.tP=data.pre; __eqTw.tQ=data.post;
-  __eqTw.dur=Math.max(8,Math.min(140,__n-__eqTw.t0)); __eqTw.t0=__n;
-  eqState.preBins = data.pre;
-  eqState.postBins = data.post;
+  /* tp31 — a frame now carries the pair this page needs and no more: pre/post only while the EQ
+     panel is the visible page, `out` only while the filter card or the rack can see it. So a frame
+     without pre/post is normal, not a dropout — keep the last pair rather than blanking to
+     undefined (which would tween NaN and clear the panel on the next flip). */
+  if (data.pre && data.post) {
+    __eqTw.tP=data.pre; __eqTw.tQ=data.post;
+    __eqTw.dur=Math.max(8,Math.min(140,__n-__eqTw.t0)); __eqTw.t0=__n;
+    eqState.preBins = data.pre;
+    eqState.postBins = data.post;
+  } else { return; }
   if (!document.getElementById('eq-panel').classList.contains('hidden')) {
     if(__eqTw.pP&&!__eqTw.raf) __eqTw.raf=requestAnimationFrame(__eqTweenStep);
     else if(!__eqTw.pP) redrawEqCanvas();
@@ -32366,7 +32372,13 @@ restoreThemeFromBackend();
   document.head.appendChild(st);
   // ---- spectrum (chained from existing EQ FFT push) ----
   var bins=null, binsPrev=null, binsT0=0, binsDur=66, base=window.__terrainEqAnalyzer;   // fb487 glide state
-  window.__terrainEqAnalyzer=function(d){ try{ if(bins)binsPrev=bins; var __n=(window.performance&&performance.now)?performance.now():Date.now(); binsDur=Math.max(8,Math.min(140,__n-binsT0)); binsT0=__n; bins=d.post; if(d && d.sr > 8000) SR=d.sr;   /* fb442 — the REAL rate: SR was
+  /* tp31 — READ `out`, THE MASTER OUTPUT, NOT `post`. `post` brackets the MASTER EQ, and since
+     tp12 a routed oscillator leaves the main mix before that tap ever sees it — so on any patch
+     that routes into the rack this card was drawing a spectrum of silence and showing its idle
+     ladder while a note played (Max: "some presets don't have it and some do"). `out` is fed from
+     the final master buffer, after the rack and after the FLOW cards. The fallback to `post`
+     keeps a frame that carries only the EQ panel's pair from blanking the card. */
+  window.__terrainEqAnalyzer=function(d){ try{ var __b=(d&&d.out)?d.out:(d?d.post:null); if(__b){ if(bins)binsPrev=bins; var __n=(window.performance&&performance.now)?performance.now():Date.now(); binsDur=Math.max(8,Math.min(140,__n-binsT0)); binsT0=__n; bins=__b; } if(d && d.sr > 8000) SR=d.sr;   /* fb442 — the REAL rate: SR was
     hard-coded 48000, so on a 44.1 k session every spectrum sat 8.8 % sharp against its own curve. */
   }catch(e){} if(base) base(d); };
   // Per-index category — every filter type gets its own representative, knob-reactive shape.

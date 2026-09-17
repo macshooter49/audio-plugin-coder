@@ -9334,6 +9334,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     eqR.prepare(sampleRate, samplesPerBlock);
     analyzerPre.prepare (sampleRate);
     analyzerPost.prepare (sampleRate);
+    analyzerOut.prepare (sampleRate);   // tp31 — the one fed from the final master
     // Initialize EQ smoothers to APVTS defaults so the first audio block sees
     // valid values (not 0, which would make ParametricEQ's internal Q smoother
     // briefly cross zero and produce NaN coefficients).
@@ -15070,6 +15071,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //    sounding. Nothing between here and the auditions writes audio, so this is the buffer the FLOW stages left.
     //    (The layer DRY rings arm and advance on their own, fb517 — WET pairing by age is an open item, not lockstep.)
     //    Tests/capture_last_gate.py rule [4] pins it after the dispatch and before the first audition write.
+    // tp31 — THE VIZ SPECTRUM, TAPPED WHERE THE EAR IS. Same buffer and same moment as the
+    //  masterFx ring below: after the FX rack, after the FLOW stages, before the browser auditions.
+    //  This is the only analyzer that sees a routed oscillator at all, and it is what the filter
+    //  card's white spectrum and the rack's spectrum cards draw. One ring store per sample, and
+    //  only while a UI is attached (the fb148 law) — the transform itself runs on the message
+    //  thread, gated on a consumer actually being visible.
+    if (vizLive)
+    {
+        const float* aL = leftChannel;
+        const float* aR = numChannels > 1 ? rightChannel : leftChannel;
+        for (int i = 0; i < numSamples; ++i) analyzerOut.pushSample (0.5f * (aL[i] + aR[i]));
+    }
     writeToMasterFxRing (leftChannel,
                          numChannels > 1 ? rightChannel : leftChannel,
                          numSamples);

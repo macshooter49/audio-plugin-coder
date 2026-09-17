@@ -919,6 +919,7 @@ private:
     // fb342 — EQ/spectrum push gate: last-pushed analyzer frame counts. MEMBERS, not statics
     // in timerCallback (a static there is shared across instances — the fb339 pluginval trap).
     uint32_t eqPushSeqPre_ = 0xffffffff, eqPushSeqPost_ = 0xffffffff;
+    uint32_t eqPushSeqOut_ = 0xffffffff;   // tp31 — the master-output analyzer's last pushed frame
     int      eqQuietTicks_ = 0;      // fb507 — ticks of inaudible output; parks the spectrum FFT+push
     // fb591 — WHEN IS THE UI *NOT* AT REST? Until now the only answer was "when the output is
     // audible", and eqQuietTicks_ above is literally the EQ analyser's silence counter that fb567

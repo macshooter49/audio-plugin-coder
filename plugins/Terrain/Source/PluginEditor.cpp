@@ -7228,27 +7228,46 @@ void TerrainUiCore::timerCallback()
         const bool audible = audioProcessor.oscScopeNv.load (std::memory_order_relaxed) > 0
                           || audioProcessor.oscScopeORms.load (std::memory_order_relaxed) > 1.0e-4f;
         if (audible) eqQuietTicks_ = 0; else if (eqQuietTicks_ < 1000) ++eqQuietTicks_;
-        const bool wantedNow = (pg == 1 || pg == 2 || pg == 5 || fltExtOpen_.load (std::memory_order_relaxed));   // tp11 — 5 = the Patcher: its filter shows the spectrum too (it froze there)
+        // ══ tp31 — TWO CONSUMERS, TWO TAP POINTS, STILL TWO ARRAYS ════════════════════════════
+        //  pre/post bracket the MASTER EQ and only the EQ panel (page 2) reads them. The filter
+        //  card's white spectrum and the rack's spectrum cards read a different thing entirely —
+        //  what the instrument is actually putting out — and since tp12 that is NOT what pre/post
+        //  carry: a routed oscillator leaves the main mix before this tap, so those cards were
+        //  drawing silence on every patch that routes into the rack (Max: "some presets don't have
+        //  it and some do"). analyzerOut is fed from the final master buffer for them.
+        //  The two consumers are never both the whole story, so each analyzer is transformed and
+        //  pushed ONLY when its own consumer is on screen. The frame therefore carries two arrays
+        //  as before, not three — fb486/fb507/fb509's budget is unchanged.
+        const bool needEq  = (pg == 2);                                                  // the master EQ panel
+        const bool needOut = (pg == 1 || pg == 5 || fltExtOpen_.load (std::memory_order_relaxed));   // filter card + rack cards · tp11 — 5 = the Patcher
+        const bool wantedNow = needEq || needOut;
         if (wantedNow && ! eqWantedPrev_ && eqQuietTicks_ > 60) eqQuietTicks_ = 60;   // flip edge: ~30 pushes
         eqWantedPrev_ = wantedNow;
         const bool spectrumLive = eqQuietTicks_ < 90;
         // fb488 — run the transform HERE (message thread), and only when something shows it.
-        if (wantedNow && spectrumLive)
+        if (spectrumLive)
         {
-            audioProcessor.analyzerPre.update();
-            audioProcessor.analyzerPost.update();
+            if (needEq)  { audioProcessor.analyzerPre.update(); audioProcessor.analyzerPost.update(); }
+            if (needOut) { audioProcessor.analyzerOut.update(); }
         }
         const auto  seqPre  = audioProcessor.analyzerPre.frameSeq();
         const auto  seqPost = audioProcessor.analyzerPost.frameSeq();
+        const auto  seqOut  = audioProcessor.analyzerOut.frameSeq();
         // fb342 review — fltExtOpen_ ORs in: the floating .filt-ext overlay outlives page
         // switches, and its spectrum must stay live on ANY page (fb311).
-        const bool  wanted  = (pg == 1 || pg == 2 || pg == 5 || fltExtOpen_.load (std::memory_order_relaxed));   // tp11 — the Patcher
-        const bool  fresh   = (seqPre != eqPushSeqPre_ || seqPost != eqPushSeqPost_);
+        const bool  wanted  = wantedNow;
+        // freshness is asked of the analyzers this frame will actually carry — an idle one must
+        // never hold the frame back, and must never make a stale one look fresh either.
+        const bool  fresh   = (needEq  && (seqPre != eqPushSeqPre_ || seqPost != eqPushSeqPost_))
+                           || (needOut && (seqOut != eqPushSeqOut_));
         const float* preBins  = audioProcessor.analyzerPre.readLatest();
         const float* postBins = audioProcessor.analyzerPost.readLatest();
-        if (pushEqW && wanted && spectrumLive && fresh && preBins != nullptr && postBins != nullptr && webView != nullptr)   // fb486 whale gate + fb507 silence gate
+        const float* outBins  = audioProcessor.analyzerOut.readLatest();
+        const bool   haveEq   = needEq  && preBins != nullptr && postBins != nullptr;
+        const bool   haveOut  = needOut && outBins != nullptr;
+        if (pushEqW && wanted && spectrumLive && fresh && (haveEq || haveOut) && webView != nullptr)   // fb486 whale gate + fb507 silence gate
         {
-            eqPushSeqPre_ = seqPre; eqPushSeqPost_ = seqPost;
+            eqPushSeqPre_ = seqPre; eqPushSeqPost_ = seqPost; eqPushSeqOut_ = seqOut;
             // fb509 — THE WHALE WAS THE FORMATTING, NOT THE FFT AND NOT THE CADENCE. The
             // per-segment meter measured this block at 32.1% of a core AT 15 Hz — ~21 ms per
             // build — because every bin became a heap-allocated juce::String plus a += that
@@ -7267,11 +7286,22 @@ void TerrainUiCore::timerCallback()
                                          if (v < 0.00005f) { ob.push_back ('0'); return; }
                                          const int n = std::snprintf (b, sizeof b, "%.4f", (double) v);
                                          if (n > 0) ob.insert (ob.end(), b, b + n); };
-            AP ("try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[");
-            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (preBins[i]); }
-            AP ("],post:[");
-            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (postBins[i]); }
-            AP ("],sr:");   // fb442 — the page hard-coded 48000; a 44.1 k session drew every spectrum 8.8 % sharp
+            AP ("try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({");
+            if (haveEq)
+            {
+                AP ("pre:[");
+                for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (preBins[i]); }
+                AP ("],post:[");
+                for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (postBins[i]); }
+                AP ("],");
+            }
+            if (haveOut)   // tp31 — what the instrument is actually putting out
+            {
+                AP ("out:[");
+                for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (outBins[i]); }
+                AP ("],");
+            }
+            AP ("sr:");   // fb442 — the page hard-coded 48000; a 44.1 k session drew every spectrum 8.8 % sharp
             { char b[32]; const int n = std::snprintf (b, sizeof b, "%.1f", audioProcessor.getSampleRate());
               if (n > 0) ob.insert (ob.end(), b, b + n); }
             AP ("});}catch(e){}");

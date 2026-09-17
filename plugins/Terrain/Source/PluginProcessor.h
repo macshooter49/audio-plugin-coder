@@ -1447,6 +1447,20 @@ public:
 
     // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)
     SpectrumAnalyzer analyzerPre, analyzerPost;
+    // ══ tp31 — THE ANALYZER THAT CAN SEE THE WHOLE INSTRUMENT ═══════════════════════════════════
+    //  Max: "I'm playing something and there isn't a background filter visualizer... some presets
+    //  don't have it and some do."  analyzerPre/analyzerPost are fed inside the master-EQ block,
+    //  which runs on the main mix BEFORE the FX rack and (since tp30) before the FLOW cards. Since
+    //  tp12 a routed oscillator LEAVES the main mix outright (SynthVoice exKeep_) and travels the
+    //  rack instead — so on any patch that routes its oscillators, those two analyzers are fed
+    //  SILENCE and every spectrum in the UI dies. MEASURED on the installed AU (Tests/au_viz_feed.cpp,
+    //  using the master EQ as the probe because it sits at their exact tap point): a bare patch moves
+    //  -14.37 dB under a brutal master lowpass; the same patch routed into a Reverb, or into a
+    //  Glitch, moves -240 dB — bit-identical, nothing passes.
+    //  This one is fed from the FINAL master buffer instead — after the rack, after the flow cards,
+    //  the audio the ear actually gets — and the page's filter/rack spectra read it. pre/post are
+    //  left exactly as they are so the master EQ panel keeps its honest before/after pair.
+    SpectrumAnalyzer analyzerOut;
 
     // Parametric EQ (one per channel) — public so editor's setEqSolo native fn can call setSolo()
     ParametricEQ eqL, eqR;
