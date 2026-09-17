@@ -183,6 +183,47 @@ public:
         legatoMode_ = legato;
     }
 
+    /* ══ tp36 — THE CAP IS ENFORCED EVERY BLOCK, ON EVERY PATH. Max: "it's the RELEASE bro." Measured on a crazy roll
+       (Tests/au_preset_census.cpp hold, TERRAIN_PROFILE's voice census): eight notes HELD, no MIDI after the first
+       note-ons, and the render count climbed 2 → 4 → 8 → 16 → 18 voices in two seconds — 14 of them in RELEASE — because
+       the mono / legato / Robin / arp retrigger paths release the previous voice into a 3-second tail without ever
+       passing through noteOn's cap. 18 voices of four Modal oscillators = 107% of a core; the same roll with a short
+       release stayed at 2 voices and 20%. So the cap (the Voices knob, default 8) is applied here before every block:
+       held + releasing voices count, a voice already steal-fading does not, and when the count is over the cap the
+       OLDEST RELEASING voice takes the standard 30 ms steal fade first (a held note is never cut while a tail could go).
+       While at most `Voices` voices sound, nothing changes; past it, the oldest tail ends 30 ms early — which is what
+       "Voices = 8" has always promised on the poly path. (The count is PER BANK: oscillators E-H live in bank B, its own
+       UnisonSynth on the same MIDI, so a roll that uses both banks renders up to 2 x Voices voice objects — the census
+       above read "16 of cap 8" across the two banks, all of them legitimately sounding tails.) */
+    void enforceVoiceCap() noexcept
+    {
+        int active = 0;
+        for (auto* v : voices)
+            if (v != nullptr && v->getCurrentlyPlayingNote() >= 0)
+                if (auto* sv = dynamic_cast<tw::SynthVoice*> (v); sv != nullptr && ! sv->isStealing()) ++active;
+        if (tw::tiVoiceCensusOn) { tw::tiVoiceCensus[5] += active; tw::tiVoiceCensus[6] = voiceCap_; }   // tp36 dev census
+        int guard = 0;
+        while (active > voiceCap_ && guard++ < 96)
+        {
+            tw::SynthVoice* pick = nullptr; juce::uint32 pickStamp = std::numeric_limits<juce::uint32>::max(); bool pickRel = false;
+            for (auto* v : voices)
+            {
+                auto* sv = dynamic_cast<tw::SynthVoice*> (v);
+                if (sv == nullptr || sv->getCurrentlyPlayingNote() < 0 || sv->isStealing()) continue;
+                const bool rel = sv->isInRelease(); const auto stamp = sv->getNoteStartStamp();
+                if (pick == nullptr || (rel && ! pickRel) || (rel == pickRel && stamp < pickStamp)) { pick = sv; pickStamp = stamp; pickRel = rel; }
+            }
+            if (pick == nullptr) break;
+            stopVoice (pick, 0.0f, false);   // the 30 ms steal fade (SynthVoice::stopNote, allowTailOff=false)
+            --active; if (tw::tiVoiceCensusOn) ++tw::tiVoiceCensus[7];
+        }
+    }
+    void renderNextBlock (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, int start, int num)
+    {
+        { const juce::ScopedLock sl (lock); enforceVoiceCap(); }   // tp36
+        juce::Synthesiser::renderNextBlock (out, midi, start, num);
+    }
+
     void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
     {
         if (monoMode_) { monoNoteOn (midiChannel, midiNoteNumber, velocity); return; }

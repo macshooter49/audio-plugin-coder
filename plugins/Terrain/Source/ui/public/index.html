@@ -42618,7 +42618,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 
   /* ── the layout blob (positions, extended cards, the view, the dice's aim + reach, the eye, the node list the browser counts) ── */
   function loadLayout(cb){ var g=NF('getPatcherJson'), done=false;
-    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',rlevel:o.rlevel||'medium',rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
+    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',cpuCap:(o.cpuCap==='off'||(typeof o.cpuCap==='number'&&o.cpuCap>0))?o.cpuCap:'auto',rlevel:o.rlevel||'medium',rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
     function first(){ if(done) return; done=true; cb(); }
     if(g){ try{ Promise.resolve(g()).then(function(s){ parse(s); if(done) applyLate(); else first(); }).catch(first); }catch(e){ first(); } setTimeout(first,300); }
     else { var s=null; try{ s=localStorage.getItem('tpLayout'); }catch(e){} parse(s); first(); } }
@@ -43080,6 +43080,47 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function destOfKnob(sel){ try{ var k=document.querySelector(sel); var g=k&&window.__ctlDestAt?window.__ctlDestAt(k):null; return (g&&g.dest!=null)?g.dest:null; }catch(e){ return null; } }
   function knobDest(p){ try{ if(window.__knobDest){ var d=window.__knobDest(p); if(d!=null) return d; } }catch(e){} return destOfKnob('#syn-panel .knob[data-syn="'+p+'"]'); }
   function uniNorm(v){ v=Math.max(1,Math.min(7,Math.round(v))); return (v-1)/15; }   /* SYN_OSC_x_UNISON is int 1..16 — the dice never goes past 7 */
+  /* ══ tp36 — THE DICE'S CPU CAP. Max: "every time I try to randomize a crazy preset I can't even use it because the CPU is
+     too high ... is there like a gate cap that we can have whenever we randomize presets?" The census of his 123 presets
+     (Tests/au_preset_census.cpp) put the cost where it is: the unit is the UNISON VOICE × the ENGINE — Perfectionist is
+     three Modal oscillators at unison 8/7/9 (50% of a core for an 8-note chord; unison 1 = 15%), Second Coming four
+     oscillators at 3/5/7/3 (56%); a DRIVEN filter (the tp21 2x gate) is +3.3%, filter 2 +1.6%, each effect +0.9%.
+     So every roll is priced with those weights (% of ONE core at an 8-note chord, on the census Mac — a laptop pays about
+     twice) and trimmed to a cap before its parameters are written: unison first (the engine, the filters, the effects — the
+     CHARACTER the dice chose — are never touched), then the filter drive under the 2x gate. Auto = a cap per reach; the
+     Dice menu also offers 30 / 40 / 50 / off. Nothing about a roll under the cap changes. */
+  var CAP_AUTO={light:22,medium:30,heavy:40,wild:50,crazy:60};   /* auto = a cap per reach, in the model's units (% of one census-Mac core, 8 notes) */
+  var CAPS=['auto',30,40,50,'off']; function capLabel(c){ return c==='auto'?'CPU cap: auto':c==='off'?'CPU cap: off':'CPU cap: '+c+'%'; }
+  /* per unison voice at an 8-note chord: WT · Sample · Granular · Resynth · FM · Additive · MODAL. Modal is the monster —
+     ModalEngine::renderBlockAdd was the top symbol of every roll that ran past 100% (roll-3: four Modal oscillators at
+     unison 4-7 = 110% of a core offline). The fixed floors a roll carries with NO note sounding are priced too: each LFO
+     ~1% (ten of them measured 11-15% in 'gather'), each routed effect ~2.5% and each flow card ~4% (a six-effect crazy rack
+     with flow cards measured 20-36% in 'fx+master' at zero voices). */
+  var ENGW={0:.5,1:1.2,2:2.0,3:2.5,4:1.4,5:1.4,6:2.5}, LFOW=1.0, FXW=2.5, FLOWW=4.0;
+  var rollInfo={}, lastCap=null;
+  function capOf(lvl){ var c=layout.cpuCap; if(c==='off') return Infinity; if(typeof c==='number'&&c>0) return c; return CAP_AUTO[lvl]||30; }
+  function estimateRoll(list,f2On,nfx){ var m={}; list.forEach(function(kv){ m[kv[0]]=kv[1]; });
+    var est=5.0, driven=0; ['1','2'].forEach(function(f){ if(f==='2'&&!f2On) return; var d=m['SYN_FILTER'+f+'_DRV']||0, r=m['SYN_FILTER'+f+'_RES']||0; if(d>0.22||r>0.90) driven++; });
+    for(var o in rollInfo){ var ri=rollInfo[o]; if(!ri||!ri.on||o.length!==1) continue; est+=(ENGW[ri.eng]||1)*(ri.uni||1); }
+    return est+3.3*driven+(f2On?1.6:0)+FXW*(nfx||0)+LFOW*(rollInfo._lfo||0)+FLOWW*(rollInfo._flow||0); }
+  function capRoll(list,ids,lvl,f2On,nfx){ var cap=capOf(lvl), trims=[], est=estimateRoll(list,f2On,nfx);
+    function setId(id,fn,dflt){ for(var i=0;i<list.length;i++) if(list[i][0]===id){ list[i][1]=fn(list[i][1]); return; }
+      if(dflt!==undefined){ var nv=fn(dflt); if(nv!==dflt){ list.push([id,nv]); ids.push(id); } } }   /* a parameter the roll never wrote can still be capped */
+    var guard=0;
+    while(est>cap&&guard++<64){   /* the heaviest oscillator gives up one unison voice at a time */
+      var best=null; for(var o in rollInfo){ var ri=rollInfo[o]; if(ri&&ri.on&&ri.uni>1&&(!best||(ENGW[ri.eng]||1)*ri.uni>(ENGW[best.eng]||1)*best.uni)) best=ri; }
+      if(!best) break; best.uni--; setId(OX(best.o)+'UNISON',function(){ return uniNorm(best.uni); }); trims.push(best.o.toUpperCase()+' unison→'+best.uni); est=estimateRoll(list,f2On,nfx); }
+    if(est>cap){ ['1','2'].forEach(function(f){ if(f==='2'&&!f2On) return; var before=est; setId('SYN_FILTER'+f+'_DRV',function(v){ return Math.min(v,0.2); }); setId('SYN_FILTER'+f+'_RES',function(v){ return Math.min(v,0.88); }); est=estimateRoll(list,f2On,nfx); if(est<before) trims.push('filter '+f+' drive under the 2x gate'); }); }
+    /* tp36 — THE TAILS. Measured on the crazy rolls: every voice in RELEASE costs exactly what a held one costs, and the
+       Voices cap (8, per bank) lets an arp-driven or retriggering roll keep 8 tails ringing at once — with a 3-second
+       release that is 8 (x2 banks) full-price voices for the whole tail (roll-3: 34% -> 116% within two seconds of
+       holding a chord, 14 of 18 voices in release). Under a cap: a roll carrying an Arp card keeps its amp release at or
+       under ~0.5 (about a second), and a mono (bass / leads) roll keeps 4 voices — four tails is what a mono lead needs. */
+    if(isFinite(cap)){ if(rollInfo._arp){ setId('SYN_ENV_AMP_R',function(v){ if(v>0.5){ trims.push('release ≤ 0.5 (arp)'); return 0.5; } return v; }); }
+                       if(rollInfo._mono){ setId('SYN_VOICES',function(v){ var four=(4-1)/31; if(v>four+0.001){ trims.push('voices 4 (mono)'); return four; } return v; },(8-1)/31); } }
+    lastCap={est:Math.round(est),cap:cap,trims:trims,level:lvl}; return lastCap; }
+  window.__tpDiceEstimate=function(){ return lastCap; };
+  window.__tpDiceCap=function(v){ if(v===undefined) return layout.cpuCap||'auto'; layout.cpuCap=(v==='off'||(typeof v==='number'&&v>0))?v:'auto'; saveLayout(); return layout.cpuCap; };
   function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(rnd()*(i+1)), t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
   function subsetOf(arr){ if(arr.length<2) return arr.slice(); var s=shuffle(arr), n=1+Math.floor(rnd()*(arr.length-1)); return s.slice(0,n); }
   /* a one-shot from the library for a Modal oscillator (the exciter) — whatever the factory folders hold */
@@ -43195,14 +43236,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     /* additive is a NAMED member of the synthesis pool now, not a textures-only accident */
     var harm=!modal&&!samp&&!fm&&rnd()<(aim==='textures'?.4:.22);
     var seng=!samp?0:(aim==='pads'||aim==='textures')?pick([1,3,3,2]):(aim==='plucks'||aim==='keys'||aim==='bass')?pick([1,1,1,3,2]):pick([1,1,3,2]);
-    P(X+'ENGINE', choiceNorm(X+'ENGINE', modal?6:samp?seng:harm?5:fm?4:0, 7));
+    var engIdx=modal?6:samp?seng:harm?5:fm?4:0; P(X+'ENGINE', choiceNorm(X+'ENGINE', engIdx, 7)); (rollInfo[o]=rollInfo[o]||{o:o,on:true}).eng=engIdx;   /* tp36 — the cap prices the roll */
     phase180(X,P);   /* tp12b — HARD RULE (Max): 180°, ALIGNED — "I shouldn't see an oscillator that isn't 180" */   /* Engine enum: WT 0 · SAMP 1 · GRAN 2 · SPEC 3 · FM 4 · HARM 5 · MODAL 6 */
     P(X+'LEVEL',.78); P(X+'PAN',.5+(i%2?1:-1)*between(.05,.2)); P(X+'WT_PRESET',rnd()); P(X+'WT_FRAME',rnd());
     P(X+'WARP_MODE',rnd()); P(X+'WARP_AMOUNT',between(R.warp[0],R.warp[1])); P(X+'WARP2_MODE',rnd()<R.w2?rnd():0); P(X+'WARP2_AMT',between(R.warp[0],R.warp[1])*0.7);
     P(X+'SPECTRAL_TYPE',rnd()); P(X+'SPECTRAL_AMT',between(0,.4)); if(rnd()<R.spec){ P(X+'SPECTRAL_LO',between(0,.3)); P(X+'SPECTRAL_HI',between(.5,1)); }
     P(X+'FOLD_SHAPE',rnd()); P(X+'FOLD_AMT',between(R.fold[0],R.fold[1])*(aim==='bass'?1.2:1)); P(X+'FRAME_SPREAD',between(0,.12));
     var vmax=R.uni[1]; if(aim==='bass') vmax=Math.min(vmax,lvl==='wild'?4:3); if(aim==='plucks'||aim==='keys') vmax=Math.min(vmax,5);
-    P(X+'UNISON',uniNorm(R.uni[0]+rnd()*(Math.max(R.uni[0],vmax)-R.uni[0]))); P(X+'UWIDTH',between(.3,.85)); P(X+'UBLEND',between(.3,.7));
+    var uc=Math.max(1,Math.min(7,Math.round(R.uni[0]+rnd()*(Math.max(R.uni[0],vmax)-R.uni[0])))); P(X+'UNISON',uniNorm(uc)); (rollInfo[o]=rollInfo[o]||{o:o,on:true}).uni=uc;   /* tp36 */ P(X+'UWIDTH',between(.3,.85)); P(X+'UBLEND',between(.3,.7));
     if(fm){ P(X+'FM_DEPTH1',between(R.fm[0],R.fm[1])); P(X+'FM_DEPTH2',between(R.fm[0],R.fm[1])*.6); P(X+'FM_FB',between(R.fm[0],R.fm[1])*.5); P(X+'FM_STRIKE',between(0,.5)); P(X+'FM_AGE',between(0,.3)); }
     if(harm){ P(X+'HARM_MODE',rnd()); P(X+'HARM_HUE',rnd()); P(X+'HARM_COUNT',between(.3,.9)); P(X+'HARM_LEAN',between(.3,.7)); P(X+'HARM_GRIT',between(0,.3)); P(X+'HARM_SHINE',between(0,.5)); }
     if(modal){ P(X+'MODAL_FAMILY',rnd()); P(X+'MODAL_FORM',rnd()); P(X+'MODAL_HARD',between(.35,.75)); P(X+'MODAL_POS',between(.2,.6)); P(X+'MODAL_DECAY',aim==='plucks'?between(.2,.5):between(.3,.65)); P(X+'MODAL_MATERIAL',between(.25,.75));   /* Skin · Timber · Glass · Wire · Ivory, struck short */
@@ -43257,6 +43298,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   window.__tpDice=function(){ try{ build(); }catch(e){} try{ rollDice(); }catch(e){ return false; } return true; };
   window.__tpDiceAim=function(){ return layout.aim||'anything'; };
   window.__tpDiceLevel=function(){ return layout.dlevel||'medium'; };
+  window.__tpDiceLevelSet=function(l){ if(LEVELS.indexOf(l)<0) return false; layout.dlevel=l; saveLayout(); return true; };   /* tp36 — the gates set the reach without a menu */
   window.__tpDiceMenu=function(x,y){
     try{ build(); }catch(e){}
     if(isOpen){ openAimMenu(x,y); return true; }
@@ -43268,6 +43310,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       onPick:function(){ layout.aim=a; saveLayout(); pageToast(isTarget(a)?('The dice rolls '+aimLabel(a)):('The dice aims at '+a)); }}); });
     LEVELS.forEach(function(l){ rows.push({label:(l===dl?'• ':'   ')+cap(l),
       onPick:function(){ layout.dlevel=l; saveLayout(); pageToast('The dice reaches '+l); }}); });
+    CAPS.forEach(function(c){ rows.push({label:(String(layout.cpuCap||'auto')===String(c)?'• ':'   ')+capLabel(c),
+      onPick:function(){ window.__tpDiceCap(c==='off'?'off':c==='auto'?'auto':c); pageToast('CPU cap: '+capLabel(c)); }}); });   /* tp36 */
     window.__tpbFolderMenu('Dice', rows, x, y); return true; };
   window.__tpRndClick=function(){ if(!isOpen||!adopted) return false; var keys=(layout.rlinks||[]).filter(function(k){ return !!nodeByKey(k); }); if(!keys.length) return false; rollLinked(keys); return true; };
   window.__tpRndMenu=function(ev){ if(!isOpen||!adopted) return false; openRndMenu(ev.clientX,ev.clientY); return true; };
@@ -43278,7 +43322,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      1–7 LFOs of any shape / rate / sync / phase aimed at the oscillators, the filters AND the effect knobs, with real depths
      (each LFO's own master stays at full — the old dice wrote it near zero); envelopes 2, 4 and 5 shaped and routed (filter,
      wavetable, effects, LFO rate); Glitch fully re-rolled on heavy / wild; no dead nodes; the canvas tidies itself. */
-  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything'||isTarget(aim)) aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'); var tool=page?page.querySelector('.g[data-t="dice"]'):null; if(tool) tool.classList.add('dis');
+  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything'||isTarget(aim)) aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
+    if(generate.tight>0){ var ti=Math.max(0,LEVELS.indexOf(lvl)-generate.tight), TR=REACH[LEVELS[ti]]||REACH.light; R=Object.assign({},R,{lfo:TR.lfo,fx:TR.fx,flow:TR.flow}); }   /* tp36 — the re-roll after an over-cap roll */ var tool=page?page.querySelector('.g[data-t="dice"]'):null; if(tool) tool.classList.add('dis');
     /* tp23 — THE CAP IS SIX (Max: "the randomization cap should be at 6 engines. Not the whole 8, but it can choose up
        to 6 engines"). The pool is eight since tp20; the dice deliberately stops two short of it, and only the top of
        the reach gets anywhere near six. */
@@ -43287,6 +43332,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(big&&rnd()<.5) nOn++; if((lvl==='wild'||lvl==='crazy')&&rnd()<.55) nOn++; if(lvl==='crazy'&&rnd()<.5) nOn++;
     nOn=Math.min(Math.min(DICE_MAX_ENGINES,pool.length),nOn);
     var on=shuffle(pool).slice(0,nOn).sort(function(a,b){ return pool.indexOf(a)-pool.indexOf(b); }), list=[], ids=[], fxAdded=[], f2On=false;
+    rollInfo={};   /* tp36 — this roll's oscillators, priced by capRoll before the write */
     function P(id,v){ list.push([id,v]); ids.push(id); }
     function span(r){ return between(r[0],r[1]); }
     function ispan(r){ return Math.round(between(r[0],r[1])); }
@@ -43297,7 +43343,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     function ftypeR(){ var musicalOdds=lvl==='light'?.75:lvl==='medium'?.35:lvl==='crazy'?.02:.08; return ftype(rnd()<musicalOdds); }
     var step=0, steps=[
       function(){ toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); phase180(X,P); if(!isOn) return;   /* tp12b — 180° on ALL of them, on or off */ rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
-          blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); },
+          blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); rollInfo._mono=(aim==='bass'||aim==='leads'); },
       function(){ toast('Shaping the filters…'); f2On=(on.length>1)&&rnd()<R.f2;   /* tp13 — Max: "why isn't the second filter active on anything" */
           P('SYN_FILTER1_TYPE',ftypeR()); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65]}[aim]||[.4,.75];
           P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',span(R.res)); P('SYN_FILTER1_DRV',span(R.drv)); P('SYN_FILTER1_KEYTRACK',0); P('SYN_FILTER1_VEL',0);
@@ -43341,7 +43387,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
              different glitch and not a second copy of glitch 1, and the ORDER is shuffled — two glitches either side
              of an arp is not the same patch as both after it. */
           var FLOWBAG={arp:3,glitch:3,chop:2,drift:1}, fUsed={arp:0,glitch:0,chop:0,drift:0}, chain=[];
-          var wantF=ispan(R.flow||[0,1]);
+          var wantF=ispan(R.flow||[0,1]); rollInfo._flow=wantF;   /* tp36 — priced */
           if((aim==='plucks'||aim==='keys')&&wantF<1&&rnd()<.55) wantF=1;
           var bag=[]; Object.keys(FLOWBAG).forEach(function(k){ for(var bi=0;bi<FLOWBAG[k];bi++) bag.push(k); });
           for(var fq=0; fq<wantF; fq++){
@@ -43350,7 +43396,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             var cand=bag.filter(function(k){ return avail.indexOf(k)>=0; });
             var fk=cand.length?pick(cand):pick(avail); if(!fk) break;
             fUsed[fk]++; chain.push(fUsed[fk]>1?fk+fUsed[fk]:fk); }
-          chain=shuffle(chain);
+          chain=shuffle(chain); rollInfo._arp=chain.some(function(k){ return /^arp/.test(k); });   /* tp36 — the cap bounds an arp roll's release */
           window.__flowSetChain&&window.__flowSetChain(chain);
           chain.forEach(function(m){ try{ if(window.__tiDiceMode) window.__tiDiceMode(cardPidOf(m),big); }catch(e){} });   /* each instance re-rolled whole, on its own card */
           var dpool=[];
@@ -43396,8 +43442,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(f2On&&nE>=2) route('env2',function(d){ window.__tiAddRoute&&window.__tiAddRoute(2,0,d); },1,between(.08,.35));
           [4,5].slice(0,Math.max(0,nE-1)).forEach(function(en){ var t=(fxAdded.length&&rnd()<R.fxMod)?take('fx'):take(null); if(t) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },t.d,dep());
             if((lvl==='wild'||lvl==='crazy')&&lfoN&&rnd()<.4) route('env'+en,function(d){ window.__tiAddRoute&&window.__tiAddRoute(en,0,d); },11+1,between(.3,.8)); });   /* wild: an envelope swells LFO 1's depth */
-          setToggle('tape-toggle',tapeOn); if(tapeOn) setMachine(tapeMach); setToggle('loop-toggle',false); if(window.__tiBatchEnd) window.__tiBatchEnd(); },
-      function(){ track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); pool.forEach(function(o){ var d=oscDev(o); if(d) d.classList.toggle('osc-off',on.indexOf(o)<0); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){}
+          setToggle('tape-toggle',tapeOn); if(tapeOn) setMachine(tapeMach); setToggle('loop-toggle',false); if(window.__tiBatchEnd) window.__tiBatchEnd(); rollInfo._lfo=lfoN; },   /* tp36 — priced */
+      function(){ var capR=capRoll(list,ids,lvl,f2On,fxAdded.length);   /* tp36 — the CPU cap: unison, then drive, until the roll fits */
+          /* tp36 — a roll whose FIXED floors (LFOs, effects, flow cards) alone break the cap cannot be trimmed into it: it is
+             rolled again with the reach one notch tighter for those three counts only (at most twice), everything else as
+             wild as the level says. The parameters of the abandoned roll are never written. */
+          if(capR.est>capR.cap&&(generate.attempt||0)<2){ generate.attempt=(generate.attempt||0)+1; generate.tight=generate.attempt; if(tool) tool.classList.remove('dis'); setTimeout(function(){ try{ generate(); }catch(e){} },0); return; }
+          generate.attempt=0; generate.tight=0;
+          track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); pool.forEach(function(o){ var d=oscDev(o); if(d) d.classList.toggle('osc-off',on.indexOf(o)<0); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){}
           setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },0);   /* the cards read back the knobs the dice wrote — the writes are already in the JS model and queued ahead of any read on the message thread, so there is nothing to wait for (tp35: was 350 ms) */
           /* tp25 — the roll can now be fired from the SYNTH PAGE's dice, with this canvas shut. adoptFx()
              MOVES the rack's cards onto the canvas and glideTidy() re-seats every node; doing either while
@@ -43406,7 +43458,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(isOpen){ adoptFx(); syncPresence(); sync(); }
           commit();
           if(isOpen) glideTidy();
-          if(tool) tool.classList.remove('dis'); toast('A new '+aim+' preset · '+lvl+' — play it');
+          if(tool) tool.classList.remove('dis'); toast('A new '+aim+' preset · '+lvl+' — play it'+(capR&&isFinite(capR.cap)?(' · CPU ≈'+capR.est+'%'+(capR.trims.length?' (capped at '+capR.cap+'%: '+capR.trims.slice(0,3).join(', ')+(capR.trims.length>3?'…':'')+')':'')+(capR.est>capR.cap?' — still over: '+lvl+'\'s LFOs, effects and flow cards alone cost that much; lower the reach or raise the cap':'')):''));
           try{ if(window.__tpDiceDone) window.__tpDiceDone(); }catch(e){} }); } ];   /* tp35 — the roll reports its end (the synth dice's lock) */
     /* tp35 — NO LATENT DICE (Max: "what are the chances that we can have a no latent dice roll"). The six steps ran one per
        260 ms so their toasts could be read — 1.7 s of pacing around ~40 ms of work (measured per step in the real
@@ -43570,10 +43622,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      things the dice is AIMED at, not one-shot actions you have to come back to the menu to fire again. */
   function openAimMenu(cx,cy){ closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
     nMenu.innerHTML=AIMS.concat(DTARGETS).map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+aimLabel(a)+'</div>'; }).join('')
-      +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('');
+      +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('')
+      +'<div class="sepd"></div>'+CAPS.map(function(c){ return '<div class="pi'+(String(layout.cpuCap||'auto')===String(c)?' cur':'')+'" data-cap="'+c+'">'+capLabel(c)+'</div>'; }).join('');   /* tp36 */
     placeMenu(nMenu,cx,cy);
-    nMenu.onmousedown=function(ev){ ev.stopPropagation(); var t=ev.target&&ev.target.closest?ev.target.closest('[data-aim],[data-dl],[data-act]'):null; if(!t) return;
-      var a=t.dataset.aim, l=t.dataset.dl, act=t.dataset.act;
+    nMenu.onmousedown=function(ev){ ev.stopPropagation(); var t=ev.target&&ev.target.closest?ev.target.closest('[data-aim],[data-dl],[data-act],[data-cap]'):null; if(!t) return;
+      var a=t.dataset.aim, l=t.dataset.dl, act=t.dataset.act, cp=t.dataset.cap;
+      if(cp){ window.__tpDiceCap(cp==='off'?'off':cp==='auto'?'auto':parseInt(cp,10)); closeMenus(); toast('CPU cap: '+capLabel(cp)); }
       if(a){ layout.aim=a; saveLayout(); closeMenus(); toast(isTarget(a)?('The dice rolls '+aimLabel(a)+' — keep clicking it'):('The dice aims at '+a)); }
       if(l){ layout.dlevel=l; saveLayout(); closeMenus(); toast('The dice reaches '+l); }
       if(act){ closeMenus(); rollRack(act); } }; }

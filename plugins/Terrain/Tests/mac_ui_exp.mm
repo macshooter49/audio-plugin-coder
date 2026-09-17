@@ -63,12 +63,13 @@ struct AuHost
             std::vector<uint8_t> raw (sizeof (AudioBufferList) + sizeof (AudioBuffer)); auto* abl = (AudioBufferList*) raw.data();
             double sampleTime = 0.0; auto next = std::chrono::steady_clock::now();
             const auto period = std::chrono::microseconds ((long) (1.0e6 * BLK / SR));
-            static const int chord[4] = { 60, 64, 67, 71 };
+            static const int chord4[4] = { 60, 64, 67, 71 }, chord8[8] = { 48, 55, 60, 64, 67, 71, 74, 79 };
+            static const bool eight = getenv ("TPEXP_CHORD8") != nullptr; const int* chord = eight ? chord8 : chord4; const int nch = eight ? 8 : 4;
             while (! stop.load())
             {
                 const int m = midi.exchange (0);
-                if (m == 1) for (int n : chord) MusicDeviceMIDIEvent (au, 0x90, (UInt32) n, 100, 0);
-                if (m == 2) for (int n : chord) MusicDeviceMIDIEvent (au, 0x80, (UInt32) n, 0, 0);
+                if (m == 1) for (int k = 0; k < nch; ++k) MusicDeviceMIDIEvent (au, 0x90, (UInt32) chord[k], 100, 0);
+                if (m == 2) for (int k = 0; k < nch; ++k) MusicDeviceMIDIEvent (au, 0x80, (UInt32) chord[k], 0, 0);
                 abl->mNumberBuffers = 2;
                 abl->mBuffers[0].mNumberChannels = 1; abl->mBuffers[0].mDataByteSize = BLK * 4; abl->mBuffers[0].mData = l.data();
                 abl->mBuffers[1].mNumberChannels = 1; abl->mBuffers[1].mDataByteSize = BLK * 4; abl->mBuffers[1].mData = r.data();
@@ -138,6 +139,7 @@ int main (int argc, char** argv)
         // is printed with the phase the page was in and the elapsed time
         NSString* stallPath = [dir stringByAppendingPathComponent: @"terrain-stall.txt"];
         unsigned long long stallSz = [[[NSFileManager defaultManager] attributesOfItemAtPath: stallPath error: nil] fileSize];
+        NSString* beaconPath = [dir stringByAppendingPathComponent: @"terrain-cpu.txt"]; NSString* lastBeacon = nil;   /* tp36 — the plugin's own CPU probe (marker terrain-cpu-on.txt) */
         NSString* lastPhase = @"?"; NSString* lastRaw = nil; double lastChange = nowMs();
         static std::atomic<double> wdLast { 0 }; wdLast.store (nowMs()); static std::atomic<bool> wdStop { false }; static bool sampled = false;
         /* tp35 — the pop-out's first frames, photographed: when terrain-card-trace.txt (TERRAIN_CARD_TRACE) grows with a
@@ -155,6 +157,7 @@ int main (int argc, char** argv)
         while (nowMs() - t0 < secs * 1000.0)
         {
             pumpMs (40);   // poll well under the 250 ms chunk rotation, or chunks are missed
+            { NSString* bc = [NSString stringWithContentsOfFile: beaconPath encoding: NSUTF8StringEncoding error: nil]; if (bc && ! [bc isEqualToString: lastBeacon]) { lastBeacon = bc; NSArray* bl = [bc componentsSeparatedByString: @"\n"]; NSString* l1 = bl.firstObject; NSString* l2 = bl.count > 1 ? bl[1] : @""; std::printf ("  [%6.1f s] BEACON %s || %s\n", (nowMs() - t0) / 1000.0, [[l1 substringToIndex: MIN (220, l1.length)] UTF8String], [[l2 substringToIndex: MIN (70, l2.length)] UTF8String]); std::fflush (stdout); } }
             NSView* wk = findWK (v); NSString* t = wk ? [wk valueForKey: @"title"] : nil;
             if (t && ! [t isEqualToString: lastRaw]) { lastRaw = t; lastChange = nowMs(); wdLast.store (lastChange); }
             if (nowMs() - lastChange > 25000.0) { std::printf ("  !! the title has not changed for 25 s - the page is stuck (or the script ended without 'done')\n"); break; }
@@ -174,6 +177,7 @@ int main (int argc, char** argv)
             if (g != curGen) { curGen = g; need = n; [parts removeAllObjects]; }
             // the patch is built once the script reaches 'measure': strike the chord THEN, so the
             // enabled oscillators actually sound and the push lane has something to ship
+            { NSRange rr = [chunk rangeOfString: @"\"restrike\":"]; if (rr.location != NSNotFound) { long n = [[chunk substringFromIndex: rr.location + rr.length] integerValue]; static long lastRe = 0; if (n != lastRe) { lastRe = n; h.midi.store (2); pumpMs (150); h.midi.store (1); std::printf ("  [%6.1f s] chord re-struck (%ld)\n", (nowMs() - t0) / 1000.0, n); std::fflush (stdout); } } }
             if (! struck) { struck = true; h.midi.store (2); pumpMs (120); h.midi.store (1); std::printf ("  patch built - chord re-struck\n"); std::fflush (stdout); }
             parts[@(idx)] = chunk;
             if ((long) parts.count == need)

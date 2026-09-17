@@ -9902,17 +9902,17 @@ struct TiProf
 {
     bool on = false; double thresholdUs = 3000.0;
     static constexpr int kMax = 96; const char* names[kMax] {}; double us[kMax] {}; int n = 0; double t0 = 0, last = 0;
-    TiProf() { on = std::getenv ("TERRAIN_PROFILE") != nullptr; if (const char* t = std::getenv ("TERRAIN_PROFILE_US")) thresholdUs = std::atof (t); }
+    TiProf() { on = std::getenv ("TERRAIN_PROFILE") != nullptr; tw::tiVoiceCensusOn = on; if (const char* t = std::getenv ("TERRAIN_PROFILE_US")) thresholdUs = std::atof (t); }
     void begin() noexcept { if (! on) return; n = 0; t0 = last = juce::Time::getMillisecondCounterHiRes() * 1000.0; }
     void mark (const char* name) noexcept { if (! on || n >= kMax) return; const double t = juce::Time::getMillisecondCounterHiRes() * 1000.0; names[n] = name; us[n] = t - last; last = t; ++n; }
     // accumulators: totals across the 96 iterations of the per-voice push loop, by setter group
     static constexpr int kAcc = 12; double accUs[kAcc] {}; const char* accNames[kAcc] {}; double accLast = 0;
     void accStart() noexcept { if (on) accLast = juce::Time::getMillisecondCounterHiRes() * 1000.0; }
     void acc (int k, const char* nm) noexcept { if (! on || k < 0 || k >= kAcc) return; const double t = juce::Time::getMillisecondCounterHiRes() * 1000.0; accUs[k] += t - accLast; accLast = t; accNames[k] = nm; }
-    void end() noexcept { if (! on) return; const double tot = last - t0; const bool print = tot >= thresholdUs;
+    void end() noexcept { if (! on) { for (int k = 0; k < 8; ++k) tw::tiVoiceCensus[k] = 0; return; } const double tot = last - t0; const bool print = tot >= thresholdUs;
         if (print) { std::fprintf (stderr, "[tiprof] %6.0f us :", tot); for (int i = 0; i < n; ++i) std::fprintf (stderr, " %s=%.0f", names[i], us[i]);
-                     std::fprintf (stderr, "  | voices:"); for (int k = 0; k < kAcc; ++k) if (accNames[k]) std::fprintf (stderr, " %s=%.0f", accNames[k], accUs[k]); std::fprintf (stderr, "\n"); }
-        for (int k = 0; k < kAcc; ++k) accUs[k] = 0; }
+                     std::fprintf (stderr, "  | rendering %d (rel %d steal %d fin %d zombie %d | cap saw %d cap %d stole %d)", tw::tiVoiceCensus[0], tw::tiVoiceCensus[1], tw::tiVoiceCensus[2], tw::tiVoiceCensus[3], tw::tiVoiceCensus[4], tw::tiVoiceCensus[5], tw::tiVoiceCensus[6], tw::tiVoiceCensus[7]); std::fprintf (stderr, "  | voices:"); for (int k = 0; k < kAcc; ++k) if (accNames[k]) std::fprintf (stderr, " %s=%.0f", accNames[k], accUs[k]); std::fprintf (stderr, "\n"); }
+        for (int k = 0; k < kAcc; ++k) accUs[k] = 0; for (int q = 0; q < 8; ++q) tw::tiVoiceCensus[q] = 0; }
 };
 TiProf tiProf_;
 }

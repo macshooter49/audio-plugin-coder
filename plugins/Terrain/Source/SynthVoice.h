@@ -150,6 +150,9 @@ struct RouteSnapshot
     std::atomic<juce::uint32> version { 0 };
 };
 
+inline bool tiVoiceCensusOn = false;   // tp36 — set once by TiProf (TERRAIN_PROFILE); the counters below cost nothing otherwise
+inline int tiVoiceCensus[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };   // tp36 — [rendering, releasing, stealing, finishing, zombies(no note), cap-active, cap, cap-stolen] this block (audio thread only)
+
 class SynthVoice : public juce::SynthesiserVoice
     {
     public:
@@ -3333,6 +3336,7 @@ class SynthVoice : public juce::SynthesiserVoice
         // the user's perception, even though its currentlyPlayingNote is still
         // set so the slot doesn't get hijacked mid-fade).
         bool isStealing() const noexcept { return stealing_; }
+        bool isInRelease() const noexcept { return ampEnv_.stage() == terrain::TerrainEnvelope::Stage::Release; }   // tp36 — the cap counts tails
         juce::uint32 getNoteStartStamp() const noexcept { return noteStartStamp_; }
 
         void pitchWheelMoved (int) override {}
@@ -3440,6 +3444,16 @@ class SynthVoice : public juce::SynthesiserVoice
                               int startSample, int numSamples) override
         {
             if (! playing_) return;
+            /* tp36 — dev census of WHAT is rendering (TERRAIN_PROFILE prints and resets it per block): held · releasing ·
+               stealing/handover-fading · finishing. A voice's cost is the same in every one of these states. */
+            if (tiVoiceCensusOn)
+            {
+                ++tiVoiceCensus[0];
+                if (stealing_)                                                                ++tiVoiceCensus[2];
+                else if (finishing_)                                                          ++tiVoiceCensus[3];
+                else if (ampEnv_.stage() == terrain::TerrainEnvelope::Stage::Release)         ++tiVoiceCensus[1];
+                if (getCurrentlyPlayingNote() < 0)                                            ++tiVoiceCensus[4];
+            }
 
             // fb122 ROBIN Wobble — humanized late start: hold silence, then begin.
             // The envelope hasn't started, so the delayed entry is click-free.
