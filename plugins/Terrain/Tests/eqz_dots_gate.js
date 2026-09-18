@@ -211,6 +211,19 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
         '[6] THE LOW BAND\'S MENU ADDS A LOW CUT AT ITS CORNER (free band 1, shape Low Cut, at 300 Hz)',
         `rows ${JSON.stringify(hands.labels)}; X1ON ${on} X1SH ${sh} X1HZ ${hz} (want ${(Math.log(300/20)/Math.log(1000)).toFixed(3)})`);
 
+  // [7] tp46 — THE PLOT AUTO-RANGES: +39 dB of Air (Amount 150 %) leaves through no edge and runs flat along none
+  const rng = await p.evaluate (async () => {
+    const curve = new Array (192).fill (0).map ((_, i) => i > 150 ? 39 * (i - 150) / 41 : 0);
+    const bc = [0, 0, 0, 39, 0, 0, 0, 0].map ((g, b) => new Array (48).fill (0).map ((_, i) => b === 3 && i > 36 ? g * (i - 36) / 11 : 0));
+    window.__fx4VizPush = { eqz: [{ curve, hz:[100,550,3100,15500,632,632,632,632], db:[0,0,0,39,0,0,0,0], on:[1,1,1,1,0,0,0,0], lvl:0.5, bc }] };
+    for (let i = 0; i < 80; i++) { try { window.__fx4Tick(); } catch (e) {} await new Promise (r => setTimeout (r, 12)); }
+    const core = document.querySelector ('.fxr-core[data-core="eqz"]'); const ys = core.querySelector ('.eqz-curve').getAttribute ('d').split (/[ML]/).filter (Boolean).map (s => +s.trim ().split (/\s+/)[1]);
+    const by = core.querySelector ('.eqz-bc[data-b="3"]').getAttribute ('d').split (/[ML]/).filter (Boolean).map (s => +s.trim ().split (/\s+/)[1]);
+    return { sc: window.__fxrDevs ()[0].__st.sc, minY: Math.min (...ys), flat: ys.filter (y => y <= 3.05).length, bandMinY: Math.min (...by) }; });
+  gate (rng.sc < 1.0 && rng.minY >= 4 && rng.flat === 0 && rng.bandMinY >= 4,
+        '[7] THE PLOT AUTO-RANGES — +39 dB runs flat along no edge (the "paint rubbing off")',
+        `units/dB ${rng.sc.toFixed(3)} (1.1 = ±30 dB); composite top ${rng.minY}, ${rng.flat} points on the edge; band top ${rng.bandMinY}`);
+
   console.log (`\n  ${fail === 0 ? '✅' : '❌'} ${pass} passed, ${fail} failed\n`);
   await b.close(); process.exit (fail === 0 ? 0 : 1);
 })();

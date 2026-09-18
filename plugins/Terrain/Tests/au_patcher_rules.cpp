@@ -156,7 +156,9 @@ static void tapChecks (bool bankB)
     std::vector<float> ds (direct.begin() + 9600, direct.end()), rs (raw.begin() + 9600, raw.end());
     const double steady = diffDb (ds, rs);
     snprintf (d, sizeof d, "%s: whole render %.1f dB, after 0.2 s %.1f dB", who, nul, steady);
-    chk (steady < -150.0, "[TAP] the direct tap IS the raw oscillator (nulls against not being in the filter, after the onset)", d);
+    // tp46 — -100, not -150: bank B's send pairs are built on a timer, so where the fb79 glide's tail sits at 0.2 s moves run to run
+    //   (measured on one binary, six runs: -121, -134, -140, -158, -158, -240). Anything under -100 dB (1e-5) is the same signal.
+    chk (steady < -100.0, "[TAP] the direct tap IS the raw oscillator (nulls against not being in the filter, after the onset)", d);
     if (bankB)
     {
         auto viaRack = renderTap (true, { false, false, true });   // E's output cable CUT: only the rack can carry it
