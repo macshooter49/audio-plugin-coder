@@ -42654,7 +42654,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 
   /* ── the layout blob (positions, extended cards, the view, the dice's aim + reach, the eye, the node list the browser counts) ── */
   function loadLayout(cb){ var g=NF('getPatcherJson'), done=false;
-    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',cpuCap:(o.cpuCap==='off'||(typeof o.cpuCap==='number'&&o.cpuCap>0))?o.cpuCap:'auto',aims:Array.isArray(o.aims)?o.aims.filter(function(a){ return typeof a==='string'; }):[],blocks:Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},(o.blocks&&typeof o.blocks==='object')?o.blocks:{}),rlevel:o.rlevel||'medium',rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
+    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',cpuCap:(o.cpuCap==='off'||(typeof o.cpuCap==='number'&&o.cpuCap>0))?o.cpuCap:'auto',aims:Array.isArray(o.aims)?o.aims.filter(function(a){ return typeof a==='string'; }):[],blocks:Object.assign({osc:1,flt:1,env:1,fx:1,mod:1,flow:1},(o.blocks&&typeof o.blocks==='object')?o.blocks:{}),rlevel:o.rlevel||'medium',rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
     function first(){ if(done) return; done=true; cb(); }
     if(g){ try{ Promise.resolve(g()).then(function(s){ parse(s); if(done) applyLate(); else first(); }).catch(first); }catch(e){ first(); } setTimeout(first,300); }
     else { var s=null; try{ s=localStorage.getItem('tpLayout'); }catch(e){} parse(s); first(); } }
@@ -43386,7 +43386,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      wavetable, effects, LFO rate); Glitch fully re-rolled on heavy / wild; no dead nodes; the canvas tidies itself. */
   function pickAim(){ var as=(layout.aims||[]).filter(function(a){ return AIMS.indexOf(a)>0; }); if(as.length) return pick(as); var a=layout.aim||'anything'; if(a==='anything'||isTarget(a)) return pick(AIMS.slice(1)); return a; }   /* tp39 — several aims: one is drawn per roll */
   function generate(){ var aim=pickAim(); window.__tpDiceLastAim=aim; window.__diceLastOneShot={}; window.__diceLastBlend={};   /* tp39 — the pick records are THIS roll's (a stale blend from the last roll is not a blend) */ var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
-    var B=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},layout.blocks||{});   /* tp39 — the blocks this roll touches; an unticked block keeps what is there */
+    var B=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1,flow:1},layout.blocks||{});   /* tp39 — the blocks this roll touches; an unticked block keeps what is there */
     if(aim==='drums') R=Object.assign({},R,{fxMod:Math.max(R.fxMod||0,.85),fx:[Math.max(2,R.fx[0]),Math.max(3,R.fx[1])]});   /* drums: the modulation aims at the effects (distortion), and there are some */
     if(generate.tight>0){ var ti=Math.max(0,LEVELS.indexOf(lvl)-generate.tight), TR=REACH[LEVELS[ti]]||REACH.light; R=Object.assign({},R,{lfo:TR.lfo,fx:TR.fx,flow:TR.flow}); }   /* tp36 — the re-roll after an over-cap roll */ var tool=page?page.querySelector('.g[data-t="dice"]'):null; if(tool) tool.classList.add('dis');
     /* tp23 — THE CAP IS SIX (Max: "the randomization cap should be at 6 engines. Not the whole 8, but it can choose up
@@ -43445,14 +43445,16 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
               var mk=d.knobs[3]; if(mk&&mk.p){ var mr=FXMIX[core]||[.25,.5]; P(mk.p, Math.min(.95, between(mr[0],mr[1])*R.mix*(aim==='pads'&&core==='reverb'?1.25:1))); } }
             if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
               (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]) P(kn[2], between(lo, hot?.6:hi)); }); } }); },
-      function(){ if(!B.mod) return; toast('Wiring the modulation…'); if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
+      function(){ if(!B.mod&&!B.flow) return; toast(B.mod?'Wiring the modulation…':'Dealing the flow cards…');   /* tp39c — two blocks: flow cards (the chain) and modulation (routes + LFOs) */
+          if(B.mod){ if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); }); }
           /* tp23 — MULTIPLE FLOW CARDS (Max: "I see two ARPs and two glitches and stuff like that, and glitches are
              routed to something else than what it's routed to"). The chain is drawn from a weighted bag up to the
              reach's own count, honouring each kind's instance ceiling (Robin is a singleton — FLOW_INST_MAX says so,
              and __flowSetChain forces it anyway). Then every instance is diced on ITS OWN card id, so glitch 2 is a
              different glitch and not a second copy of glitch 1, and the ORDER is shuffled — two glitches either side
              of an arp is not the same patch as both after it. */
-          var FLOWBAG={arp:3,glitch:3,chop:2,drift:1}, fUsed={arp:0,glitch:0,chop:0,drift:0}, chain=[];
+          var chain=[];
+          if(B.flow){ var FLOWBAG={arp:3,glitch:3,chop:2,drift:1}, fUsed={arp:0,glitch:0,chop:0,drift:0};
           var wantF=ispan(R.flow||[0,1]); rollInfo._flow=wantF;   /* tp36 — priced */
           if((aim==='plucks'||aim==='keys')&&wantF<1&&rnd()<.55) wantF=1;
           var bag=[]; Object.keys(FLOWBAG).forEach(function(k){ for(var bi=0;bi<FLOWBAG[k];bi++) bag.push(k); });
@@ -43464,7 +43466,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             fUsed[fk]++; chain.push(fUsed[fk]>1?fk+fUsed[fk]:fk); }
           chain=shuffle(chain); rollInfo._arp=chain.some(function(k){ return /^arp/.test(k); });   /* tp36 — the cap bounds an arp roll's release */
           window.__flowSetChain&&window.__flowSetChain(chain);
-          chain.forEach(function(m){ try{ if(window.__tiDiceMode) window.__tiDiceMode(cardPidOf(m),big); }catch(e){} });   /* each instance re-rolled whole, on its own card */
+          chain.forEach(function(m){ try{ if(window.__tiDiceMode) window.__tiDiceMode(cardPidOf(m),big); }catch(e){} }); }   /* each instance re-rolled whole, on its own card */
+          else { chain=window.__flowChain?window.__flowChain():[]; rollInfo._flow=chain.length; rollInfo._arp=chain.some(function(k){ return /^arp/.test(k); }); }   /* tp39c — flow unticked: the chain that is there stays, and its knobs are still targets */
+          if(!B.mod) return;   /* tp39c — modulation unticked: every route and LFO stays as it is */
           var dpool=[];
           /* tp23 — and the instances are MOD TARGETS, which is the other half of Max's ask: "glitches are routed to
              something else than what it's routed to". Two glitches only feel like two cards if one rides an LFO the
@@ -43696,30 +43700,37 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      I'd like to randomize in terms of blocks ... multiple aims ... CPU cap at the bottom"). The browser's own sheet with
      chip rows: Aim (several — one is drawn per roll; none = anything), Roll (the blocks; an unticked block keeps what is
      there), Reach, CPU cap. Roll = save + roll; the header dice's left click rolls with what was saved. */
-  var AIMLBL={keys:'Keys',pads:'Pads',bass:'Bass',leads:'Leads',plucks:'Plucks',textures:'Textures',drums:'Drums'}, BLKLBL={osc:'Oscillators',flt:'Filters',env:'Envelopes',fx:'Effects',mod:'Modulation & flow'};
+  var AIMLBL={keys:'Keys',pads:'Pads',bass:'Bass',leads:'Leads',plucks:'Plucks',textures:'Textures',drums:'Drums'}, BLKLBL={osc:'Oscillators',flt:'Filters',env:'Envelopes',fx:'Effects',mod:'Modulation',flow:'Flow cards'};   /* tp39c — Max: flow cards separate from modulation */
   function openDiceSheet(){ if(!window.__tpSheet) return false;
-    var aims=(layout.aims||[]).slice(), blocks=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},layout.blocks||{}), lvl=layout.dlevel||'medium', capV=layout.cpuCap||'auto';
+    var aims=(layout.aims||[]).slice(), blocks=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1,flow:1},layout.blocks||{}), lvl=layout.dlevel||'medium', capV=layout.cpuCap||'auto';
     function chip(cls,attr,val,on,txt){ return '<button class="tp-chip'+(on?' active':'')+'" data-'+attr+'="'+val+'">'+txt+'</button>'; }
+    function commit(){ layout.aims=aims.slice(); layout.blocks=Object.assign({},blocks); layout.dlevel=lvl; layout.cpuCap=capV; if(isTarget(layout.aim)) layout.aim='anything'; saveLayout(); }   /* tp39c — a tick is a setting the moment it is made */
     function paint(){
       var A=document.getElementById('dc-aim'), Bk=document.getElementById('dc-blk'), Lv=document.getElementById('dc-lvl'), C=document.getElementById('dc-cap'); if(!A||!Bk||!Lv||!C) return;
       A.innerHTML=Object.keys(AIMLBL).map(function(a){ return chip('','a',a,aims.indexOf(a)>=0,AIMLBL[a]); }).join('');
       Bk.innerHTML=Object.keys(BLKLBL).map(function(b){ return chip('','b',b,!!blocks[b],BLKLBL[b]); }).join('');
       Lv.innerHTML=LEVELS.map(function(l){ return chip('','l',l,l===lvl,cap(l)); }).join('');
       C.innerHTML=CAPS.map(function(c){ return chip('','c',String(c),String(capV)===String(c),capLabel(c).replace('CPU cap: ','')); }).join('');
-      A.querySelectorAll('[data-a]').forEach(function(b){ b.onclick=function(){ var a=b.dataset.a, i=aims.indexOf(a); if(i>=0) aims.splice(i,1); else aims.push(a); paint(); }; });
-      Bk.querySelectorAll('[data-b]').forEach(function(b){ b.onclick=function(){ blocks[b.dataset.b]=blocks[b.dataset.b]?0:1; paint(); }; });
-      Lv.querySelectorAll('[data-l]').forEach(function(b){ b.onclick=function(){ lvl=b.dataset.l; paint(); }; });
-      C.querySelectorAll('[data-c]').forEach(function(b){ b.onclick=function(){ var c=b.dataset.c; capV=(c==='off'||c==='auto')?c:parseInt(c,10); paint(); }; }); }
+      A.querySelectorAll('[data-a]').forEach(function(b){ b.onclick=function(){ var a=b.dataset.a, i=aims.indexOf(a); if(i>=0) aims.splice(i,1); else aims.push(a); commit(); paint(); }; });
+      Bk.querySelectorAll('[data-b]').forEach(function(b){ b.onclick=function(){ blocks[b.dataset.b]=blocks[b.dataset.b]?0:1; commit(); paint(); }; });
+      Lv.querySelectorAll('[data-l]').forEach(function(b){ b.onclick=function(){ lvl=b.dataset.l; commit(); paint(); }; });
+      C.querySelectorAll('[data-c]').forEach(function(b){ b.onclick=function(){ var c=b.dataset.c; capV=(c==='off'||c==='auto')?c:parseInt(c,10); commit(); paint(); }; }); }
     window.__tpSheet({ title:'Randomize', ok:'Roll', wide:true,
       body:'<div class="tp-f"><span class="k">Aim</span><div class="chp" id="dc-aim"></div><span class="k">Roll</span><div class="chp" id="dc-blk"></div><span class="k">Reach</span><div class="chp" id="dc-lvl"></div><span class="k">CPU cap</span><div class="chp" id="dc-cap"></div></div>',
-      note:'Several aims: the dice draws one each roll — none ticked means anything. An unticked block keeps what you have. Left-click the dice to roll again with these.',
+      note:'Several aims: the dice draws one each roll — none ticked means anything. An unticked block keeps what you have. Ticks stick: Roll here, or press the dice any time.',
       init:function(){ paint(); },
-      onOk:function(){ layout.aims=aims.slice(); layout.blocks=Object.assign({},blocks); layout.dlevel=lvl; layout.cpuCap=capV; if(!Object.keys(blocks).some(function(k){ return blocks[k]; })){ toast('Nothing ticked to roll'); return; }
-        saveLayout(); try{ window.__tpCloseSheet(); }catch(e){} rollDice(); } });
+      onOk:function(){ commit(); if(!Object.keys(blocks).some(function(k){ return blocks[k]; })){ toast('Nothing ticked to roll'); return; }
+        try{ window.__tpCloseSheet(); }catch(e){} rollDice(); } });
+    /* tp39c — Max: "I'm ticking boxes and pressing the dice but it's not working". The sheet's backdrop covers the header, so a
+       press on the dice used to hit the backdrop: the sheet closed, the ticks were dropped, nothing rolled. Now a mousedown on the
+       backdrop over the dice IS the dice: the sheet closes and the roll goes with everything ticked (ticks commit as they are made). */
+    if(!window.__tpDiceSheetHook){ window.__tpDiceSheetHook=true; document.addEventListener('mousedown',function(e){ var sh=document.getElementById('tp-sheet'); if(!sh||e.target!==sh||!document.getElementById('dc-aim')) return;
+        var db=document.getElementById('dice-btn'); if(!db) return; var r=db.getBoundingClientRect(); if(e.clientX<r.left-2||e.clientX>r.right+2||e.clientY<r.top-2||e.clientY>r.bottom+2) return;
+        e.stopImmediatePropagation(); e.preventDefault(); try{ window.__tpCloseSheet(); }catch(x){} setTimeout(function(){ db.click(); },0); },true); }
     return true; }
   window.__tpDiceSheetOpen=openDiceSheet;
   window.__tpDiceAims=function(a){ if(a===undefined) return (layout.aims||[]).slice(); layout.aims=Array.isArray(a)?a.filter(function(x){ return AIMS.indexOf(x)>0; }):[]; saveLayout(); return layout.aims.slice(); };   /* the gates and the probes */
-  window.__tpDiceBlocks=function(b){ if(b===undefined) return Object.assign({},layout.blocks||{}); layout.blocks=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},b||{}); saveLayout(); return Object.assign({},layout.blocks); };
+  window.__tpDiceBlocks=function(b){ if(b===undefined) return Object.assign({},layout.blocks||{}); layout.blocks=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1,flow:1},b||{}); saveLayout(); return Object.assign({},layout.blocks); };
   function openAimMenu(cx,cy){ if(openDiceSheet()) return; closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
     nMenu.innerHTML=AIMS.concat(DTARGETS).map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+aimLabel(a)+'</div>'; }).join('')
       +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('')
@@ -43735,6 +43746,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      have to do is keep clicking the random button until I get something good"). layout.aim is saved by saveLayout,
      so it survives a reload too — the menu is for CHANGING the aim, never for repeating it. */
   function rollDice(){ var a=layout.aim||'anything';
+    if(layout.blocks&&isTarget(a)){ layout.aim='anything'; saveLayout(); a='anything'; }   /* tp39c — the sheet's blocks replaced the old FX/Modulation targets: once it has been used they never swallow a roll */
     if(a==='fx') return rollRack('fx');
     if(a==='modulation') return rollRack('mod');
     generate(); }
