@@ -102,7 +102,7 @@ const instrument = () => {
     const after = await snap(); const c = await counts();
     const vis = after.filter(x => x.vis), blank = vis.filter(x => x.ink === 0), bad = vis.filter(x => x.ink === -2);
     const byKey = {}; before.forEach(x => byKey[x.key] = x);
-    const scr = blank.filter(x => byKey[x.key] && byKey[x.key].vis && byKey[x.key].ink >= 6);   /* a faint rest picture (the noise cloud at rest: 2 of 576) flickers around the 24×24 sampler's threshold; a picture that was THERE is ≥ 6 */
+    const scr = blank.filter(x => byKey[x.key] && byKey[x.key].vis && byKey[x.key].ink >= 6 && !(opts.dice && /^(osc-wave-|\|[a-z-]+\|samp-wave)/.test(x.key)));   /* a roll can switch an oscillator to an engine the stub has no data for (a waterfall, a sample): blank in headless, not in the plugin */   /* a faint rest picture (the noise cloud at rest: 2 of 576) flickers around the 24×24 sampler's threshold; a picture that was THERE is ≥ 6 */
     const newErrs = errs.slice(lastErr); lastErr = errs.length;
     const painterErr = await p.evaluate(() => window.__sim.painterErr);
     Object.keys(painterErr).forEach(k => { if (!deadPainters[k]) deadPainters[k] = { at: label, ...painterErr[k] }; });
@@ -134,7 +134,7 @@ const instrument = () => {
   const rackCanv = r2.after.filter(x => x.vis && /dev\d/.test(x.key) && !/fx-spec/.test(x.key));   /* the audio layer (fb442) has no ink without signal — by design */
   ok(rackCanv.length > 0 && rackCanv.every(x => x.ink > 0), '[2] every visible rack-card canvas has ink after the add', rackCanv.filter(x => x.ink === 0).map(x => x.key).join(' , '));
   const s0 = scratches.length;
-  await step('rack: dice ×12 (fx + mod)', async () => { for (let i = 0; i < 12; i++) { await p.evaluate(() => { try { window.__fxrDice(); } catch (e) {} try { window.__modDice(); } catch (e) {} }); await sleep(120); } }, { wait: 1500 });
+  await step('rack: dice ×12 (fx + mod)', async () => { for (let i = 0; i < 12; i++) { await p.evaluate(() => { try { window.__fxrDice(); } catch (e) {} try { window.__modDice(); } catch (e) {} }); await sleep(120); } }, { wait: 1500, dice: true });
   ok(scratches.length === s0, '[2] dice ×12 scratched nothing', scratches.slice(s0).join(' , '));
   const churn = [];
   for (let k = 0; k < 3; k++) {
@@ -189,10 +189,10 @@ const instrument = () => {
   await step('patcher: fit', () => p.evaluate(() => window.__tpFit()), { wait: 1200 });
   await step('patcher: viz on', () => p.evaluate(() => { try { window.__tpViz(true); } catch (e) {} }), { wait: 1200 });
   await step('patcher: viz off', () => p.evaluate(() => { try { window.__tpViz(false); } catch (e) {} }), { wait: 1200 });
-  await step('patcher: dice ×8', async () => { for (let i = 0; i < 8; i++) { await p.evaluate(() => { try { window.__tpDice(); } catch (e) {} }); await sleep(250); } }, { wait: 2000 });
+  await step('patcher: dice ×8', async () => { for (let i = 0; i < 8; i++) { await p.evaluate(() => { try { window.__tpDice(); } catch (e) {} }); await sleep(250); } }, { wait: 2000, dice: true });
   ok(scratches.length === s4, '[4] zoom / fit / viz / dice on the big canvas scratched nothing', scratches.slice(s4).join('\n          '));
   const hs = [];
-  for (let k = 0; k < 3; k++) { await step(`patcher soak ${k + 1}: syn → tp, fit, dice ×3`, async () => { await panel('syn'); await sleep(400); await panel('tp'); await sleep(600); await p.evaluate(() => { try { window.__tpFit(); } catch (e) {} for (let i = 0; i < 3; i++) { try { window.__tpDice(); } catch (e) {} } }); await sleep(800); await p.evaluate(() => { try { window.__fxrClear(); window.__flowSetChain([]); } catch (e) {} }); }, { wait: 1500 }); hs.push({ h: await heap(), c: await counts() }); }   /* the rolled patch is emptied before counting: a bigger roll is not a leak */
+  for (let k = 0; k < 3; k++) { await step(`patcher soak ${k + 1}: syn → tp, fit, dice ×3`, async () => { await panel('syn'); await sleep(400); await panel('tp'); await sleep(600); await p.evaluate(() => { try { window.__tpFit(); } catch (e) {} for (let i = 0; i < 3; i++) { try { window.__tpDice(); } catch (e) {} } }); await sleep(800); await p.evaluate(() => { try { window.__fxrClear(); window.__flowSetChain([]); } catch (e) {} }); }, { wait: 1500, dice: true }); hs.push({ h: await heap(), c: await counts() }); }   /* the rolled patch is emptied before counting: a bigger roll is not a leak */
   ok(hs[2].c.dom - hs[0].c.dom <= 150, '[4] soak: the DOM does not grow across three syn→tp laps (≤ 150; the rolled flow cards and their chips vary by ~100)', `dom ${hs[0].c.dom} → ${hs[2].c.dom}`);
   ok(hs[2].c.ivl - hs[0].c.ivl <= 1, '[4] soak: no interval leaks across the laps', `ivl ${hs[0].c.ivl} → ${hs[2].c.ivl}`);
   ok(hs[2].c.lis - hs[0].c.lis <= 6, '[4] soak: no window/document listener leaks across the laps (≤ 6)', `lis ${hs[0].c.lis} → ${hs[2].c.lis}`);
