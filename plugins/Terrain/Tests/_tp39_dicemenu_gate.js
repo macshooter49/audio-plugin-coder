@@ -5,7 +5,7 @@
 //       another file, and three failures put the oscillator back on a wavetable;  [4] several aims: the rolls draw from
 //       them only;  [5] blocks: Effects unticked = the rack is not touched, Oscillators unticked = ENABLE untouched;
 //   [6] crazy rolls draw CUSTOM LFO shapes through __lfoDrawRandom;  [8] ticks commit live;  [9] the dice pressed through the open
-//       sheet closes it and rolls with the ticks (tp39c);  [10] Flow cards is a block apart from Modulation.     node Tests/_tp39_dicemenu_gate.js [index.html]
+//       sheet closes it and rolls with the ticks (tp39c);  [10] Flow cards is a block apart from Modulation;  [11] ONLY semantics (tp39d): styles = the whole preset, ticked blocks = only those.     node Tests/_tp39_dicemenu_gate.js [index.html]
 const puppeteer = require('puppeteer-core');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SRC = process.argv[2] || (process.cwd() + '/Source/ui/public/index.html');
@@ -78,7 +78,7 @@ const stub = () => {
   await p.evaluate(() => { window.__failPaths = {}; });
   // [4] several aims
   await p.evaluate(() => { window.__tpDiceAims(['keys', 'pads']); window.__tpDiceLevelSet('medium'); });
-  const seen = new Set(); for (let k = 0; k < 8; k++) { await p.evaluate(() => window.__tpDice()); await sleep(500); seen.add(await p.evaluate(() => window.__tpDiceLastAim)); }
+  const seen = new Set(); for (let k = 0; k < 12; k++) {   /* 12: two aims all landing the same side is 0.05 %, not 0.8 % */ await p.evaluate(() => window.__tpDice()); await sleep(500); seen.add(await p.evaluate(() => window.__tpDiceLastAim)); }
   ok([...seen].every(a => a === 'keys' || a === 'pads') && seen.size === 2, '[4] with Keys + Pads ticked the rolls draw from those two only', JSON.stringify([...seen]));
   // [5] blocks
   await p.evaluate(() => { window.__tpDiceAims(['keys']); window.__tpDiceBlocks({ osc: 1, flt: 1, env: 1, fx: 0, mod: 1 }); window.__fxrAddCount = 0; const oa = window.__fxrAdd; window.__fxrAdd = function(){ window.__fxrAddCount++; return oa.apply(this, arguments); }; });
@@ -109,7 +109,7 @@ const stub = () => {
   await p.evaluate(() => { window.__tpDiceAims([]); window.__tpDiceBlocks({}); const d = document.getElementById('dice-btn'); d.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })); }); await sleep(300);
   await p.evaluate(() => { const c = (id, attr, v) => { const b = [...document.querySelectorAll('#' + id + ' .tp-chip')].find(x => x.dataset[attr] === v); if (b) b.click(); }; c('dc-aim', 'a', 'bass'); c('dc-blk', 'b', 'fx'); c('dc-lvl', 'l', 'wild'); c('dc-cap', 'c', 'off'); });
   const live = await p.evaluate(() => { const L = window.__tpLayout(); return { aims: L.aims, fx: L.blocks.fx, flow: L.blocks.flow, lvl: L.dlevel, cap: L.cpuCap, on: document.getElementById('tp-sheet').classList.contains('on') }; });
-  ok(live.on && JSON.stringify(live.aims) === '["bass"]' && live.fx === 0 && live.flow === 1 && live.lvl === 'wild' && live.cap === 'off', '[8] a tick is a setting the moment it is made (sheet still open)', JSON.stringify(live));
+  ok(live.on && JSON.stringify(live.aims) === '["bass"]' && live.fx === 1 && live.flow === 0 && live.lvl === 'wild' && live.cap === 'off', '[8] a tick is a setting the moment it is made (sheet still open; Only: Effects)', JSON.stringify(live));
   // [9] tp39c — the dice pressed THROUGH the open sheet: the sheet closes and the roll goes with the ticks
   const pressed = await p.evaluate(async () => { const sh = document.getElementById('tp-sheet'), db = document.getElementById('dice-btn'); const r = db.getBoundingClientRect();
     window.__fxrAddCount = 0; const oa = window.__fxrAdd; window.__fxrAdd = function(){ window.__fxrAddCount++; return oa ? oa.apply(this, arguments) : undefined; };
@@ -117,7 +117,7 @@ const stub = () => {
     sh.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     await new Promise(res => setTimeout(res, 700));
     return { closed: !sh.classList.contains('on'), aim: window.__tpDiceLastAim, fxAdds: window.__fxrAddCount, envMoved: window.__P('SYN_ENV_AMP_D') !== before }; });
-  ok(pressed.closed && pressed.aim === 'bass' && pressed.fxAdds === 0 && pressed.envMoved, '[9] pressing the dice through the sheet closes it and rolls with the ticks (Bass, Effects unticked)', JSON.stringify(pressed));
+  ok(pressed.closed && pressed.aim === 'bass' && pressed.fxAdds > 0 && !pressed.envMoved, '[9] pressing the dice through the sheet closes it and rolls with the ticks (Bass, Only: Effects → effects rebuilt, envelopes untouched)', JSON.stringify(pressed));
   // [10] tp39c — flow cards are their own block
   await p.evaluate(() => { window.__tpDiceAims(['keys']); window.__n = { setChain: 0, rmRoute: 0 }; const os = window.__flowSetChain, orr = window.__tiRemoveRoute; window.__flowSetChain = function(){ window.__n.setChain++; return os ? os.apply(this, arguments) : undefined; }; window.__tiRemoveRoute = function(){ window.__n.rmRoute++; return orr ? orr.apply(this, arguments) : undefined; }; });
   await p.evaluate(() => { window.__n = { setChain: 0, rmRoute: 0 }; window.__tpDiceBlocks({ osc: 1, flt: 1, env: 1, fx: 1, mod: 1, flow: 0 }); window.__tpDice(); }); await sleep(600);
@@ -128,6 +128,19 @@ const stub = () => {
   ok(modOff.n.rmRoute === 0 && modOff.routes >= 1, '[10] Modulation unticked: no route is removed (the one added before the roll survives)', JSON.stringify(modOff));
   const chips6 = await p.evaluate(() => { const d = document.getElementById('dice-btn'); d.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })); const c = [...document.querySelectorAll('#dc-blk .tp-chip')].map(b => b.textContent); window.__tpCloseSheet(); return c; });
   ok(chips6.length === 6 && chips6.includes('Flow cards') && chips6.includes('Modulation'), '[10] the Roll row has six chips, Modulation and Flow cards apart', chips6.join(','));
+  // [11] tp39d — Max: "keys n pads = everything including FX and modulation; on effects = only FX; FX + modulation = new fx + mod"
+  const wrapCounts = () => p.evaluate(() => { window.__n = { setChain: 0, rmRoute: 0, fxAdd: 0 }; if (!window.__wrapped) { window.__wrapped = 1; const os = window.__flowSetChain, orr = window.__tiRemoveRoute, oa = window.__fxrAdd;
+    window.__flowSetChain = function(){ window.__n.setChain++; return os ? os.apply(this, arguments) : undefined; }; window.__tiRemoveRoute = function(){ window.__n.rmRoute++; return orr ? orr.apply(this, arguments) : undefined; }; window.__fxrAdd = function(){ window.__n.fxAdd++; return oa ? oa.apply(this, arguments) : undefined; }; } });
+  const rollWith = async (aims, blocks) => { await wrapCounts(); await p.evaluate((aims, blocks) => { window.__tpDiceAims(aims); window.__tpDiceBlocks(blocks); window.__tiAddRoute(0, 1, 0); window.__envBefore = window.__P('SYN_ENV_FLT_D'); window.__enBefore = 'abcdefgh'.split('').map(o => window.__P('SYN_OSC_' + o.toUpperCase() + '_ENABLE')).join(); window.__tpDice(); }, aims, blocks); await sleep(700);
+    return p.evaluate(() => Object.assign({}, window.__n, { envMoved: window.__P('SYN_ENV_FLT_D') !== window.__envBefore, enMoved: 'abcdefgh'.split('').map(o => window.__P('SYN_OSC_' + o.toUpperCase() + '_ENABLE')).join() !== window.__enBefore, aim: window.__tpDiceLastAim })); };
+  let whole = null; for (let k = 0; k < 4 && !(whole && whole.enMoved); k++) whole = await rollWith(['keys', 'pads'], {});
+  ok(whole.fxAdd > 0 && whole.setChain >= 1 && whole.rmRoute > 0 && whole.envMoved && whole.enMoved && (whole.aim === 'keys' || whole.aim === 'pads'), '[11] Keys + Pads with nothing in Only: the WHOLE preset (oscillators, envelopes, effects, modulation, flow) in that style', JSON.stringify(whole));
+  const fxOnly = await rollWith(['keys', 'pads'], { fx: 1 });
+  ok(fxOnly.fxAdd > 0 && fxOnly.setChain === 0 && fxOnly.rmRoute === 0 && !fxOnly.envMoved && !fxOnly.enMoved, '[11] Only: Effects → just the effects (no oscillator, envelope, route or flow change)', JSON.stringify(fxOnly));
+  const fxMod = await rollWith(['keys', 'pads'], { fx: 1, mod: 1 });
+  ok(fxMod.fxAdd > 0 && fxMod.rmRoute > 0 && fxMod.setChain === 0 && !fxMod.envMoved && !fxMod.enMoved, '[11] Only: Effects + Modulation → new effects + new routes, flow cards and the rest untouched', JSON.stringify(fxMod));
+  const rowLbl = await p.evaluate(() => { const d = document.getElementById('dice-btn'); d.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })); const ks = [...document.querySelectorAll('#tp-sheet .tp-f .k')].map(k => k.textContent); window.__tpCloseSheet(); return ks; });
+  ok(rowLbl.includes('Only') && rowLbl.includes('Aim'), '[11] the sheet rows read Aim / Only / Reach / CPU cap', rowLbl.join(','));
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
   await b.close(); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log('FAIL', e); process.exit(1); });
