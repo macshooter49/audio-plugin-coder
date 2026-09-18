@@ -139,7 +139,7 @@ namespace tw
 //    sides are the audio thread; the version is what tells a voice it is behind.
 struct RouteSnapshot
 {
-    static constexpr int kPools = 101;   // tp30 — + 4 Flow Chop + 4 Flow Glitch send buses
+    static constexpr int kPools = 102;   // tp30 — + 4 Flow Chop + 4 Flow Glitch send buses · tp43 — + the Deck
     float hall[6] {}, dly[6] {}, dst[6] {}, ex[6] {};
     float cut[6] {};   // tp30 — the OUTPUT CABLE, per source. 1 = cut: never reaches the main buses,
                        //  whatever the rack is or is not doing. See setCutRoutes.
@@ -3383,7 +3383,7 @@ class SynthVoice : public juce::SynthesiserVoice
         // The filter pair is heap-allocated ON DEMAND (message thread) the first time that
         // instance is routed, so an unrouted instance costs nothing: eager members would be
         // 10 extra FilterSlot PAIRS x 96 voices.
-        static constexpr int kPoolSends = 101;              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape · fb377 — + 6 filter · fb413 — + 6 chorus + 6 flanger + 6 phaser · fb426 — + 6 equalizer + 6 widen + 6 compress + 6 ott · fb444 — + 6 bode + 6 utility + 6 splitter · tp30 — + 4 flow chop + 4 flow glitch
+        static constexpr int kPoolSends = 102;   // tp43 — + the Deck              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape · fb377 — + 6 filter · fb413 — + 6 chorus + 6 flanger + 6 phaser · fb426 — + 6 equalizer + 6 widen + 6 compress + 6 ott · fb444 — + 6 bode + 6 utility + 6 splitter · tp30 — + 4 flow chop + 4 flow glitch
                                                            // ⚠️ must equal PluginProcessor::kPoolSendCount
         void setPoolSendTarget (int s, float* L, float* R) noexcept
         { if ((unsigned) s < kPoolSends) { poolSend_[s].L = L; poolSend_[s].R = R; } }

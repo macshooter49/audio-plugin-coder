@@ -487,11 +487,12 @@ TerrainAudioProcessor::TerrainAudioProcessor()
             { kEqzSendBase, "SYN_EQZ" }, { kWidSendBase, "SYN_WID" }, { kCmpSendBase, "SYN_CMP" },
             { kOttSendBase, "SYN_OTT" }, { kBodSendBase, "SYN_BOD" }, { kUtlSendBase, "SYN_UTL" },
             { kSplSendBase, "SYN_SPL" } };
-        static_assert (3 * kFxExtra == kGrnSendBase && kSplSendBase + ParameterIDs::kFxInstances == kChpSendBase,
+        static_assert (3 * kFxExtra == kGrnSendBase && kSplSendBase + ParameterIDs::kFxInstances == kDckSendBase && kDckSendBase + 1 == kChpSendBase,
                        "the table covers every pooled send exactly once");
         for (const auto& [base, pfx] : kAll)
             for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
                 add (base + i, juce::String (pfx) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_");
+        add (kDckSendBase, "SYN_DCK_");   // tp43 — the deck's six pills
         // tp30 — THE AUDIO FLOW CARDS' SENDS. Same table, two differences worth naming: four
         //  instances rather than six, and the flow ids spell the last two pills SRC_S / SRC_N
         //  (the rack spells them SRC_SUB / SRC_NOISE). Everything downstream of this — the lazy
@@ -7324,12 +7325,23 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                    juce::String (kd.second) + (i == 0 ? juce::String() : " " + juce::String (i + 1)) + " Direct Taps");   // instance 1 is bare, like every other name
         I ("FLOW_CHOP_TAPS", "Flow Chop Direct Taps");
         I ("FLOW_GLI_TAPS",  "Flow Glitch Direct Taps");
+        // tp43 — THE DECK: in the chain by cable (Max: "a simple in and out"). Unrouted and out of the chain on arrival.
+        {
+            static const char* const kDs[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+            for (const char* sfx : kDs)
+                layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { juce::String ("SYN_DCK_") + sfx, 1 }, juce::String ("Deck ") + sfx, false));
+            layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "SYN_DCK_POWER", 1 }, "Deck Power", true));
+            layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "SYN_DCK_ACTIVE", 1 }, "Deck In Chain", false));
+            layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "SYN_DCK_RANK", 1 }, "Deck Chain Rank", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+            I ("SYN_DCK_TAPS", "Deck Direct Taps");
+        }
         for (const auto& kd : kKinds)
             for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
                 N2 (juce::String (kd.first) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_SRC_N2",
                     juce::String (kd.second) + (i == 0 ? juce::String() : " " + juce::String (i + 1)) + " SRC_N2");
         N2 ("FLOW_CHOP_SRC_N2", "Flow Chop Src Noise 2");
         N2 ("FLOW_GLI_SRC_N2",  "Flow Glitch Src Noise 2");
+        N2 ("SYN_DCK_SRC_N2",   "Deck SRC_N2");   // tp43
         layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "FLOW_CHOP_INLINE", 1 }, "Flow Chop In Rack", false));
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "FLOW_CHOP_RANK", 1 }, "Flow Chop Chain Rank", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
         layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "FLOW_GLI_INLINE", 1 }, "Flow Glitch In Rack", false));
@@ -8288,9 +8300,20 @@ void TerrainAudioProcessor::cacheTapRefs()
         poolN2Ref_[(size_t) (kChpSendBase + i)] = R ("FLOW_CHOP" + nn + "_SRC_N2");
         poolN2Ref_[(size_t) (kGliSendBase + i)] = R ("FLOW_GLI"  + nn + "_SRC_N2");
     }
+    poolN2Ref_[(size_t) kDckSendBase]  = R ("SYN_DCK_SRC_N2");   // tp43
+    poolTapRef_[(size_t) kDckSendBase] = R ("SYN_DCK_TAPS");
     outCableRefN2_ = R ("SYN_NOISE2_OUT");
     noise2OnRef_   = R ("SYN_NOISE2_ON");
     for (int q = 0; q < kPoolSendCount; ++q) jassert (poolN2Ref_[(size_t) q] != nullptr);
+}
+
+void TerrainAudioProcessor::cacheDeckParams()   // tp43
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* const sfx [6] = { "SRC_A", "SRC_B", "SRC_C", "SRC_D", "SRC_SUB", "SRC_NOISE" };
+    dckRefs_.active = R ("SYN_DCK_ACTIVE"); dckRefs_.rank = R ("SYN_DCK_RANK"); dckRefs_.power = R ("SYN_DCK_POWER");
+    for (int k = 0; k < 6; ++k) dckRefs_.src [k] = R (juce::String ("SYN_DCK_") + sfx[k]);
+    for (int k = 0; k < 4; ++k) dckRefs_.srcB[k] = R (juce::String ("SYN_DCK_") + kSrcBSfx[k]);
 }
 
 void TerrainAudioProcessor::cacheSendRefs()
@@ -9208,6 +9231,7 @@ void TerrainAudioProcessor::rebuildChainOrder() noexcept
     //    touchpoint can be green and the apply branch below is simply unreachable code.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (13, i + 1, bodRefs_[(size_t) i].active, bodRefs_[(size_t) i].rank);
+    add (kDeckKind, 1, dckRefs_.active, dckRefs_.rank);   // tp43 — the deck, when a cable put it in the chain
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (14, i + 1, utlRefs_[(size_t) i].active, utlRefs_[(size_t) i].rank);
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
@@ -9412,6 +9436,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     cacheSplRefs();      // fb444 — the Splitter's own roster shape
     cacheFlowRouteRefs();   // tp30 — the audio FLOW cards' ten route pills + the per-source output cable
     cacheTapRefs();         // tp41 — every device's direct taps + the flow cards' inline rank
+    cacheDeckParams();      // tp43 — the deck's pills, switch and rank
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
     // fb636 bugA — the constructor's pill table must BE the pointers processBlock just cached; then build
     // every lit send's pair now, under this prepGuard, at the rate the voices were prepared at above.
@@ -12710,6 +12735,12 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    {   // tp43 — THE DECK'S ROUTE GATES (one instance, the same shape as every device)
+        float ps = 0.0f;
+        for (int k = 0; k < 6; ++k) { const float pg = (dckRefs_.src[k] != nullptr && dckRefs_.src[k]->load() > 0.5f) ? 1.0f : 0.0f; poolRouteG_[(size_t) (kDckSendBase * 6 + k)] = pg; ps += pg; }
+        for (int k = 0; k < 4; ++k) { const float pg = (dckRefs_.srcB[k] != nullptr && dckRefs_.srcB[k]->load() > 0.5f) ? 1.0f : 0.0f; poolRouteGB_[(size_t) (kDckSendBase * 4 + k)] = pg; ps += pg; }
+        poolRouteAny_[(size_t) kDckSendBase] = ps > 0.0f;
+    }
     // tp41 — THE DIRECT TAPS, per device, shaped like the entry gains (bank 0: bits 0..5; bank 1:
     //  slots 0..3 = bits 6..9 (E-H), 4 = the shared Sub bit, 5 = 0). Read every block, like the pills.
     {
@@ -12746,10 +12777,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // (b) whose output feeds whom. Without this every device tapped its own sources and added to the
     // output in parallel, so dragging a card changed nothing: Max's "it doesn't do any of that".
     {
-        static constexpr int kBaseOf[18] = { -1, -1, -1, kGrnSendBase, kTpeSendBase, kFltSendBase, kChoSendBase, kFlaSendBase,
+        static constexpr int kBaseOf[19] = { -1, -1, -1, kGrnSendBase, kTpeSendBase, kFltSendBase, kChoSendBase, kFlaSendBase,
                                              kPhaSendBase, kEqzSendBase, kWidSendBase, kCmpSendBase, kOttSendBase, kBodSendBase,
                                              kUtlSendBase, kSplSendBase,
-                                             kChpSendBase, kGliSendBase };   // tp20 — pool send base per kind (3..15) · tp30 — 16/17 flow
+                                             kChpSendBase, kGliSendBase, kDckSendBase };   // tp20 — pool send base per kind (3..15) · tp30 — 16/17 flow · tp43 — 18 deck
         auto maskOf = [this] (const ChainEntry& ce) -> uint16_t
         {
             const float* g = nullptr;
@@ -12770,13 +12801,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else if (ce.kind == 15) g = &poolRouteG_[(size_t) ((kSplSendBase + ce.inst - 1) * 6)];   // fb444
             else if (ce.kind == 16) g = &poolRouteG_[(size_t) ((kChpSendBase + ce.inst - 1) * 6)];   // tp30 — flow chop
             else if (ce.kind == 17) g = &poolRouteG_[(size_t) ((kGliSendBase + ce.inst - 1) * 6)];   // tp30 — flow glitch
+            else if (ce.kind == kDeckKind) g = &poolRouteG_[(size_t) (kDckSendBase * 6)];              // tp43 — the deck
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             // tp20 — bank 1's pills for the same device ride bits 6..9 (E F G H) of the one mask
             const float* gB = nullptr;
             if      (ce.kind == 0) gB = (ce.inst == 1) ? hallRvbGB_ : &poolRouteGB_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 4)];
             else if (ce.kind == 1) gB = (ce.inst == 1) ? dlyGB_     : &poolRouteGB_[(size_t) ((ce.inst - 2) * 4)];
             else if (ce.kind == 2) gB = (ce.inst == 1) ? dstGB_     : &poolRouteGB_[(size_t) ((kFxExtra + ce.inst - 2) * 4)];
-            else if (ce.kind >= 3 && ce.kind < 18) gB = &poolRouteGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 4)];
+            else if (ce.kind >= 3 && ce.kind < 19) gB = &poolRouteGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 4)];
             uint16_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint16_t) (m | (1u << (unsigned) s));
             if (gB != nullptr)
@@ -12786,7 +12818,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if      (ce.kind == 0) n2 = (ce.inst == 1) ? hallN2G_ : poolN2G_[(size_t) (2 * kFxExtra + ce.inst - 2)];
             else if (ce.kind == 1) n2 = (ce.inst == 1) ? dlyN2G_  : poolN2G_[(size_t) (ce.inst - 2)];
             else if (ce.kind == 2) n2 = (ce.inst == 1) ? dstN2G_  : poolN2G_[(size_t) (kFxExtra + ce.inst - 2)];
-            else if (ce.kind >= 3 && ce.kind < 18) n2 = poolN2G_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)];
+            else if (ce.kind >= 3 && ce.kind < 19) n2 = poolN2G_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)];
             if (n2 > 0.0f) m = (uint16_t) (m | (1u << (unsigned) tw::FxChainTopology::kNoise2Bit));
             return m;
         };
@@ -12800,6 +12832,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         //  reads the output that card actually produced rather than the zero its slot left behind.
         flowSlotOf_.fill (-1);
         flowAnyRouted_ = false;
+        dckInChain_ = false;   // tp43
+        for (int c = 0; c < n; ++c) if (chainOrder_[(size_t) c].kind == kDeckKind) { dckInChain_ = true; break; }
         for (int c = 0; c < n; ++c)
         {
             const auto& ce = chainOrder_[(size_t) c];
@@ -12840,7 +12874,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if      (ce.kind == 0) dstArrB = (ce.inst == 1) ? hallEntryGB_ : &poolEntryGB_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArrB = (ce.inst == 1) ? dlyEntryGB_  : &poolEntryGB_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 2) dstArrB = (ce.inst == 1) ? dstEntryGB_  : &poolEntryGB_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
-            else if (ce.kind >= 3 && ce.kind < 18) dstArrB = &poolEntryGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 6)];
+            else if (ce.kind >= 3 && ce.kind < 19) dstArrB = &poolEntryGB_[(size_t) ((kBaseOf[ce.kind] + ce.inst - 1) * 6)];
             if      (ce.kind == 0) dstArr = (ce.inst == 1) ? hallEntryG_ : &poolEntryG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 3) dstArr = &poolEntryG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
@@ -12858,6 +12892,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else if (ce.kind == 15) dstArr = &poolEntryG_[(size_t) ((kSplSendBase + ce.inst - 1) * 6)];   // fb444
             else if (ce.kind == 16) dstArr = &poolEntryG_[(size_t) ((kChpSendBase + ce.inst - 1) * 6)];   // tp30 — flow chop
             else if (ce.kind == 17) dstArr = &poolEntryG_[(size_t) ((kGliSendBase + ce.inst - 1) * 6)];   // tp30 — flow glitch
+            else if (ce.kind == kDeckKind) dstArr = &poolEntryG_[(size_t) (kDckSendBase * 6)];              // tp43 — the deck
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -13799,6 +13834,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 17) { const int q = kGliSendBase + ce.inst - 1;     // tp30 — flow glitch
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == kDeckKind) { const int q = kDckSendBase;              // tp43 — the deck
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
         if (b != nullptr && b->getNumSamples() >= numSamples && b->getNumChannels() >= 2)
@@ -14433,6 +14470,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         else if (ce.kind == 13) applyBod (ce.inst - 1, inL, inR, oL, oR);
         else if (ce.kind == 14) applyUtl (ce.inst - 1, inL, inR, oL, oR);
         else if (ce.kind == 15) { /* Splitter: pass-through in the deferred pass */ }
+        else if (ce.kind == kDeckKind) { /* tp43 — the deck after a flow card: pass-through (its per-sample inputs live in the sample loop) */ }
         else if (ce.kind == kFlowKindChop || ce.kind == kFlowKindGli) { /* never here: flow slots run their stage */ }
         else if (ce.inst == 1)
         {
@@ -14709,7 +14747,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // on re-enable since tapeLoop preserves its internal write head.
         const float preLoopL = wetL;
         const float preLoopR = wetR;
-        if (tapeLoopOn)
+        if (tapeLoopOn && ! dckInChain_)   // tp43 — in the chain, the deck ran on its cabled input above
             tapeLoop.processStereo(wetL, wetR, wantRecord, wantPlay,
                                    loopLengthParam, loopFeedback, loopDegrade,
                                    loopSpeedParam, bpm, isFreeform,
@@ -14962,7 +15000,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     pendL[c] = 0.0f; pendR[c] = 0.0f;
                     continue;
                 }
-                if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
+                if (ce.kind == kDeckKind)   // tp43 — THE DECK IN THE CHAIN: the loop records its routed input and plays back here
+                {
+                    if (tapeLoopOn && (dckRefs_.power == nullptr || dckRefs_.power->load() > 0.5f))
+                        tapeLoop.processStereo (oL, oR, wantRecord, wantPlay, loopLengthParam, loopFeedback, loopDegrade,
+                                                loopSpeedParam, bpm, isFreeform, inL, inR, feedActive);
+                }
+                else if (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
                 else if (ce.kind == 4) applyTpe (ce.inst - 1, inL, inR, oL, oR);   // fb365 — ditto
                 else if (ce.kind == 5) applyFlt (ce.inst - 1, inL, inR, oL, oR);   // fb377 — ditto
                 else if (ce.kind == 6) applyCho (ce.inst - 1, inL, inR, oL, oR);   // fb413 — chorus

@@ -169,6 +169,7 @@ cost a diagnosis once already.
 | `_tp43_wtstep_probe.js` | **tp43 THE WAVETABLE ARROWS STEP ON THE PATCHER** (tpexp, real WebView). Press › three times on osc A and on osc E: Sine → Triangle → Square → Pulse on both, nothing dragging. |
 | `_tp43_capture_probe.js` | **tp43 DAW CAPTURE ON/OFF** (tpexp). `setCaptureEnabled(0)` reads back off, `(1)` back on; the settings row exists. Off releases the ~202 MB rolling ring, never arms it on a fresh instance (marker `~/Library/Caches/Terrain/capture-off`), and processBlock skips the write. |
 | `_tp43_noise2_library_probe.js` | **tp43 NOISE 2 OWNS THE SAME LIBRARY** (tpexp). Scan the factory, load a sound into Noise 2 through the instance-aware natives (a trailing `2`), read its peaks and persisted selection; Noise 1's stay untouched; clear. Instance 2 of the noise strip routes every sample native through `nsJuceFn` with the instance appended; the two file dialogs stay Noise 1's. |
+| `au_patcher_rules.cpp` [DECK] | **tp43b THE DECK IN THE CHAIN** (same binary/gate as above). With its transport idle the deck passes its cabled input through: osc A with its output cable CUT and `Deck In Chain` + `Deck SRC_A` lit is audible (through the deck), a lit pill with the deck out of the chain claims nothing (silent), nothing claiming a cut A is silent. The transport is natives-only, so the gate proves the routing, not a take. |
 
 ## 🚨 THE JS GATES — RUN THE SETUP ONCE, THEN THEY ARE PLAIN `node` (fb601)
 

@@ -42952,6 +42952,17 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function flowSetTap(m,i,direct){ var id=flowTapId(m); if(!id||!(i>=0&&i<NSRC)) return; var b=flowTaps(m), k=1<<i, nb=direct?(b|k):(b&~k); if(nb!==b) setP(id,nb/2047); }
   function flowInline(m){ var id=flowInlId(m); return id?pv(id,0)>0.5:false; }
   function fxKeyOf(d){ return d?('fx-'+d.core+'-'+d.inst):null; }
+  /* ── tp43 — THE DECK IN THE CHAIN. SYN_DCK_* (rack spelling: SRC_SUB / SRC_NOISE). ACTIVE puts it in the rack order at
+     SYN_DCK_RANK; a cable into it lights its pill (direct from an oscillator); the last cable cut takes it out again. */
+  var DSRC=['SRC_A','SRC_B','SRC_C','SRC_D','SRC_SUB','SRC_NOISE','SRC_E','SRC_F','SRC_G','SRC_H','SRC_N2'];
+  function deckSrcId(i){ return (i>=0&&i<NSRC)?('SYN_DCK_'+DSRC[i]):null; }
+  function deckIds(){ var a=[]; for(var i=0;i<NSRC;i++) a.push(deckSrcId(i)); return a.concat(['SYN_DCK_ACTIVE','SYN_DCK_RANK','SYN_DCK_TAPS']); }
+  function deckMask(){ var o=[]; for(var i=0;i<NSRC;i++) o.push(pv(deckSrcId(i),0)>0.5?1:0); return o; }
+  function deckActive(){ return pv('SYN_DCK_ACTIVE',0)>0.5; }
+  function deckTaps(){ return Math.round(pv('SYN_DCK_TAPS',0)*2047); }
+  function deckSetTap(i,direct){ var b=deckTaps(), k=1<<i, nb=direct?(b|k):(b&~k); if(nb!==b) setP('SYN_DCK_TAPS',nb/2047); }
+  function deckSetSrc(i,on,direct){ var id=deckSrcId(i); if(!id) return; track(deckIds(),function(){}); setP(id,on?1:0); if(direct!=null) deckSetTap(i,!!direct); if(on) setP('SYN_DCK_ACTIVE',1); else if(!deckMask().some(Boolean)) setP('SYN_DCK_ACTIVE',0); }
+  function deckRankAfter(devs,idx){ var lo=idx>=0?devRank(devs,idx):0, hi=(idx+1<devs.length)?devRank(devs,idx+1):1; setP('SYN_DCK_RANK',Math.max(0,Math.min(1,lo+(hi-lo)*0.5))); }
   function devRank(devs,i){ var d=devs[i]; return (d&&typeof d.rank==='number'&&!isNaN(d.rank))?d.rank:(i+1)/(devs.length+1); }
   /* an inline card's rank = between its anchor (the rack device it sits after; none = before the first) and
      the next device, several cards after one anchor in chain order. Re-run whenever the rack renumbers. */
@@ -43043,13 +43054,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
        FxChainTopology::build runs it: a source ENTERS at the first slot routed to it; a slot eats every
        unconsumed upstream slot that shares a source; whatever nothing eats goes to Out. Every cable below is
        read off that, so the canvas can no longer disagree with the audio. */
-    var ins=[]; var tp=nodeByKey('tape'), tl=nodeByKey('tapeloop'); if(tp) ins.push(tp); if(tl) ins.push(tl);
+    var ins=[]; var tp=nodeByKey('tape'), tl=nodeByKey('tapeloop'); if(tp) ins.push(tp); if(tl&&!deckActive()) ins.push(tl);   /* tp43 — a deck in the chain is a slot, not a fixture */
     for(var ii=0;ii<ins.length;ii++) add(ins[ii],'out',0,ii+1<ins.length?ins[ii+1]:outN,'in',0,'a',null,true);
     var dryHead=ins.length?ins[0]:outN;
     var devs=window.__fxrDevs?window.__fxrDevs():[]; var fxN=devs.map(function(d){ return d?nodeByKey('fx-'+d.core+'-'+d.inst):null; });
     var slots=[];
     devs.forEach(function(d,i){ if(!d||!fxN[i]) return; slots.push({k:'fx',idx:i,node:fxN[i],mask:(d.route||[]).map(function(v){ return v?1:0; }),rank:devRank(devs,i),ord:slots.length,taps:d.taps|0}); });
     audioT.forEach(function(m,ci){ var t=nodeByKey('flow-'+m); if(!t) return; var inl=flowInline(m); slots.push({k:'flow',m:m,node:t,mask:flowMaskOf(m),rank:inl?pv(flowRankId(m),0.5):2+0.001*ci,ord:slots.length,inl:inl,taps:flowTaps(m)}); });
+    { var dk=nodeByKey('tapeloop'); if(dk&&deckActive()) slots.push({k:'deck',node:dk,mask:deckMask(),rank:pv('SYN_DCK_RANK',0.5),ord:slots.length,taps:deckTaps()}); }   /* tp43 — the deck in the chain */
     slots.forEach(function(sl){ while(sl.mask.length<NSRC) sl.mask.push(0); });
     slots.sort(function(a,b){ return (a.rank-b.rank)||(a.ord-b.ord); });
     var claimed=[]; for(var ci0=0;ci0<NSRC;ci0++) claimed.push(0);
@@ -43060,7 +43072,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     function inFilter(o){ if(o.kind==='noise') return noiseInFilter(); return (pv(OX(o.sub)+'F1MIX')>0.001)||(pv(OX(o.sub)+'F2MIX')>0.001); }
     var oscClaimed={};
     slots.forEach(function(sl){ for(var i=0;i<NSRC;i++){ if(!sl.entry[i]) continue; var o=oscNodeOf(i); if(!o) continue; oscClaimed[i]=1;
-        var direct=((sl.taps>>i)&1)===1, ed=sl.k==='fx'?{route:{dev:sl.idx,osc:i}}:{frt:{m:sl.m,osc:i}};
+        var direct=((sl.taps>>i)&1)===1, ed=sl.k==='fx'?{route:{dev:sl.idx,osc:i}}:(sl.k==='deck'?{dck:{osc:i}}:{frt:{m:sl.m,osc:i}});
         /* the cable says where the tap is: from the filter = post-filter (the synth's law), from the oscillator = raw (the Patcher's) */
         if(inFilter(o)&&flt&&!direct){ add(o,'out',0,flt,'in',0,'a',{fmix:o.sub}); add(flt,'out',0,sl.node,'in',0,'a',ed); }
         else add(o,'out',0,sl.node,'in',0,'a',ed); } });
@@ -43068,6 +43080,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         if(u.k==='fx'&&sl.k==='fx') ed={fxorder:1};
         else if(u.k==='flow'&&sl.k==='fx') ed={finl:{m:u.m}};                                   /* cut = the card leaves the rack order */
         else if(sl.k==='flow'){ var srcs=[]; for(var q=0;q<NSRC;q++) if(u.eff[q]&&sl.mask[q]) srcs.push(q); ed={frtm:{m:sl.m,srcs:srcs}}; }   /* cut = those sources leave the card */
+        else if(sl.k==='deck'){ var dsr=[]; for(var q2=0;q2<NSRC;q2++) if(u.eff[q2]&&sl.mask[q2]) dsr.push(q2); ed={dckm:{srcs:dsr}}; }   /* tp43 — cut = those sources leave the deck */
         add(u.node,'out',0,sl.node,'in',0,'a',ed,!ed); });
       if(!sl.consumed) add(sl.node,'out',0,sl.k==='flow'?outN:dryHead,'in',0,'a',null,true); });   /* tp30 — the flow cards run BESIDE the tape machines to Out */
     /* an oscillator nothing claims: through the filter if it is in one, then Out while its output cable holds — else NO CABLE (silent, and the engine agrees) */
@@ -43154,6 +43167,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         oscIdx=oscIdx.filter(function(i){ return i>=0; }); if(oscIdx.length){ var dv=(window.__fxrDevs?window.__fxrDevs():[])[b.idx]; if(dv&&dv.tapsP) track([dv.tapsP],function(){}); oscIdx.forEach(function(i){ window.__fxrSetRoute&&window.__fxrSetRoute(b.idx,i,1,direct?1:0); }); if(direct) toast(nodeName(a)+' → '+nodeName(b)+' · direct, not through the filter'); return true; }
         if(a.kind==='fx'){ var devs=window.__fxrDevs?window.__fxrDevs():[]; var order=[]; for(var i=0;i<devs.length;i++) order.push(i); order.splice(order.indexOf(b.idx),1); order.splice(order.indexOf(a.idx)+1,0,b.idx); window.__fxrReorder&&window.__fxrReorder(order); return true; }
         if(a.kind==='flow'){ return inlineFlowInto(a,b); }   /* tp41 — a flow card THROUGH an effect */
+        if(a.kind==='tapeloop'){ var dm=deckMask(); if(!dm.some(Boolean)){ toast('Cable something into the Deck first'); return true; } var devsE=window.__fxrDevs?window.__fxrDevs():[];   /* tp43 — the deck THROUGH an effect */
+          var rD=pv('SYN_DCK_RANK',0.5); if(devRank(devsE,b.idx)<=rD){ var order=[]; for(var i=0;i<devsE.length;i++) order.push(i); var after=-1; devsE.forEach(function(d,i){ if(devRank(devsE,i)<rD) after=i; }); order.splice(order.indexOf(b.idx),1); order.splice(after+1,0,b.idx); window.__fxrReorder&&window.__fxrReorder(order); }
+          var bd2=null; (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d,i){ if(d&&fxKeyOf(d)===b.key) bd2=i; }); if(bd2!=null){ var dd=(window.__fxrDevs())[bd2]; if(dd&&dd.tapsP) track([dd.tapsP],function(){}); dm.forEach(function(v,i){ if(v) window.__fxrSetRoute&&window.__fxrSetRoute(bd2,i,1); }); }
+          toast('Deck → '+nodeName(b)); return true; }
         return false; }
       if(b.kind==='flow'){ var ch2=window.__flowChain?window.__flowChain():[]; if(ch2.indexOf(b.sub)<0){ ch2.push(b.sub); window.__flowSetChain&&window.__flowSetChain(ch2); }
         /* tp30 — THE CABLE NAMES THE OSCILLATOR. Dropping osc B on a Glitch lights B's pill on
@@ -43175,7 +43192,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(idxs.length){ var fi2=flowSrcIds(b.sub).concat(flowIds41(b.sub)); seedOn(flowSrcIds(b.sub)); track(fi2,function(){}); idxs.forEach(function(i){ flowSetSrc(b.sub,i,1); flowSetTap(b.sub,i,directF); }); }
         }
         return true; }
-      if(b.kind==='tape'||b.kind==='tapeloop'){ toast('Everything runs through it while it is on the canvas'); return true; }
+      if(b.kind==='tapeloop'){   /* tp43 — the deck takes what is cabled into it */
+        var devsD=window.__fxrDevs?window.__fxrDevs():[];
+        if(a.kind==='osc'||a.kind==='noise'){ var sd=srcIdx(a.sub); if(sd>=0){ deckSetSrc(sd,true,true); toast(nodeName(a)+' → Deck · direct'); } return true; }
+        if(a.kind==='filter'){ oscList().forEach(function(o){ if(pv(OX(o)+'F1MIX')>0.001||pv(OX(o)+'F2MIX')>0.001){ var si2=srcIdx(o); if(si2>=0) deckSetSrc(si2,true,false); } }); return true; }
+        if(a.kind==='fx'){ var ad2=devsD[a.idx]; var lit=[]; (ad2&&ad2.route||[]).forEach(function(v,i){ if(v) lit.push(i); }); if(!lit.length){ toast('Cable something into '+nodeName(a)+' first'); return true; } lit.forEach(function(i){ deckSetSrc(i,true,false); }); deckRankAfter(devsD,a.idx); return true; }
+        if(a.kind==='flow'){ var fm2=flowMaskOf(a.sub); var any=false; fm2.forEach(function(v,i){ if(v){ deckSetSrc(i,true,false); any=true; } }); if(!any){ toast('Cable an oscillator into '+nodeName(a)+' first'); return true; } setP('SYN_DCK_RANK',1); return true; }   /* after a flow card: last in the rack */
+        return false; }
+      if(b.kind==='tape'){ toast('Everything runs through it while it is on the canvas'); return true; }
       /* tp30 — Out is a real destination now: re-cabling an oscillator to it reconnects the
          output cable this canvas can cut. */
       if(b.kind==='out'){ if(a.kind==='osc'||a.kind==='noise'){ var oid=oscOutId(a.sub);
@@ -43199,6 +43223,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else if(e.frts){ e.frts.forEach(function(r){ var fi4=flowSrcIds(r.m); seedOn(fi4); track(fi4,function(){}); flowSetSrc(r.m,r.osc,0); flowSetTap(r.m,r.osc,false); }); }
     else if(e.frtm){ var fi5=flowSrcIds(e.frtm.m); seedOn(fi5); track(fi5,function(){}); e.frtm.srcs.forEach(function(i){ flowSetSrc(e.frtm.m,i,0); }); }
     else if(e.finl){ setFlowInline(e.finl.m,false); if(!quiet) toast(flowLabel(e.finl.m)+' runs after the rack again'); }
+    else if(e.dck){ deckSetSrc(e.dck.osc,false); }   /* tp43 */
+    else if(e.dckm){ e.dckm.srcs.forEach(function(i){ deckSetSrc(i,false); }); }
     else
     if(e.fmix){ if(e.fmix==='n'||e.fmix==='n2'){ setP('SYN_FILTER1_SRC_NOISE',0); setP('SYN_FILTER2_SRC_NOISE',0); } else { setP(OX(e.fmix)+'F1MIX',0); setP(OX(e.fmix)+'F2MIX',0); } try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(x){} }
     else if(e.route){ window.__fxrSetRoute&&window.__fxrSetRoute(e.route.dev,e.route.osc,0); }
@@ -43230,7 +43256,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function trackFlowCables(){ try{
     var ids=[]; oscList().forEach(function(o){ var id=oscOutId(o); if(id) ids.push(id); });
     (window.__flowChain?window.__flowChain():[]).forEach(function(m){ ids=ids.concat(flowSrcIds(m)); });
-    ids=ids.concat(['SYN_NOISE_OUT','SYN_NOISE2_OUT']); seedOn(ids); ids=ids.concat(['SYN_NOISE_ON','SYN_NOISE2_ON','SYN_FILTER1_SRC_NOISE','SYN_FILTER2_SRC_NOISE']);   /* tp42 — the noise cables default connected, like an oscillator's */
+    ids=ids.concat(['SYN_NOISE_OUT','SYN_NOISE2_OUT']); seedOn(ids); ids=ids.concat(['SYN_NOISE_ON','SYN_NOISE2_ON','SYN_FILTER1_SRC_NOISE','SYN_FILTER2_SRC_NOISE']).concat(deckIds());   /* tp42 — the noise cables default connected, like an oscillator's · tp43 — the deck's pills */
     var ids41=[]; (window.__flowChain?window.__flowChain():[]).forEach(function(m){ ids41=ids41.concat(flowIds41(m)); }); (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d){ if(d&&d.tapsP) ids41.push(d.tapsP); });   /* tp41 — taps + inline ranks are undo state too */
     ids=ids.concat(ids41); if(ids.length) track(ids,function(){ placeInlineFlows(); });
   }catch(e){} }
@@ -44047,7 +44073,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       setTimeout(function(){ hist.cur=snapshot(); paintTools(); },200); if(window.__tiFrameReg) window.__tiFrameReg('tp',frame); else if(!raf) raf=requestAnimationFrame(function loop(ts){ frame(ts); if(isOpen) raf=requestAnimationFrame(loop); else raf=0; }); requestAnimationFrame(frame); }); }
   function closePage(){ if(!isOpen) return; isOpen=false; closeMenus(); try{ if(window.__tiFrameUnreg) window.__tiFrameUnreg('tp'); }catch(e){} try{ returnAll(); }catch(e){ try{ console.warn('[tp] return',e); }catch(_){} } if(raf){ cancelAnimationFrame(raf); raf=0; } lastT=0; }
   window.__tpOpen=openPage; window.__tpClose=closePage; window.__tpNodes=function(){ return nodes.map(function(n){ return {key:n.key,x:n.x,y:n.y,w:n.w,h:n.h,ext:!!n.ext}; }); }; window.__tpCables=function(){ return cables.map(function(c){ return c.id; }); }; window.__tpSync=sync; window.__tpDrag=function(){ return drag?{kind:drag.kind,moved:!!drag.moved,ctl:!!drag.ctl}:null; };
-  window.__tpConnect=connect; window.__tpNodeByKey=nodeByKey; window.__tpDerive=derive; window.__tpFlowInline=flowInline; window.__tpFlowTaps=flowTaps; window.__tpPlaceInline=placeInlineFlows; window.__tpSetFlowInline=setFlowInline; window.__tpCatalog=function(){ return catalog(); }; window.__tpCut=function(id){ var c=cables.filter(function(x){ return x.id===id; })[0]; return c?cut(c):false; };   /* tp41 — gates */ window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpLayout=function(){ return layout; }; window.__tpAdd=function(k,x,y){ addFromList(k,x||200,y||200); }; window.__tpRemove=function(key){ var n=nodeByKey(key); if(n) removeNode(n); }; window.__tpExt=function(key,on){ var n=nodeByKey(key); if(n&&n.kind==='flow') setFlowExt(n,!!on); }; window.__tpTidy=glideTidy; window.__tpRollOsc=rollOscNow; window.__tpOscList=function(){ return nodes.filter(function(n){return n.kind==='osc';}).map(function(n){return n.sub;}); };
+  window.__tpConnect=connect; window.__tpNodeByKey=nodeByKey; window.__tpDerive=derive; window.__tpFlowInline=flowInline; window.__tpFlowTaps=flowTaps; window.__tpPlaceInline=placeInlineFlows; window.__tpSetFlowInline=setFlowInline; window.__tpDeckMask=deckMask; window.__tpDeckActive=deckActive; window.__tpCatalog=function(){ return catalog(); }; window.__tpCut=function(id){ var c=cables.filter(function(x){ return x.id===id; })[0]; return c?cut(c):false; };   /* tp41 — gates */ window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpLayout=function(){ return layout; }; window.__tpAdd=function(k,x,y){ addFromList(k,x||200,y||200); }; window.__tpRemove=function(key){ var n=nodeByKey(key); if(n) removeNode(n); }; window.__tpExt=function(key,on){ var n=nodeByKey(key); if(n&&n.kind==='flow') setFlowExt(n,!!on); }; window.__tpTidy=glideTidy; window.__tpRollOsc=rollOscNow; window.__tpOscList=function(){ return nodes.filter(function(n){return n.kind==='osc';}).map(function(n){return n.sub;}); };
   window.__tpView=function(){ return {x:view.x,y:view.y,z:view.z,lod:!!(page&&page.classList.contains('lod')),viz:!!(page&&page.classList.contains('viz'))}; }; window.__tpSetView=function(x,y,z){ view.x=x; view.y=y; view.z=z; applyView(); }; window.__tpViz=setViz; window.__tpFit=fit; window.__tpParam=function(id){ return pv(id); };
   window.__tpRect=function(el){ var r=el.getBoundingClientRect(); if(!isOpen||!page||!page.contains(el)) return r; var z=view.z||1; return {left:r.left,top:r.top,width:r.width/z,height:r.height/z,right:r.right,bottom:r.bottom}; };   /* tp5 — a painter's sizing rect in LAYOUT px while the module sits in the scaled world */
   window.__tpZoomOf=function(el){ try{ return (isOpen&&page&&el&&page.contains(el))?(view.z||1):1; }catch(e){ return 1; } };

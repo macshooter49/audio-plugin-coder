@@ -319,6 +319,29 @@ int main (int argc, char** argv)
         snprintf (d, sizeof d, "Noise 1 alone %.1f  both %.1f dBFS", rmsDb (n1, from), rmsDb (both, from));
         chk (rmsDb (n1, from) > -40.0 && rmsDb (both, from) > rmsDb (n1, from) + 1.0, "[NOISE 2] the two noises add (Noise 1 untouched, Noise 2 on top)", d);
     }
+    // ── [DECK] the tape deck as a routed device: with its transport idle it passes its cabled input through, so A with
+    //    its output cable CUT is audible only if the deck really sits in the chain and really receives A. ──
+    {
+        auto rend = [] (bool active, bool routeA, bool cutA) -> std::vector<float>
+        {
+            Au a; if (! a.open()) { printf ("no AU\n"); exit (2); }
+            a.set ("Deck In Chain", active ? 1.0f : 0.0f); a.set ("Deck SRC_A", routeA ? 1.0f : 0.0f); a.set ("Deck Chain Rank", 0.5f);
+            if (cutA) a.set ("Synth OSC A Out", 0.0f);
+            a.pump (0.8); a.render (4, nullptr);
+            std::vector<float> out; a.note (48, 100); a.render (48, &out); a.close();
+            return leftOnly (out);
+        };
+        const size_t from = 4800;
+        auto dry   = rend (false, false, false);
+        auto cutNo = rend (false, false, true);
+        auto viaDk = rend (true,  true,  true);
+        auto inact = rend (false, true,  true);
+        char d[300];
+        snprintf (d, sizeof d, "A dry %.1f  A cut (nothing claims it) %.1f  A cut but cabled into the Deck in the chain %.1f  pill lit but Deck not in the chain %.1f dBFS", rmsDb (dry, from), rmsDb (cutNo, from), rmsDb (viaDk, from), rmsDb (inact, from));
+        chk (rmsDb (cutNo, from) < -100.0, "[DECK] A with its cable cut and nothing claiming it is silent", d);
+        chk (rmsDb (viaDk, from) > rmsDb (dry, from) - 6.0, "[DECK] A cabled into the Deck (in the chain) comes out THROUGH the deck", d);
+        chk (rmsDb (inact, from) < -100.0, "[DECK] a lit pill on a deck that is not in the chain claims nothing", d);
+    }
     printf ("\n  PASS %d   FAIL %d\n", npass, nfail);
     return nfail ? 1 : 0;
 }

@@ -2768,7 +2768,8 @@ private:
     // tp30 — THE AUDIO FLOW CARDS ARE ROUTED DEVICES. Chop and Glitch get the same per-instance
     //  send bus every rack device has, so an oscillator can be cut from one card and handed to
     //  another. Four instances each (wc::kFlowInstances), not six — the pool is settled at 4.
-    static constexpr int kChpSendBase  = kSplSendBase + ParameterIDs::kFxInstances;    // 93 — tp30 flow chop
+    static constexpr int kDckSendBase  = kSplSendBase + ParameterIDs::kFxInstances;    // 93 — tp43 the DECK (one instance)
+    static constexpr int kChpSendBase  = kDckSendBase + 1;                              // 94 — tp30 flow chop
     static constexpr int kGliSendBase  = kChpSendBase + wc::kFlowInstances;            // 97 — tp30 flow glitch
     static constexpr int kPoolSendCount = kGliSendBase + wc::kFlowInstances;           // 101
     static_assert (kPoolSendCount >= kGliSendBase + wc::kFlowInstances,
@@ -2809,7 +2810,7 @@ private:
     // at :4392/:4417 and vanished with no message. The guard fails safe (no overflow — that was
     // checked) but a silently-dropped device reads as "the rack is broken". Derive it from the kind
     // count instead of hand-maintaining a number: 6 kinds x 6 instances, ~432 bytes.
-    static constexpr int kFxKinds  = 18;     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12 · fb444 — + bode 13, utility 14, splitter 15 · tp30 — + flow chop 16, flow glitch 17
+    static constexpr int kFxKinds  = 19;   // tp43 — + the Deck (18)     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12 · fb444 — + bode 13, utility 14, splitter 15 · tp30 — + flow chop 16, flow glitch 17
     // tp30 — the flow kinds carry 4 instances, not 6, so the bound is the honest sum rather than
     //  kFxKinds x 6. It must stay <= FxChainTopology::kMaxSlots (128) — the static_assert says so.
     static constexpr int kChainMax = 16 * ParameterIDs::kFxInstances + 2 * wc::kFlowInstances;   // 104
@@ -3141,6 +3142,17 @@ private:
     static constexpr int kFlowSlots    = kFlowKinds * wc::kFlowInstances;       // 8
     static constexpr int kFlowKindChop = 16;
     static constexpr int kFlowKindGli  = 17;
+    // ══ tp43 — THE DECK AS A ROUTED DEVICE (kind 18). Max: "the tape deck … we need a simple in and out for that." The
+    //  tape loop used to record and play the MASTER (its canvas ports were decoration). With SYN_DCK_ACTIVE it joins the
+    //  chain like any rack device: it records what is cabled into it and plays back into the chain; the master call is
+    //  skipped while it is in the chain. Per sample already (TapeLoopProcessor::processStereo), so never deferred by
+    //  itself — after a flow card it passes through (the loop's per-sample inputs live in the sample loop).
+    static constexpr int kDeckKind = 18;
+    struct DckRefs { std::atomic<float>* active = nullptr; std::atomic<float>* rank = nullptr; std::atomic<float>* power = nullptr;
+                     std::atomic<float>* src[6] {}; std::atomic<float>* srcB[4] {}; };
+    DckRefs dckRefs_;
+    bool    dckInChain_ = false;   // this block: the deck runs in the chain, not on the master
+    void cacheDeckParams();
     // Above every reachable device rank (_RANK is a 0..1 float), so a flow card always sorts last.
     static constexpr float kFlowRankBase = 2.0f;
     static constexpr int flowFlat (int kind, int inst0) noexcept
