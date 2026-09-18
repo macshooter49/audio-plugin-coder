@@ -307,10 +307,11 @@ int main (int argc, char** argv)
                 const int ei = (int) std::lround (eng[o - 'A']); const char* en_ = (ei >= 0 && ei < 7) ? EN[ei] : "?";
                 std::string extra; if (ei == 6) { Au ax; if (ax.open() && ax.loadChunk (p.chunk)) { ax.pump (0.5); const std::string b = std::string ("Synth OSC ") + o + " Modal "; static const char* FAM[] = { "Grand", "Pluck", "Bow", "Flute", "Reed", "Brass", "Bars", "Bells", "Skin" }; const int fam = (int) std::lround (ax.get (b + "Family")); extra = std::string ("  [") + (fam >= 0 && fam < 9 ? FAM[fam] : "?") + " form " + std::to_string ((int) std::lround (ax.get (b + "Form"))) + " src " + std::to_string ((int) std::lround (ax.get (b + "Source"))) + " stretch " + std::to_string (ax.get (b + "Stretch")).substr (0, 4) + "]"; ax.close(); } }
                 const bool silent = f0[0] <= 0 || f0[1] <= 0 || f0[2] <= 0, noisy = q[0] < 0.3 || q[1] < 0.3 || q[2] < 0.3;
+                float lvl = 1.f; { Au al; if (al.open() && al.loadChunk (p.chunk)) { al.pump (0.4); lvl = al.get (std::string ("Synth OSC ") + o + " Level"); al.close(); } }   // a Level-0 oscillator is off by design: its residual is not a pitch
                 double d1 = silent ? 0 : std::log2 (f0[1] / f0[0]), d2 = silent ? 0 : std::log2 (f0[2] / f0[1]);
-                const char* verdict = silent ? "silent" : noisy ? "noisy/unpitched" : (std::fabs (d1) < 0.12 && std::fabs (d2) < 0.12) ? "LOCKED <-- one pitch for every key"
+                const char* verdict = (lvl <= 0.001f) ? "level 0 (off by design)" : silent ? "silent" : noisy ? "noisy/unpitched" : (std::fabs (d1) < 0.12 && std::fabs (d2) < 0.12) ? "LOCKED <-- one pitch for every key"
                                     : (std::fabs (d1 - EXP[0]) < 0.12 && std::fabs (d2 - EXP[1]) < 0.12) ? "tracks" : "odd (octave/other)";
-                if (! silent && ! noisy) { if (verdict[0] == 'L') ++locked; else if (verdict[0] == 't') ++tracks; else ++unsure; }
+                if (! silent && ! noisy && lvl > 0.001f) { if (verdict[0] == 'L') ++locked; else if (verdict[0] == 't') ++tracks; else ++unsure; }
                 printf ("  osc %c  %-9s f0 @48 %7.1f  @55 %7.1f  @60 %7.1f   (q %.2f %.2f %.2f)  d %+.2f %+.2f oct   %s%s\n", o, en_, f0[0], f0[1], f0[2], q[0], q[1], q[2], d1, d2, verdict, extra.c_str());
             }
         }
