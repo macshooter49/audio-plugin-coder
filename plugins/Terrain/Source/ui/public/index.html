@@ -3493,9 +3493,9 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
    The gear paints a 28px canvas, so 19px read visibly small beside it; 23px matches its weight, the
    stroke thins to 1.6, and the pair closes up by dropping the gear's own left margin when the dice
    precedes it (header-right's 6px gap is then all that separates them, half what it was). */
-.dice-btn { color: var(--text-muted); }
+.dice-btn { color: var(--text-secondary); }   /* tp45 — the gear's own ink (drawSettingsIcon strokes --text-secondary): Max: "the same color as the settings and everything else" */
 .dice-btn svg { width: 23px; height: 23px; display: block; }
-.dice-btn:hover { color: var(--text-primary); }
+.dice-btn:hover { color: var(--text-secondary); }   /* tp45 — no light-up on hover (Max); .settings-btn:hover's opacity .8 is all it does, like the gear */
 .dice-btn.rolling { opacity: .45; pointer-events: none; }
 #dice-btn + .settings-btn { margin-left: 0; }
 /* the roll's notice, for when it is fired with the Patcher shut and its own toast is hidden */
@@ -14638,7 +14638,7 @@ window.__flowInstDest = function(inst, d){ inst = inst|0; if (inst <= 1 || d < w
   function mk(id){
     var st = { __id:id, __v:0, __ls:[], __card:0, __seen:false,
       getNormalisedValue:function(){ return st.__v; },
-      setNormalisedValue:function(n){ n = Math.max(0, Math.min(1, +n || 0)); st.__v = n; st.__seen = true; sf = sf || nf('setSynParam'); if (sf){ try{ sf(id, n); }catch(e){} } fire(st); if (/_ENABLE$/.test(id)) poolAwakeSync(); },
+      setNormalisedValue:function(n){ n = Math.max(0, Math.min(1, +n || 0)); st.__v = n; st.__seen = true; st.__wAt = Date.now(); sf = sf || nf('setSynParam'); if (sf){ try{ sf(id, n); }catch(e){} } fire(st); if (/_ENABLE$/.test(id)) poolAwakeSync(); },   /* tp45 — __wAt: a poll may not undo this write (see poll) */
       getScaledValue:function(){ var c = st.__card || (window.__paramCardinality ? window.__paramCardinality(id) : 0); return c > 1 ? st.__v * (c - 1) : st.__v; },
       valueChangedEvent:{ addListener:function(f){ st.__ls.push(f); } },
       sliderDragStarted:function(){}, sliderDragEnded:function(){},
@@ -14649,13 +14649,25 @@ window.__flowInstDest = function(inst, d){ inst = inst|0; if (inst <= 1 || d < w
     return st; }
   window.Juce.getSliderState = function(id){ return isPool(id) ? (pool[id] || mk(id)) : real(id); };
   window.__poolSliderState = function(id){ return pool[id] || mk(id); };
-  var busy = false;
+  var busy = false, busyAt = 0;
+  /* ═══ tp45 — A POLL IN FLIGHT MUST NEVER UNDO A WRITE. THE FLOW CARDS' FLICKER. ═══════════════════════
+     Max: "every time I try to randomize the flow cards they pop up and fade in on the patcher and then fade out, and on my
+     main synth page they start flickering and I can't turn them on or off... it stays like that throughout the whole plugin".
+     REPRODUCED headless with a native that applies a write 150-400 ms late (the message thread under a dice roll's burst of
+     hundreds of writes): the dice writes FLOW_CHAIN_n / _INST_n, a poll issued BEFORE the write answers AFTER it with the old
+     values, this loop overwrote the page's fresh value with the stale one and fired the listeners — the chain reverted, the
+     instance tile left the canvas and the synth page — and 700 ms later the next poll brought the write back. Every write the
+     revert provoked (a re-adopted flow node seeds its ten pills, a chain add pushes its MIX) raced the same way, so under load
+     it fed itself. RULE: a value the page wrote after this poll was issued, or within the last 1500 ms, is the page's truth;
+     the poll after it will confirm. And a poll that never answers (fb334) must not park the pool: busy expires after 3 s. */
   function poll(){
-    if (busy || !ids.length) return; gf = gf || nf('getSynParams'); if (!gf) return; busy = true;
-    var list = ids.slice();
+    if ((busy && Date.now() - busyAt < 3000) || !ids.length) return; gf = gf || nf('getSynParams'); if (!gf) return; busy = true; busyAt = Date.now();
+    var list = ids.slice(), issued = Date.now();
     try{ Promise.resolve(gf(list.join(','))).then(function(res){ busy = false;
       var parts = String(res || '').split(','); if (parts.length !== list.length) return;
+      var now = Date.now();
       for (var i = 0; i < list.length; i++){ var st = pool[list[i]], nv = parseFloat(parts[i]); if (!st || isNaN(nv)) continue;
+        if (st.__wAt && (st.__wAt >= issued || now - st.__wAt < 1500)) continue;   /* tp45 — the page wrote this since; its value stands */
         if (!st.__seen || Math.abs(nv - st.__v) > 0.0005){ st.__v = nv; st.__seen = true; fire(st); } }
       poolAwakeSync(); }).catch(function(){ busy = false; }); }catch(e){ busy = false; } }
   /* the pool is AWAKE when any E–H oscillator is on: the rack's E–H pills show, the browser stops hinting */
@@ -33863,7 +33875,7 @@ restoreThemeFromBackend();
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   /* fb260 — drag VELOCITY from the voice panel onto any knob, exactly like an env/LFO. The
      label (data-drag-vel) is the source grip; the row's number stays the vel→amp depth. */
-  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-vel]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-vel], #tp-page [data-drag-vel]'); if(!t)return;   /* tp45 — and on the Patcher's Voices module */
     var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Vel'; document.body.appendChild(ghost);
@@ -33926,7 +33938,7 @@ restoreThemeFromBackend();
   /* fb555 — drag KEY out as a mod source, exactly like Velocity above. Depth lands at FULL: it is
      a shape source, so at 100 % the destination follows the keyboard and less is a deliberate
      attenuation (fb178/fb263's law, and fb552's). */
-  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-note]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-note], #tp-page [data-drag-note]'); if(!t)return;
     var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Key'; document.body.appendChild(ghost);
@@ -38023,23 +38035,28 @@ restoreThemeFromBackend();
   function __shimPollAll(){ if(!__shimReg.length||__shimBusy) return;
     if(__shimGAll===null) __shimGAll=NF('getSynParams')||false;
     if(!__shimGAll){ __shimReg.forEach(function(r){ r.one(); }); return; }
-    var list=__shimReg.slice(); __shimBusy=true;
+    var list=__shimReg.slice(), issued=Date.now(); __shimBusy=true;   /* tp45 — a value written after `issued` outranks this answer */
     try{ Promise.resolve(__shimGAll(list.map(function(r){ return r.id; }).join(','))).then(function(res){ __shimBusy=false;
         var parts=String(res||'').split(','); if(parts.length!==list.length) return;
-        for(var i=0;i<list.length;i++){ var nv=parseFloat(parts[i]); if(!isNaN(nv)) list[i].got(nv); } }).catch(function(){ __shimBusy=false; }); }
+        for(var i=0;i<list.length;i++){ var nv=parseFloat(parts[i]); if(!isNaN(nv)) list[i].got(nv,issued); } }).catch(function(){ __shimBusy=false; }); }
     catch(e){ __shimBusy=false; } }
   setInterval(function(){ __shimN++; if(window.__uiParked)return; if((__shimN&3)&&window.__tiRest&&window.__tiRest())return; __shimPollAll(); },700);
   window.addEventListener('tiactive',__shimPollAll);
   window.__synSliderShim=function(id,def){
-    var v=(def==null?0.5:def), ls=[], g=NF('getSynParam'), s=NF('setSynParam');
+    var v=(def==null?0.5:def), ls=[], g=NF('getSynParam'), s=NF('setSynParam'), wAt=0;
     function fire(){ for(var i=0;i<ls.length;i++){ try{ls[i]();}catch(e){} } }
-    function got(nv){ if(!isNaN(nv)&&Math.abs(nv-v)>0.0005){ v=nv; fire(); } }
-    function poll(){ if(!g)return; try{ Promise.resolve(g(id)).then(function(nv){ got(parseFloat(nv)); }).catch(function(){}); }catch(e){} }
+    /* tp45 — THE FLOW CARDS' FLICKER (Max: "they pop up and fade in on the patcher and then fade out... on my main synth page they
+       start flickering and I can't turn them on or off"). A poll issued BEFORE a write answers AFTER it with the old value and this
+       overwrote the page's fresh value: FLOW_CHAIN_1..4 reverted to the previous roll's chain, the tiles and the canvas followed,
+       and 700 ms later the next poll brought the write back. Reproduced headless with a 150-400 ms native (a dice roll's burst).
+       A value the page wrote after the poll was issued, or within the last 1500 ms, stands; the poll after it confirms. */
+    function got(nv,issued){ if(wAt&&((issued&&wAt>=issued)||Date.now()-wAt<1500)) return; if(!isNaN(nv)&&Math.abs(nv-v)>0.0005){ v=nv; fire(); } }
+    function poll(){ if(!g)return; var at=Date.now(); try{ Promise.resolve(g(id)).then(function(nv){ got(parseFloat(nv),at); }).catch(function(){}); }catch(e){} }
     /* fb636 (M2) — at rest it looks every 2.8 s instead of every 0.7 s, and not at all while the editor is closed; the
        first frame / touch / note after rest ('tiactive') looks at once. 4 of these run at boot, ~46 once RBN/CHOP open. */
     __shimReg.push({ id:id, got:got, one:poll }); poll();   /* tp34 — one shared poll; the first read is still immediate */
     return { getNormalisedValue:function(){ return v; },
-             setNormalisedValue:function(n){ v=Math.max(0,Math.min(1,n)); if(s){ try{ s(id,v); }catch(e){} } fire(); },
+             setNormalisedValue:function(n){ v=Math.max(0,Math.min(1,n)); wAt=Date.now(); if(s){ try{ s(id,v); }catch(e){} } fire(); },
              valueChangedEvent:{ addListener:function(f){ ls.push(f); } } };
   };
 
@@ -42526,17 +42543,43 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-node.off > .tp-body > .fxr-dev .fxr-pwr { display: inline-block; }   /* a bypassed card shows its power so it can come back */
 /* tp43 — THE VOICES MODULE on the canvas (Max: "give us a better version of the voices … the buttons were weird, everything
    looks poorly spaced out"). Only inside #tp-page: the synth page keeps its column exactly as it is. */
-#tp-page .tp-node[data-kind="voice"] .voice-meta.tp-voice { padding: 12px 14px 12px; gap: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; }
-#tp-page .voice-meta.tp-voice .voice-toggle-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; padding: 0; }
-#tp-page .voice-meta.tp-voice .voice-toggle { height: 24px; line-height: 24px; padding: 0; border-radius: 12px; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,.42); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); transition: background .15s, color .15s; }
-#tp-page .voice-meta.tp-voice .voice-toggle:hover { color: rgba(255,255,255,.75); background: rgba(255,255,255,.08); }
-#tp-page .voice-meta.tp-voice .voice-toggle.on { color: #fff; background: rgba(183,148,255,.22); border-color: rgba(183,148,255,.55); }
-#tp-page .voice-meta.tp-voice .vm-voiceview { display: flex; flex-direction: column; gap: 4px; }
-#tp-page .voice-meta.tp-voice .voice-row { grid-template-columns: 1fr auto; height: 22px; padding: 0 6px; border-radius: 6px; background: rgba(255,255,255,.035); }
-#tp-page .voice-meta.tp-voice .voice-row span { font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(255,255,255,.55); }
-#tp-page .voice-meta.tp-voice .voice-row .vel-src { color: rgba(183,148,255,.85); }
-#tp-page .voice-meta.tp-voice .voice-row b { font-size: 12px; font-variant-numeric: tabular-nums; }
-#tp-page .voice-meta.tp-voice .vm-macroview { padding-top: 2px; }
+/* tp45 — THE VOICES MODULE IS THE SYNTH PAGE'S COLUMN, FLOATING. Max: "make it look exactly like this, but popped out". The tp43
+   restyle (uppercase rows, boxed lines, a filled pill) is gone; only the frame is ours. Velocity and Key drag as mod sources here too. */
+#tp-page .tp-node[data-kind="voice"] .voice-meta.tp-voice { height: 100%; box-sizing: border-box; padding: 10px 12px; }
+/* tp45 — the column's own rules, re-scoped: they are written for #syn-panel (and its .ribbon-row.rr-new) and the module lives in #tp-page — measured: the pills lost their borders */
+#tp-page .tp-voice { padding-top: 4px; display: flex; flex-direction: column; gap: 8px; font-size: 9px; color: var(--text-secondary); letter-spacing: 1px; font-weight: 200; }
+#tp-page .tp-voice .voice-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; padding: 1px 4px; }   /* fb259 — emblems removed: label left, value right, uniform padding on EVERY row → V/V/P/G stack dead-even */
+#tp-page .tp-voice .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
+#tp-page .tp-voice .voice-row .vel-src { cursor: grab; }
+#tp-page .tp-voice .voice-toggle-row { display: flex; gap: 4px; padding: 2px 0; }
+#tp-page .tp-voice .voice-mode-row { padding: 1px 0 3px; }
+#tp-page .tp-voice .voice-mode-row .voice-toggle:first-child { text-align: left; padding-left: 2px; }
+#tp-page .tp-voice .voice-toggle { flex: 1; font-size: 9px; letter-spacing: 1px; padding: 2px 0; border: none; border-radius: 0; background: transparent; color: var(--text-dim); cursor: pointer; text-transform: none; transition: color 0.12s; }
+#tp-page .tp-voice .voice-toggle:hover { color: var(--text-muted); }
+#tp-page .tp-voice .voice-toggle.on { background: transparent; color: var(--text-primary); }
+#tp-page .tp-voice .voice-row[data-syn-row] { cursor: ns-resize; transition: background 0.12s ease; border-radius: 4px; }   /* fb259 — padding moved to base .voice-row so ALL rows (incl. the unwired Velocity) share one left edge */
+#tp-page .tp-voice .voice-row[data-syn-row]:hover { background: rgba(139,92,246,0.10); }
+#tp-page .tp-voice .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
+#tp-page .tp-voice .voice-toggle-row { gap:6px; }
+#tp-page .tp-voice .voice-toggle { flex:1; border:1px solid rgba(255,255,255,.42); border-radius:5px; padding:3px 0; text-align:center; color:var(--text-secondary); background:transparent; transition:.14s; }
+#tp-page .tp-voice .voice-mode-row .voice-toggle:first-child { text-align:center; }   /* fb637 — dropped `padding-left:0`. With padding-right still 1px the box was asymmetric, so "Mono" sat half a pixel left of its own pill while its three neighbours were centred — the odd one out in the row. text-align:center (kept) is what actually centres it; the zeroed padding was a leftover from when this button was left-aligned. */
+#tp-page .tp-voice .voice-toggle:hover { border-color:rgba(255,255,255,.72); color:var(--text-primary); }
+#tp-page .tp-voice .voice-toggle.on { background:transparent; border-color:var(--purple-400); color:#fff;
+          text-shadow:0 0 6px rgba(255,255,255,.35); }   /* fb627 — the text's answer to fb119's drop-shadow on the emblem */
+#tp-page .tp-voice { padding-top:0; gap:7px; height:100%; }
+#tp-page .tp-voice .voice-toggle-row { gap:5px; }
+#tp-page .tp-voice .voice-toggle { padding:calc(4px - 0.056em) 0 calc(4px + 0.056em); text-indent:1px; }
+#tp-page .tp-voice .vm-4 .voice-toggle { font-size:8.5px; letter-spacing:.2px; padding:4px 1px; text-indent:.2px; }   /* 4 buttons fit without squeezing the words. fb637 — text-indent tracks THIS row's own .2px letter-spacing (Mono · Legato · Poly · Macros). NOTE it keeps the plain 4px/4px padding: measured, this row is already dead-centre vertically, because these buttons are STRETCHED to the row height by the flex row's align-items and land on a different rounding than the taller Always/Scaled pills. Inheriting that row's optical nudge overshot it by half a pixel the other way — so the correction is applied where it was measured, and only there. */
+#tp-page .tp-voice .voice-toggle { transition:color .14s, border-color .14s, background-color .14s; }
+#tp-page .tp-voice .vm-voiceview { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-between; gap:0; }   /* fb272 — even distribution: as row-4 grows the rows spread evenly (no single big gap before Always/Scaled) */
+#tp-page .tp-voice .vm-voiceview > .voice-toggle-row { margin-top:0; }   /* fb272 — space-between already lands Always/Scaled at the bottom */
+#tp-page .tp-voice .vm-macroview { flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; padding-top:0; }   /* fb565 — NINE macros, 3×3 (Max: "I liked my three rows of three") */   /* fb272 claimed "same box geometry as vm-voiceview so toggling Macros never reflows anything" — it did not hold, see fb574 below */
+#tp-page .tp-voice { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); row-gap:7px; }
+#tp-page .tp-voice > .vm-4 { grid-row:1; grid-column:1; }
+#tp-page .tp-voice .vm-voiceview, #tp-page .tp-voice .vm-macroview { grid-row:2; grid-column:1; min-height:0; }
+#tp-page .tp-voice.vm-macros-active .vm-voiceview { visibility:hidden; opacity:0; pointer-events:none; }   /* fb575 — opacity too: see the pills note above */
+#tp-page .tp-voice:not(.vm-macros-active) .vm-macroview { visibility:hidden; opacity:0; pointer-events:none; }
+#tp-page .tp-voice.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on { border-color:rgba(255,255,255,.42); color:var(--text-primary); }
 #tp-page.viz .tp-node > .tp-body > .fxr-dev .fxr-core { display: block !important; }   /* tp10 — a card flipped to its back panel still shows its picture in the eye (it measured 0 and vanished) */
 #tp-page .tp-node > .tp-body > .fxr-dev .fxr-pwr { display: none; }                          /* tp6 — no power dots: a card on the canvas is on */
 #tp-page .tp-node[data-core="tape"] > .tp-body > .fxr-dev .fxr-type { display: none; }       /* the machine IS the picture (Studio / Cassette are separate nodes) */
@@ -42678,6 +42721,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 @keyframes tpIn { from { opacity: 0; } to { opacity: 1; } }
 #tp-page .tp-node.leaving { opacity: 0; transition: opacity .22s ease-out; pointer-events: none; }
 #tp-page .tp-cables .cable { transition: opacity .22s ease-out; }
+/* tp45 — a hovered cable, or a hovered module's cables, come forward; the hover chip names the two ends and cuts */
+#tp-page .tp-cables .cable.lit .core { opacity: 1; stroke: #fff; stroke-width: 1.9; }
+#tp-page .tp-cables .cable.lit.m .core { stroke-width: 1.4; }
+#tp-ctip { position: absolute; z-index: 60; display: none; align-items: center; gap: 7px; padding: 4px 5px 4px 9px; border-radius: 9px; background: rgb(24,22,37); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 10px 26px rgba(0,0,0,.55); font-size: 9.5px; letter-spacing: .02em; color: rgba(255,255,255,.88); white-space: nowrap; pointer-events: auto; }
+#tp-ctip.on { display: flex; }
+#tp-ctip .x { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: rgba(255,255,255,.55); cursor: pointer; }
+#tp-ctip .x:hover { color: #fff; background: rgba(255,255,255,.1); }
+#tp-ctip .x svg { width: 9px; height: 9px; display: block; }
+#tp-ctip.nocut .x { display: none; }
 #tp-page .tp-cables .cable.gone { opacity: 0; }
 #tp-page .tp-menu.on { display: block; }
 #tp-page .tp-menu .ps { font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255,255,255,.30); padding: 6px 9px 3px; }
@@ -42747,7 +42799,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var page=null, world=null, cg=null, drawg=null, nodesEl=null, addM=null, nMenu=null, toastEl=null, miniEl=null, modesEl=null, modesHome=null, tileHome={}, tileOrder=[];
   var isOpen=false, built=false, view={x:0,y:0,z:0.6}, nodes=[], cables=[], sel=null, drag=null, raf=0, shims={}, addCtx=null, addCat='All', suppressClick=false, syncT=0, applying=false, prevTapeTab=null, zTop=1;
   var layout={v:6,pos:{},ext:{},view:null,aim:'anything',dlevel:'medium',rlevel:'medium',rlinks:[],viz:false,nodes:[],finl:{}};   /* tp41 — finl: an inline flow card's anchor, the rack device it sits after */
-  var SIZES={osc:[332,140],noise:[220,160],voiceCanvas:[300,236],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
+  var SIZES={osc:[332,140],noise:[220,160],voiceCanvas:[202,196],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
   /* tp11 — Max: "extend the bottom … then the top … evenly": a module with dots under its knobs gets 7 px of air on top and 17 at the bottom, so a dot never lands on a knob's LFO streak */
   var PADK={osc:1,filter:1,fx:1,tape:1,noise:1}, PADT=7, PADB=17;
   function padOf(kind){ return PADK[kind]?[PADT,PADB]:[0,0]; }
@@ -43150,10 +43202,30 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       else { c=w; var g=document.createElementNS(SVGNS,'g'); g.setAttribute('class','cable '+c.t+(c.fixed?' fixed':'')); g.setAttribute('data-id',c.id); c.el=g; var mk=function(cls){ var e=document.createElementNS(SVGNS,'path'); e.setAttribute('class',cls); g.appendChild(e); return e; };
         c.core=mk('core'); c.spk=mk('spk'); c.hit=mk('hit'); c.s=null; c.lvl=0; cg.appendChild(g);
         c.hit.addEventListener('mousedown',function(e){ e.stopPropagation(); closeMenus(); sel={cable:c.id}; paintSel(); });
-        c.hit.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); sel={cable:c.id}; paintSel(); openNodeMenu(e.clientX,e.clientY,null,c); }); }
+        c.hit.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); sel={cable:c.id}; paintSel(); openNodeMenu(e.clientX,e.clientY,null,c); });
+        c.hit.addEventListener('pointerenter',function(e){ ctipShow(c,e); }); c.hit.addEventListener('pointerleave',function(){ ctipHide(); }); }   /* tp45 — the hover chip */
       c.el.classList.toggle('fixed',!!c.fixed); next.push(c); layoutCable(c); });
-    for(var id in byId){ (function(g){ g.classList.add('gone'); setTimeout(function(){ g.remove(); },230); })(byId[id].el); if(sel&&sel.cable===id) sel=null; }   /* a cable that leaves fades out */
+    for(var id in byId){ (function(g){ g.classList.add('gone'); setTimeout(function(){ g.remove(); },230); })(byId[id].el); if(sel&&sel.cable===id) sel=null; if(ctipC===byId[id]) ctipHide(true); }   /* a cable that leaves fades out */
     cables=next; paintSel(); drawMini(); }
+  /* ═══ tp45 — WHAT IS CONNECTED TO WHAT. Max: "hover over our node cables and it shows us what's being connected to what... I just wanna
+     press X on one and be like, okay, I don't want this there, boom". Hover a cable: a chip names both ends (a mod cable names the knob) and
+     carries an × that cuts it — the same cut as the right-click menu. Hover a module: every cable it owns comes forward. ═══ */
+  var ctip=null, ctipC=null, ctipT=0, litN=null;
+  function ctipEl(){ if(ctip) return ctip; ctip=document.createElement('div'); ctip.id='tp-ctip'; ctip.innerHTML='<span class="t"></span><span class="x" title="Cut this cable"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></span>'; page.appendChild(ctip);
+    ctip.addEventListener('pointerenter',function(){ clearTimeout(ctipT); }); ctip.addEventListener('pointerleave',function(){ ctipHide(); });
+    ctip.addEventListener('mousedown',function(e){ e.stopPropagation(); });
+    ctip.querySelector('.x').addEventListener('mousedown',function(e){ e.stopPropagation(); e.preventDefault(); var c=ctipC; ctipHide(true); if(c) cut(c); });
+    return ctip; }
+  function cableLabel(c){ var a=nodeName(c.from), b=nodeName(c.to);
+    if(c.t==='m'&&c.edit&&c.edit.dest!=null){ try{ var el=window.__tiElForDest?window.__tiElForDest(c.edit.dest):null; var lab=el?((el.closest&&el.closest('[data-mod-dest]'))||el):null; var kn=lab?lab.querySelector('.fxr-lab, .knob-label, .lab, label'):null; var tx=kn?kn.textContent.trim():''; if(tx) b+=' · '+tx; }catch(e){} }
+    return a+' \u2192 '+b; }
+  function ctipShow(c,e){ var t=ctipEl(); clearTimeout(ctipT); if(ctipC&&ctipC!==c&&ctipC.el) ctipC.el.classList.remove('lit'); ctipC=c; t.querySelector('.t').textContent=cableLabel(c); t.classList.toggle('nocut',!c.edit); t.classList.add('on');
+    var r=page.getBoundingClientRect(), x=e.clientX-r.left+12, y=e.clientY-r.top-32; x=Math.max(4,Math.min(x,r.width-t.offsetWidth-4)); y=Math.max(4,Math.min(y,r.height-t.offsetHeight-4)); t.style.left=x+'px'; t.style.top=y+'px'; if(c.el) c.el.classList.add('lit'); }
+  function ctipHide(now){ clearTimeout(ctipT); var f=function(){ if(ctip) ctip.classList.remove('on'); if(ctipC&&ctipC.el) ctipC.el.classList.remove('lit'); ctipC=null; }; if(now) f(); else ctipT=setTimeout(f,260); }
+  function litFor(n,on){ cables.forEach(function(c){ if(c.from===n||c.to===n){ if(c.el) c.el.classList.toggle('lit',!!on); } }); }
+  document.addEventListener('pointerover',function(e){ try{ if(!isOpen) return; var w=e.target.closest&&e.target.closest('#tp-page .tp-node'); var n=w?nodeByKey(w.dataset.key):null;
+    if(n===litN) return; if(litN) litFor(litN,false); litN=n||null; if(litN) litFor(litN,true); }catch(err){} });
+  window.__tpCableTip=function(){ return { on: !!(ctip&&ctip.classList.contains('on')), text: ctip?ctip.querySelector('.t').textContent:'', cable: ctipC?ctipC.id:null, lit: [].slice.call(document.querySelectorAll('#tp-page .tp-cables .cable.lit')).map(function(g){ return g.getAttribute('data-id'); }) }; };   /* the gate reads it */
   function layoutCablesOf(n){ cables.forEach(function(c){ if(c.from===n||c.to===n) layoutCable(c); }); }
   function tapeName(n){ if(n.kind!=='fx'||n.core!=='tape'||!n.el) return; var d=(window.__fxrDevs?window.__fxrDevs():[])[n.idx], nm=n.el.querySelector('.fxr-name'); if(d&&nm&&nm.firstChild&&nm.firstChild.nodeType===3&&nm.firstChild.nodeValue!==d.type) nm.firstChild.nodeValue=d.type; }   /* tp10 — "Studio", "Cassette", not "Tape" */
   function sync(){ if(!isOpen||!adopted) return; try{ syncPresence(); nodes.forEach(function(n){ tapeName(n); if(n.kind==='flow'&&n.ext) fitNodeToCard(n); if(n.kind==='osc') markViz(n); if(n.kind==='osc'||n.kind==='filter'||n.kind==='fx'||n.kind==='tape'||n.kind==='tapeloop') modDots(n); }); syncCables(); if(nodeByKey('tape')&&window.__fxTapePaint) window.__fxTapePaint(); if(page.classList.contains('viz')) vizFitAll(); }catch(e){ try{ console.warn('[tp] sync',e); }catch(_){} } }
@@ -43884,7 +43956,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   }   /* tp9 — no self re-arm: window.__tiFrame drives it (see openPage) */
 
   /* ── interaction ── */
-  var CONTROL='input, select, button, textarea, .wt-nav, .noise-pow, .noise-nav, .noise-name, .noise-viz, .knob, .knob-ring, .fk-em, .fxr-dial, .fxr-knob, .fxr-pill, .fxr-r, .fxr-type, .fxr-preset, .fxr-swap, .fxr-x, .fxr-snd, .swap-btn, .osc-letter, .engine-wrap, .preset-wrap, .samp-sel, .uni-voices, .uni-stack, .uni-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .gk-arrow, .bl-arrow, .set-prev, .sel, .blend-pill, .ft-pill, .filt-exp, .flt-nav, .dd-trigger, .mv-c, .mv-seg, .mv-tabs, .mv-dep, .env-shelf, .env-sel, .reso-menu, .samp-h, .fade-sq, .fade-cv, .samp-drop, .samp-exp, .tp-port, .device-label, .knob-canvas-wrap, .fx-knob-wrap, .fx-knob-group, .tp-min, .ti-card .b, .ti-card .mix, .ti-card .pset';   /* tp9 — displays (filter curve, envelope grid, LFO scope, FX pictures, osc display) DRAG the node; play them on the synth page (Max) */
+  var CONTROL='input, select, button, textarea, .vel-src, [data-drag-vel], [data-drag-note], .wt-nav, .noise-pow, .noise-nav, .noise-name, .noise-viz, .knob, .knob-ring, .fk-em, .fxr-dial, .fxr-knob, .fxr-pill, .fxr-r, .fxr-type, .fxr-preset, .fxr-swap, .fxr-x, .fxr-snd, .swap-btn, .osc-letter, .engine-wrap, .preset-wrap, .samp-sel, .uni-voices, .uni-stack, .uni-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .gk-arrow, .bl-arrow, .set-prev, .sel, .blend-pill, .ft-pill, .filt-exp, .flt-nav, .dd-trigger, .mv-c, .mv-seg, .mv-tabs, .mv-dep, .env-shelf, .env-sel, .reso-menu, .samp-h, .fade-sq, .fade-cv, .samp-drop, .samp-exp, .tp-port, .device-label, .knob-canvas-wrap, .fx-knob-wrap, .fx-knob-group, .tp-min, .ti-card .b, .ti-card .mix, .ti-card .pset';   /* tp9 — displays (filter curve, envelope grid, LFO scope, FX pictures, osc display) DRAG the node; play them on the synth page (Max) */
   var FXCTL=CONTROL+', .fxr-pwr, .fxr-bk-sel, .fxr-bk-knob, .fxr-bk-v, .spl-add, [data-act], a, .fxr-core[data-core="eqz"], .fxr-core[data-core="ott"], .fxr-core[data-core="bod"], .fxr-core[data-core="spl"], .fxr-core[data-core="flt"]';
   var EDGE_ALL=9; function nearEdge(n,e){ if(!e||e.clientX==null) return false; try{ var r=n.wrap.getBoundingClientRect(), z=view.z||1, x=(e.clientX-r.left)/z, y=(e.clientY-r.top)/z; return x<EDGE_ALL||y<EDGE_ALL||x>n.w-EDGE_ALL||y>n.h-EDGE_ALL; }catch(x){ return false; } }
   function isCtl(n,tgt,e){ if(!tgt||!tgt.closest) return false; if(tgt.closest('.tp-port')) return true; if(e&&e.altKey) return false;
