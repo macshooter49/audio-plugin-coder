@@ -16961,7 +16961,7 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
     // Unlike the layers, oscSampleBuffers_ are NOT cleared by loadV1State/loadV2State, so a second
     // setStateInformation into a LIVE instance would otherwise leave the previous patch's audio
     // playing under the new patch's name. oscLoadedPath_ is the record that decides.
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
     {
         auto& tgt = oscSampleBuffers_[(size_t) oi];
         const juce::String path = oscSourcePaths_[(size_t) oi];
@@ -17027,7 +17027,7 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
     // both source files are still on disk. Baking here would mean instantiating BlendEngine +
     // reading both sources + an FFT analyse inside setStateInformation; that is a real feature and
     // it belongs with the embedded-audio commit, not smuggled into this one.
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
     {
         const juce::String a = blendSrcPaths_[(size_t) oi][0];
         const juce::String b = blendSrcPaths_[(size_t) oi][1];
@@ -17419,7 +17419,7 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
         // PEROSC-STATE — persist each oscillator's sample path (survives DAW project reload).
         // fb621 — the path is now a HINT, not the audio. It still travels because it is the only
         // record of where a one-shot came from, and a moved-but-present file is worth naming.
-        for (int oi = 0; oi < 4; ++oi)
+        for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
             if (oscSourcePaths_[(size_t) oi].isNotEmpty())
                 state.setProperty ("oscSamplePath" + juce::String (oi), oscSourcePaths_[(size_t) oi], nullptr);
             else state.removeProperty ("oscSamplePath" + juce::String (oi), nullptr);   // fb618
@@ -17432,7 +17432,7 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
         //  embedded"). Embedding the LIVE BUFFER rather than re-reading the file fixes all three at
         //  once, and a BLENDED oscillator too: the bake is editor-side and lands in this same slot,
         //  so what travels is what you hear.
-        for (int oi = 0; oi < 4; ++oi)
+        for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
         {
             const juce::String s (oi);
             auto buf = oscSampleBuffers_[(size_t) oi].load();
@@ -17478,7 +17478,7 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
 
         // BLEND-STATE — persist each osc's live blend source pair; the editor reloads both
         // files on reopen so the blend knobs stay live (knob values ride in the APVTS).
-        for (int oi = 0; oi < 4; ++oi)
+        for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
             for (int w = 0; w < 2; ++w)
                 if (blendSrcPaths_[(size_t) oi][(size_t) w].isNotEmpty())
                     state.setProperty ("blendSrc" + juce::String (w ? "B" : "A") + juce::String (oi),
@@ -18477,10 +18477,10 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
 void TerrainAudioProcessor::loadOscAndBlendPaths (const juce::ValueTree& loaded)
 {
     // PEROSC-STATE — each oscillator's sample path; restoreSampleSlotsFromState re-decodes it.
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
         oscSourcePaths_[(size_t) oi] = loaded.getProperty ("oscSamplePath" + juce::String (oi), "").toString();
     // BLEND-STATE — the blend source pairs (the editor re-analyzes lazily on reopen).
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
         for (int w = 0; w < 2; ++w)
             blendSrcPaths_[(size_t) oi][(size_t) w] =
                 loaded.getProperty ("blendSrc" + juce::String (w ? "B" : "A") + juce::String (oi), "").toString();

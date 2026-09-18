@@ -1641,7 +1641,7 @@ private:
         float lastVals[6] = { -1.f, -1.f, -1.f, -1.f, -1.f, -1.f };   // param poll cache
         juce::int64 lastMoveMs = 0;            // debounce timestamp
     };
-    OscBlend oscBlends_[4];
+    OscBlend oscBlends_[ParameterIDs::kOscCount];   // tp39 — E-H blend too (was [4])
     bool blendRestoreTried_ = false;           // lazy one-shot state-restore (first timer tick)
     void startBlend (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> srcB, double rateB, const juce::String& name);   // drop → "Blend" (memory)
     void queueBlendBake (int oscIdx);                           // analyze-if-needed + render on the pool
@@ -1649,7 +1649,7 @@ private:
     void pollBlendKnobs();                                      // timerCallback: debounce re-bakes
     void restoreBlendsFromState();                              // reload persisted source pairs
     void resetBlend (int oscIdx, bool pushUi);                  // end a live blend (Replace / undo / delete)
-    std::array<std::vector<std::pair<std::shared_ptr<juce::AudioBuffer<float>>, double>>, 4> blendHistory_;   // UNDO — pre-blend buffer snapshots (memory), ≤100 deep
+    std::array<std::vector<std::pair<std::shared_ptr<juce::AudioBuffer<float>>, double>>, ParameterIDs::kOscCount> blendHistory_;   // tp39 — E-H   // UNDO — pre-blend buffer snapshots (memory), ≤100 deep
     tw::BlendParams currentBlendParams (int oscIdx) const;
     juce::File blendCacheDir() const;
     static std::shared_ptr<juce::AudioBuffer<float>> readAudioFile (const juce::File& f, double& rateOut);

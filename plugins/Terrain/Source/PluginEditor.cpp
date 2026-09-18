@@ -4122,6 +4122,25 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 startBlend (oscIdx, bufB, rateB, filename);
                 complete (juce::var ("ok (memory)"));
             })
+            .withNativeFunction("blendOscSampleByPath", [this](const juce::Array<juce::var>& args,
+                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // tp39 — the drop's BLEND, by path: the dice stacks two library one-shots on one oscillator (Max: "when you
+                // drag one shot over another one shot ... it blends it ... that's what I want for percussion"). Same bake
+                // as blendOscSample — the osc's CURRENT sound is A, the file is B — but the file is read from disk here.
+                if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) oscStr[0] - 'a') : 0;
+                juce::File f (args[1].toString());
+                if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
+                juce::MemoryBlock mb;
+                if (! f.loadFileAsData (mb) || mb.getSize() == 0) { complete (juce::var ("read-failed")); return; }
+                double rateB = 0.0;
+                auto bufB = readAudioFromMemory (mb.getData(), mb.getSize(), rateB);
+                if (bufB == nullptr || bufB->getNumSamples() < 64) { complete (juce::var ("unreadable")); return; }
+                startBlend (oscIdx, bufB, rateB, f.getFileName());
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("clearOscSample", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5506,7 +5525,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
         // PEROSC-RELOAD — reload each oscillator's saved sample from disk (DAW project reload).
         // In-session reopen is already covered by the persistent buffer + cached payload; this
         // path handles a fresh processor whose oscSampleBuffers_ are empty but paths were restored.
-        for (int oi = 0; oi < 4; ++oi)
+        for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
         {
             // fb602 — same anti-double-load contract as the layer loop above.
             if (safeThis->audioProcessor.getOscSampleBuffer (oi).getNumSamples() > 0) { ++alreadyFilled; continue; }
@@ -14594,7 +14613,7 @@ void TerrainUiCore::loadSampleIntoLayer (const juce::File& file,
 //    window.onOscSampleLoaded(letter, json) so the UI draws that oscillator's waveform.
 void TerrainUiCore::loadOscSampleAsync (int oscIdx, const juce::File& file)
 {
-    if (oscIdx < 0 || oscIdx > 3) return;
+    if (oscIdx < 0 || oscIdx >= ParameterIDs::kOscCount) return;   // tp39 — E-H are oscillators too (was > 3)
     const char oscLetter = (char) ('a' + oscIdx);
     audioProcessor.oscSourcePath (oscIdx) = file.getFullPathName();
 
@@ -14643,7 +14662,11 @@ void TerrainUiCore::loadOscSampleAsync (int oscIdx, const juce::File& file)
 void TerrainUiCore::loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename,
                                              const juce::String& sourcePath)
 {
-    if (oscIdx < 0 || oscIdx > 3) return;
+    /* tp39 — was `oscIdx > 3`: a guard from before tp20 gave the instrument oscillators E-H (bank B). Every one-shot
+       aimed at E-H — the dice's, the browser's, a drop's — was silently dropped here, and the sampler sat EMPTY: Max's
+       "no engine should load up empty". Measured (Tests/_tp39b_bankb_probe.js): the same drum into A and E — A lands,
+       E's payload stays empty and E solos at -240 dBFS. kOscCount is the instrument's truth. */
+    if (oscIdx < 0 || oscIdx >= ParameterIDs::kOscCount) return;
     const char oscLetter = (char) ('a' + oscIdx);
     // fb602 — was `= filename;`. The cached payload only restores the WAVEFORM PICTURE on an
     // editor reopen; a DAW project reload rebuilds the processor and the bare filename failed
@@ -14801,7 +14824,7 @@ std::shared_ptr<juce::AudioBuffer<float>> TerrainUiCore::readAudioFromMemory (co
 // loadOscSampleFromMemory so it reuses the peaks + waveform push. Sandbox-safe (onBlendState pushed by caller).
 void TerrainUiCore::publishBlendBuffer (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> buf, double rate)
 {
-    if (oscIdx < 0 || oscIdx > 3 || buf == nullptr || buf->getNumSamples() < 1) return;
+    if (oscIdx < 0 || oscIdx >= ParameterIDs::kOscCount || buf == nullptr || buf->getNumSamples() < 1) return;   // tp39 — E-H are oscillators too (was > 3)
     juce::MemoryBlock mb;
     {
         auto mos = std::make_unique<juce::MemoryOutputStream> (mb, false);
@@ -14849,7 +14872,7 @@ tw::BlendParams TerrainUiCore::currentBlendParams (int oscIdx) const
 // Used by Replace (any plain load), Undo, and Delete sample. The published audio is untouched.
 void TerrainUiCore::resetBlend (int oscIdx, bool pushUi)
 {
-    if (oscIdx < 0 || oscIdx > 3) return;
+    if (oscIdx < 0 || oscIdx >= ParameterIDs::kOscCount) return;   // tp39 — E-H are oscillators too (was > 3)
     auto& bl = oscBlends_[oscIdx];
     bl.live = false;
     bl.srcA.reset(); bl.srcB.reset(); bl.engine.reset();
@@ -14865,7 +14888,7 @@ void TerrainUiCore::resetBlend (int oscIdx, bool pushUi)
 void TerrainUiCore::startBlend (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> srcB, double rateB, const juce::String& name)
 {
     juce::ignoreUnused (name);
-    if (oscIdx < 0 || oscIdx > 3) return;
+    if (oscIdx < 0 || oscIdx >= ParameterIDs::kOscCount) return;   // tp39 — E-H are oscillators too (was > 3)
     auto cur = audioProcessor.getOscSampleBuffer (oscIdx).load();
     if (cur == nullptr || cur->getNumSamples() < 256)   // nothing to blend with — just publish the drop
     { publishBlendBuffer (oscIdx, srcB, rateB); return; }
@@ -14967,7 +14990,7 @@ void TerrainUiCore::pollBlendKnobs()
     if (! blendRestoreTried_) { blendRestoreTried_ = true; restoreBlendsFromState(); }
 
     const juce::int64 now = juce::Time::currentTimeMillis();
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
     {
         auto& bl = oscBlends_[oi];
         if (! bl.live) continue;
@@ -14992,7 +15015,7 @@ void TerrainUiCore::pollBlendKnobs()
 
 void TerrainUiCore::restoreBlendsFromState()
 {
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
     {
         auto& bl = oscBlends_[oi];
         if (bl.live) continue;
@@ -15047,7 +15070,7 @@ void TerrainUiCore::afterPatchLoad (bool fromHost)
     // already moved every knob.
     if (webView == nullptr) return;
     resyncAfterReattach();
-    for (int oi = 0; oi < 4; ++oi)
+    for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
     {
         const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
         if (audioProcessor.getCachedOscPayload (oi).isEmpty())
@@ -15281,7 +15304,7 @@ void TerrainUiCore::resyncAfterReattach()
                 // relied on a few timed getOscSamplePayload polls that lost the WKWebView init race
                 // "sometimes" (blank waveform even though audio plays). Authoritatively PUSH each
                 // osc's cached waveform payload now that the page is ready — no poll, no race.
-                for (int oi = 0; oi < 4; ++oi)
+                for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
                 {
                     const juce::String payload = audioProcessor.getCachedOscPayload (oi);
                     if (payload.isEmpty()) continue;
@@ -15292,7 +15315,7 @@ void TerrainUiCore::resyncAfterReattach()
                             + letter + "'," + payload + ");", nullptr);
                 }
                 // BLEND-RESYNC — re-show the blend knob row for any osc with a live blend
-                for (int oi = 0; oi < 4; ++oi)
+                for (int oi = 0; oi < ParameterIDs::kOscCount; ++oi)   // tp39 — E-H (bank B) too; was `< 4`, which dropped their one-shots on save/restore
                 {
                     if (! oscBlends_[oi].live) continue;
                     const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));

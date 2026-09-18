@@ -6925,7 +6925,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
            buttons ... make sure everything is spaced out evenly and equally and it doesn't touch that terrain in
            the middle." Same .settings-btn box as the gear, so .header-right's 6 px gap + the 6 px margin puts the
            same air on both sides of it; the gear stays last, keeping its 16 px right inset. -->
-      <button class="settings-btn dice-btn" id="dice-btn" title="Roll the dice — right-click to aim it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="4.4"/><circle cx="8.4" cy="8.4" r="1.05" fill="currentColor"/><circle cx="15.6" cy="15.6" r="1.05" fill="currentColor"/><circle cx="15.6" cy="8.4" r="1.05" fill="currentColor"/><circle cx="8.4" cy="15.6" r="1.05" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg></button>
+      <button class="settings-btn dice-btn" id="dice-btn" title="Roll the dice — right-click for the randomization menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="4.4"/><circle cx="8.4" cy="8.4" r="1.05" fill="currentColor"/><circle cx="15.6" cy="15.6" r="1.05" fill="currentColor"/><circle cx="15.6" cy="8.4" r="1.05" fill="currentColor"/><circle cx="8.4" cy="15.6" r="1.05" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg></button>
       <button class="settings-btn" id="settings-btn" title="Settings">
         <canvas id="settings-icon" width="28" height="28"></canvas>
       </button>
@@ -31536,8 +31536,8 @@ restoreThemeFromBackend();
     /* fb635 — the generative shapes (5 Dune · 6 Rand · 9 Eddy · 10 Vortex) never read the table, so they no longer clear pm:
        Path → S&H → Path used to replace the drawing with the figure-8 and push it. */
     setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; chaosTrail=[]; duneHist=[]; render(); }
-  function shRand(kind){   // fb227 — THE RANDOM DICE (Max: 'complete randomness... random both goes the craziest'). One-shot UI RNG (the never-reseed law guards DSP RNG, not dice).
-    var sp=shGet(), n=sp.gv||8, pts=[], i, r=Math.random;
+  function shRand(kind,spIn){   // fb227 — THE RANDOM DICE (Max: 'complete randomness... random both goes the craziest'). One-shot UI RNG (the never-reseed law guards DSP RNG, not dice).   tp39 — spIn: draw into ANY LFO's shape (the dice)
+    var sp=spIn||shGet(), n=sp.gv||8, pts=[], i, r=Math.random;
     function lv(){ var y=r(); return sp.sn? shSnap(y,sp.gh) : y; }
     if(kind===0){                              // FLAT — random steps on the Time grid (snap quantizes levels = instant rhythmic gates)
       for(i=0;i<n;i++){ var y=lv(); pts.push([i/n,y,0]); pts.push([(i+1)/n,y,0]); }
@@ -31563,7 +31563,12 @@ restoreThemeFromBackend();
     pts.sort(function(a,b){return a[0]-b[0];});
     pts[0][0]=0; pts[pts.length-1][0]=1;
     if(pts.length>160)pts.length=160;
+    if(spIn&&spIn!==shGet()){ spIn.pts=pts; spIn.nm='Random'; shTouched=true; shPush(); return; }   /* tp39 — another LFO's shape: written and pushed, no repaint of this tab */
     seedTo(pts,'Random'); }
+  /* tp39 — THE DICE DRAWS. Max: "turn the grid up heavily on the LFO and press random both — watch the shit you're gonna get."
+     n 1..10, kind 0 flat · 1 curve · 2 both, gv time cells, gh level lines, snap. The LFO's shape param must be CUSTOM (7). */
+  window.__lfoDrawRandom=function(n,kind,gv,gh,snap){ try{ if(!(n>=1&&n<=10)) return false; if(!shapes[n]) shapes[n]={pts:seedFor(1),gh:8,gv:8,sn:1};
+      var sp=shapes[n]; sp.gv=Math.max(2,Math.min(32,gv|0)); sp.gh=Math.max(2,Math.min(32,gh|0)); sp.sn=snap?1:0; shRand(kind,sp); if(n===st.tab){ shTouched=true; shPush(); render(); } return true; }catch(e){ return false; } };
   function shStampGesture(e,T){   // fb221 — ONE stamp gesture, two doors: an armed brush (fb213) or Shift-drag (the Serum step-sequencer gesture); doc-level drag survives the per-stamp rebuilds
     shSelClear();
     if(st.shape!==7){ shConvert(); }
@@ -42293,6 +42298,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     if (spec.focus) setTimeout(() => { const f = $(spec.focus); if (f) { f.focus(); if (f.select) f.select(); } }, 30);
   }
   function closeSheet() { closeSug(); const sh = $('tp-sheet'); sh.classList.remove('on'); sh.querySelector('.tp-card').innerHTML = ''; sheetSpec = null; surfaceUp(); if (browserOpen()) $('tp-list').focus(); }
+  window.__tpSheet = sheet; window.__tpCloseSheet = closeSheet;   /* tp39 — the randomization menu is this same sheet (Max: "model it off the preset menu") */
   $('tp-sheet').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeSheet(); if (e.key === 'Enter' && e.target.tagName === 'INPUT' && ! e.target.closest('.chp') && sheetSpec && sheetSpec.onOk) { e.preventDefault(); sheetSpec.onOk(); } });
   $('tp-sheet').addEventListener('mousedown', e => { if (e.target === $('tp-sheet')) closeSheet(); });
   /* the fb135 host-key bridge types into the ARMED input — every field in these surfaces arms itself */
@@ -42635,7 +42641,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function build(){ if(built) return; var sp=document.getElementById('syn-panel'); if(!sp) return; built=true;
     page=document.createElement('div'); page.id='tp-page';
     page.innerHTML='<div class="tp-grid"></div><div class="tp-world"><div class="tp-zoom"><svg class="tp-cables"><g class="cg"></g><g class="drawg"></g></svg><div class="tp-nodes"></div></div></div>'
-      +'<div class="tp-tools"><span class="g dis" data-t="undo" title="Undo">'+IC.undo+'</span><span class="g dis" data-t="redo" title="Redo">'+IC.redo+'</span><span class="g" data-t="fit" title="Fit everything in view">'+IC.fit+'</span><span class="g" data-t="tidy" title="Tidy the canvas">'+IC.tidy+'</span><span class="g" data-t="viz" title="Visualizers only">'+IC.eye+'</span><span class="sep"></span><span class="g" data-t="dice" title="A new preset — right-click to aim it and set how far it reaches">'+IC.dice+'</span></div>'
+      +'<div class="tp-tools"><span class="g dis" data-t="undo" title="Undo">'+IC.undo+'</span><span class="g dis" data-t="redo" title="Redo">'+IC.redo+'</span><span class="g" data-t="fit" title="Fit everything in view">'+IC.fit+'</span><span class="g" data-t="tidy" title="Tidy the canvas">'+IC.tidy+'</span><span class="g" data-t="viz" title="Visualizers only">'+IC.eye+'</span><span class="sep"></span></div>'
       +'<div class="tp-mini"><svg viewBox="0 0 118 72" preserveAspectRatio="none"></svg></div>'
       +'<div class="tp-menu tp-add"><div class="head">'+IC.mag+'<input placeholder="Search" spellcheck="false"><span class="x">'+IC.x+'</span></div><div class="panes"><div class="cats"></div><div class="items"></div></div></div>'
       +'<div class="tp-menu tp-nmenu"></div><div class="tp-toast"></div>';
@@ -42648,7 +42654,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 
   /* ── the layout blob (positions, extended cards, the view, the dice's aim + reach, the eye, the node list the browser counts) ── */
   function loadLayout(cb){ var g=NF('getPatcherJson'), done=false;
-    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',cpuCap:(o.cpuCap==='off'||(typeof o.cpuCap==='number'&&o.cpuCap>0))?o.cpuCap:'auto',rlevel:o.rlevel||'medium',rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
+    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',cpuCap:(o.cpuCap==='off'||(typeof o.cpuCap==='number'&&o.cpuCap>0))?o.cpuCap:'auto',aims:Array.isArray(o.aims)?o.aims.filter(function(a){ return typeof a==='string'; }):[],blocks:Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},(o.blocks&&typeof o.blocks==='object')?o.blocks:{}),rlevel:o.rlevel||'medium',rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
     function first(){ if(done) return; done=true; cb(); }
     if(g){ try{ Promise.resolve(g()).then(function(s){ parse(s); if(done) applyLate(); else first(); }).catch(first); }catch(e){ first(); } setTimeout(first,300); }
     else { var s=null; try{ s=localStorage.getItem('tpLayout'); }catch(e){} parse(s); first(); } }
@@ -43073,7 +43079,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      light) the level — the gate. Modal is the one sample engine the dice may pick (keys / plucks / textures), with a
      one-shot from the library and sane hardness / decay / material. NO DEAD NODES: everything the dice leaves on the
      canvas is on and in the path, then the canvas tidies itself so the nodes move. */
-  var AIMS=['anything','keys','pads','bass','leads','plucks','textures'], LEVELS=['light','medium','heavy','wild','crazy'];
+  var AIMS=['anything','keys','pads','bass','leads','plucks','textures','drums'], LEVELS=['light','medium','heavy','wild','crazy'];   /* tp39 — drums: the library's Drums + 808 one-shots, layered */
   /* tp23 — THE DICE'S TARGETS. Max: "instead of putting a randomized chain could you just put effects and then
      modulation and just put it in the list" — and, the point of it: "if I have it set to FX all I have to do is keep
      clicking the random button until I get something good. I don't have to keep loading up that menu." So FX and
@@ -43088,7 +43094,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      can still drive to 1.0 is not capped. */
   var DLY_FB_MAX=.20;
   function knobTop(core,k,top){ return (core==='delay'&&k===1)?Math.min(top,DLY_FB_MAX):top; }   /* tp16 — Max: "how come the other menu gets crazy" — ONE reach, and it goes all the way */
-  var ENV={keys:[.05,.45,.6,.35],pads:[.45,.55,.85,.65],bass:[.02,.35,.7,.2],leads:[.06,.35,.85,.3],plucks:[.0,.3,.0,.25],textures:[.55,.6,.9,.8]};
+  var ENV={keys:[.05,.45,.6,.35],pads:[.45,.55,.85,.65],bass:[.02,.35,.7,.2],leads:[.06,.35,.85,.3],plucks:[.0,.3,.0,.25],textures:[.55,.6,.9,.8],drums:[.0,.3,.0,.2]};   /* tp39 — drums: a percussive envelope */
   /* the REACH — how far every section goes. uni = unison VOICES (never above 7, Max: "anything above is a CPU eater"); lfo/env/fx = how many;
      types = chance a card leaves its default type; back = chance its back panel rolls; fxMod = share of LFOs aimed at effect knobs;
      depth = route depth range; wideLfo = chance an LFO takes any shape (else sine/triangle-ish); subset = chance an effect hears only SOME oscillators */
@@ -43177,9 +43183,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var TUNED_SET=(function(){ var m={}; for(var c in TUNED_ONESHOTS){ m[c]={}; TUNED_ONESHOTS[c].forEach(function(n){ m[c][n]=1; }); } return m; })();
   function tunedIn(c){ return TUNED_ONESHOTS[c]||[]; }
   /* @end:tuned-oneshots */
-  var AIMCATS={keys:['Keys','Bell','Pluck'],pads:['Pad','Keys','Synth'],bass:['Bass'],leads:['Lead','Synth','Bell'],plucks:['Pluck','Bell','Keys'],textures:['Pad','Synth','Keys']};
+  var AIMCATS={keys:['Keys','Bell','Pluck'],pads:['Pad','Keys','Synth'],bass:['Bass'],leads:['Lead','Synth','Bell'],plucks:['Pluck','Bell','Keys'],textures:['Pad','Synth','Keys'],drums:['Drums','Drums','808']};   /* tp39 — drums are not pitched: every file counts, tuned or not */
+  function filesFor(d,c,aim){ return aim==='drums'?(d.cats[c]||[]).slice():tunedFiles(d,c); }
   var libCache=null, libAt=0, blendPeers=null;
-  function sampLib(cb){ if(libCache&&Date.now()-libAt<60000){ cb(libCache); return; } var f=NF('scanSampleFactory'); if(!f){ cb(null); return; }
+  function sampLib(cb){ if(libCache&&Date.now()-libAt<600000){ cb(libCache); return; } var f=NF('scanSampleFactory'); if(!f){ cb(null); return; }   /* tp39 — ten minutes, and pre-fetched (below), so the roll never waits for the scan */
     try{ Promise.resolve(f()).then(function(r){ var d=(typeof r==='string')?JSON.parse(r):r; libCache=(d&&d.cats)?d:null; libAt=Date.now(); cb(libCache); }).catch(function(){ cb(null); }); }catch(e){ cb(null); } }
   /* tp24 — THE DICE LOADS ONLY ONE-SHOTS THAT MEASURED IN TUNE. Max: "I want to give the sample engine a
      shot ... we just need to make sure that the one shots are tuned ... they actually have to be tuned to C."
@@ -43199,12 +43206,28 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var fail=function(){ try{ if(onFail) onFail(); }catch(e){} };
     if(!window.__sampLoadPath){ fail(); return; }
     sampLib(function(d){ if(!d){ fail(); return; }
-      var has=function(c){ return tunedFiles(d,c).length>0; };
+      var has=function(c){ return filesFor(d,c,aim).length>0; };
       var pool=(AIMCATS[aim]||[]).filter(has);
-      if(!pool.length||rnd()<.2) { var wide=MELODIC.filter(has); if(wide.length) pool=wide; }
+      if(aim!=='drums'&&(!pool.length||rnd()<.2)) { var wide=MELODIC.filter(has); if(wide.length) pool=wide; }
       if(!pool.length){ fail(); return; }
-      var c=pick(pool), files=tunedFiles(d,c); if(!files.length){ fail(); return; }
-      try{ window.__sampLoadPath(o, d.path+'/'+c+'/'+pick(files)); }catch(e){ fail(); } }); }
+      /* tp39 — NO ENGINE LOADS UP EMPTY (Max). The load is asynchronous and can fail after the roll has moved on (a file the
+         decoder rejects, a slot that was busy), so the one-shot is VERIFIED against the C++'s own record of a landed sample
+         (getOscSamplePayload) and retried with another file, three times, before the oscillator goes back to a wavetable. */
+      var tried={};
+      (function attempt(k){ if(k>=3){ fail(); return; }
+        var c=pick(pool), files=filesFor(d,c,aim).filter(function(f){ return !tried[c+'/'+f]; }); if(!files.length){ fail(); return; }
+        var f=pick(files), path=d.path+'/'+c+'/'+f; tried[c+'/'+f]=1;
+        try{ window.__sampLoadPath(o,path); }catch(e){ attempt(k+1); return; }
+        window.__diceLastOneShot=window.__diceLastOneShot||{}; window.__diceLastOneShot[o]=path;   /* the gates read what was picked */
+        setTimeout(function(){ var g=NF('getOscSamplePayload'); if(!g) return;
+          try{ Promise.resolve(g(o)).then(function(pl){ if(pl&&String(pl).length>2) return; attempt(k+1); }).catch(function(){ attempt(k+1); }); }catch(e){ attempt(k+1); } },1400);
+      })(0); }); }
+  /* tp39 — DRUM LAYERS. The drop's blend ("drag one shot over another one shot ... it blends it"): a second library drum is
+     baked INTO the oscillator's current one-shot through blendOscSampleByPath once the first has landed. */
+  function drumBlend(o){ sampLib(function(d){ if(!d) return; var cats=AIMCATS.drums.filter(function(c){ return filesFor(d,c,'drums').length>0; }); if(!cats.length) return;
+      var c=pick(cats), f=pick(filesFor(d,c,'drums')), path=d.path+'/'+c+'/'+f, b=NF('blendOscSampleByPath'); if(!b) return;
+      setTimeout(function(){ var g=NF('getOscSamplePayload'); var go=function(){ try{ b(o,path); window.__diceLastBlend=window.__diceLastBlend||{}; window.__diceLastBlend[o]=path; }catch(e){} };
+        if(!g){ go(); return; } try{ Promise.resolve(g(o)).then(function(pl){ if(pl&&String(pl).length>2) go(); }); }catch(e){} },1900); }); }
   var SAMPR={light:.25,medium:.4,heavy:.5,wild:.6,crazy:.75}, BLENDR={light:.15,medium:.35,heavy:.6,wild:.8,crazy:1};
   /* tp12b — HARD RULE (Max): EVERY oscillator this plugin summons sits at PHASE 180°, and it is the ALIGNED mode (0 =
      the note starts at PHASE/360 every time), never Random — a random 180 is not 180. PHASE_AMT is ignored by that mode
@@ -43246,6 +43269,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     P('WIRE_WOW', between(.2,top)); P('WIRE_SATURATION', between(.3,top)); P('WIRE_HISS', between(.08,.4)); }
   /* one oscillator's sound, rolled — everything but pitch (shared by the dice and the map's per-oscillator roll) */
   function rollOsc(o,i,aim,lvl,R,P){ var X=OX(o);
+    /* tp39 — DRUMS: a Sample engine (a Resynth now and then) with a library drum, unison 1, no back-panel blends — the
+       layering is the drop's blend, and the character comes from the distortion / tape / glitch the roll adds. */
+    if(aim==='drums'){ var dEng=(lvl==='wild'||lvl==='crazy')&&rnd()<.3?3:1; P(X+'ENGINE',choiceNorm(X+'ENGINE',dEng,7)); (rollInfo[o]=rollInfo[o]||{o:o,on:true}).eng=dEng; rollInfo[o].uni=1;
+      phase180(X,P); P(X+'UNISON',uniNorm(1)); P(X+'LEVEL',between(.55,.85)); P(X+'FOLD_AMT',0); P(X+'WARP_AMOUNT',0); P(X+'WARP2_AMT',0);
+      rollSample(X,dEng,aim,'light',P); oneShot(o,'drums',function(){ try{ setP(X+'ENGINE',choiceNorm(X+'ENGINE',0,7)); }catch(e){} });
+      if(rnd()<.55) drumBlend(o);
+      return false; }
     /* tp13 — GRANULAR IS OFF THE TABLE (Max). Sample 1 and Resynth 3 only, and Resynth has to be USED, not defaulted.
        tp23 — and now the whole sample family is CRAZY-only; see the engine choice below. */
     /* tp23 — SYNTHESIS ONLY, UNLESS IT IS CRAZY (Max: "take away the granular and the sample engine from even being
@@ -43326,11 +43356,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      build() only creates the canvas DOM — it never adopts — so it is safe to call with the page shut, and it is
      what gives generate() a `page` to find its tool button on. The roll itself is identical to the canvas's. */
   window.__tpDice=function(){ try{ build(); }catch(e){} try{ rollDice(); }catch(e){ return false; } return true; };
+  setTimeout(function(){ try{ sampLib(function(){}); }catch(e){} },2500);   /* tp39 — the one-shot library, warm before the first roll */
   window.__tpDiceAim=function(){ return layout.aim||'anything'; };
   window.__tpDiceLevel=function(){ return layout.dlevel||'medium'; };
   window.__tpDiceLevelSet=function(l){ if(LEVELS.indexOf(l)<0) return false; layout.dlevel=l; saveLayout(); return true; };   /* tp36 — the gates set the reach without a menu */
   window.__tpDiceMenu=function(x,y){
     try{ build(); }catch(e){}
+    if(openDiceSheet()) return true;   /* tp39 — the randomization sheet, wherever the dice was pressed */
     if(isOpen){ openAimMenu(x,y); return true; }
     /* the canvas's own menu lives inside #tp-page and cannot be seen while that is hidden, so off-canvas it is
        drawn with the house body-level menu instead — same list, same state, same saveLayout. */
@@ -43352,16 +43384,20 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      1–7 LFOs of any shape / rate / sync / phase aimed at the oscillators, the filters AND the effect knobs, with real depths
      (each LFO's own master stays at full — the old dice wrote it near zero); envelopes 2, 4 and 5 shaped and routed (filter,
      wavetable, effects, LFO rate); Glitch fully re-rolled on heavy / wild; no dead nodes; the canvas tidies itself. */
-  function generate(){ var aim=layout.aim||'anything'; if(aim==='anything'||isTarget(aim)) aim=pick(AIMS.slice(1)); var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
+  function pickAim(){ var as=(layout.aims||[]).filter(function(a){ return AIMS.indexOf(a)>0; }); if(as.length) return pick(as); var a=layout.aim||'anything'; if(a==='anything'||isTarget(a)) return pick(AIMS.slice(1)); return a; }   /* tp39 — several aims: one is drawn per roll */
+  function generate(){ var aim=pickAim(); window.__tpDiceLastAim=aim; window.__diceLastOneShot={}; window.__diceLastBlend={};   /* tp39 — the pick records are THIS roll's (a stale blend from the last roll is not a blend) */ var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
+    var B=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},layout.blocks||{});   /* tp39 — the blocks this roll touches; an unticked block keeps what is there */
+    if(aim==='drums') R=Object.assign({},R,{fxMod:Math.max(R.fxMod||0,.85),fx:[Math.max(2,R.fx[0]),Math.max(3,R.fx[1])]});   /* drums: the modulation aims at the effects (distortion), and there are some */
     if(generate.tight>0){ var ti=Math.max(0,LEVELS.indexOf(lvl)-generate.tight), TR=REACH[LEVELS[ti]]||REACH.light; R=Object.assign({},R,{lfo:TR.lfo,fx:TR.fx,flow:TR.flow}); }   /* tp36 — the re-roll after an over-cap roll */ var tool=page?page.querySelector('.g[data-t="dice"]'):null; if(tool) tool.classList.add('dis');
     /* tp23 — THE CAP IS SIX (Max: "the randomization cap should be at 6 engines. Not the whole 8, but it can choose up
        to 6 engines"). The pool is eight since tp20; the dice deliberately stops two short of it, and only the top of
        the reach gets anywhere near six. */
     var DICE_MAX_ENGINES=6;
-    var pool=oscList(); var nOn=(aim==='bass')?(1+(rnd()<.35?1:0)):(2+(rnd()<(lvl==='light'?.2:.45)?1:0));
+    var pool=oscList(); var nOn=(aim==='bass')?(1+(rnd()<.35?1:0)):(aim==='drums')?(2+Math.floor(rnd()*3)):(2+(rnd()<(lvl==='light'?.2:.45)?1:0));
     if(big&&rnd()<.5) nOn++; if((lvl==='wild'||lvl==='crazy')&&rnd()<.55) nOn++; if(lvl==='crazy'&&rnd()<.5) nOn++;
     nOn=Math.min(Math.min(DICE_MAX_ENGINES,pool.length),nOn);
-    var on=shuffle(pool).slice(0,nOn).sort(function(a,b){ return pool.indexOf(a)-pool.indexOf(b); }), list=[], ids=[], fxAdded=[], f2On=false;
+    var on=shuffle(pool).slice(0,nOn).sort(function(a,b){ return pool.indexOf(a)-pool.indexOf(b); }), list=[], ids=[], fxAdded=[], f2On=false, drawQ=[];
+    if(!B.osc){ var onNow=pool.filter(oscOn); if(onNow.length) on=onNow; else B.osc=1; }   /* tp39 — the oscillators stay: the rest of the roll addresses the ones that are on */
     rollInfo={};   /* tp36 — this roll's oscillators, priced by capRoll before the write */
     function P(id,v){ list.push([id,v]); ids.push(id); }
     function span(r){ return between(r[0],r[1]); }
@@ -43372,9 +43408,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     function ftype(musical){ var ti=musical?pick(aim==='bass'||aim==='leads'?[0,0,4,5]:[0,5,0,1]):Math.floor(rnd()*NF1); return Ro&&Ro.norm?Ro.norm(ti):ti/(NF1-1); }
     function ftypeR(){ var musicalOdds=lvl==='light'?.75:lvl==='medium'?.35:lvl==='crazy'?.02:.08; return ftype(rnd()<musicalOdds); }
     var step=0, steps=[
-      function(){ toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); phase180(X,P); if(!isOn) return;   /* tp12b — 180° on ALL of them, on or off */ rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
+      function(){ if(!B.osc) return; toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); phase180(X,P); if(!isOn) return;   /* tp12b — 180° on ALL of them, on or off */ rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
           blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); rollInfo._mono=(aim==='bass'||aim==='leads'); },
-      function(){ toast('Shaping the filters…'); f2On=(on.length>1)&&rnd()<R.f2;   /* tp13 — Max: "why isn't the second filter active on anything" */
+      function(){ if(!B.flt) return; toast('Shaping the filters…'); f2On=(on.length>1)&&rnd()<R.f2;   /* tp13 — Max: "why isn't the second filter active on anything" */
           P('SYN_FILTER1_TYPE',ftypeR()); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65]}[aim]||[.4,.75];
           P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',span(R.res)); P('SYN_FILTER1_DRV',span(R.drv)); P('SYN_FILTER1_KEYTRACK',0); P('SYN_FILTER1_VEL',0);
           P('SYN_FILTER1_MIX',1); P('SYN_FILTER1_POLES',rnd()<.5?1:between(.3,1)); P('SYN_FILTER1_SPREAD',rnd()<(R.wide||.3)?between(.1,.6):0);
@@ -43388,12 +43424,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             var r=rnd(), toF1=1, toF2=0; if(f2On){ if(r<.4){ toF1=0; toF2=1; } else if(r<.65){ toF2=1; } } if(toF2) f2Got.push(o);
             P(X+'F1MIX',toF1); P(X+'F2MIX',toF2); });
           if(f2On&&!f2Got.length){ var lastO=on[on.length-1], XL=OX(lastO); P(XL+'F1MIX',0); P(XL+'F2MIX',1); f2Got.push(lastO); } },
-      function(){ toast('Setting the envelopes…'); var e=ENV[aim]; P('SYN_ENV_AMP_A',e[0]+between(-.02,.02)); P('SYN_ENV_AMP_D',e[1]); P('SYN_ENV_AMP_S',e[2]); P('SYN_ENV_AMP_R',e[3]); P('SYN_ENV_AMP_DLY',0); P('SYN_ENV_AMP_H',0);
+      function(){ if(!B.env) return; toast('Setting the envelopes…'); var e=ENV[aim]; P('SYN_ENV_AMP_A',e[0]+between(-.02,.02)); P('SYN_ENV_AMP_D',e[1]); P('SYN_ENV_AMP_S',e[2]); P('SYN_ENV_AMP_R',e[3]); P('SYN_ENV_AMP_DLY',0); P('SYN_ENV_AMP_H',0);
           P('SYN_ENV_FLT_A',Math.max(0,e[0]-.02+between(-.03,.1))); P('SYN_ENV_FLT_D',between(.15,big?.8:.55)); P('SYN_ENV_FLT_S',between(0,big?.8:.5)); P('SYN_ENV_FLT_R',e[3]);
           P('SYN_ENV_FLT_CA',between(-.6,.6)); P('SYN_ENV_FLT_CD',between(-.6,.6));
           ['M1','M2'].forEach(function(m){ P('SYN_ENV_'+m+'_A',between(0,big?.7:.4)); P('SYN_ENV_'+m+'_D',between(.1,.8)); P('SYN_ENV_'+m+'_S',between(0,1)); P('SYN_ENV_'+m+'_R',between(.1,.7));
             P('SYN_ENV_'+m+'_CA',between(-.8,.8)); P('SYN_ENV_'+m+'_CD',between(-.8,.8)); P('SYN_ENV_'+m+'_LOOP',((lvl==='wild'||lvl==='crazy')&&rnd()<.4)?1:0); }); },
-      function(){ toast('Building the effects…'); var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
+      function(){ if(!B.fx) return; toast('Building the effects…'); var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
           var fp=diceableFx((FXPOOL[aim]||FXPOOL.pads).slice()); if(big) diceableFx(FXMORE).forEach(function(k){ if(fp.indexOf(k)<0) fp.push(k); });
           var count=ispan(R.fx), picked=[]; if((aim==='pads'||aim==='keys'||aim==='textures')&&rnd()<.7){ picked.push('reverb'); }
           shuffle(fp).forEach(function(k){ if(picked.length<count&&picked.indexOf(k)<0) picked.push(k); });
@@ -43409,7 +43445,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
               var mk=d.knobs[3]; if(mk&&mk.p){ var mr=FXMIX[core]||[.25,.5]; P(mk.p, Math.min(.95, between(mr[0],mr[1])*R.mix*(aim==='pads'&&core==='reverb'?1.25:1))); } }
             if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
               (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]) P(kn[2], between(lo, hot?.6:hi)); }); } }); },
-      function(){ toast('Wiring the modulation…'); if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
+      function(){ if(!B.mod) return; toast('Wiring the modulation…'); if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); });
           /* tp23 — MULTIPLE FLOW CARDS (Max: "I see two ARPs and two glitches and stuff like that, and glitches are
              routed to something else than what it's routed to"). The chain is drawn from a weighted bag up to the
              reach's own count, honouring each kind's instance ceiling (Robin is a singleton — FLOW_INST_MAX says so,
@@ -43457,7 +43493,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           function dep(){ return between(R.depth[0],R.depth[1])*(rnd()<.25?-1:1); }
           var nL=Math.min(10,ispan(R.lfo)), lfoN=0;
           for(var n=1;n<=nL;n++){ var tgt=(n===1)?take('wt'):(chain.length&&rnd()<.3)?take('flow'):(rnd()<R.fxMod)?(rnd()<.5?take('fxback'):take('fx')):(rnd()<.35?take('fltback'):take(null)); if(!tgt) break; lfoN=n;   /* tp23 — the flow instances take their share */   /* tp13 — the back panels get their share */
-            var shape=rnd()<R.wideLfo?Math.floor(rnd()*11):pick([0,0,1,2]); P('LFO'+n+'_SHAPE',choiceNorm('LFO'+n+'_SHAPE',shape,11));
+            var shape=rnd()<R.wideLfo?Math.floor(rnd()*11):pick([0,0,1,2]);
+            /* tp39 — THE DICE DRAWS ITS LFOs (Max: "I want the craziest drawings, the craziest chaos patterns"). From heavy up a share of the
+               LFOs are CUSTOM shapes drawn by the card's own Random flat / curve / both with the grid turned up — crazy = 'both' on a
+               16-32 cell grid. The drawing lands after the parameters (the shape must be CUSTOM first). */
+            var drawP={light:0,medium:.15,heavy:.4,wild:.65,crazy:.9}[lvl]||0;
+            if(rnd()<drawP&&window.__lfoDrawRandom){ shape=7; drawQ.push({n:n,kind:lvl==='crazy'?pick([2,2,2,0,1]):lvl==='wild'?pick([2,0,1]):pick([1,2]),gv:pick(lvl==='crazy'?[16,24,32]:big?[8,12,16]:[8]),gh:pick(lvl==='crazy'?[8,12,16]:[4,6,8]),snap:rnd()<.6}); }
+            P('LFO'+n+'_SHAPE',choiceNorm('LFO'+n+'_SHAPE',shape,11));
             var sync=rnd()<.5; P('LFO'+n+'_SYNC',sync?1:0); if(sync) P('LFO'+n+'_DIV',rnd());
             P('LFO'+n+'_RATE', rnd()<R.fast?between(.45,.85):between(.05,.4)); P('LFO'+n+'_PHASE',rnd()); P('LFO'+n+'_DEPTH',1);   /* the LFO's own master at full; the route carries the amount */
             (function(nn){ route('lfo'+nn,function(d){ window.__tiAddRoute&&window.__tiAddRoute(0,nn,d); },tgt.d,(tgt.k==='cut'?.6:1)*dep()); })(n); }
@@ -43479,7 +43521,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
              wild as the level says. The parameters of the abandoned roll are never written. */
           if(capR.est>capR.cap&&(generate.attempt||0)<2){ generate.attempt=(generate.attempt||0)+1; generate.tight=generate.attempt; if(tool) tool.classList.remove('dis'); setTimeout(function(){ try{ generate(); }catch(e){} },0); return; }
           generate.attempt=0; generate.tight=0;
-          track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); pool.forEach(function(o){ var d=oscDev(o); if(d) d.classList.toggle('osc-off',on.indexOf(o)<0); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){}
+          track(ids,function(){ list.forEach(function(kv){ setP(kv[0],kv[1]); }); drawQ.forEach(function(q){ try{ window.__lfoDrawRandom(q.n,q.kind,q.gv,q.gh,q.snap); }catch(e){} });   /* tp39 — the drawn LFOs, after their shape params landed */ pool.forEach(function(o){ var d=oscDev(o); if(d) d.classList.toggle('osc-off',on.indexOf(o)<0); }); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); if(window.__fxrRender) window.__fxrRender(); }catch(e){}
           setTimeout(function(){ try{ if(window.__fxrRestoreAll) window.__fxrRestoreAll(); }catch(e){} },0);   /* the cards read back the knobs the dice wrote — the writes are already in the JS model and queued ahead of any read on the message thread, so there is nothing to wait for (tp35: was 350 ms) */
           /* tp25 — the roll can now be fired from the SYNTH PAGE's dice, with this canvas shut. adoptFx()
              MOVES the rack's cards onto the canvas and glideTidy() re-seats every node; doing either while
@@ -43594,13 +43636,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     page.addEventListener('contextmenu',function(e){ if(e.target.closest('.tp-mini, .tp-menu')) { e.preventDefault(); return; }
       var prt=e.target.closest('.tp-port'); if(prt){ e.preventDefault(); e.stopPropagation(); closeMenus(); unpatchPort(prt.dataset.key,prt.dataset.kind,+prt.dataset.i); return; }   /* tp11 — right-click a port = unpatch it (Max) */
       if(e.target.closest('.hit')) return;   /* a cable's own handler offers Cut */
-      var tool=e.target.closest('.tp-tools .g'); if(tool){ e.preventDefault(); if(tool.dataset.t==='dice') openAimMenu(e.clientX,e.clientY); return; }
+      var tool=e.target.closest('.tp-tools .g'); if(tool){ e.preventDefault(); return; }   /* tp39 — the canvas has no dice of its own: the header's is the one */
       var n=nodeOf(e.target);
       if(!n){ e.preventDefault(); closeMenus(); openAdd(e.clientX,e.clientY,null); return; }
       if(page.classList.contains('viz')){ e.preventDefault(); return; }
       if(n.kind==='flow'&&!n.ext){ e.preventDefault(); e.stopPropagation(); closeMenus(); setFlowExt(n,true); commit(); return; }   /* the tile opens IN PLACE (its own right-click would float a card) */
       closeMenus(); sel={node:n.key}; paintSel(); },true);   /* tp10 — CAPTURE; no "Part of the synth", no "Extend / Remove" (Max: delete = ⌫) — the module's own right-click runs */
-    page.querySelector('.tp-tools').addEventListener('mousedown',function(e){ e.stopPropagation(); var g=e.target.closest('.g'); if(!g||e.button!==0) return; var t=g.dataset.t; if(t==='fit') fit(); if(t==='tidy') glideTidy(); if(t==='undo') undo(); if(t==='redo') redo(); if(t==='viz') setViz(!layout.viz); if(t==='dice'&&!g.classList.contains('dis')) rollDice(); });
+    page.querySelector('.tp-tools').addEventListener('mousedown',function(e){ e.stopPropagation(); var g=e.target.closest('.g'); if(!g||e.button!==0) return; var t=g.dataset.t; if(t==='fit') fit(); if(t==='tidy') glideTidy(); if(t==='undo') undo(); if(t==='redo') redo(); if(t==='viz') setViz(!layout.viz);  });
     miniEl.addEventListener('mousedown',function(e){ e.stopPropagation(); var m=miniEl._map; if(!m) return; var r=miniEl.getBoundingClientRect(); var wx=(e.clientX-r.left-m.ox)/m.k+m.x0, wy=(e.clientY-r.top-m.oy)/m.k+m.y0; view.x=-(wx-m.W/2)*view.z; view.y=-(wy-m.H/2)*view.z; applyView(); saveView(); });
     addM.addEventListener('mousedown',function(e){ e.stopPropagation(); var c=e.target.closest('.cats .row'); if(c){ addCat=c.dataset.c; renderAdd(); return; } if(e.target.closest('.x')){ closeMenus(); return; } var r=e.target.closest('.items .row'); if(!r||r.classList.contains('dis')){ if(r&&r.dataset.note) toast(r.dataset.note); return; } addFromList(r.dataset.k,+addM.dataset.wx,+addM.dataset.wy); });
     addM.querySelector('input').addEventListener('input',renderAdd);
@@ -43650,7 +43692,35 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function aimLabel(a){ return DTNAME[a]||cap(a); }
   /* tp23 — ONE list. FX and Modulation sit in it exactly like the sound aims, because that is what they now ARE:
      things the dice is AIMED at, not one-shot actions you have to come back to the menu to fire again. */
-  function openAimMenu(cx,cy){ closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
+  /* ══ tp39 — THE RANDOMIZATION MENU (Max: "model a randomization menu based off of the preset menu ... pick and choose what
+     I'd like to randomize in terms of blocks ... multiple aims ... CPU cap at the bottom"). The browser's own sheet with
+     chip rows: Aim (several — one is drawn per roll; none = anything), Roll (the blocks; an unticked block keeps what is
+     there), Reach, CPU cap. Roll = save + roll; the header dice's left click rolls with what was saved. */
+  var AIMLBL={keys:'Keys',pads:'Pads',bass:'Bass',leads:'Leads',plucks:'Plucks',textures:'Textures',drums:'Drums'}, BLKLBL={osc:'Oscillators',flt:'Filters',env:'Envelopes',fx:'Effects',mod:'Modulation & flow'};
+  function openDiceSheet(){ if(!window.__tpSheet) return false;
+    var aims=(layout.aims||[]).slice(), blocks=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},layout.blocks||{}), lvl=layout.dlevel||'medium', capV=layout.cpuCap||'auto';
+    function chip(cls,attr,val,on,txt){ return '<button class="tp-chip'+(on?' active':'')+'" data-'+attr+'="'+val+'">'+txt+'</button>'; }
+    function paint(){
+      var A=document.getElementById('dc-aim'), Bk=document.getElementById('dc-blk'), Lv=document.getElementById('dc-lvl'), C=document.getElementById('dc-cap'); if(!A||!Bk||!Lv||!C) return;
+      A.innerHTML=Object.keys(AIMLBL).map(function(a){ return chip('','a',a,aims.indexOf(a)>=0,AIMLBL[a]); }).join('');
+      Bk.innerHTML=Object.keys(BLKLBL).map(function(b){ return chip('','b',b,!!blocks[b],BLKLBL[b]); }).join('');
+      Lv.innerHTML=LEVELS.map(function(l){ return chip('','l',l,l===lvl,cap(l)); }).join('');
+      C.innerHTML=CAPS.map(function(c){ return chip('','c',String(c),String(capV)===String(c),capLabel(c).replace('CPU cap: ','')); }).join('');
+      A.querySelectorAll('[data-a]').forEach(function(b){ b.onclick=function(){ var a=b.dataset.a, i=aims.indexOf(a); if(i>=0) aims.splice(i,1); else aims.push(a); paint(); }; });
+      Bk.querySelectorAll('[data-b]').forEach(function(b){ b.onclick=function(){ blocks[b.dataset.b]=blocks[b.dataset.b]?0:1; paint(); }; });
+      Lv.querySelectorAll('[data-l]').forEach(function(b){ b.onclick=function(){ lvl=b.dataset.l; paint(); }; });
+      C.querySelectorAll('[data-c]').forEach(function(b){ b.onclick=function(){ var c=b.dataset.c; capV=(c==='off'||c==='auto')?c:parseInt(c,10); paint(); }; }); }
+    window.__tpSheet({ title:'Randomize', ok:'Roll', wide:true,
+      body:'<div class="tp-f"><span class="k">Aim</span><div class="chp" id="dc-aim"></div><span class="k">Roll</span><div class="chp" id="dc-blk"></div><span class="k">Reach</span><div class="chp" id="dc-lvl"></div><span class="k">CPU cap</span><div class="chp" id="dc-cap"></div></div>',
+      note:'Several aims: the dice draws one each roll — none ticked means anything. An unticked block keeps what you have. Left-click the dice to roll again with these.',
+      init:function(){ paint(); },
+      onOk:function(){ layout.aims=aims.slice(); layout.blocks=Object.assign({},blocks); layout.dlevel=lvl; layout.cpuCap=capV; if(!Object.keys(blocks).some(function(k){ return blocks[k]; })){ toast('Nothing ticked to roll'); return; }
+        saveLayout(); try{ window.__tpCloseSheet(); }catch(e){} rollDice(); } });
+    return true; }
+  window.__tpDiceSheetOpen=openDiceSheet;
+  window.__tpDiceAims=function(a){ if(a===undefined) return (layout.aims||[]).slice(); layout.aims=Array.isArray(a)?a.filter(function(x){ return AIMS.indexOf(x)>0; }):[]; saveLayout(); return layout.aims.slice(); };   /* the gates and the probes */
+  window.__tpDiceBlocks=function(b){ if(b===undefined) return Object.assign({},layout.blocks||{}); layout.blocks=Object.assign({osc:1,flt:1,env:1,fx:1,mod:1},b||{}); saveLayout(); return Object.assign({},layout.blocks); };
+  function openAimMenu(cx,cy){ if(openDiceSheet()) return; closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
     nMenu.innerHTML=AIMS.concat(DTARGETS).map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+aimLabel(a)+'</div>'; }).join('')
       +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('')
       +'<div class="sepd"></div>'+CAPS.map(function(c){ return '<div class="pi'+(String(layout.cpuCap||'auto')===String(c)?' cur':'')+'" data-cap="'+c+'">'+capLabel(c)+'</div>'; }).join('');   /* tp36 */

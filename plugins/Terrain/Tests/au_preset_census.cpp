@@ -176,6 +176,7 @@ static std::vector<Preset> loadAll (const char* dir, const char* sub)
 }
 static std::string userBank() { if (const char* b = getenv ("TP_BANK")) return b;   /* tp36 — any folder of .terrain files (the dice rolls the probe saved) */
     return std::string (getenv ("HOME")) + "/Library/WavesCrate/TerrainInstrument/Banks/User"; }
+static int juce_jlimit0 (int v) { return v < 0 ? 0 : (v > 6 ? 6 : v); }
 static double cpu (double us) { return us / budgetUs() * 100.0; }
 
 int main (int argc, char** argv)
@@ -243,6 +244,28 @@ int main (int argc, char** argv)
         a.allOff(); blocks (2 * sec);
         for (int n : CHORD8) a.note (n, 100); blocks (sec); a.allOff(); blocks (2 * sec);
         fclose (f); free (abl); a.close(); printf ("wrote %s (%d s)\n", argv[3], 7); return 0;
+    }
+    if (mode == "solo")   // solo <preset>: every ENABLED oscillator alone (the others off) — its engine, and whether it makes sound (8 notes, peak dBFS)
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }
+        for (auto& p : ps)
+        {
+            Au a0; if (! a0.open() || ! a0.loadChunk (p.chunk)) continue; a0.pump (0.8); a0.render (20, nullptr); a0.pump (0.4);
+            float en[8], eng[8]; for (char o = 'A'; o <= 'H'; ++o) { en[o - 'A'] = a0.get (std::string ("Osc ") + o + " Enable"); eng[o - 'A'] = a0.get (std::string ("Synth OSC ") + o + " Engine"); } a0.close();
+            printf ("== %s ==\n", p.name.c_str());
+            for (char o = 'A'; o <= 'H'; ++o)
+            {
+                if (en[o - 'A'] < 0.5f) continue;
+                Au a; if (! a.open() || ! a.loadChunk (p.chunk)) continue; a.pump (0.8); a.render (20, nullptr); a.pump (0.6);
+                for (char q = 'A'; q <= 'H'; ++q) if (q != o) a.setRaw (std::string ("Osc ") + q + " Enable", 0.0f);
+                a.render (20, nullptr); for (int n : CHORD8) a.note (n, 100); a.render (12, nullptr); std::vector<double> t; float pk = 0; a.render (40, &t, &pk); a.allOff();
+                static const char* EN[] = { "WT", "Sample", "Granular", "Resynth", "FM", "Additive", "Modal" };
+                const int ei = (int) std::lround (eng[o - 'A']);   // the AU hands back the choice index itself (0..6)
+                printf ("  osc %c  %-9s  peak %7.1f dBFS  %s\n", o, EN[juce_jlimit0 (ei)], pk > 1e-9f ? 20.0 * std::log10 (pk) : -240.0, (pk < 1e-4f && ei >= 1 && ei <= 3) ? "<-- EMPTY sample engine" : "");
+                a.close();
+            }
+        }
+        return 0;
     }
     if (mode == "params")   // params <preset> <substr>: every parameter containing <substr> whose value differs from its default
     {

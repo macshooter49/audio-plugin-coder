@@ -1014,7 +1014,7 @@ public:
      *  The editor reloads both files on reopen so the blend knobs stay LIVE across sessions. */
     juce::String&     blendSrcPath (int idx, int which) noexcept { return blendSrcPaths_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)][(size_t) (which & 1)]; }
     void setCachedOscPayload (const juce::String& json, int idx)
-    { if (idx < 0 || idx > 3) return; juce::ScopedLock sl (samplePayloadLock); cachedOscPayloads_[(size_t) idx] = json; }
+    { if (idx < 0 || idx >= ParameterIDs::kOscCount) return; juce::ScopedLock sl (samplePayloadLock); cachedOscPayloads_[(size_t) idx] = json; }
     // Wavetable EXTENDER (message thread) — build/clear an imported table for osc 0..3.
     void importAudioAsWavetable (int osc, const float* pcm, int numSamples);
     /* fb611 — read + decode + mono-fold a wavetable file OFF the message thread, then hand the PCM
@@ -1046,7 +1046,7 @@ public:
     juce::String getOscLfoWaveJson (int osc);   // fb248 — exact current frame for WT→LFO
 
     juce::String getCachedOscPayload (int idx) const
-    { if (idx < 0 || idx > 3) return {}; juce::ScopedLock sl (samplePayloadLock); return cachedOscPayloads_[(size_t) idx]; }
+    { if (idx < 0 || idx >= ParameterIDs::kOscCount) return {}; juce::ScopedLock sl (samplePayloadLock); return cachedOscPayloads_[(size_t) idx]; }   // tp39 — E-H too
 
     // ── Slicer state ──────────────────────────────────────────────────────
     // Slice list — atomic snapshot pointer. UI thread writes via

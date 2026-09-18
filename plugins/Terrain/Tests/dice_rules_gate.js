@@ -147,8 +147,8 @@ chk(leftovers === 0, '[4] no live percussion branch survives in the dice',
 chk(/var DTARGETS=\['fx','modulation'\]/.test(SRC), '[5] FX and Modulation are dice TARGETS');
 chk(/AIMS\.concat\(DTARGETS\)\.map/.test(SRC), '[5] and they render in the ONE list with the aims');
 chk(!/Randomize chain/.test(SRC), '[5] the old bottom-of-menu "Randomize chain" action is gone');
-chk(/if\(t==='dice'&&!g\.classList\.contains\('dis'\)\) rollDice\(\);/.test(SRC),
-    '[5] the dice button dispatches through rollDice (honours the standing selection)');
+chk(/window\.__tpDice=function\(\)\{[^\n]{0,80}rollDice\(\)/.test(SRC) && !/<span class="g" data-t="dice"/.test(SRC),
+    '[5] the ONE dice (the header\'s) dispatches through rollDice; the canvas has no dice tool of its own (tp39)');
 chk(/function rollDice\(\)\{[\s\S]{0,220}layout\.aim/.test(SRC),
     '[5] rollDice reads layout.aim — so it persists and repeats without reopening the menu');
 
@@ -208,8 +208,8 @@ chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — rout
   chk(anyOff, '[7] the CSV really does contain off-pitch files (a whitelist that excludes nothing is not one)');
   const flat = new Set(Object.values(baked).flat());
   chk(flat.size === gotTotal, '[7] no duplicate names inside the baked list');
-  chk(/window\.__sampLoadPath\(o, d\.path\+'\/'\+c\+'\/'\+pick\(files\)\)/.test(SRC),
-      '[7] oneShot loads from the FILTERED list, never from the raw scan');
+  chk(/files=filesFor\(d,c,aim\)\.filter\(/.test(SRC) && /var f=pick\(files\), path=d\.path\+'\/'\+c\+'\/'\+f/.test(SRC) && /function filesFor\(d,c,aim\)\{ return aim==='drums'\?\(d\.cats\[c\]\|\|\[\]\)\.slice\(\):tunedFiles\(d,c\); \}/.test(SRC),
+      '[7] oneShot loads from the FILTERED list (tuned; drums take every file), never from the raw scan');
   chk(!/DRUMCATS/.test(SRC), '[7] the drum path is gone entirely (Max: "we\'re not using drums")');
 }
 
@@ -269,10 +269,10 @@ chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — rout
 //   the failure path has to write the engine back itself.
 {
   chk(/function oneShot\(o,aim,onFail\)/.test(SRC), '[10] oneShot takes a failure callback');
-  const body = SRC.slice(SRC.indexOf('function oneShot(o,aim,onFail)'), SRC.indexOf('var SAMPR='));
-  const bails = (body.match(/\breturn;/g) || []).length;
-  const fails = (body.match(/fail\(\);/g) || []).length;
-  chk(fails >= bails, `[10] every bail-out reports it (${fails} fail() for ${bails} return;)`);
+  const body = SRC.slice(SRC.indexOf('function oneShot(o,aim,onFail)'), SRC.indexOf('function drumBlend('));
+  // tp39 — every `return;` is a reported bail-out (fail();), a retry (attempt(k+1);), or the verify finding the sample landed
+  const bare = (body.match(/[^\n]*\breturn;/g) || []).filter(l => !/fail\(\); return;|attempt\(k\+1\); return;|length>2\) return;|if\(!g\) return;/.test(l));
+  chk(bare.length === 0, `[10] every bail-out reports it (${bare.length} unreported return; in oneShot)`, bare.join(' | ').slice(0, 200));
   chk(/if\(samp\)\{ rollSample[\s\S]{0,200}oneShot\(o,aim,function\(\)\{/.test(SRC),
       '[10] and the dice passes one when it picks a sampler');
   chk(/setP\(X\+'ENGINE', choiceNorm\(X\+'ENGINE', 0, 7\)\)/.test(SRC),
