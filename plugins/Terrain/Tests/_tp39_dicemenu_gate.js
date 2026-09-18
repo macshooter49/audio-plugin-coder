@@ -141,6 +141,20 @@ const stub = () => {
   ok(fxMod.fxAdd > 0 && fxMod.rmRoute > 0 && fxMod.setChain === 0 && !fxMod.envMoved && !fxMod.enMoved, '[11] Only: Effects + Modulation → new effects + new routes, flow cards and the rest untouched', JSON.stringify(fxMod));
   const rowLbl = await p.evaluate(() => { const d = document.getElementById('dice-btn'); d.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })); const ks = [...document.querySelectorAll('#tp-sheet .tp-f .k')].map(k => k.textContent); window.__tpCloseSheet(); return ks; });
   ok(rowLbl.includes('Only') && rowLbl.includes('Aim'), '[11] the sheet rows read Aim / Only / Reach / CPU cap', rowLbl.join(','));
+  // [12] tp39e — the reverb / delay Mod Rate + Mod Depth (and the reverb Mod Mode) are pinned to defaults and never LFO targets
+  await p.evaluate(() => { window.__tpDiceAims(['pads']); window.__tpDiceBlocks({}); window.__tpDiceLevelSet('crazy'); window.__routeDests = []; const oa = window.__tiAddRoute; window.__tiAddRoute = function(a, b, d){ window.__routeDests.push(d); return oa ? oa.apply(this, arguments) : undefined; }; });
+  const PIN = { SYN_RVB_MODDEPTH: 0.25, SYN_RVB_MODRATE: 0.30, SYN_DLY_MODRATE: 0.40, SYN_DLY_MODDEPTH: 0.0 };
+  let pinBad = [], hitDest = 0, sawRvb = 0, sawDly = 0, modeMoved = 0;
+  for (let k = 0; k < 8; k++) { await p.evaluate(() => { window.__routeDests = []; delete window.__params.SYN_RVB_MODMODE; window.__tpDice(); }); await sleep(600);
+    const r = await p.evaluate((PIN) => { const devs = window.__fxrDevs ? window.__fxrDevs() : []; const out = { bad: [], hit: 0, rvb: 0, dly: 0, mode: 0 };
+      devs.forEach(d => { if (d.core !== 'reverb' && d.core !== 'delay') return; if (d.core === 'reverb') out.rvb++; else out.dly++;
+        (d.back.knobs || []).forEach((kn, i) => { if (!/^(Mod Rate|Mod Depth)$/i.test(kn[0]) && !/_(MODRATE|MODDEPTH)$/.test(kn[2])) return; const v = window.__params[kn[2]]; if (v != null && Math.abs(v - PIN[kn[2]]) > 0.001) out.bad.push(kn[2] + '=' + v.toFixed(2));
+          const dest = window.__fxModDest(d.core, d.inst, 4 + i); if (window.__routeDests.indexOf(dest) >= 0) out.hit++; }); });
+      devs.forEach(d => { if (d.core === 'reverb' && d.back && d.back.d2 && /^(Mod Mode|Voicing|Motion)$/i.test(d.back.d2.k || '') && window.__params.SYN_RVB_MODMODE != null && Math.abs(window.__params.SYN_RVB_MODMODE - (2 / 5)) > 0.001) out.mode++; }); return out; }, PIN);
+    pinBad = pinBad.concat(r.bad); hitDest += r.hit; sawRvb += r.rvb; sawDly += r.dly; modeMoved += r.mode; }
+  ok(sawRvb >= 3 && sawDly >= 1 && pinBad.length === 0, '[12] over 8 crazy pad rolls (' + sawRvb + ' reverbs, ' + sawDly + ' delays) Mod Rate / Mod Depth stay at the defaults', pinBad.join(' '));
+  ok(hitDest === 0, '[12] and no LFO / envelope route ever lands on them', 'hits=' + hitDest);
+  ok(modeMoved === 0, '[12] the reverb Mod Mode dropdown is not rolled either', 'moved=' + modeMoved);
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
   await b.close(); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log('FAIL', e); process.exit(1); });

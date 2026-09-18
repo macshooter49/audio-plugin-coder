@@ -43387,7 +43387,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function pickAim(){ var as=(layout.aims||[]).filter(function(a){ return AIMS.indexOf(a)>0; }); if(as.length) return pick(as); var a=layout.aim||'anything'; if(a==='anything'||isTarget(a)) return pick(AIMS.slice(1)); return a; }   /* tp39 — several aims: one is drawn per roll */
   function generate(){ var aim=pickAim(); window.__tpDiceLastAim=aim; window.__diceLastOneShot={}; window.__diceLastBlend={};   /* tp39 — the pick records are THIS roll's (a stale blend from the last roll is not a blend) */ var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
     var B=Object.assign({osc:0,flt:0,env:0,fx:0,mod:0,flow:0},layout.blocks||{});   /* tp39d — ONLY: ticked = only those blocks are re-rolled (in the aim's style); nothing ticked = the whole preset */
-    var whole=!Object.keys(B).some(function(k){ return B[k]; }); if(whole) B={osc:1,flt:1,env:1,fx:1,mod:1,flow:1};   /* Max: "keys n pads = everything that has to do with keys n pads including FX and modulation; on effects = only FX" */
+    var whole=!Object.keys(B).some(function(k){ return B[k]; }); if(whole) B={osc:1,flt:1,env:1,fx:1,mod:1,flow:1};
+    /* tp39e — Max: "stop randomizing the delay and reverb mod rate and mod depth, it makes it sound very wobbly and bad". Those
+       knobs (and the reverb's Mod Mode / Voicing / Motion dropdown) are PINNED to the device's defaults on every roll, and they
+       are never LFO targets (see the dpool below). Matched by label AND by param id, so a type's relabel cannot slip one through. */
+    var NOMOD=/^(Mod Rate|Mod Depth|Motion|Speed)$/i, NOMODP=/_(MODRATE|MODDEPTH)$/, NOMODD=/^(Mod Mode|Voicing|Motion)$/i;
+    function fxNoMod(dv,kk){ if(!dv||kk<4||!dv.back||!dv.back.knobs) return false; var kn=dv.back.knobs[kk-4]; return !!(kn&&(NOMOD.test(kn[0]||'')||NOMODP.test(kn[2]||''))); }   /* Max: "keys n pads = everything that has to do with keys n pads including FX and modulation; on effects = only FX" */
     if(aim==='drums') R=Object.assign({},R,{fxMod:Math.max(R.fxMod||0,.85),fx:[Math.max(2,R.fx[0]),Math.max(3,R.fx[1])]});   /* drums: the modulation aims at the effects (distortion), and there are some */
     if(generate.tight>0){ var ti=Math.max(0,LEVELS.indexOf(lvl)-generate.tight), TR=REACH[LEVELS[ti]]||REACH.light; R=Object.assign({},R,{lfo:TR.lfo,fx:TR.fx,flow:TR.flow}); }   /* tp36 — the re-roll after an over-cap roll */ var tool=page?page.querySelector('.g[data-t="dice"]'):null; if(tool) tool.classList.add('dis');
     /* tp23 — THE CAP IS SIX (Max: "the randomization cap should be at 6 engines. Not the whole 8, but it can choose up
@@ -43430,7 +43435,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           P('SYN_ENV_FLT_CA',between(-.6,.6)); P('SYN_ENV_FLT_CD',between(-.6,.6));
           ['M1','M2'].forEach(function(m){ P('SYN_ENV_'+m+'_A',between(0,big?.7:.4)); P('SYN_ENV_'+m+'_D',between(.1,.8)); P('SYN_ENV_'+m+'_S',between(0,1)); P('SYN_ENV_'+m+'_R',between(.1,.7));
             P('SYN_ENV_'+m+'_CA',between(-.8,.8)); P('SYN_ENV_'+m+'_CD',between(-.8,.8)); P('SYN_ENV_'+m+'_LOOP',((lvl==='wild'||lvl==='crazy')&&rnd()<.4)?1:0); }); },
-      function(){ if(!B.fx) return; toast('Building the effects…'); var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
+      function(){ if(!B.fx) return; toast('Building the effects…');
+ var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
           var fp=diceableFx((FXPOOL[aim]||FXPOOL.pads).slice()); if(big) diceableFx(FXMORE).forEach(function(k){ if(fp.indexOf(k)<0) fp.push(k); });
           var count=ispan(R.fx), picked=[]; if((aim==='pads'||aim==='keys'||aim==='textures')&&rnd()<.7){ picked.push('reverb'); }
           shuffle(fp).forEach(function(k){ if(picked.length<count&&picked.indexOf(k)<0) picked.push(k); });
@@ -43444,8 +43450,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             var hot=HOT.test(core), hi=lvl==='crazy'?1:lvl==='wild'?.95:lvl==='heavy'?.85:.7, lo=lvl==='light'?.3:.1;
             if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(!kp) continue; var top=knobTop(core,k,hot?Math.min(hi,.6):hi); P(kp, between(lo,top)); }   /* tp23 — delay feedback capped at DLY_FB_MAX */
               var mk=d.knobs[3]; if(mk&&mk.p){ var mr=FXMIX[core]||[.25,.5]; P(mk.p, Math.min(.95, between(mr[0],mr[1])*R.mix*(aim==='pads'&&core==='reverb'?1.25:1))); } }
-            if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
-              (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]) P(kn[2], between(lo, hot?.6:hi)); }); } }); },
+            if(d.back&&d.back.knobs&&(core==='reverb'||core==='delay')) d.back.knobs.forEach(function(kn){ if(kn&&kn[2]&&(NOMOD.test(kn[0]||'')||NOMODP.test(kn[2]||''))) P(kn[2], Math.max(0,Math.min(1,(kn[1]||0)/100))); });   /* tp39e — pinned to the defaults */
+            if(core==='reverb'&&d.back&&d.back.d2&&d.back.d2.p&&d.back.d2.opts&&NOMODD.test(d.back.d2.k||'')) P(d.back.d2.p, choiceNorm(d.back.d2.p, 2, d.back.d2.opts.length));   /* tp39e — and the mod-mode dropdown back to Lush (index 2) where the type has one */
+            if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1&&!(core==='reverb'&&NOMODD.test(b.k||''))) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
+              (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]&&!((core==='reverb'||core==='delay')&&(NOMOD.test(kn[0]||'')||NOMODP.test(kn[2]||'')))) P(kn[2], between(lo, hot?.6:hi)); }); } }); },
       function(){ if(!B.mod&&!B.flow) return; toast(B.mod?'Wiring the modulation…':'Dealing the flow cards…');   /* tp39c — two blocks: flow cards (the chain) and modulation (routes + LFOs) */
           if(B.mod){ if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); }); }
           /* tp23 — MULTIPLE FLOW CARDS (Max: "I see two ARPs and two glitches and stuff like that, and glitches are
@@ -43492,6 +43500,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(f2On){ dpool.push({d:1,k:'cut'}); dpool.push({d:55,k:'res'}); [59,61,63,341,343,345].forEach(function(d){ dpool.push({d:d,k:'fltback'}); }); }
           fxAdded.forEach(function(f){ if(f.core==='cmp') return; for(var kk=0;kk<12;kk++){   /* tp12 — nothing on the compressor · tp13 — 0-3 are the front dials, 4-11 the BACK PANEL: all of them are targets */
             if(f.core==='delay'&&kk===1) continue;   /* tp23 — NEVER modulate delay feedback: a value capped at 20 that an LFO can still drive to 1.0 is not capped */
+            if((f.core==='reverb'||f.core==='delay')&&fxNoMod((window.__fxrDevs?window.__fxrDevs():[]).filter(function(x){ return x.core===f.core&&x.inst===f.inst; })[0],kk)) continue;   /* tp39e — the reverb/delay mod rate + depth are never LFO targets */
             var d=window.__fxrDevs?(window.__fxModDest?window.__fxModDest(f.core,f.inst,kk):null):null; if(d!=null) dpool.push({d:d,k:(kk<4?'fx':'fxback')}); } });
           var used={}; function take(kind){ var c=dpool.filter(function(p){ return !used[p.d]&&(!kind||p.k===kind); }); if(!c.length) c=dpool.filter(function(p){ return !used[p.d]; }); if(!c.length) return null; var p=pick(c); used[p.d]=1; return p; }
           function route(tag,addFn,dest,depth){ if(dest==null) return; addFn(dest); if(window.__tiSetDepth) window.__tiSetDepth(tag,dest,Math.max(-1,Math.min(1,depth))); }
