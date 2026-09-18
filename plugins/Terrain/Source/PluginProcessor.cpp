@@ -3085,7 +3085,15 @@ void TerrainAudioProcessor::ensureBankB()
     eng->setCurrentPlaybackSampleRate (sr);
     for (int i = 0; i < kSynthVoiceCount; ++i)
         if (auto* sv = synthVoicesB_[(size_t) i])
-        { sv->prepareToPlay (sr, bs, 2); sv->setLfoCustomTables (lfoTableAudio_); }
+        {
+            sv->prepareToPlay (sr, bs, 2); sv->setLfoCustomTables (lfoTableAudio_);
+            // tp41 — the pooled send pairs the timer has ALREADY built for bank 0 exist for these voices too,
+            //  or a send lit before the bank was built would never light for E-H (see buildPoolPairsLocked).
+            //  Message thread, and the bank is not yet published: nothing races this.
+            for (int q = 0; q < kPoolSendCount; ++q)
+                if (q < 64 ? ((poolBuiltMask_[0] >> q) & 1ull) : ((poolBuiltMask_[1] >> (q - 64)) & 1ull))
+                    sv->buildPoolFilters (q);
+        }
     synthEngineB_ = std::move (eng);
     bankB_.store (synthEngineB_.get(), std::memory_order_release);
 }
@@ -7276,6 +7284,37 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { kOutId[k], 1 }, kOutNm[k], true));
     }
 
+    // ══ tp41 — THE PATCHER'S RULES ═══════════════════════════════════════════════════════════════
+    //  Max (2026-09-18): "I tried to route oscillator B to a reverb and it still had to make me go
+    //  through the filter … the patcher needs its own rules." Three parameters, all defaulting to
+    //  the synth page's law so an untouched patch is bit-identical:
+    //   · <device>_TAPS — an int bitmask, bit s = source s (0..3 A-D, 4 Sub, 5 Noise, 6..9 E-H)
+    //     taps that device DIRECTLY (the raw oscillator, never the main filter). 0 = post-filter,
+    //     the synth page's law. Per source, because a cable on the canvas is per (osc, device).
+    //   · FLOW_<card>_INLINE / _RANK — an audio flow card placed IN the rack's order (a 0..1 rank
+    //     among the devices) instead of forced after everything, so an effect can sit after it.
+    //  Declared HERE, above the pool block, so the flow cards' instances 2..4 are cloned from
+    //  instance 1 exactly like their other parameters.
+    {
+        auto I = [&layout] (const juce::String& id, const juce::String& nm)
+        { layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id, 1 }, nm, 0, 1023, 0)); };
+        static const std::pair<const char*, const char*> kKinds[] = {
+            { "SYN_RVB", "Reverb" }, { "SYN_DLY", "Delay" }, { "SYN_DST", "Distortion" }, { "SYN_GRN", "Granular" },
+            { "SYN_TPE", "Tape" }, { "SYN_FLT", "Filter" }, { "SYN_CHO", "Chorus" }, { "SYN_FLA", "Flanger" },
+            { "SYN_PHA", "Phaser" }, { "SYN_EQZ", "Equalizer" }, { "SYN_WID", "Widen" }, { "SYN_CMP", "Compress" },
+            { "SYN_OTT", "OTT" }, { "SYN_BOD", "Bode" }, { "SYN_UTL", "Utility" }, { "SYN_SPL", "Splitter" } };
+        for (const auto& kd : kKinds)
+            for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+                I (juce::String (kd.first) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_TAPS",
+                   juce::String (kd.second) + (i == 0 ? juce::String() : " " + juce::String (i + 1)) + " Direct Taps");   // instance 1 is bare, like every other name
+        I ("FLOW_CHOP_TAPS", "Flow Chop Direct Taps");
+        I ("FLOW_GLI_TAPS",  "Flow Glitch Direct Taps");
+        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "FLOW_CHOP_INLINE", 1 }, "Flow Chop In Rack", false));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "FLOW_CHOP_RANK", 1 }, "Flow Chop Chain Rank", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "FLOW_GLI_INLINE", 1 }, "Flow Glitch In Rack", false));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "FLOW_GLI_RANK", 1 }, "Flow Glitch Chain Rank", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
+    }
+
     // ══ tp20 — THE POOL. Appended AFTER every hand-written parameter (the parameter law: IDs are append-only;
     //    instance 1 keeps its bare id). A clone carries the source's type, range/choices, default and label.
     {
@@ -8170,6 +8209,41 @@ void TerrainAudioProcessor::cacheFlowRouteRefs()
     for (int k = 0; k < 4; ++k) outCableRefB_[k] = R (kOutB[k]);
 }
 
+// tp41 — THE PATCHER'S RULES: every device's _TAPS bitmask + the flow cards' _INLINE/_RANK, resolved
+//  once. The pooled-send index q → device prefix table is the constructor's (poolSrcRaw_) — kept in
+//  step by the same static_asserts. Message thread only.
+void TerrainAudioProcessor::cacheTapRefs()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    hallTapRef_ = R ("SYN_RVB_TAPS"); dlyTapRef_ = R ("SYN_DLY_TAPS"); dstTapRef_ = R ("SYN_DST_TAPS");
+    for (int e = 0; e < kFxExtra; ++e)
+    {
+        poolTapRef_[(size_t) e]                = R ("SYN_DLY" + juce::String (e + 2) + "_TAPS");
+        poolTapRef_[(size_t) (kFxExtra + e)]   = R ("SYN_DST" + juce::String (e + 2) + "_TAPS");
+        poolTapRef_[(size_t) (2 * kFxExtra + e)] = R ("SYN_RVB" + juce::String (e + 2) + "_TAPS");
+    }
+    static const std::pair<int, const char*> kAll[] = {
+        { kGrnSendBase, "SYN_GRN" }, { kTpeSendBase, "SYN_TPE" }, { kFltSendBase, "SYN_FLT" },
+        { kChoSendBase, "SYN_CHO" }, { kFlaSendBase, "SYN_FLA" }, { kPhaSendBase, "SYN_PHA" },
+        { kEqzSendBase, "SYN_EQZ" }, { kWidSendBase, "SYN_WID" }, { kCmpSendBase, "SYN_CMP" },
+        { kOttSendBase, "SYN_OTT" }, { kBodSendBase, "SYN_BOD" }, { kUtlSendBase, "SYN_UTL" },
+        { kSplSendBase, "SYN_SPL" } };
+    for (const auto& [base, pfx] : kAll)
+        for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+            poolTapRef_[(size_t) (base + i)] = R (juce::String (pfx) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_TAPS");
+    for (int i = 0; i < wc::kFlowInstances; ++i)
+    {
+        const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+        poolTapRef_[(size_t) (kChpSendBase + i)] = R ("FLOW_CHOP" + nn + "_TAPS");
+        poolTapRef_[(size_t) (kGliSendBase + i)] = R ("FLOW_GLI"  + nn + "_TAPS");
+        flowInlineRef_[(size_t) flowFlat (kFlowKindChop, i)] = R ("FLOW_CHOP" + nn + "_INLINE");
+        flowRankRef_  [(size_t) flowFlat (kFlowKindChop, i)] = R ("FLOW_CHOP" + nn + "_RANK");
+        flowInlineRef_[(size_t) flowFlat (kFlowKindGli,  i)] = R ("FLOW_GLI"  + nn + "_INLINE");
+        flowRankRef_  [(size_t) flowFlat (kFlowKindGli,  i)] = R ("FLOW_GLI"  + nn + "_RANK");
+    }
+    for (int q = 0; q < kPoolSendCount; ++q) jassert (poolTapRef_[(size_t) q] != nullptr);
+}
+
 void TerrainAudioProcessor::cacheSendRefs()
 {
     // fb435 — was a SECOND hand-copied list, still nine kinds long: the fx4 four had SEND
@@ -8199,7 +8273,15 @@ void TerrainAudioProcessor::buildPoolPairsLocked (juce::uint64 m0, juce::uint64 
     for (int q = 0; q < kPoolSendCount; ++q)
         if (q < 64 ? ((m0 >> q) & 1ull) : ((m1 >> (q - 64)) & 1ull))
             for (int v = 0; v < kSynthVoiceCount; ++v)
+            {
                 if (auto* sv = synthVoices_[(size_t) v]) sv->buildPoolFilters (q);
+                // tp41 — BANK 1 TOO. This loop only ever built bank 0's pairs, so a bank-1 voice's send never
+                //  lit (poolOn keys on flt1) and E-H BYPASSED every rack device they were routed to — audible,
+                //  dry, unprocessed (the tp19 law working exactly as written). Measured: E routed into a
+                //  Utility with its output cable cut rendered -240 dBFS. ensureBankB builds the pairs that
+                //  already exist for the voices it mints.
+                if (auto* svB = synthVoicesB_[(size_t) v]) svB->buildPoolFilters (q);
+            }
     poolBuiltMask_[0] |= m0; poolBuiltMask_[1] |= m1;                    // built stays built, as before
 }
 
@@ -9097,7 +9179,12 @@ void TerrainAudioProcessor::rebuildChainOrder() noexcept
             if (m != 2 && m != 3) continue;                         // note stages (Arp/Robin) make no audio
             const int fk = flowFlat (m == 2 ? kFlowKindChop : kFlowKindGli, fc.inst[ci]);
             flowChainActive_[(size_t) fk].store (1.0f, std::memory_order_relaxed);
-            flowChainRank_  [(size_t) fk].store (kFlowRankBase + 0.001f * (float) ci, std::memory_order_relaxed);
+            // tp41 — an INLINE card takes its own 0..1 rank among the rack devices (the Patcher's
+            //  "a flow card through a reverb"); otherwise the tp30 law: after everything, click order.
+            const bool  inl = flowInlineRef_[(size_t) fk] != nullptr && flowInlineRef_[(size_t) fk]->load() > 0.5f;
+            const float rk  = inl ? juce::jlimit (0.0f, 1.0f, flowRankRef_[(size_t) fk] != nullptr ? flowRankRef_[(size_t) fk]->load() : 0.5f)
+                                  : kFlowRankBase + 0.001f * (float) ci;
+            flowChainRank_  [(size_t) fk].store (rk, std::memory_order_relaxed);
         }
         for (int i = 0; i < wc::kFlowInstances; ++i)
         {
@@ -9275,6 +9362,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     cacheUtlRefs();      // fb444 — Utility's six-pill roster
     cacheSplRefs();      // fb444 — the Splitter's own roster shape
     cacheFlowRouteRefs();   // tp30 — the audio FLOW cards' ten route pills + the per-source output cable
+    cacheTapRefs();         // tp41 — every device's direct taps + the flow cards' inline rank
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
     // fb636 bugA — the constructor's pill table must BE the pointers processBlock just cached; then build
     // every lit send's pair now, under this prepGuard, at the rate the voices were prepared at above.
@@ -12573,6 +12661,24 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    // tp41 — THE DIRECT TAPS, per device, shaped like the entry gains (bank 0: bits 0..5; bank 1:
+    //  slots 0..3 = bits 6..9 (E-H), 4 = the shared Sub bit, 5 = 0). Read every block, like the pills.
+    {
+        auto bits = [] (std::atomic<float>* r) noexcept -> unsigned
+        { return r != nullptr ? (unsigned) juce::jlimit (0, 1023, (int) std::lround (r->load())) : 0u; };
+        auto unpack = [] (unsigned b, float* g6, float* gB6) noexcept
+        {
+            for (int k = 0; k < 6; ++k) g6[k] = ((b >> (unsigned) k) & 1u) ? 1.0f : 0.0f;
+            for (int k = 0; k < 4; ++k) gB6[k] = ((b >> (unsigned) (tw::FxChainTopology::kBank1Shift + k)) & 1u) ? 1.0f : 0.0f;
+            gB6[4] = ((b >> 4) & 1u) ? 1.0f : 0.0f; gB6[5] = 0.0f;
+        };
+        unpack (bits (hallTapRef_), hallTapG_, hallTapGB_);
+        unpack (bits (dlyTapRef_),  dlyTapG_,  dlyTapGB_);
+        unpack (bits (dstTapRef_),  dstTapG_,  dstTapGB_);
+        for (int q = 0; q < kPoolSendCount; ++q)
+            unpack (bits (poolTapRef_[(size_t) q]), &poolTapG_[(size_t) (q * 6)], &poolTapGB_[(size_t) (q * 6)]);
+    }
+
     pushFx3Params();     // fb413 — ONE setParams per instance per block, not per sample
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
     // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
@@ -12634,6 +12740,25 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             const int fk = flowFlat (ce.kind, ce.inst - 1);
             if ((unsigned) fk < (unsigned) kFlowSlots) { flowSlotOf_[(size_t) fk] = c; flowAnyRouted_ = true; }
         }
+        // tp41 — WHAT IS DEFERRED WITH THE FLOW CARDS: every flow slot, and every slot that eats a
+        //  deferred slot (through the feed mask, or through a Splitter lane whose splitter or
+        //  previous device is deferred). Transitive by construction: j < c is already decided.
+        defRackCount_ = 0;
+        for (int c = 0; c < n; ++c)
+        {
+            const auto& ce = chainOrder_[(size_t) c];
+            bool d = (ce.kind == kFlowKindChop || ce.kind == kFlowKindGli);
+            if (! d && flowAnyRouted_ && fxTopo_.feed[c].any())
+                for (int j = 0; j < c && ! d; ++j) d = fxTopo_.feed[c].test (j) && chainDeferred_[(size_t) j];
+            if (! d && flowAnyRouted_ && laneAny_ && laneSplitter_[(size_t) c] >= 0)
+            {
+                const int sp = laneSplitter_[(size_t) c], pv = lanePrev_[(size_t) c];
+                d = chainDeferred_[(size_t) sp] || (pv >= 0 && chainDeferred_[(size_t) pv]);
+            }
+            chainDeferred_[(size_t) c] = d;
+            if (d && ce.kind != kFlowKindChop && ce.kind != kFlowKindGli) defRackSlots_[(size_t) defRackCount_++] = c;
+        }
+        for (int c = n; c < kChainMax; ++c) chainDeferred_[(size_t) c] = false;
 
         // Scatter the ENTRY masks back to per-device arrays — these, not the full route masks, are
         // what the voices tap, so a source routed to three devices is still summed only ONCE.
@@ -12788,6 +12913,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (! routesDirty)
             routesDirty = (rsL != lastRsL_) || (rsR != lastRsR_) || (dsL != lastDsL_) || (dsR != lastDsR_)
                        || (dtL != lastDtL_) || (dtR != lastDtR_) || (exL != lastExL_) || (exR != lastExR_);
+        for (int k = 0; k < 6 && ! routesDirty; ++k)   // tp41 — the direct taps travel with the routes
+            routesDirty = (hallTapG_[k] != lastHallTapG_[k]) || (dlyTapG_[k] != lastDlyTapG_[k]) || (dstTapG_[k] != lastDstTapG_[k])
+                       || (hallTapGB_[k] != lastHallTapGB_[k]) || (dlyTapGB_[k] != lastDlyTapGB_[k]) || (dstTapGB_[k] != lastDstTapGB_[k]);
+        if (! routesDirty)
+            routesDirty = (poolTapG_ != lastPoolTapG_) || (poolTapGB_ != lastPoolTapGB_);
         for (int q = 0; q < kPoolSendCount && ! routesDirty; ++q)
         {
             if (poolRouteAny_[(size_t) q] != lastPoolRouteAny_[(size_t) q]) { routesDirty = true; break; }
@@ -12809,6 +12939,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             auto& R = routeSnap_;
             for (int k = 0; k < 6; ++k) { R.hall[k] = hallEntryG_[k]; R.dly[k] = dlyEntryG_[k]; R.dst[k] = dstEntryG_[k]; R.ex[k] = exUnionG_[k]; R.cut[k] = cutG_[k]; }   // tp30 — the cable
+            for (int k = 0; k < 6; ++k) { R.hallT[k] = hallTapG_[k]; R.dlyT[k] = dlyTapG_[k]; R.dstT[k] = dstTapG_[k]; }   // tp41 — the direct taps
+            for (int q = 0; q < kPoolSendCount * 6; ++q) R.poolT[q] = poolTapG_[(size_t) q];
             R.rsL = rsL; R.rsR = rsR; R.dsL = dsL; R.dsR = dsR; R.dtL = dtL; R.dtR = dtR; R.exL = exL; R.exR = exR;
             juce::uint64 m0 = 0, m1 = 0;
             for (int q = 0; q < kPoolSendCount; ++q)
@@ -12856,6 +12988,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             {   // tp20 — bank 1's snapshot: the same buses, ITS entry gains (E–H in slots 0..3)
                 auto& RB = routeSnapB_;
                 for (int k = 0; k < 6; ++k) { RB.hall[k] = hallEntryGB_[k]; RB.dly[k] = dlyEntryGB_[k]; RB.dst[k] = dstEntryGB_[k]; RB.ex[k] = exUnionGB_[k]; RB.cut[k] = cutGB_[k]; }   // tp30
+                for (int k = 0; k < 6; ++k) { RB.hallT[k] = hallTapGB_[k]; RB.dlyT[k] = dlyTapGB_[k]; RB.dstT[k] = dstTapGB_[k]; }   // tp41
+                for (int q = 0; q < kPoolSendCount * 6; ++q) RB.poolT[q] = poolTapGB_[(size_t) q];
                 RB.rsL = rsL; RB.rsR = rsR; RB.dsL = dsL; RB.dsR = dsR; RB.dtL = dtL; RB.dtR = dtR; RB.exL = exL; RB.exR = exR;
                 for (int q = 0; q < kPoolSendCount; ++q)
                 {
@@ -12877,7 +13011,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             lastHallEntryGB_[k] = hallEntryGB_[k]; lastDlyEntryGB_[k] = dlyEntryGB_[k];   // tp20
             lastDstEntryGB_[k]  = dstEntryGB_[k];  lastExUnionGB_[k]  = exUnionGB_[k];
             lastCutG_[k] = cutG_[k]; lastCutGB_[k] = cutGB_[k];   // tp30
+            lastHallTapG_[k] = hallTapG_[k]; lastDlyTapG_[k] = dlyTapG_[k]; lastDstTapG_[k] = dstTapG_[k];         // tp41
+            lastHallTapGB_[k] = hallTapGB_[k]; lastDlyTapGB_[k] = dlyTapGB_[k]; lastDstTapGB_[k] = dstTapGB_[k];
         }
+        lastPoolTapG_ = poolTapG_; lastPoolTapGB_ = poolTapGB_;   // tp41
         lastRsL_ = rsL; lastRsR_ = rsR; lastDsL_ = dsL; lastDsR_ = dsR;
         lastDtL_ = dtL; lastDtR_ = dtR; lastExL_ = exL; lastExR_ = exR;
         for (int q = 0; q < kPoolSendCount; ++q)
@@ -13724,9 +13861,518 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             fInL[(size_t) fk] = b.getWritePointer (0);
             fInR[(size_t) fk] = b.getWritePointer (1);
         }
+    // ══ tp41 — THE DEVICE LAMBDAS LIVE AT BLOCK SCOPE NOW. They used to be defined inside the sample
+    //  loop (recreated per sample, inlined away) and keyed their once-per-block setup on `i == 0`.
+    //  The deferred pass after the loop (a rack device AFTER a flow card) needs them too, so they
+    //  moved up here unchanged and key on chI, which both passes set to their sample index.
+    int chI = 0;
+    // fb351 — every device is now IN → OUT instead of "add my wet to the master mix". The caller
+    // gathers the input (this slot's oscillator tap + whatever feeds it) and decides where the
+    // output goes: on to the next device, or to the mix if nothing downstream wants it. Bypass
+    // must PASS THE SIGNAL THROUGH, or a powered-off device would break the chain behind it.
+    auto applyRvb = [&](float sgL, float sgR, float& outL, float& outR)
+    {
+    outL = sgL; outR = sgR;
+    if (hallPower_ || hallRvbEnv_ > 1.0e-4f)
+    {
+        hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
+        hallRvbDry_ += (hallRvbDryT_ - hallRvbDry_) * hallSm_;   // ramp mix
+        hallRvbWet_ += (hallRvbWetT_ - hallRvbWet_) * hallSm_;
+        // Send = routed oscs (voice-level), scaled by outputGain AND the -6 dB kVoiceToFxPad (buffer.applyGain
+        // near L6055) so sgL/sgR match the routed dry EXACTLY as it sits in the master mix. fb292 BUGFIX (Max:
+        // "Mix up = fully wet"): the pad was MISSING here, so the duck subtracted 2x the routed dry actually in
+        // leftChannel → at Mix 100% the dry was only half-cancelled (phase-inverted, still audible). Padding
+        // sgL/sgR corrects BOTH the duck term and the wet input (equal-power) for all 9 types. Proven offline:
+        // Mix 100% dry residual 0 dB → -93 dB. Routes off ⇒ send=nullptr ⇒ raw=0 ⇒ byte-identical default.
+        // fb351 — the input arrives from the chain (this slot's oscillator tap, already padded by
+        // the caller, plus any upstream device feeding it). The old MAIN-SEND branch is gone: since
+        // fb348 an unrouted device is silent, so nothing ever took it, and the serial behaviour it
+        // used to provide is now what the chain itself does — for EVERY device, routed or not.
+        float rl, rr;
+        if      (activeRvbType_ == 8) convolutionReverb.processSample (sgL, sgR, rl, rr);  // fb291 — Convolution (internally block-buffered, B-latency)
+        else if (activeRvbType_ == 7) shimmerReverb.processSample (sgL, sgR, rl, rr);  // fb290 — Shimmer
+        else if (activeRvbType_ == 6) basinReverb.processSample   (sgL, sgR, rl, rr);  // fb289 — Basin
+        else if (activeRvbType_ == 5) vintageReverb.processSample (sgL, sgR, rl, rr);  // fb288 — Vintage
+        else if (activeRvbType_ == 4) digitalReverb.processSample (sgL, sgR, rl, rr);  // fb285 — active engine
+        else if (activeRvbType_ == 3) springReverb.processSample (sgL, sgR, rl, rr);   // fb284
+        else if (activeRvbType_ == 2) plateReverb.processSample (sgL, sgR, rl, rr);   // fb282
+        else if (activeRvbType_ == 1) roomReverb.processSample  (sgL, sgR, rl, rr);
+        else                          hallReverb.processSample  (sgL, sgR, rl, rr);
+        const float e = hallRvbEnv_, duck = e * (1.0f - hallRvbDry_), wet = e * hallRvbWet_;
+        // fb287 — DUCK (Room/Spring 2nd pill): env-follow the routed dry (send) level and pull the WET
+        // down under it (dynamic — louder input ducks deeper), so the reverb recedes while you play and
+        // BLOOMS in the gaps. duck (the wet/dry crossfade above) is untouched; only the wet gain scales.
+        float duckG = 1.0f;
+        if (rvbDuckActive_)
+        {
+            const float inLvl = 0.5f * (std::abs (sgL) + std::abs (sgR));
+            duckEnv_ = inLvl + (inLvl > duckEnv_ ? duckAtkCoef_ : duckRelCoef_) * (duckEnv_ - inLvl);
+            duckG = 1.0f / (1.0f + 7.0f * duckEnv_);   // 1 in the gaps → deep duck under signal
+        }
+        const float wetG = wet * duckG;
+        outL = sgL + (wetG * rl - duck * sgL);       // fb351 — same math, but it OUTPUTS instead of
+        outR = sgR + (wetG * rr - duck * sgR);       //   adding to the mix (Mix 100% ⇒ dry gone)
+        const float wmag = 0.5f * (std::abs (rl) + std::abs (rr)) * e * duckG;   // fb280/fb287 — bloom follows audible (ducked) wet
+        if (wmag > hallBlockWetPk) hallBlockWetPk = wmag;
+    }
+    };   // fb307 — end applyRvb (both blooms now publish AFTER the ordered chain below)
+
+    // ── fb296 — synth FX-rack DELAY (parallel per-osc send). Click-free type swap + Mix-100%-wet, mirrors
+    //    the reverb above. Own send bus (delaySendBuf_) so its routing is fully independent of the reverb.
+    if (chI == 0)
+    {
+        int dpend = (int) *rawParam (ParameterIDs::SYN_DLY_TYPE);
+        if (dpend < 0 || dpend > 3) dpend = 0;               // Digital/Tape/BBD/Diffuse
+        if (activeDlyType_ < 0) activeDlyType_ = dpend;
+        if (dpend != activeDlyType_)
+        {
+            dlySwapping_ = true;
+            if (dlyEnv_ < 1.0e-3f) { activeDlyType_ = dpend; delayEngine.reset(); dlySwapping_ = false; }
+        }
+        else dlySwapping_ = false;
+        dlyEnvT_ = (dlyPower_ && dlyRouteActive_ && ! dlySwapping_) ? 1.0f : 0.0f;   // fb348 — routed or silent
+        if (dlyPower_)
+        {
+            // Resolve delay TIME — synced to a note division, or free ms from the Time knob.
+            const bool sync    = rawParam (ParameterIDs::SYN_DLY_SYNC)->load() > 0.5f;
+            const int  syncDiv = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV);   // 0 Free/1 1-4/2 1-8/3 1-8T/4 1-8D/5 1-16
+            // fb304/fb306 — division index → multiplier of a QUARTER note (qms). Shared by L and (unlinked) R.
+            auto divMult = [] (int d) -> float {
+                switch (d) {
+                    case 1:  return 16.0f;            // 4 bar
+                    case 2:  return 8.0f;             // 2 bar
+                    case 3:  return 4.0f;             // 1 bar
+                    case 4:  return 2.0f;             // 1/2
+                    case 5:  return 3.0f;             // 1/2 dotted
+                    case 6:  return 2.0f*2.0f/3.0f;   // 1/2 triplet
+                    case 7:  return 1.0f;             // 1/4
+                    case 8:  return 1.5f;             // 1/4 dotted
+                    case 9:  return 1.0f*2.0f/3.0f;   // 1/4 triplet
+                    case 10: return 0.5f;             // 1/8
+                    case 11: return 0.75f;            // 1/8 dotted
+                    case 12: return 0.5f*2.0f/3.0f;   // 1/8 triplet
+                    case 13: return 0.25f;            // 1/16
+                    case 14: return 0.375f;           // 1/16 dotted
+                    case 15: return 0.25f*2.0f/3.0f;  // 1/16 triplet
+                    case 16: return 0.125f;           // 1/32
+                    case 17: return 0.0625f;          // 1/64
+                    case 18: return 0.03125f;         // 1/128
+                    case 19: return 0.015625f;        // 1/256
+                }
+                return 0.5f; };
+            float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+            const float qms = 60000.0f / bpmNow;            // quarter-note ms
+            const float timeMs = (sync && syncDiv > 0)
+                ? qms * divMult (syncDiv)
+                : std::pow (8000.0f, M (rawParam (ParameterIDs::SYN_DLY_TIME)));   // fb304 — 1 ms → 8000 ms (exp)
+            delayEngine.setType      (activeDlyType_);
+            delayEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DLY_CHARACTER));
+            delayEngine.setTimeMs    (timeMs);
+            // fb306 — LINK + independent RIGHT time. Linked (default): DelayEngine derives R from L (+Spread) →
+            // byte-identical to before. Unlinked: R uses its OWN synced division (SYNCDIV_R) or free time (TIME_R).
+            const bool dlyLink = rawParam (ParameterIDs::SYN_DLY_LINK)->load() > 0.5f;
+            delayEngine.setLink (dlyLink);
+            if (! dlyLink)
+            {
+                const int   syncDivR = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV_R);
+                const float timeMsR  = (sync && syncDivR > 0)
+                    ? qms * divMult (syncDivR)
+                    : std::pow (8000.0f, M (rawParam (ParameterIDs::SYN_DLY_TIME_R)));
+                delayEngine.setTimeMsR (timeMsR);
+            }
+            delayEngine.setFeedback  (M (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)) * 1.2f);           // fb303 — amplified (0..120%): 100% ≈ "someone playing it back over you" (softClip-bounded in the loop, no runaway)
+            delayEngine.setTone      (M (rawParam (ParameterIDs::SYN_DLY_TONE)));
+            delayEngine.setLowCutHz  (20.0f   * std::pow (50.0f, M (rawParam (ParameterIDs::SYN_DLY_LOWCUT))));  // 20..1000 Hz
+            delayEngine.setHiCutHz   (1200.0f * std::pow (15.0f, M (rawParam (ParameterIDs::SYN_DLY_HICUT))));   // 1.2k..18k Hz
+            delayEngine.setSpread    (M (rawParam (ParameterIDs::SYN_DLY_SPREAD)));
+            delayEngine.setWidth     (M (rawParam (ParameterIDs::SYN_DLY_WIDTH)) * 1.6f);              // 0..1.6 M/S
+            delayEngine.setModRate   (0.05f + M (rawParam (ParameterIDs::SYN_DLY_MODRATE)) * 7.95f);   // 0.05..8 Hz
+            delayEngine.setModDepth  (M (rawParam (ParameterIDs::SYN_DLY_MODDEPTH)));
+            delayEngine.setWow       (rawParam (ParameterIDs::SYN_DLY_WOW)->load());    // fb303 — default 0 now (off); kept for Tape. Full removal + L/R redesign next.
+            delayEngine.setDucking   (rawParam (ParameterIDs::SYN_DLY_DUCK)->load());   // fb303 — default 0 now (Max never liked it)
+            delayEngine.setPing      (rawParam (ParameterIDs::SYN_DLY_PING)->load() > 0.5f);
+            delayEngine.setHQ        (rawParam (ParameterIDs::SYN_DLY_HQ)->load()   > 0.5f);
+            delayEngine.updateCoefficients();
+            const float mixv = M (rawParam (ParameterIDs::SYN_DLY_MIX));
+            dlyWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+            dlyDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+        }
+    }
+    // ════════ fb315 — DISTORTION setup (block-rate, i==0) ════════
+    if (chI == 0)
+    {
+        dstEnvT_ = (dstPower_ && dstRouteActive_) ? 1.0f : 0.0f;   // fb348 — routed or silent (was: power alone ⇒ main send)
+        if (dstPower_)
+        {
+            distortionEngine.setMode      ((int) *rawParam (ParameterIDs::SYN_DST_TYPE));
+            distortionEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DST_CHARACTER));
+            distortionEngine.setQuality   ((int) *rawParam (ParameterIDs::SYN_DST_QUALITY));
+            distortionEngine.setAuto      (rawParam (ParameterIDs::SYN_DST_AUTO)->load()  > 0.5f);
+            distortionEngine.setPill2     (rawParam (ParameterIDs::SYN_DST_PILL2)->load() > 0.5f);
+            distortionEngine.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last-played note (the glide tracker; mono law on a post-mix bus)
+            // Drive is dB-linear inside the engine (48·t^0.8) — do NOT pre-scale it here into a
+            // linear multiplier, that is the dead-first-third bug this device exists to avoid.
+            distortionEngine.setDrive     (M (rawParam (ParameterIDs::SYN_DST_DRIVE)));
+            distortionEngine.setKnee      (dstMorphEff_);   // fb340 — Morph/Knee is a first-class dest (§6.7); fb453 T5b resolves it just after wc::buildFxMod() so the rack half is THIS block's: env destroys the attack, the tail stays clean
+            distortionEngine.setTone      (M (rawParam (ParameterIDs::SYN_DST_TONE)));
+            // fb319 — the back-8 goes in RAW; the engine interprets each slot per FAMILY. Slots 0
+            // and 1 are Low Cut / Hi Cut in every family; the rest change meaning per family.
+            static const char* const kDstP[8] = {
+                ParameterIDs::SYN_DST_P1, ParameterIDs::SYN_DST_P2, ParameterIDs::SYN_DST_P3,
+                ParameterIDs::SYN_DST_P4, ParameterIDs::SYN_DST_P5, ParameterIDs::SYN_DST_P6,
+                ParameterIDs::SYN_DST_P7, ParameterIDs::SYN_DST_P8 };
+            for (int pIdx = 0; pIdx < 8; ++pIdx)
+                distortionEngine.setP (pIdx, M (rawParam (kDstP[pIdx])));
+            // fb318 — the ENGINE owns Mix now (it is the only place the wet and the dry can be
+            // latency-aligned across the 2× resampler; see DistortionEngine::setMix).
+            distortionEngine.setMix (M (rawParam (ParameterIDs::SYN_DST_MIX)));
+        }
+    }
+
+    auto applyDst = [&](float sgL, float sgR, float& outL, float& outR)   // fb315/fb351 — distortion INSERT
+    {
+        outL = sgL; outR = sgR;
+        if (dstPower_ || dstEnv_ > 1.0e-4f)
+        {
+            dstEnv_ += (dstEnvT_ - dstEnv_) * hallSm_;      // on/off fade (~15 ms, no click)
+            // fb351 — input comes from the chain (see applyRvb). The MAIN-SEND branch is retired.
+            float wl, wr; distortionEngine.processSample (sgL, sgR, wl, wr);
+            // fb318 — ENV-GATED REPLACE. The engine returns the FINISHED signal (its own Mix
+            // applied, dry latency-aligned to the 2× resampler), so the insert is just a crossfade
+            // from the untouched mix to the engine's output. At env 0 this contributes EXACTLY 0 —
+            // no click on power toggle, and no delay line in circuit when the device is off.
+            const float e = dstEnv_;
+            outL = sgL + e * (wl - sgL);                  // fb351 — crossfade IN→engine, then hand it on
+            outR = sgR + e * (wr - sgR);
+            const float wmag = 0.5f * (std::abs (wl) + std::abs (wr)) * e;
+            if (wmag > dstBlockWetPk) dstBlockWetPk = wmag;
+        }
+    };
+
+    auto applyDly = [&](float sgL, float sgR, float& outL, float& outR)   // fb307/fb351 — delay INSERT
+    {
+    outL = sgL; outR = sgR;
+    if (dlyPower_ || dlyEnv_ > 1.0e-4f)
+    {
+        dlyEnv_ += (dlyEnvT_ - dlyEnv_) * hallSm_;           // on/off fade
+        dlyDry_ += (dlyDryT_ - dlyDry_) * hallSm_;           // ramp mix (no zipper)
+        dlyWet_ += (dlyWetT_ - dlyWet_) * hallSm_;
+        // fb351 — input comes from the chain (see applyRvb); the MAIN-SEND branch is retired.
+        float dl, dr; delayEngine.processSample (sgL, sgR, dl, dr);
+        const float e = dlyEnv_, duck = e * (1.0f - dlyDry_), wet = e * dlyWet_;
+        outL = sgL + (wet * dl - duck * sgL);                // Mix 100% ⇒ dry crossfade→0
+        outR = sgR + (wet * dr - duck * sgR);
+        const float wmag = 0.5f * (std::abs (dl) + std::abs (dr)) * e;
+        if (wmag > dlyBlockWetPk) dlyBlockWetPk = wmag;
+    }
+    };   // fb307 — end applyDly
+
+    // ════════ fb346 — THE POOLED INSTANCES (Delay 2..6, Distortion 2..6) ════════
+    // ⚠️ fb348 SUPERSEDED the original "main-send only" design described here: every pooled
+    // instance now reads its OWN route pills and owns its OWN send bus, so a delay on osc C
+    // cannot touch osc A. The fb305/fb338 exclusion landmine is handled by the single shared
+    // routed-dry bus (fb347), not by keeping duplicates off the send path.
+    // 🔑 THE POOL LAW (fb350, learned the hard way): a pooled instance must make EVERY per-block
+    // engine call instance 1 makes. The pool was missing DelayEngine::updateCoefficients() — the
+    // resolve that turns timeMs_ into the real delay-length target — so duplicates ran at ZERO
+    // delay length and their Time knob was dead. When you pool a device, diff its call set
+    // against instance 1's; a missing per-block resolve compiles clean and fails silently.
+    // fb351 — the old excludeRouted() helper is GONE. Duplicates no longer reconstruct a
+    // "whole mix minus the routed dry" input; like every other device they are handed their
+    // input by the chain. That subtraction was the source of the fb347 phase-inversion class.
+    // fb352 — POOLED REVERB (instances 2..6). Same shape as instance 1, and deliberately built
+    // on the SAME applyRvbTypeParams routine so no per-type setter can exist for one and not
+    // the other (the fb350 pool law). The one difference is the engine: this instance has built
+    // only the one its type needs, and while that build is pending it passes the chain through.
+    auto applyPoolRvb = [&] (int e, float sgL, float sgR, float& outL, float& outR)
+    {
+        outL = sgL; outR = sgR;
+        auto& V = rvbRefs_[(size_t) e];
+        if (V.power == nullptr) return;
+        const bool powered = (V.power->load() > 0.5f) && poolRouteAny_[(size_t) (2 * kFxExtra + e)];
+        float& env = poolRvbEnv_[(size_t) e];
+        // fb361 — CONVOLUTION IDLE BAKE, mirroring instance 1: keep the IR baked for the VIZ even
+        // while this instance is powered off or unrouted, so a dropped IR shows its REAL waveform
+        // straight away instead of the placeholder. Bake-affecting params only, once per block.
+        if (chI == 0 && ! powered && (int) V.type->load() == 8)
+        {
+            rvbWantType_[(size_t) e].store (8, std::memory_order_relaxed);   // ask for the engine
+            if (auto* cv = rvbEngineSetPool (e).conv)
+            {
+                cv->setSize      (M (V.size));
+                cv->setDecay     (M (V.decay));
+                cv->setDensity   (M (V.diffuse));
+                cv->setAttack    (M (V.hidamp));
+                cv->setDistance  (M (V.lowdecay));
+                cv->setCharacter ((int) V.chr->load());
+                cv->setShape     ((int) V.modmode->load());
+                cv->setReverse   (V.freeze->load() > 0.5f);
+                cv->updateCoefficients();
+                cv->bakeIfDirtyIdle (numSamples);   // fb453 — 50 ms-throttled (a modulated Size baked EVERY block)
+            }
+        }
+        if (! powered && env <= 1.0e-4f) return;             // unrouted / off ⇒ zero cost
+        int ty = (int) V.type->load(); if (ty < 0 || ty > 8) ty = 0;
+        // ask the message thread for this engine (it builds it in timerCallback, never here)
+        rvbWantType_[(size_t) e].store (ty, std::memory_order_relaxed);
+        RvbEngineSet es = rvbEngineSetPool (e);
+        int&  cur      = poolRvbType_[(size_t) e];
+        bool& swapping = poolRvbSwap_[(size_t) e];
+        // Nothing adopted yet: stay silent (there is no tail to protect) until the message
+        // thread has built this type's engine — usually the very next timer tick.
+        if (cur < 0)
+        {
+            if (! es.has (ty)) { env = 0.0f; return; }
+            cur = ty;
+        }
+        if (chI == 0)
+        {
+            if (ty != cur)
+            {
+                swapping = true;                              // fade the CURRENT engine out first…
+                // …and only commit once the incoming engine actually exists. Testing `ty` before
+                // the fade would cut a live tail dead the instant you picked an unbuilt type.
+                if (env < 1.0e-3f && es.has (ty))
+                {
+                    cur = ty; swapping = false;
+                    switch (ty) { case 8: es.conv->reset(); break;    case 7: es.shimmer->reset(); break;
+                                  case 6: es.basin->reset(); break;   case 5: es.vintage->reset(); break;
+                                  case 4: es.digital->reset(); break; case 3: es.spring->reset(); break;
+                                  case 2: es.plate->reset(); break;   case 1: es.room->reset(); break;
+                                  default: es.hall->reset(); break; }
+                }
+            }
+            else swapping = false;
+
+            RvbSnapshot rp;
+            rp.size      = M (V.size);      rp.decay    = M (V.decay);
+            rp.tone      = M (V.tone);      rp.predelay = M (V.predelay);
+            rp.diffuse   = M (V.diffuse);   rp.moddepth = M (V.moddepth);
+            rp.modrate   = M (V.modrate);   rp.hidamp   = M (V.hidamp);
+            rp.lowdecay  = M (V.lowdecay);  rp.lowcut   = M (V.lowcut);
+            rp.width     = M (V.width);     rp.mix      = M (V.mix);
+            rp.character = (int) V.chr->load(); rp.modmode  = (int) V.modmode->load();
+            rp.mod       = V.mod->load()    > 0.5f;
+            rp.freeze    = V.freeze->load() > 0.5f;
+            rp.duck      = V.duck->load()   > 0.5f;
+            applyRvbTypeParams (cur, rp, es);                 // 🔑 the ONE shared routine
+            // fb358 — DUCK is Room/Spring's 2nd pill ONLY, resolved once per block so the
+            // per-sample follower stays branch-light (identical to instance 1).
+            poolRvbDuckOn_[(size_t) e] = (cur == 1 || cur == 3) && rp.duck;
+            const float mixv = rp.mix;
+            poolRvbWet_[(size_t) e] = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+            poolRvbDry_[(size_t) e] = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+        }
+        const bool on = powered && ! swapping;
+        env += ((on ? 1.0f : 0.0f) - env) * hallSm_;          // click-free power fade
+        float rl = 0.0f, rr = 0.0f;
+        switch (cur) { case 8: es.conv->processSample (sgL, sgR, rl, rr); break;
+                       case 7: es.shimmer->processSample (sgL, sgR, rl, rr); break;
+                       case 6: es.basin->processSample (sgL, sgR, rl, rr); break;
+                       case 5: es.vintage->processSample (sgL, sgR, rl, rr); break;
+                       case 4: es.digital->processSample (sgL, sgR, rl, rr); break;
+                       case 3: es.spring->processSample (sgL, sgR, rl, rr); break;
+                       case 2: es.plate->processSample (sgL, sgR, rl, rr); break;
+                       case 1: es.room->processSample (sgL, sgR, rl, rr); break;
+                       default: es.hall->processSample (sgL, sgR, rl, rr); break; }
+        const float duck = env * (1.0f - poolRvbDry_[(size_t) e]);
+        const float wet  = env * poolRvbWet_[(size_t) e];
+        // fb358 — DUCK: env-follow this instance's OWN input and pull ITS wet down underneath,
+        // so the reverb recedes while you play and blooms in the gaps. Shares instance 1's
+        // attack/release coefficients (both computed in prepareToPlay); the ENV is per instance.
+        float duckG = 1.0f;
+        if (poolRvbDuckOn_[(size_t) e])
+        {
+            float& dEnv = poolRvbDuckEnv_[(size_t) e];
+            const float inLvl = 0.5f * (std::abs (sgL) + std::abs (sgR));
+            dEnv = inLvl + (inLvl > dEnv ? duckAtkCoef_ : duckRelCoef_) * (dEnv - inLvl);
+            duckG = 1.0f / (1.0f + 7.0f * dEnv);
+        }
+        const float wetG = wet * duckG;
+        outL = sgL + (wetG * rl - duck * sgL);                // fb351 — IN → OUT, Mix 100% ⇒ dry gone
+        outR = sgR + (wetG * rr - duck * sgR);
+        const float wmagV = 0.5f * (std::abs (rl) + std::abs (rr)) * env * duckG;   // its OWN bloom, follows the AUDIBLE wet
+        if (wmagV > poolRvbPk[(size_t) e]) poolRvbPk[(size_t) e] = wmagV;
+    };
+
+    auto applyPoolDly = [&] (int e, float sgL, float sgR, float& outL, float& outR)
+    {
+        outL = sgL; outR = sgR;
+        auto& R = dlyRefs_[(size_t) e];
+        if (R.power == nullptr) return;
+        // fb348 — NO GLOBAL SEND: an instance with no route pills lit is SILENT. It no longer
+        // falls back to processing the whole mix, which is what made a delay routed to osc C
+        // audibly chew on osc A.
+        const bool powered = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) e];
+        float& env = poolDlyEnv_[(size_t) e];
+        if (! powered && env <= 1.0e-4f) return;              // unrouted / powered off ⇒ zero cost
+        auto& eng = delayPool_[(size_t) e];
+        if (chI == 0)                                          // per-block setup (never per sample)
+        {
+            // fb350 — TYPE SWAP, mirroring instance 1: fade the wet to zero FIRST, then switch and
+            // reset. The old code switched instantly mid-tail, which both clicks (the no-clicks law)
+            // and leaves the previous type's buffer state ringing under the new one.
+            int ty = (int) R.type->load();
+            if (ty < 0 || ty > 3) ty = 0;
+            int&  cur      = poolDlyType_[(size_t) e];
+            bool& swapping = poolDlySwap_[(size_t) e];
+            if (cur < 0) { cur = ty; eng.setType (ty); }      // first block for this slot — adopt, no fade
+            if (ty != cur)
+            {
+                swapping = true;
+                if (env < 1.0e-3f) { cur = ty; eng.setType (ty); eng.reset(); swapping = false; }
+            }
+            else swapping = false;
+            const bool sync = R.sync->load() > 0.5f;
+            const int  sdiv = (int) R.syncdiv->load();
+            auto divMult = [] (int d) -> float {
+                switch (d) { case 1: return 16.0f;  case 2: return 8.0f;   case 3: return 4.0f;
+                             case 4: return 2.0f;   case 5: return 3.0f;   case 6: return 2.0f*2.0f/3.0f;
+                             case 7: return 1.0f;   case 8: return 1.5f;   case 9: return 1.0f*2.0f/3.0f;
+                             case 10:return 0.5f;   case 11:return 0.75f;  case 12:return 0.5f*2.0f/3.0f;
+                             case 13:return 0.25f;  case 14:return 0.375f; case 15:return 0.25f*2.0f/3.0f;
+                             case 16:return 0.125f; case 17:return 0.0625f;case 18:return 0.03125f;
+                             case 19:return 0.015625f; } return 0.5f; };
+            float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+            const float qms = 60000.0f / bpmNow;
+            const float timeMs = (sync && sdiv > 0) ? qms * divMult (sdiv)
+                                                    : std::pow (8000.0f, M (R.time));
+            eng.setCharacter ((int) R.chr->load());
+            eng.setTimeMs    (timeMs);
+            const bool lk = R.link->load() > 0.5f;
+            eng.setLink (lk);
+            if (! lk)
+            {
+                const int sdR = (int) R.syncdivR->load();
+                eng.setTimeMsR ((sync && sdR > 0) ? qms * divMult (sdR)
+                                                  : std::pow (8000.0f, M (R.timeR)));
+            }
+            eng.setFeedback (M (R.fb) * 1.2f);
+            eng.setTone     (M (R.tone));
+            eng.setLowCutHz (20.0f   * std::pow (50.0f, M (R.lowcut)));
+            eng.setHiCutHz  (1200.0f * std::pow (15.0f, M (R.hicut)));
+            eng.setSpread   (M (R.spread));
+            eng.setWidth    (M (R.width) * 1.6f);
+            eng.setModRate  (0.05f + M (R.modrate) * 7.95f);
+            eng.setModDepth (M (R.moddepth));
+            eng.setWow      (R.wow->load());
+            eng.setDucking  (R.duck->load());
+            eng.setPing     (R.ping->load() > 0.5f);
+            eng.setHQ       (R.hq->load()   > 0.5f);
+            // 🔑🔑 fb350 — THE MISSING PER-BLOCK RESOLVE. Every setter above only stores a value;
+            // updateCoefficients() is what turns timeMs_ into the actual delay-length target
+            // (delTgtL/R) and computes every filter/mod/duck coefficient. Instance 1 calls it
+            // (see applyDly), the pool NEVER did — so delTgtL stayed at its 0.0f default and a
+            // duplicate delay ran at ZERO delay length: Time and Sync Division did nothing at all,
+            // while Feedback/Mix still worked (those setters write their smoothed targets direct).
+            // That is exactly the bug Max hit: "the time knob doesn't work at all" on delay 2.
+            eng.updateCoefficients();
+        }
+        const bool on = powered && ! poolDlySwap_[(size_t) e];   // fb350 — a swapping type fades out first
+        env += ((on ? 1.0f : 0.0f) - env) * hallSm_;         // click-free power fade
+        const float mixv = M (R.mix);
+        const float wet  = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+        const float dry  = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+        // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
+        float dl, dr; eng.processSample (sgL, sgR, dl, dr);
+        const float duck = env * (1.0f - dry);
+        outL = sgL + (env * wet * dl - duck * sgL);          // Mix 100% ⇒ dry fully removed (law 4)
+        outR = sgR + (env * wet * dr - duck * sgR);
+        const float wmagP = 0.5f * (std::abs (dl) + std::abs (dr)) * env;   // fb350 — its OWN bloom
+        if (wmagP > poolDlyPk[(size_t) e]) poolDlyPk[(size_t) e] = wmagP;
+    };
+
+    auto applyPoolDst = [&] (int e, float sgL, float sgR, float& outL, float& outR)
+    {
+        outL = sgL; outR = sgR;
+        auto& R = dstRefs_[(size_t) e];
+        if (R.power == nullptr) return;
+        // fb348 — NO GLOBAL SEND: unrouted ⇒ silent (never the whole mix).
+        const bool on = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) (kFxExtra + e)];
+        float& env = poolDstEnv_[(size_t) e];
+        if (! on && env <= 1.0e-4f) return;                  // unrouted / powered off ⇒ zero cost
+        auto& eng = distPool_[(size_t) e];
+        if (chI == 0)
+        {
+            const int ty = (int) R.type->load();
+            if (ty != poolDstType_[(size_t) e]) { poolDstType_[(size_t) e] = ty; eng.setMode (ty); }
+            eng.setCharacter ((int) R.chr->load());
+            eng.setQuality   ((int) R.qual->load());
+            eng.setAuto      (R.autoP->load() > 0.5f);
+            eng.setPill2     (R.pill2->load() > 0.5f);
+            eng.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last note
+            eng.setDrive     (M (R.drive));
+            eng.setKnee      (M (R.sig));     // "Knee" is the SIG param (the signature knob)
+            eng.setTone      (M (R.tone));
+            eng.setMix       (M (R.mix));
+            for (int k = 0; k < 8; ++k) eng.setP (k, M (R.p[k]));
+        }
+        env += ((on ? 1.0f : 0.0f) - env) * hallSm_;
+        // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
+        float wl, wr; eng.processSample (sgL, sgR, wl, wr);
+        // fb318 ENV-GATED REPLACE: the engine returns the FINISHED signal (its own Mix applied),
+        // so the insert is a crossfade from the untouched mix to the engine output. env 0 = exactly 0.
+        outL = sgL + env * (wl - sgL);                       // fb351 — crossfade IN→engine, hand on
+        outR = sgR + env * (wr - sgR);
+    };
+
+
+    // tp41 — the deferred RACK slots' capture buses (see chainDeferred_ in the header). Same shape as
+    //  the flow captures above: grown in place, cleared per block, written by pass 1, read after it.
+    float* dInL[(size_t) kChainMax] = {};
+    float* dInR[(size_t) kChainMax] = {};
+    if (flowAnyRouted_ && defRackCount_ > 0)
+        for (int d = 0; d < defRackCount_; ++d)
+        {
+            const int c = defRackSlots_[(size_t) d];
+            auto& b = defBuf_[(size_t) c];
+            if (b.getNumSamples() < numSamples || b.getNumChannels() < 2) b.setSize (2, numSamples, false, true, true);
+            b.clear (0, numSamples);
+            dInL[(size_t) c] = b.getWritePointer (0);
+            dInR[(size_t) c] = b.getWritePointer (1);
+        }
+    // tp41 — one rack device, IN → OUT, by kind. The deferred pass runs this per sample on a captured
+    //  bus; pass 1 keeps its own inline dispatch below (untouched, so the null holds to the bit). No
+    //  lanes here: a Splitter that lands after a flow card passes through — bands split before the
+    //  flow cards, never after them.
+    auto applySlot = [&] (const ChainEntry& ce, float inL, float inR, float& oL, float& oR)
+    {
+        oL = inL; oR = inR;
+        if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 4) applyTpe (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 5) applyFlt (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 6) applyCho (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 7) applyFla (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 8) applyPha (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind ==  9) applyEqz (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 10) applyWid (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 11) applyCmp (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 12) applyOtt (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 13) applyBod (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 14) applyUtl (ce.inst - 1, inL, inR, oL, oR);
+        else if (ce.kind == 15) { /* Splitter: pass-through in the deferred pass */ }
+        else if (ce.kind == kFlowKindChop || ce.kind == kFlowKindGli) { /* never here: flow slots run their stage */ }
+        else if (ce.inst == 1)
+        {
+            if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);
+            else if (ce.kind == 1) applyDly (inL, inR, oL, oR);
+            else                   applyDst (inL, inR, oL, oR);
+        }
+        else
+        {
+            const int e = ce.inst - 2;
+            if (e >= 0 && e < kFxExtra)
+            {
+                if      (ce.kind == 0) applyPoolRvb (e, inL, inR, oL, oR);
+                else if (ce.kind == 1) applyPoolDly (e, inL, inR, oL, oR);
+                else                   applyPoolDst (e, inL, inR, oL, oR);
+            }
+        }
+    };
     for (int i = 0; i < numSamples; ++i)
     {
         // Advance LFOs and compute per-param offsets
+        chI = i;   // tp41 — the device lambdas key their per-block setup on this
         modulationEngine.processSample();
 
         // Read smoothed base values, apply modulation offsets, then scale
@@ -14148,456 +14794,6 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 convolutionReverb.bakeIfDirtyIdle (numSamples);   // fb453 — 50 ms-throttled (a modulated Size baked EVERY block)
             }
         }
-        // fb351 — every device is now IN → OUT instead of "add my wet to the master mix". The caller
-        // gathers the input (this slot's oscillator tap + whatever feeds it) and decides where the
-        // output goes: on to the next device, or to the mix if nothing downstream wants it. Bypass
-        // must PASS THE SIGNAL THROUGH, or a powered-off device would break the chain behind it.
-        auto applyRvb = [&](float sgL, float sgR, float& outL, float& outR)
-        {
-        outL = sgL; outR = sgR;
-        if (hallPower_ || hallRvbEnv_ > 1.0e-4f)
-        {
-            hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
-            hallRvbDry_ += (hallRvbDryT_ - hallRvbDry_) * hallSm_;   // ramp mix
-            hallRvbWet_ += (hallRvbWetT_ - hallRvbWet_) * hallSm_;
-            // Send = routed oscs (voice-level), scaled by outputGain AND the -6 dB kVoiceToFxPad (buffer.applyGain
-            // near L6055) so sgL/sgR match the routed dry EXACTLY as it sits in the master mix. fb292 BUGFIX (Max:
-            // "Mix up = fully wet"): the pad was MISSING here, so the duck subtracted 2x the routed dry actually in
-            // leftChannel → at Mix 100% the dry was only half-cancelled (phase-inverted, still audible). Padding
-            // sgL/sgR corrects BOTH the duck term and the wet input (equal-power) for all 9 types. Proven offline:
-            // Mix 100% dry residual 0 dB → -93 dB. Routes off ⇒ send=nullptr ⇒ raw=0 ⇒ byte-identical default.
-            // fb351 — the input arrives from the chain (this slot's oscillator tap, already padded by
-            // the caller, plus any upstream device feeding it). The old MAIN-SEND branch is gone: since
-            // fb348 an unrouted device is silent, so nothing ever took it, and the serial behaviour it
-            // used to provide is now what the chain itself does — for EVERY device, routed or not.
-            float rl, rr;
-            if      (activeRvbType_ == 8) convolutionReverb.processSample (sgL, sgR, rl, rr);  // fb291 — Convolution (internally block-buffered, B-latency)
-            else if (activeRvbType_ == 7) shimmerReverb.processSample (sgL, sgR, rl, rr);  // fb290 — Shimmer
-            else if (activeRvbType_ == 6) basinReverb.processSample   (sgL, sgR, rl, rr);  // fb289 — Basin
-            else if (activeRvbType_ == 5) vintageReverb.processSample (sgL, sgR, rl, rr);  // fb288 — Vintage
-            else if (activeRvbType_ == 4) digitalReverb.processSample (sgL, sgR, rl, rr);  // fb285 — active engine
-            else if (activeRvbType_ == 3) springReverb.processSample (sgL, sgR, rl, rr);   // fb284
-            else if (activeRvbType_ == 2) plateReverb.processSample (sgL, sgR, rl, rr);   // fb282
-            else if (activeRvbType_ == 1) roomReverb.processSample  (sgL, sgR, rl, rr);
-            else                          hallReverb.processSample  (sgL, sgR, rl, rr);
-            const float e = hallRvbEnv_, duck = e * (1.0f - hallRvbDry_), wet = e * hallRvbWet_;
-            // fb287 — DUCK (Room/Spring 2nd pill): env-follow the routed dry (send) level and pull the WET
-            // down under it (dynamic — louder input ducks deeper), so the reverb recedes while you play and
-            // BLOOMS in the gaps. duck (the wet/dry crossfade above) is untouched; only the wet gain scales.
-            float duckG = 1.0f;
-            if (rvbDuckActive_)
-            {
-                const float inLvl = 0.5f * (std::abs (sgL) + std::abs (sgR));
-                duckEnv_ = inLvl + (inLvl > duckEnv_ ? duckAtkCoef_ : duckRelCoef_) * (duckEnv_ - inLvl);
-                duckG = 1.0f / (1.0f + 7.0f * duckEnv_);   // 1 in the gaps → deep duck under signal
-            }
-            const float wetG = wet * duckG;
-            outL = sgL + (wetG * rl - duck * sgL);       // fb351 — same math, but it OUTPUTS instead of
-            outR = sgR + (wetG * rr - duck * sgR);       //   adding to the mix (Mix 100% ⇒ dry gone)
-            const float wmag = 0.5f * (std::abs (rl) + std::abs (rr)) * e * duckG;   // fb280/fb287 — bloom follows audible (ducked) wet
-            if (wmag > hallBlockWetPk) hallBlockWetPk = wmag;
-        }
-        };   // fb307 — end applyRvb (both blooms now publish AFTER the ordered chain below)
-
-        // ── fb296 — synth FX-rack DELAY (parallel per-osc send). Click-free type swap + Mix-100%-wet, mirrors
-        //    the reverb above. Own send bus (delaySendBuf_) so its routing is fully independent of the reverb.
-        if (i == 0)
-        {
-            int dpend = (int) *rawParam (ParameterIDs::SYN_DLY_TYPE);
-            if (dpend < 0 || dpend > 3) dpend = 0;               // Digital/Tape/BBD/Diffuse
-            if (activeDlyType_ < 0) activeDlyType_ = dpend;
-            if (dpend != activeDlyType_)
-            {
-                dlySwapping_ = true;
-                if (dlyEnv_ < 1.0e-3f) { activeDlyType_ = dpend; delayEngine.reset(); dlySwapping_ = false; }
-            }
-            else dlySwapping_ = false;
-            dlyEnvT_ = (dlyPower_ && dlyRouteActive_ && ! dlySwapping_) ? 1.0f : 0.0f;   // fb348 — routed or silent
-            if (dlyPower_)
-            {
-                // Resolve delay TIME — synced to a note division, or free ms from the Time knob.
-                const bool sync    = rawParam (ParameterIDs::SYN_DLY_SYNC)->load() > 0.5f;
-                const int  syncDiv = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV);   // 0 Free/1 1-4/2 1-8/3 1-8T/4 1-8D/5 1-16
-                // fb304/fb306 — division index → multiplier of a QUARTER note (qms). Shared by L and (unlinked) R.
-                auto divMult = [] (int d) -> float {
-                    switch (d) {
-                        case 1:  return 16.0f;            // 4 bar
-                        case 2:  return 8.0f;             // 2 bar
-                        case 3:  return 4.0f;             // 1 bar
-                        case 4:  return 2.0f;             // 1/2
-                        case 5:  return 3.0f;             // 1/2 dotted
-                        case 6:  return 2.0f*2.0f/3.0f;   // 1/2 triplet
-                        case 7:  return 1.0f;             // 1/4
-                        case 8:  return 1.5f;             // 1/4 dotted
-                        case 9:  return 1.0f*2.0f/3.0f;   // 1/4 triplet
-                        case 10: return 0.5f;             // 1/8
-                        case 11: return 0.75f;            // 1/8 dotted
-                        case 12: return 0.5f*2.0f/3.0f;   // 1/8 triplet
-                        case 13: return 0.25f;            // 1/16
-                        case 14: return 0.375f;           // 1/16 dotted
-                        case 15: return 0.25f*2.0f/3.0f;  // 1/16 triplet
-                        case 16: return 0.125f;           // 1/32
-                        case 17: return 0.0625f;          // 1/64
-                        case 18: return 0.03125f;         // 1/128
-                        case 19: return 0.015625f;        // 1/256
-                    }
-                    return 0.5f; };
-                float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
-                const float qms = 60000.0f / bpmNow;            // quarter-note ms
-                const float timeMs = (sync && syncDiv > 0)
-                    ? qms * divMult (syncDiv)
-                    : std::pow (8000.0f, M (rawParam (ParameterIDs::SYN_DLY_TIME)));   // fb304 — 1 ms → 8000 ms (exp)
-                delayEngine.setType      (activeDlyType_);
-                delayEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DLY_CHARACTER));
-                delayEngine.setTimeMs    (timeMs);
-                // fb306 — LINK + independent RIGHT time. Linked (default): DelayEngine derives R from L (+Spread) →
-                // byte-identical to before. Unlinked: R uses its OWN synced division (SYNCDIV_R) or free time (TIME_R).
-                const bool dlyLink = rawParam (ParameterIDs::SYN_DLY_LINK)->load() > 0.5f;
-                delayEngine.setLink (dlyLink);
-                if (! dlyLink)
-                {
-                    const int   syncDivR = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV_R);
-                    const float timeMsR  = (sync && syncDivR > 0)
-                        ? qms * divMult (syncDivR)
-                        : std::pow (8000.0f, M (rawParam (ParameterIDs::SYN_DLY_TIME_R)));
-                    delayEngine.setTimeMsR (timeMsR);
-                }
-                delayEngine.setFeedback  (M (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)) * 1.2f);           // fb303 — amplified (0..120%): 100% ≈ "someone playing it back over you" (softClip-bounded in the loop, no runaway)
-                delayEngine.setTone      (M (rawParam (ParameterIDs::SYN_DLY_TONE)));
-                delayEngine.setLowCutHz  (20.0f   * std::pow (50.0f, M (rawParam (ParameterIDs::SYN_DLY_LOWCUT))));  // 20..1000 Hz
-                delayEngine.setHiCutHz   (1200.0f * std::pow (15.0f, M (rawParam (ParameterIDs::SYN_DLY_HICUT))));   // 1.2k..18k Hz
-                delayEngine.setSpread    (M (rawParam (ParameterIDs::SYN_DLY_SPREAD)));
-                delayEngine.setWidth     (M (rawParam (ParameterIDs::SYN_DLY_WIDTH)) * 1.6f);              // 0..1.6 M/S
-                delayEngine.setModRate   (0.05f + M (rawParam (ParameterIDs::SYN_DLY_MODRATE)) * 7.95f);   // 0.05..8 Hz
-                delayEngine.setModDepth  (M (rawParam (ParameterIDs::SYN_DLY_MODDEPTH)));
-                delayEngine.setWow       (rawParam (ParameterIDs::SYN_DLY_WOW)->load());    // fb303 — default 0 now (off); kept for Tape. Full removal + L/R redesign next.
-                delayEngine.setDucking   (rawParam (ParameterIDs::SYN_DLY_DUCK)->load());   // fb303 — default 0 now (Max never liked it)
-                delayEngine.setPing      (rawParam (ParameterIDs::SYN_DLY_PING)->load() > 0.5f);
-                delayEngine.setHQ        (rawParam (ParameterIDs::SYN_DLY_HQ)->load()   > 0.5f);
-                delayEngine.updateCoefficients();
-                const float mixv = M (rawParam (ParameterIDs::SYN_DLY_MIX));
-                dlyWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
-                dlyDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
-            }
-        }
-        // ════════ fb315 — DISTORTION setup (block-rate, i==0) ════════
-        if (i == 0)
-        {
-            dstEnvT_ = (dstPower_ && dstRouteActive_) ? 1.0f : 0.0f;   // fb348 — routed or silent (was: power alone ⇒ main send)
-            if (dstPower_)
-            {
-                distortionEngine.setMode      ((int) *rawParam (ParameterIDs::SYN_DST_TYPE));
-                distortionEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DST_CHARACTER));
-                distortionEngine.setQuality   ((int) *rawParam (ParameterIDs::SYN_DST_QUALITY));
-                distortionEngine.setAuto      (rawParam (ParameterIDs::SYN_DST_AUTO)->load()  > 0.5f);
-                distortionEngine.setPill2     (rawParam (ParameterIDs::SYN_DST_PILL2)->load() > 0.5f);
-                distortionEngine.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last-played note (the glide tracker; mono law on a post-mix bus)
-                // Drive is dB-linear inside the engine (48·t^0.8) — do NOT pre-scale it here into a
-                // linear multiplier, that is the dead-first-third bug this device exists to avoid.
-                distortionEngine.setDrive     (M (rawParam (ParameterIDs::SYN_DST_DRIVE)));
-                distortionEngine.setKnee      (dstMorphEff_);   // fb340 — Morph/Knee is a first-class dest (§6.7); fb453 T5b resolves it just after wc::buildFxMod() so the rack half is THIS block's: env destroys the attack, the tail stays clean
-                distortionEngine.setTone      (M (rawParam (ParameterIDs::SYN_DST_TONE)));
-                // fb319 — the back-8 goes in RAW; the engine interprets each slot per FAMILY. Slots 0
-                // and 1 are Low Cut / Hi Cut in every family; the rest change meaning per family.
-                static const char* const kDstP[8] = {
-                    ParameterIDs::SYN_DST_P1, ParameterIDs::SYN_DST_P2, ParameterIDs::SYN_DST_P3,
-                    ParameterIDs::SYN_DST_P4, ParameterIDs::SYN_DST_P5, ParameterIDs::SYN_DST_P6,
-                    ParameterIDs::SYN_DST_P7, ParameterIDs::SYN_DST_P8 };
-                for (int pIdx = 0; pIdx < 8; ++pIdx)
-                    distortionEngine.setP (pIdx, M (rawParam (kDstP[pIdx])));
-                // fb318 — the ENGINE owns Mix now (it is the only place the wet and the dry can be
-                // latency-aligned across the 2× resampler; see DistortionEngine::setMix).
-                distortionEngine.setMix (M (rawParam (ParameterIDs::SYN_DST_MIX)));
-            }
-        }
-
-        auto applyDst = [&](float sgL, float sgR, float& outL, float& outR)   // fb315/fb351 — distortion INSERT
-        {
-            outL = sgL; outR = sgR;
-            if (dstPower_ || dstEnv_ > 1.0e-4f)
-            {
-                dstEnv_ += (dstEnvT_ - dstEnv_) * hallSm_;      // on/off fade (~15 ms, no click)
-                // fb351 — input comes from the chain (see applyRvb). The MAIN-SEND branch is retired.
-                float wl, wr; distortionEngine.processSample (sgL, sgR, wl, wr);
-                // fb318 — ENV-GATED REPLACE. The engine returns the FINISHED signal (its own Mix
-                // applied, dry latency-aligned to the 2× resampler), so the insert is just a crossfade
-                // from the untouched mix to the engine's output. At env 0 this contributes EXACTLY 0 —
-                // no click on power toggle, and no delay line in circuit when the device is off.
-                const float e = dstEnv_;
-                outL = sgL + e * (wl - sgL);                  // fb351 — crossfade IN→engine, then hand it on
-                outR = sgR + e * (wr - sgR);
-                const float wmag = 0.5f * (std::abs (wl) + std::abs (wr)) * e;
-                if (wmag > dstBlockWetPk) dstBlockWetPk = wmag;
-            }
-        };
-
-        auto applyDly = [&](float sgL, float sgR, float& outL, float& outR)   // fb307/fb351 — delay INSERT
-        {
-        outL = sgL; outR = sgR;
-        if (dlyPower_ || dlyEnv_ > 1.0e-4f)
-        {
-            dlyEnv_ += (dlyEnvT_ - dlyEnv_) * hallSm_;           // on/off fade
-            dlyDry_ += (dlyDryT_ - dlyDry_) * hallSm_;           // ramp mix (no zipper)
-            dlyWet_ += (dlyWetT_ - dlyWet_) * hallSm_;
-            // fb351 — input comes from the chain (see applyRvb); the MAIN-SEND branch is retired.
-            float dl, dr; delayEngine.processSample (sgL, sgR, dl, dr);
-            const float e = dlyEnv_, duck = e * (1.0f - dlyDry_), wet = e * dlyWet_;
-            outL = sgL + (wet * dl - duck * sgL);                // Mix 100% ⇒ dry crossfade→0
-            outR = sgR + (wet * dr - duck * sgR);
-            const float wmag = 0.5f * (std::abs (dl) + std::abs (dr)) * e;
-            if (wmag > dlyBlockWetPk) dlyBlockWetPk = wmag;
-        }
-        };   // fb307 — end applyDly
-
-        // ════════ fb346 — THE POOLED INSTANCES (Delay 2..6, Distortion 2..6) ════════
-        // ⚠️ fb348 SUPERSEDED the original "main-send only" design described here: every pooled
-        // instance now reads its OWN route pills and owns its OWN send bus, so a delay on osc C
-        // cannot touch osc A. The fb305/fb338 exclusion landmine is handled by the single shared
-        // routed-dry bus (fb347), not by keeping duplicates off the send path.
-        // 🔑 THE POOL LAW (fb350, learned the hard way): a pooled instance must make EVERY per-block
-        // engine call instance 1 makes. The pool was missing DelayEngine::updateCoefficients() — the
-        // resolve that turns timeMs_ into the real delay-length target — so duplicates ran at ZERO
-        // delay length and their Time knob was dead. When you pool a device, diff its call set
-        // against instance 1's; a missing per-block resolve compiles clean and fails silently.
-        // fb351 — the old excludeRouted() helper is GONE. Duplicates no longer reconstruct a
-        // "whole mix minus the routed dry" input; like every other device they are handed their
-        // input by the chain. That subtraction was the source of the fb347 phase-inversion class.
-        // fb352 — POOLED REVERB (instances 2..6). Same shape as instance 1, and deliberately built
-        // on the SAME applyRvbTypeParams routine so no per-type setter can exist for one and not
-        // the other (the fb350 pool law). The one difference is the engine: this instance has built
-        // only the one its type needs, and while that build is pending it passes the chain through.
-        auto applyPoolRvb = [&] (int e, float sgL, float sgR, float& outL, float& outR)
-        {
-            outL = sgL; outR = sgR;
-            auto& V = rvbRefs_[(size_t) e];
-            if (V.power == nullptr) return;
-            const bool powered = (V.power->load() > 0.5f) && poolRouteAny_[(size_t) (2 * kFxExtra + e)];
-            float& env = poolRvbEnv_[(size_t) e];
-            // fb361 — CONVOLUTION IDLE BAKE, mirroring instance 1: keep the IR baked for the VIZ even
-            // while this instance is powered off or unrouted, so a dropped IR shows its REAL waveform
-            // straight away instead of the placeholder. Bake-affecting params only, once per block.
-            if (i == 0 && ! powered && (int) V.type->load() == 8)
-            {
-                rvbWantType_[(size_t) e].store (8, std::memory_order_relaxed);   // ask for the engine
-                if (auto* cv = rvbEngineSetPool (e).conv)
-                {
-                    cv->setSize      (M (V.size));
-                    cv->setDecay     (M (V.decay));
-                    cv->setDensity   (M (V.diffuse));
-                    cv->setAttack    (M (V.hidamp));
-                    cv->setDistance  (M (V.lowdecay));
-                    cv->setCharacter ((int) V.chr->load());
-                    cv->setShape     ((int) V.modmode->load());
-                    cv->setReverse   (V.freeze->load() > 0.5f);
-                    cv->updateCoefficients();
-                    cv->bakeIfDirtyIdle (numSamples);   // fb453 — 50 ms-throttled (a modulated Size baked EVERY block)
-                }
-            }
-            if (! powered && env <= 1.0e-4f) return;             // unrouted / off ⇒ zero cost
-            int ty = (int) V.type->load(); if (ty < 0 || ty > 8) ty = 0;
-            // ask the message thread for this engine (it builds it in timerCallback, never here)
-            rvbWantType_[(size_t) e].store (ty, std::memory_order_relaxed);
-            RvbEngineSet es = rvbEngineSetPool (e);
-            int&  cur      = poolRvbType_[(size_t) e];
-            bool& swapping = poolRvbSwap_[(size_t) e];
-            // Nothing adopted yet: stay silent (there is no tail to protect) until the message
-            // thread has built this type's engine — usually the very next timer tick.
-            if (cur < 0)
-            {
-                if (! es.has (ty)) { env = 0.0f; return; }
-                cur = ty;
-            }
-            if (i == 0)
-            {
-                if (ty != cur)
-                {
-                    swapping = true;                              // fade the CURRENT engine out first…
-                    // …and only commit once the incoming engine actually exists. Testing `ty` before
-                    // the fade would cut a live tail dead the instant you picked an unbuilt type.
-                    if (env < 1.0e-3f && es.has (ty))
-                    {
-                        cur = ty; swapping = false;
-                        switch (ty) { case 8: es.conv->reset(); break;    case 7: es.shimmer->reset(); break;
-                                      case 6: es.basin->reset(); break;   case 5: es.vintage->reset(); break;
-                                      case 4: es.digital->reset(); break; case 3: es.spring->reset(); break;
-                                      case 2: es.plate->reset(); break;   case 1: es.room->reset(); break;
-                                      default: es.hall->reset(); break; }
-                    }
-                }
-                else swapping = false;
-
-                RvbSnapshot rp;
-                rp.size      = M (V.size);      rp.decay    = M (V.decay);
-                rp.tone      = M (V.tone);      rp.predelay = M (V.predelay);
-                rp.diffuse   = M (V.diffuse);   rp.moddepth = M (V.moddepth);
-                rp.modrate   = M (V.modrate);   rp.hidamp   = M (V.hidamp);
-                rp.lowdecay  = M (V.lowdecay);  rp.lowcut   = M (V.lowcut);
-                rp.width     = M (V.width);     rp.mix      = M (V.mix);
-                rp.character = (int) V.chr->load(); rp.modmode  = (int) V.modmode->load();
-                rp.mod       = V.mod->load()    > 0.5f;
-                rp.freeze    = V.freeze->load() > 0.5f;
-                rp.duck      = V.duck->load()   > 0.5f;
-                applyRvbTypeParams (cur, rp, es);                 // 🔑 the ONE shared routine
-                // fb358 — DUCK is Room/Spring's 2nd pill ONLY, resolved once per block so the
-                // per-sample follower stays branch-light (identical to instance 1).
-                poolRvbDuckOn_[(size_t) e] = (cur == 1 || cur == 3) && rp.duck;
-                const float mixv = rp.mix;
-                poolRvbWet_[(size_t) e] = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
-                poolRvbDry_[(size_t) e] = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
-            }
-            const bool on = powered && ! swapping;
-            env += ((on ? 1.0f : 0.0f) - env) * hallSm_;          // click-free power fade
-            float rl = 0.0f, rr = 0.0f;
-            switch (cur) { case 8: es.conv->processSample (sgL, sgR, rl, rr); break;
-                           case 7: es.shimmer->processSample (sgL, sgR, rl, rr); break;
-                           case 6: es.basin->processSample (sgL, sgR, rl, rr); break;
-                           case 5: es.vintage->processSample (sgL, sgR, rl, rr); break;
-                           case 4: es.digital->processSample (sgL, sgR, rl, rr); break;
-                           case 3: es.spring->processSample (sgL, sgR, rl, rr); break;
-                           case 2: es.plate->processSample (sgL, sgR, rl, rr); break;
-                           case 1: es.room->processSample (sgL, sgR, rl, rr); break;
-                           default: es.hall->processSample (sgL, sgR, rl, rr); break; }
-            const float duck = env * (1.0f - poolRvbDry_[(size_t) e]);
-            const float wet  = env * poolRvbWet_[(size_t) e];
-            // fb358 — DUCK: env-follow this instance's OWN input and pull ITS wet down underneath,
-            // so the reverb recedes while you play and blooms in the gaps. Shares instance 1's
-            // attack/release coefficients (both computed in prepareToPlay); the ENV is per instance.
-            float duckG = 1.0f;
-            if (poolRvbDuckOn_[(size_t) e])
-            {
-                float& dEnv = poolRvbDuckEnv_[(size_t) e];
-                const float inLvl = 0.5f * (std::abs (sgL) + std::abs (sgR));
-                dEnv = inLvl + (inLvl > dEnv ? duckAtkCoef_ : duckRelCoef_) * (dEnv - inLvl);
-                duckG = 1.0f / (1.0f + 7.0f * dEnv);
-            }
-            const float wetG = wet * duckG;
-            outL = sgL + (wetG * rl - duck * sgL);                // fb351 — IN → OUT, Mix 100% ⇒ dry gone
-            outR = sgR + (wetG * rr - duck * sgR);
-            const float wmagV = 0.5f * (std::abs (rl) + std::abs (rr)) * env * duckG;   // its OWN bloom, follows the AUDIBLE wet
-            if (wmagV > poolRvbPk[(size_t) e]) poolRvbPk[(size_t) e] = wmagV;
-        };
-
-        auto applyPoolDly = [&] (int e, float sgL, float sgR, float& outL, float& outR)
-        {
-            outL = sgL; outR = sgR;
-            auto& R = dlyRefs_[(size_t) e];
-            if (R.power == nullptr) return;
-            // fb348 — NO GLOBAL SEND: an instance with no route pills lit is SILENT. It no longer
-            // falls back to processing the whole mix, which is what made a delay routed to osc C
-            // audibly chew on osc A.
-            const bool powered = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) e];
-            float& env = poolDlyEnv_[(size_t) e];
-            if (! powered && env <= 1.0e-4f) return;              // unrouted / powered off ⇒ zero cost
-            auto& eng = delayPool_[(size_t) e];
-            if (i == 0)                                          // per-block setup (never per sample)
-            {
-                // fb350 — TYPE SWAP, mirroring instance 1: fade the wet to zero FIRST, then switch and
-                // reset. The old code switched instantly mid-tail, which both clicks (the no-clicks law)
-                // and leaves the previous type's buffer state ringing under the new one.
-                int ty = (int) R.type->load();
-                if (ty < 0 || ty > 3) ty = 0;
-                int&  cur      = poolDlyType_[(size_t) e];
-                bool& swapping = poolDlySwap_[(size_t) e];
-                if (cur < 0) { cur = ty; eng.setType (ty); }      // first block for this slot — adopt, no fade
-                if (ty != cur)
-                {
-                    swapping = true;
-                    if (env < 1.0e-3f) { cur = ty; eng.setType (ty); eng.reset(); swapping = false; }
-                }
-                else swapping = false;
-                const bool sync = R.sync->load() > 0.5f;
-                const int  sdiv = (int) R.syncdiv->load();
-                auto divMult = [] (int d) -> float {
-                    switch (d) { case 1: return 16.0f;  case 2: return 8.0f;   case 3: return 4.0f;
-                                 case 4: return 2.0f;   case 5: return 3.0f;   case 6: return 2.0f*2.0f/3.0f;
-                                 case 7: return 1.0f;   case 8: return 1.5f;   case 9: return 1.0f*2.0f/3.0f;
-                                 case 10:return 0.5f;   case 11:return 0.75f;  case 12:return 0.5f*2.0f/3.0f;
-                                 case 13:return 0.25f;  case 14:return 0.375f; case 15:return 0.25f*2.0f/3.0f;
-                                 case 16:return 0.125f; case 17:return 0.0625f;case 18:return 0.03125f;
-                                 case 19:return 0.015625f; } return 0.5f; };
-                float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
-                const float qms = 60000.0f / bpmNow;
-                const float timeMs = (sync && sdiv > 0) ? qms * divMult (sdiv)
-                                                        : std::pow (8000.0f, M (R.time));
-                eng.setCharacter ((int) R.chr->load());
-                eng.setTimeMs    (timeMs);
-                const bool lk = R.link->load() > 0.5f;
-                eng.setLink (lk);
-                if (! lk)
-                {
-                    const int sdR = (int) R.syncdivR->load();
-                    eng.setTimeMsR ((sync && sdR > 0) ? qms * divMult (sdR)
-                                                      : std::pow (8000.0f, M (R.timeR)));
-                }
-                eng.setFeedback (M (R.fb) * 1.2f);
-                eng.setTone     (M (R.tone));
-                eng.setLowCutHz (20.0f   * std::pow (50.0f, M (R.lowcut)));
-                eng.setHiCutHz  (1200.0f * std::pow (15.0f, M (R.hicut)));
-                eng.setSpread   (M (R.spread));
-                eng.setWidth    (M (R.width) * 1.6f);
-                eng.setModRate  (0.05f + M (R.modrate) * 7.95f);
-                eng.setModDepth (M (R.moddepth));
-                eng.setWow      (R.wow->load());
-                eng.setDucking  (R.duck->load());
-                eng.setPing     (R.ping->load() > 0.5f);
-                eng.setHQ       (R.hq->load()   > 0.5f);
-                // 🔑🔑 fb350 — THE MISSING PER-BLOCK RESOLVE. Every setter above only stores a value;
-                // updateCoefficients() is what turns timeMs_ into the actual delay-length target
-                // (delTgtL/R) and computes every filter/mod/duck coefficient. Instance 1 calls it
-                // (see applyDly), the pool NEVER did — so delTgtL stayed at its 0.0f default and a
-                // duplicate delay ran at ZERO delay length: Time and Sync Division did nothing at all,
-                // while Feedback/Mix still worked (those setters write their smoothed targets direct).
-                // That is exactly the bug Max hit: "the time knob doesn't work at all" on delay 2.
-                eng.updateCoefficients();
-            }
-            const bool on = powered && ! poolDlySwap_[(size_t) e];   // fb350 — a swapping type fades out first
-            env += ((on ? 1.0f : 0.0f) - env) * hallSm_;         // click-free power fade
-            const float mixv = M (R.mix);
-            const float wet  = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
-            const float dry  = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
-            // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
-            float dl, dr; eng.processSample (sgL, sgR, dl, dr);
-            const float duck = env * (1.0f - dry);
-            outL = sgL + (env * wet * dl - duck * sgL);          // Mix 100% ⇒ dry fully removed (law 4)
-            outR = sgR + (env * wet * dr - duck * sgR);
-            const float wmagP = 0.5f * (std::abs (dl) + std::abs (dr)) * env;   // fb350 — its OWN bloom
-            if (wmagP > poolDlyPk[(size_t) e]) poolDlyPk[(size_t) e] = wmagP;
-        };
-
-        auto applyPoolDst = [&] (int e, float sgL, float sgR, float& outL, float& outR)
-        {
-            outL = sgL; outR = sgR;
-            auto& R = dstRefs_[(size_t) e];
-            if (R.power == nullptr) return;
-            // fb348 — NO GLOBAL SEND: unrouted ⇒ silent (never the whole mix).
-            const bool on = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) (kFxExtra + e)];
-            float& env = poolDstEnv_[(size_t) e];
-            if (! on && env <= 1.0e-4f) return;                  // unrouted / powered off ⇒ zero cost
-            auto& eng = distPool_[(size_t) e];
-            if (i == 0)
-            {
-                const int ty = (int) R.type->load();
-                if (ty != poolDstType_[(size_t) e]) { poolDstType_[(size_t) e] = ty; eng.setMode (ty); }
-                eng.setCharacter ((int) R.chr->load());
-                eng.setQuality   ((int) R.qual->load());
-                eng.setAuto      (R.autoP->load() > 0.5f);
-                eng.setPill2     (R.pill2->load() > 0.5f);
-                eng.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last note
-                eng.setDrive     (M (R.drive));
-                eng.setKnee      (M (R.sig));     // "Knee" is the SIG param (the signature knob)
-                eng.setTone      (M (R.tone));
-                eng.setMix       (M (R.mix));
-                for (int k = 0; k < 8; ++k) eng.setP (k, M (R.p[k]));
-            }
-            env += ((on ? 1.0f : 0.0f) - env) * hallSm_;
-            // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
-            float wl, wr; eng.processSample (sgL, sgR, wl, wr);
-            // fb318 ENV-GATED REPLACE: the engine returns the FINISHED signal (its own Mix applied),
-            // so the insert is a crossfade from the untouched mix to the engine output. env 0 = exactly 0.
-            outL = sgL + env * (wl - sgL);                       // fb351 — crossfade IN→engine, hand on
-            outR = sgR + env * (wr - sgR);
-        };
-
         // fb307 — SERIAL CHAIN ORDER (drag-to-reorder): run the two INSERTS in the dragged order. Both setups
         // (i==0) have run above, so either order is valid. Default reverb→delay = byte-identical to fb306. Per-osc
         // (parallel) sends are order-independent, so the swap only re-routes the MAIN-SEND serial case — exactly
@@ -14663,6 +14859,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     }
                 }
 
+                // tp41 — A RACK SLOT DOWNSTREAM OF A FLOW CARD IS A CAPTURE TOO. Its pass-1 input (the
+                //  oscillator tap + every non-deferred feed) waits on its bus; the deferred walk after the
+                //  loop folds in what the flow cards produced and runs the device. It counts toward the
+                //  limiter's view of the instrument exactly like a flow capture does.
+                if (flowAnyRouted_ && chainDeferred_[(size_t) c] && ce.kind != kFlowKindChop && ce.kind != kFlowKindGli)
+                {
+                    if (dInL[(size_t) c] != nullptr) { dInL[(size_t) c][i] = inL; dInR[(size_t) c][i] = inR; fSumL += inL; fSumR += inR; }
+                    pendL[c] = 0.0f; pendR[c] = 0.0f;
+                    continue;
+                }
                 float oL = inL, oR = inR;
                 // tp30 — A FLOW SLOT IS A CAPTURE, NOT AN INSERT. It hands back silence here so
                 //  nothing double-counts; its real output is added after the block stage runs.
@@ -14825,6 +15031,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 const float a = masterSoftClip (fInL[(size_t) fk][i] * kInstrumentMakeup * limGain_);
                 const float b = masterSoftClip (fInR[(size_t) fk][i] * kInstrumentMakeup * limGain_);
                 fInL[(size_t) fk][i] = a; fInR[(size_t) fk][i] = b;
+                fClipL += a; fClipR += b;
+            }
+        if (flowAnyRouted_ && defRackCount_ > 0)   // tp41 — the deferred rack captures enter the same post-master domain
+            for (int d = 0; d < defRackCount_; ++d)
+            {
+                const int c = defRackSlots_[(size_t) d];
+                if (dInL[(size_t) c] == nullptr) continue;
+                const float a = masterSoftClip (dInL[(size_t) c][i] * kInstrumentMakeup * limGain_);
+                const float b = masterSoftClip (dInR[(size_t) c][i] * kInstrumentMakeup * limGain_);
+                dInL[(size_t) c][i] = a; dInR[(size_t) c][i] = b;
                 fClipL += a; fClipR += b;
             }
 
@@ -15038,45 +15254,72 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //  With every pill on, the first card in the chain claims all ten sources, its bus holds the
     //  whole master, and the mix buffer holds nothing — so this is the old code path, sample for
     //  sample. That equivalence is the acceptance gate (Tests/au_flow_route.cpp).
+    // tp41 — THE DEFERRED WALK. Every deferred slot (a flow card, or a rack device downstream of one),
+    //  in chain order. A flow slot runs its block stage; a rack slot runs its device per sample over
+    //  the block. Each first folds in the outputs of the deferred slots it eats (its pass-1 feeds were
+    //  folded in per sample). With no rack device after a flow card this is the tp30 pass, line for
+    //  line — the flow null (Tests/au_flow_route.cpp) still holds.
     if (flowAnyRouted_)
     {
         const int nSlotsF = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
-        for (int c = 0; c < nSlotsF; ++c)
+        auto busOf = [&] (int c) -> juce::AudioBuffer<float>*
         {
             const auto& ce = chainOrder_[(size_t) c];
-            if (ce.kind != kFlowKindChop && ce.kind != kFlowKindGli) continue;
-            const int fk = flowFlat (ce.kind, ce.inst - 1);
-            if ((unsigned) fk >= (unsigned) kFlowSlots || flowInBuf_[(size_t) fk].getNumSamples() < numSamples) continue;
-            auto& me = flowInBuf_[(size_t) fk];
-            // fold in every UPSTREAM FLOW card this one eats (rack slots already folded in per sample)
+            if (ce.kind == kFlowKindChop || ce.kind == kFlowKindGli)
+            {
+                const int fk = flowFlat (ce.kind, ce.inst - 1);
+                if ((unsigned) fk >= (unsigned) kFlowSlots) return nullptr;
+                return &flowInBuf_[(size_t) fk];
+            }
+            return &defBuf_[(size_t) c];
+        };
+        auto usable = [&] (juce::AudioBuffer<float>* b) { return b != nullptr && b->getNumChannels() >= 2 && b->getNumSamples() >= numSamples; };
+        for (int c = 0; c < nSlotsF; ++c)
+        {
+            if (! chainDeferred_[(size_t) c]) continue;
+            const auto& ce = chainOrder_[(size_t) c];
+            const bool isFlow = (ce.kind == kFlowKindChop || ce.kind == kFlowKindGli);
+            auto* me = busOf (c);
+            if (! usable (me)) continue;
+            // fold in every DEFERRED upstream slot this one eats (pass-1 slots were folded in per sample)
             for (int j = 0; j < c; ++j)
             {
-                const auto& up = chainOrder_[(size_t) j];
-                if (up.kind != kFlowKindChop && up.kind != kFlowKindGli) continue;
-                if (! fxTopo_.feed[c].test (j)) continue;
-                const int uk = flowFlat (up.kind, up.inst - 1);
-                if ((unsigned) uk >= (unsigned) kFlowSlots || flowInBuf_[(size_t) uk].getNumSamples() < numSamples) continue;
-                me.addFrom (0, 0, flowInBuf_[(size_t) uk], 0, 0, numSamples);
-                me.addFrom (1, 0, flowInBuf_[(size_t) uk], 1, 0, numSamples);
+                if (! chainDeferred_[(size_t) j] || ! fxTopo_.feed[c].test (j)) continue;
+                auto* ub = busOf (j);
+                if (! usable (ub)) continue;
+                me->addFrom (0, 0, *ub, 0, 0, numSamples);
+                me->addFrom (1, 0, *ub, 1, 0, numSamples);
             }
-            flowStageL = me.getWritePointer (0);
-            flowStageR = me.getWritePointer (1);
-            if (ce.kind == kFlowKindChop) chopStage   (ce.inst - 1);
-            else                          glitchStage (ce.inst - 1);
+            if (isFlow)
+            {
+                flowStageL = me->getWritePointer (0);
+                flowStageR = me->getWritePointer (1);
+                if (ce.kind == kFlowKindChop) chopStage   (ce.inst - 1);
+                else                          glitchStage (ce.inst - 1);
+            }
+            else
+            {
+                float* L = me->getWritePointer (0);
+                float* R = me->getWritePointer (1);
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    chI = i;
+                    float oL, oR; applySlot (ce, L[i], R[i], oL, oR);
+                    L[i] = oL; R[i] = oR;
+                }
+            }
         }
         // whatever nothing downstream claimed comes back to the mix — the same claim rule the rack uses
         for (int c = 0; c < nSlotsF; ++c)
         {
-            const auto& ce = chainOrder_[(size_t) c];
-            if (ce.kind != kFlowKindChop && ce.kind != kFlowKindGli) continue;
-            if (fxTopo_.consumed[c]) continue;
-            const int fk = flowFlat (ce.kind, ce.inst - 1);
-            if ((unsigned) fk >= (unsigned) kFlowSlots || flowInBuf_[(size_t) fk].getNumSamples() < numSamples) continue;
-            buffer.addFrom (0, 0, flowInBuf_[(size_t) fk], 0, 0, numSamples);
-            if (buffer.getNumChannels() > 1) buffer.addFrom (1, 0, flowInBuf_[(size_t) fk], 1, 0, numSamples);
+            if (! chainDeferred_[(size_t) c] || fxTopo_.consumed[c]) continue;
+            auto* b = busOf (c);
+            if (! usable (b)) continue;
+            buffer.addFrom (0, 0, *b, 0, 0, numSamples);
+            if (buffer.getNumChannels() > 1) buffer.addFrom (1, 0, *b, 1, 0, numSamples);
         }
     }
-    juce::ignoreUnused (chopStage, glitchStage);
+    juce::ignoreUnused (chopStage, glitchStage, applySlot);
 
     // 🎚️ fb636e (clean-up) — THE masterFx RING. The WET stem export attributes each layer's share of the shared FX
     //    against it, so it is written HERE: after the FLOW Chop/Glitch stages (the WET stems carry them) and ABOVE the

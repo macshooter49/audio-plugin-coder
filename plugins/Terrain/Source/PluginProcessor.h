@@ -3150,6 +3150,33 @@ private:
     std::atomic<float>* outCableRef_ [6] {};
     std::atomic<float>* outCableRefB_[4] {};
     float cutG_ [6] = { 0, 0, 0, 0, 0, 0 };   // 1 = that source's cable to Audio Out is cut
+    // ══ tp41 — THE PATCHER'S RULES (see the layout block of the same name) ══════════════════════
+    //  DIRECT TAPS: per device, per source, "take the raw oscillator, not the main filter's output".
+    //  Read per block into 0/1 gains shaped exactly like the entry gains (bank 0: bits 0..5; bank 1:
+    //  slots 0..3 = bits 6..9, 4 = the shared Sub bit, 5 = 0) and carried to the voices in the route
+    //  snapshot, where they only ever matter at the device that TAPS (the entry) — a device fed by an
+    //  upstream device eats that output and never taps the oscillator at all.
+    std::atomic<float>* poolTapRef_[(size_t) kPoolSendCount] {};
+    std::atomic<float>* hallTapRef_ = nullptr; std::atomic<float>* dlyTapRef_ = nullptr; std::atomic<float>* dstTapRef_ = nullptr;
+    std::array<float, (size_t) kPoolSendCount * 6> poolTapG_ {}, poolTapGB_ {}, lastPoolTapG_ {}, lastPoolTapGB_ {};
+    float hallTapG_[6] {}, dlyTapG_[6] {}, dstTapG_[6] {}, hallTapGB_[6] {}, dlyTapGB_[6] {}, dstTapGB_[6] {};
+    float lastHallTapG_[6] {}, lastDlyTapG_[6] {}, lastDstTapG_[6] {}, lastHallTapGB_[6] {}, lastDlyTapGB_[6] {}, lastDstTapGB_[6] {};
+    //  INLINE FLOW CARDS: a Chop/Glitch that carries _INLINE takes its _RANK among the rack devices
+    //  instead of kFlowRankBase, so a rack device can sit AFTER it. Its DSP is still block-rate, so
+    //  every slot downstream of a flow card is DEFERRED with it: pass 1 (the per-sample loop) only
+    //  captures such a slot's pass-1 input (its oscillator tap + every non-deferred feed) into
+    //  defBuf_[slot]; after the loop the deferred slots are walked once, in chain order — a flow slot
+    //  runs its stage, a rack slot runs its device per sample over the block — each folding in the
+    //  outputs of the deferred slots it eats. Everything past the first flow card therefore lives in
+    //  the post-master domain (makeup/limiter/clip applied at capture, exactly as tp30 does for the
+    //  flow captures), and nothing is delayed by a block.
+    std::atomic<float>* flowInlineRef_[(size_t) kFlowSlots] {};
+    std::atomic<float>* flowRankRef_  [(size_t) kFlowSlots] {};
+    void cacheTapRefs();
+    std::array<bool, (size_t) kChainMax> chainDeferred_ {};      // slot is a flow card or eats one (transitively)
+    std::array<int,  (size_t) kChainMax> defRackSlots_ {};        // the deferred RACK slots, in chain order
+    int  defRackCount_ = 0;
+    std::array<juce::AudioBuffer<float>, (size_t) kChainMax> defBuf_ {};   // a deferred rack slot's capture, then its output
     float cutGB_[6] = { 0, 0, 0, 0, 0, 0 };
     float lastCutG_ [6] = { -1, -1, -1, -1, -1, -1 };   // the route push is change-gated; seed to "never pushed"
     float lastCutGB_[6] = { -1, -1, -1, -1, -1, -1 };

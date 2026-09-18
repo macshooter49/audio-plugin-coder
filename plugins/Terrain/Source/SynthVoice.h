@@ -147,6 +147,9 @@ struct RouteSnapshot
     float* dtL = nullptr; float* dtR = nullptr; float* exL = nullptr; float* exR = nullptr;
     float  poolG[kPools * 6] {};
     float* poolL[kPools] {}; float* poolR[kPools] {};
+    // tp41 — DIRECT TAPS, same shape as the gains: 1 = that source feeds this device RAW (never the main filter)
+    float hallT[6] {}, dlyT[6] {}, dstT[6] {};
+    float poolT[kPools * 6] {};
     std::atomic<juce::uint32> version { 0 };
 };
 
@@ -3421,7 +3424,18 @@ class SynthVoice : public juce::SynthesiserVoice
             setCutRoutes        (R.cut);   // tp30 — BEFORE the exclusion: setExclusionRoutes folds it in
             setExclusionRoutes  (R.ex[0],   R.ex[1],   R.ex[2],   R.ex[3],   R.ex[4],   R.ex[5]);   setExclusionSendTarget  (R.exL, R.exR);
             for (int q = 0; q < kPoolSends; ++q) { setPoolSendRoutes (q, &R.poolG[q * 6]); setPoolSendTarget (q, R.poolL[q], R.poolR[q]); }
+            // tp41 — the direct taps ride the same snapshot (see setSendTaps)
+            setSendTaps (R.hallT, R.dlyT, R.dstT);
+            for (int q = 0; q < kPoolSends; ++q) for (int k = 0; k < 6; ++k) poolSend_[q].t[k] = R.poolT[q * 6 + k];
             routesSeen_ = R.version.load (std::memory_order_acquire);
+        }
+        // tp41 — DIRECT TAPS. 1 = that source reaches this send RAW: not through the main filter, its
+        //  post-filter drive or its spread — Max's "straight into the reverb, not through the filter".
+        //  They become per-send bus coefficients once per block (see sendCo below): the same three
+        //  numbers every send has always multiplied, so with every tap at 0 the sums are bit-identical.
+        void setSendTaps (const float* hall6, const float* dly6, const float* dst6) noexcept
+        {
+            for (int k = 0; k < 6; ++k) { rvbT_[k] = hall6 ? hall6[k] : 0.0f; dlyT_[k] = dly6 ? dly6[k] : 0.0f; dstT_[k] = dst6 ? dst6[k] : 0.0f; }
         }
         // ── tp30 — THE OUTPUT CABLE. A source whose cable to Audio Out is cut leaves the main buses
         //  the way a rack-tapped source does, with ONE decisive difference: the tp19 rule below caps
@@ -3603,6 +3617,24 @@ class SynthVoice : public juce::SynthesiserVoice
                 noiseCoD_ = (! noiseSrc1_ && ! noiseSrc2_) ? 1.0f : 0.0f;
                 anySrc1_ = anySrc1_ || (noiseCo1_ != 0.0f);
                 anySrc2_ = anySrc2_ || (noiseCo2_ != 0.0f);
+                // tp41 — EVERY SEND'S OWN BUS COEFFICIENTS. A source tapped DIRECTLY lands whole in the
+                //  send's dry bus (which filterBuses never touches) and contributes nothing to its F1/F2
+                //  buses; a source tapped post-filter keeps exactly busCo1_/busCo2_/busCoD_ (× 1, + 0:
+                //  the same floats, so the untouched patch sums to the bit). Noise is source 5.
+                {
+                    auto mkCo = [this] (const float* t, SendCo& C) noexcept
+                    {
+                        for (int k = 0; k < 5; ++k)
+                        {
+                            const float d = t[k], w = 1.0f - d;
+                            C.c1[k] = busCo1_[k] * w; C.c2[k] = busCo2_[k] * w; C.cD[k] = busCoD_[k] * w + d;
+                        }
+                        const float d5 = t[5], w5 = 1.0f - d5;
+                        C.c1[5] = noiseCo1_ * w5; C.c2[5] = noiseCo2_ * w5; C.cD[5] = noiseCoD_ * w5 + d5;
+                    };
+                    mkCo (rvbT_, rvbCo_); mkCo (dlyT_, dlyCo_); mkCo (dstT_, dstCo_);
+                    for (int pq = 0; pq < nPoolAct; ++pq) { auto& P = poolSend_[poolAct[pq]]; mkCo (P.t, P.co); }
+                }
                 // fb603 — CPU: with bus2 silent the per-sample path skips its 2× interpolator, so hold
                 // it at rest here (once per block, not per sample). Zero in ⇒ zero state, so re-arming
                 // it starts from exactly the state a run of zeros would have left. Click-free.
@@ -6321,34 +6353,34 @@ class SynthVoice : public juce::SynthesiserVoice
                 {
                     const float rAL = rvbG_[0]*oAL, rBL = rvbG_[1]*oBL, rCL = rvbG_[2]*oCL, rDL = rvbG_[3]*oDL, rSL = rvbG_[4]*subBL, rNL = rvbG_[5]*noiseAddL;
                     const float rAR = rvbG_[0]*oAR, rBR = rvbG_[1]*oBR, rCR = rvbG_[2]*oCR, rDR = rvbG_[3]*oDR, rSR = rvbG_[4]*subBR, rNR = rvbG_[5]*noiseAddR;
-                    sF1L[i]  = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
-                    sF1R[i]  = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
-                    sF2L[i]  = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
-                    sF2R[i]  = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
-                    sDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
-                    sDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
+                    sF1L[i]  = rvbCo_.c1[0]*rAL + rvbCo_.c1[1]*rBL + rvbCo_.c1[2]*rCL + rvbCo_.c1[3]*rDL + rvbCo_.c1[4]*rSL + rNL*rvbCo_.c1[5];
+                    sF1R[i]  = rvbCo_.c1[0]*rAR + rvbCo_.c1[1]*rBR + rvbCo_.c1[2]*rCR + rvbCo_.c1[3]*rDR + rvbCo_.c1[4]*rSR + rNR*rvbCo_.c1[5];
+                    sF2L[i]  = rvbCo_.c2[0]*rAL + rvbCo_.c2[1]*rBL + rvbCo_.c2[2]*rCL + rvbCo_.c2[3]*rDL + rvbCo_.c2[4]*rSL + rNL*rvbCo_.c2[5];
+                    sF2R[i]  = rvbCo_.c2[0]*rAR + rvbCo_.c2[1]*rBR + rvbCo_.c2[2]*rCR + rvbCo_.c2[3]*rDR + rvbCo_.c2[4]*rSR + rNR*rvbCo_.c2[5];
+                    sDryL[i] = rvbCo_.cD[0]*rAL + rvbCo_.cD[1]*rBL + rvbCo_.cD[2]*rCL + rvbCo_.cD[3]*rDL + rvbCo_.cD[4]*rSL + rNL*rvbCo_.cD[5];
+                    sDryR[i] = rvbCo_.cD[0]*rAR + rvbCo_.cD[1]*rBR + rvbCo_.cD[2]*rCR + rvbCo_.cD[3]*rDR + rvbCo_.cD[4]*rSR + rNR*rvbCo_.cD[5];
                 }
                 if (dlySendActive)   // fb296 — same per-osc filter split, gated by the DELAY's independent route mask
                 {
                     const float rAL = dlyG_[0]*oAL, rBL = dlyG_[1]*oBL, rCL = dlyG_[2]*oCL, rDL = dlyG_[3]*oDL, rSL = dlyG_[4]*subBL, rNL = dlyG_[5]*noiseAddL;
                     const float rAR = dlyG_[0]*oAR, rBR = dlyG_[1]*oBR, rCR = dlyG_[2]*oCR, rDR = dlyG_[3]*oDR, rSR = dlyG_[4]*subBR, rNR = dlyG_[5]*noiseAddR;
-                    dF1L[i]  = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
-                    dF1R[i]  = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
-                    dF2L[i]  = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
-                    dF2R[i]  = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
-                    dDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
-                    dDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
+                    dF1L[i]  = dlyCo_.c1[0]*rAL + dlyCo_.c1[1]*rBL + dlyCo_.c1[2]*rCL + dlyCo_.c1[3]*rDL + dlyCo_.c1[4]*rSL + rNL*dlyCo_.c1[5];
+                    dF1R[i]  = dlyCo_.c1[0]*rAR + dlyCo_.c1[1]*rBR + dlyCo_.c1[2]*rCR + dlyCo_.c1[3]*rDR + dlyCo_.c1[4]*rSR + rNR*dlyCo_.c1[5];
+                    dF2L[i]  = dlyCo_.c2[0]*rAL + dlyCo_.c2[1]*rBL + dlyCo_.c2[2]*rCL + dlyCo_.c2[3]*rDL + dlyCo_.c2[4]*rSL + rNL*dlyCo_.c2[5];
+                    dF2R[i]  = dlyCo_.c2[0]*rAR + dlyCo_.c2[1]*rBR + dlyCo_.c2[2]*rCR + dlyCo_.c2[3]*rDR + dlyCo_.c2[4]*rSR + rNR*dlyCo_.c2[5];
+                    dDryL[i] = dlyCo_.cD[0]*rAL + dlyCo_.cD[1]*rBL + dlyCo_.cD[2]*rCL + dlyCo_.cD[3]*rDL + dlyCo_.cD[4]*rSL + rNL*dlyCo_.cD[5];
+                    dDryR[i] = dlyCo_.cD[0]*rAR + dlyCo_.cD[1]*rBR + dlyCo_.cD[2]*rCR + dlyCo_.cD[3]*rDR + dlyCo_.cD[4]*rSR + rNR*dlyCo_.cD[5];
                 }
                 if (dstSendActive)   // fb338 — same per-osc filter split, gated by the DISTORTION's independent route mask
                 {
                     const float rAL = dstG_[0]*oAL, rBL = dstG_[1]*oBL, rCL = dstG_[2]*oCL, rDL = dstG_[3]*oDL, rSL = dstG_[4]*subBL, rNL = dstG_[5]*noiseAddL;
                     const float rAR = dstG_[0]*oAR, rBR = dstG_[1]*oBR, rCR = dstG_[2]*oCR, rDR = dstG_[3]*oDR, rSR = dstG_[4]*subBR, rNR = dstG_[5]*noiseAddR;
-                    tF1L[i]  = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
-                    tF1R[i]  = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
-                    tF2L[i]  = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
-                    tF2R[i]  = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
-                    tDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
-                    tDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
+                    tF1L[i]  = dstCo_.c1[0]*rAL + dstCo_.c1[1]*rBL + dstCo_.c1[2]*rCL + dstCo_.c1[3]*rDL + dstCo_.c1[4]*rSL + rNL*dstCo_.c1[5];
+                    tF1R[i]  = dstCo_.c1[0]*rAR + dstCo_.c1[1]*rBR + dstCo_.c1[2]*rCR + dstCo_.c1[3]*rDR + dstCo_.c1[4]*rSR + rNR*dstCo_.c1[5];
+                    tF2L[i]  = dstCo_.c2[0]*rAL + dstCo_.c2[1]*rBL + dstCo_.c2[2]*rCL + dstCo_.c2[3]*rDL + dstCo_.c2[4]*rSL + rNL*dstCo_.c2[5];
+                    tF2R[i]  = dstCo_.c2[0]*rAR + dstCo_.c2[1]*rBR + dstCo_.c2[2]*rCR + dstCo_.c2[3]*rDR + dstCo_.c2[4]*rSR + rNR*dstCo_.c2[5];
+                    tDryL[i] = dstCo_.cD[0]*rAL + dstCo_.cD[1]*rBL + dstCo_.cD[2]*rCL + dstCo_.cD[3]*rDL + dstCo_.cD[4]*rSL + rNL*dstCo_.cD[5];
+                    tDryR[i] = dstCo_.cD[0]*rAR + dstCo_.cD[1]*rBR + dstCo_.cD[2]*rCR + dstCo_.cD[3]*rDR + dstCo_.cD[4]*rSR + rNR*dstCo_.cD[5];
                 }
                 // fb347 — THE SHARED EXCLUSION BUS: identical split, but the mask is the UNION of every
                 // device's routes, so an osc routed to three devices lands here exactly ONCE. This is the
@@ -6375,12 +6407,13 @@ class SynthVoice : public juce::SynthesiserVoice
                     float* pDL  = P.dry.getWritePointer (0); float* pDR  = P.dry.getWritePointer (1);
                     const float rAL = P.g[0]*oAL, rBL = P.g[1]*oBL, rCL = P.g[2]*oCL, rDL = P.g[3]*oDL, rSL = P.g[4]*subBL, rNL = P.g[5]*noiseAddL;
                     const float rAR = P.g[0]*oAR, rBR = P.g[1]*oBR, rCR = P.g[2]*oCR, rDR = P.g[3]*oDR, rSR = P.g[4]*subBR, rNR = P.g[5]*noiseAddR;
-                    pF1L[i] = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
-                    pF1R[i] = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
-                    pF2L[i] = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
-                    pF2R[i] = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
-                    pDL[i]  = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
-                    pDR[i]  = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
+                    const SendCo& C = P.co;   // tp41 — this send's own coefficients (direct taps land in the dry bus)
+                    pF1L[i] = C.c1[0]*rAL + C.c1[1]*rBL + C.c1[2]*rCL + C.c1[3]*rDL + C.c1[4]*rSL + rNL*C.c1[5];
+                    pF1R[i] = C.c1[0]*rAR + C.c1[1]*rBR + C.c1[2]*rCR + C.c1[3]*rDR + C.c1[4]*rSR + rNR*C.c1[5];
+                    pF2L[i] = C.c2[0]*rAL + C.c2[1]*rBL + C.c2[2]*rCL + C.c2[3]*rDL + C.c2[4]*rSL + rNL*C.c2[5];
+                    pF2R[i] = C.c2[0]*rAR + C.c2[1]*rBR + C.c2[2]*rCR + C.c2[3]*rDR + C.c2[4]*rSR + rNR*C.c2[5];
+                    pDL[i]  = C.cD[0]*rAL + C.cD[1]*rBL + C.cD[2]*rCL + C.cD[3]*rDL + C.cD[4]*rSL + rNL*C.cD[5];
+                    pDR[i]  = C.cD[0]*rAR + C.cD[1]*rBR + C.cD[2]*rCR + C.cD[3]*rDR + C.cD[4]*rSR + rNR*C.cD[5];
                 }
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
@@ -7440,10 +7473,17 @@ class SynthVoice : public juce::SynthesiserVoice
         bool                    dstAny_ = false;
         // fb348 — one send slot per POOLED instance. Buffers and the filter pair are allocated only
         // when that instance is actually routed, so unrouted slots cost ~nothing.
+        // tp41 — a send's bus coefficients (F1 / F2 / dry per source), rebuilt per block from the
+        //  filter routing and that send's direct taps. Identity == busCo1_/busCo2_/busCoD_ (+ noise).
+        struct SendCo { float c1[6] { 1, 1, 1, 1, 1, 0 }; float c2[6] {}; float cD[6] { 0, 0, 0, 0, 0, 1 }; };
+        SendCo rvbCo_, dlyCo_, dstCo_;
+        float  rvbT_[6] {}, dlyT_[6] {}, dstT_[6] {};   // the legacy inline sends' direct taps
         struct PoolSend
         {
             float* L = nullptr; float* R = nullptr;
             float  g[6] { 0, 0, 0, 0, 0, 0 };
+            float  t[6] { 0, 0, 0, 0, 0, 0 };   // tp41 — direct taps
+            SendCo co;                          // tp41 — this send's coefficients this block
             bool   any = false;
             juce::AudioBuffer<float> f1, f2, dry;
             std::atomic<tw::filters::FilterSlot*> flt1 { nullptr }, flt2 { nullptr };   // fb631 — built on the MESSAGE thread (buildPoolFilters), published atomically; the render sees a send as ON only once flt1 is non-null
