@@ -203,7 +203,7 @@ int main()
       uint16_t m2[] = { (uint16_t) (A | E), E }; t.build (m2, 2);
       expect (t, 0, { (uint16_t) (A | E), 0,       true,  (uint16_t) (A | E) });
       expect (t, 1, { 0,                  FROM(0), false, (uint16_t) (A | E) });
-      check (tw::FxChainTopology::kAllSrc == 0x3FF, "ten sources: A B C D Sub Noise E F G H"); }
+      check (tw::FxChainTopology::kAllSrc == 0x7FF, "eleven sources: A B C D Sub Noise E F G H Noise2"); }
 
     // ── 15. the UI's inherit-on-add default: a device added carrying the same mask
     //       as the one above it simply extends that line (zero clicks, reads as an

@@ -1334,6 +1334,7 @@ public:
     float modVizLfoVX (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoVX_[k].load (std::memory_order_relaxed) : 0.f; }
     float modVizLfoVY (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoVY_[k].load (std::memory_order_relaxed) : 0.f; }
     std::atomic<float> noiseVizLevel_ { 0.f };   // NOISE viz — env level while noise is sounding (0 when off/silent)
+    std::atomic<float> noiseVizLevelB_ { 0.f };  // tp42 — Noise 2's (bank 1)
     std::atomic<float> noiseVizPos_  { -1.f };   // fb66 — NOISE waveform follower position 0..1 (representative), -1 = none
     std::atomic<float> noiseFreeNorm_{ 0.f  };   // fb66 — NOISE Free-mode global tape position 0..1
     // HARM-VIZ — live partial bins from the most-active voice (audio thread writes; editor
@@ -2542,6 +2543,7 @@ private:
     std::array<juce::String, ParameterIDs::kOscCount>             oscLoadedPath_ {};
     juce::String                              noiseLoadedSel_;
     tw::SampleBuffer                          noiseSampleBuffer_;   // NOISE IMPORT (P5) — shared looping-sample noise source
+    tw::SampleBuffer                          noiseSampleBufferB_;  // tp42 — Noise 2's, deliberately EMPTY (algorithmic only; no import yet)
     juce::String                              noiseSampleSelJson_;  // NOISE IMPORT (P5c) — persisted selection (factory path / user audio)
     double                                    noiseFreePos_ = 0.0;  // fb66 — NOISE Free-mode global tape playhead (samples; audio thread)
     int                                       noiseVizMode_ = 1;    // fb66 — NOISE viz choice (1 particle · 2 waveform), persisted
@@ -3177,6 +3179,15 @@ private:
     std::array<int,  (size_t) kChainMax> defRackSlots_ {};        // the deferred RACK slots, in chain order
     int  defRackCount_ = 0;
     std::array<juce::AudioBuffer<float>, (size_t) kChainMax> defBuf_ {};   // a deferred rack slot's capture, then its output
+    // ══ tp42 — NOISE 2 = bank 1's noise layer, source bit 10 (FxChainTopology::kNoise2Bit) ═══════════════
+    //  Every device instance carries an `_SRC_N2` pill (poolN2Ref_ by pooled-send index, the three legacy inline
+    //  devices by name); the gather reads SYN_NOISE_* through rawParamB → SYN_NOISE2_* for bank 1; the route
+    //  snapshot's bank-1 slot 5 (RB.hall[5] …) carries its entry gain; SYN_NOISE2_OUT is its cable.
+    std::atomic<float>* poolN2Ref_[(size_t) kPoolSendCount] {};
+    std::atomic<float>* hallN2Ref_ = nullptr; std::atomic<float>* dlyN2Ref_ = nullptr; std::atomic<float>* dstN2Ref_ = nullptr;
+    std::atomic<float>* outCableRefN2_ = nullptr; std::atomic<float>* noise2OnRef_ = nullptr;
+    std::array<float, (size_t) kPoolSendCount> poolN2G_ {};
+    float hallN2G_ = 0.0f, dlyN2G_ = 0.0f, dstN2G_ = 0.0f;
     float cutGB_[6] = { 0, 0, 0, 0, 0, 0 };
     float lastCutG_ [6] = { -1, -1, -1, -1, -1, -1 };   // the route push is change-gated; seed to "never pushed"
     float lastCutGB_[6] = { -1, -1, -1, -1, -1, -1 };

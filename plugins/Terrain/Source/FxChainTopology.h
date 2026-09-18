@@ -122,8 +122,10 @@ struct FxChainTopology
     static_assert (kMaxSlots <= 128, "kMaxSlots cannot exceed the SlotMask bit width");
     // tp20 — TEN sources now: bits 0..5 = A B C D Sub Noise (bank 0, unchanged), bits 6..9 = E F G H (bank 1).
     //        One topology for the rack's mixer; each bank reads its own bits back out of entry[].
-    static constexpr uint16_t kAllSrc  = 0x3FF;
+    // tp42 — ELEVEN sources: bit 10 = Noise 2 (bank 1's noise layer). 0x7FF.
+    static constexpr uint16_t kAllSrc  = 0x7FF;
     static constexpr int      kBank1Shift = 6;   // bit of E
+    static constexpr int      kNoise2Bit  = 10;  // Noise 2
 
     int      count = 0;
     uint16_t entry    [kMaxSlots] = {};       // sources that TAP the oscillators at this slot

@@ -135,7 +135,7 @@ static std::vector<float> renderTap (bool bankB, Tap t)
     a.set ("Utility In Chain", 1.0f); a.set ("Utility Power", 1.0f); a.set ("Utility Chain Rank", 0.5f);
     a.set (src, 1.0f);
     const char* taps = a.has ("Utility Direct Taps") ? "Utility Direct Taps" : "Utility 1 Direct Taps";
-    a.set (taps, t.direct ? (float) (1u << (bankB ? 6 : 0)) / 1023.0f : 0.0f);
+    a.set (taps, t.direct ? (float) (1u << (bankB ? 6 : 0)) / 2047.0f : 0.0f);
     a.pump (0.8); a.render (4, nullptr);   // the pooled send pair is built by the timer; the tp19 law bypasses until it is
     std::vector<float> out; a.note (48, 100); a.render (48, &out); a.close();
     return leftOnly (out);
@@ -178,7 +178,7 @@ static void probe()
         {
             a.set ("Utility In Chain", 1.0f); a.set ("Utility Power", 1.0f); a.set ("Utility Chain Rank", 0.5f); a.set (src, 1.0f);
             const char* taps = a.has ("Utility Direct Taps") ? "Utility Direct Taps" : "Utility 1 Direct Taps";
-            a.set (taps, direct ? (float) (1u << (bankB ? 6 : 0)) / 1023.0f : 0.0f);
+            a.set (taps, direct ? (float) (1u << (bankB ? 6 : 0)) / 2047.0f : 0.0f);
         }
         a.pump (pumpLong ? 1.0 : 0.35); a.render (4, nullptr);
         std::vector<float> out; a.note (48, 100); a.render (48, &out); a.close();
@@ -200,7 +200,7 @@ static void probe()
             {
                 a.set ("Utility In Chain", 1.0f); a.set ("Utility Power", 1.0f); a.set ("Utility Chain Rank", 0.5f); a.set (src, 1.0f);
                 const char* taps = a.has ("Utility Direct Taps") ? "Utility Direct Taps" : "Utility 1 Direct Taps";
-                a.set (taps, direct ? (float) (1u << (bankB ? 6 : 0)) / 1023.0f : 0.0f);
+                a.set (taps, direct ? (float) (1u << (bankB ? 6 : 0)) / 2047.0f : 0.0f);
             }
             a.pump (getenv ("PUMP") ? atof (getenv ("PUMP")) : 0.6); a.render (4, nullptr);
             std::vector<float> out; a.note (48, 100); a.render (48, &out); a.close();
@@ -287,6 +287,37 @@ int main (int argc, char** argv)
         char d[256];
         snprintf (d, sizeof d, "chop alone %.1f dBFS, chop -> mix-0 reverb %.1f dBFS, residual %.1f dB", rmsDb (alone, from), rmsDb (pass, from), diffDb (alone, pass));
         chk (std::abs (rmsDb (alone, from) - rmsDb (pass, from)) < 1.0, "[PASS] a device after the flow card passes the signal ONCE (level within 1 dB)", d);
+    }
+    // ── [NOISE 2] the second noise: its own switch, its own pill (bit 10), its own cable, its own knobs ──
+    {
+        auto rend = [] (bool n2on, bool routeN2, bool cutOut, float level, bool n1on) -> std::vector<float>
+        {
+            Au a; if (! a.open()) { printf ("no AU\n"); exit (2); }
+            a.set ("Osc A Enable", 0.0f);
+            a.set ("Noise On", n1on ? 1.0f : 0.0f);
+            a.set ("Noise 2 On", n2on ? 1.0f : 0.0f); a.set ("Noise 2 Level", level); a.pump (0.6);   // the bank builds on the message thread
+            if (routeN2) { a.set ("Utility In Chain", 1.0f); a.set ("Utility Power", 1.0f); a.set ("Utility Chain Rank", 0.5f); a.set ("Utility SRC_N2", 1.0f); }
+            if (cutOut) a.set ("Synth Noise 2 Out", 0.0f);
+            a.pump (0.8); a.render (4, nullptr);
+            std::vector<float> out; a.note (48, 100); a.render (48, &out); a.close();
+            return leftOnly (out);
+        };
+        const size_t from = 4800;
+        auto off   = rend (false, false, false, 0.5f, false);
+        auto on    = rend (true,  false, false, 0.5f, false);
+        auto quiet = rend (true,  false, false, 0.0f, false);
+        auto cut   = rend (true,  false, true,  0.5f, false);
+        auto via   = rend (true,  true,  true,  0.5f, false);
+        char d[300];
+        snprintf (d, sizeof d, "off %.1f  on %.1f  level 0 %.1f  cable cut %.1f  cut but routed into Utility %.1f dBFS", rmsDb (off, from), rmsDb (on, from), rmsDb (quiet, from), rmsDb (cut, from), rmsDb (via, from));
+        chk (rmsDb (off, from) < -100.0 && rmsDb (on, from) > -40.0, "[NOISE 2] Noise 2 On makes sound on its own (no oscillator, Noise 1 off)", d);
+        chk (rmsDb (quiet, from) < rmsDb (on, from) - 40.0, "[NOISE 2] its own Level knob is its own", d);
+        chk (rmsDb (cut, from) < -100.0, "[NOISE 2] its own Out cable: cut = silent", d);
+        chk (rmsDb (via, from) > -40.0, "[NOISE 2] cut, but routed into a Utility by the N2 pill: audible THROUGH the rack (bit 10)", d);
+        auto n1 = rend (false, false, false, 0.5f, true);
+        auto both = rend (true, false, false, 0.5f, true);
+        snprintf (d, sizeof d, "Noise 1 alone %.1f  both %.1f dBFS", rmsDb (n1, from), rmsDb (both, from));
+        chk (rmsDb (n1, from) > -40.0 && rmsDb (both, from) > rmsDb (n1, from) + 1.0, "[NOISE 2] the two noises add (Noise 1 untouched, Noise 2 on top)", d);
     }
     printf ("\n  PASS %d   FAIL %d\n", npass, nfail);
     return nfail ? 1 : 0;

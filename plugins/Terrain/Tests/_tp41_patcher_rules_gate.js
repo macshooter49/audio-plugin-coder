@@ -54,7 +54,7 @@ const stub = () => {
     const oi = Math.max(0, a.ports.filter(q => q.kind === 'out').findIndex(q => q.el && q.el.dataset.t === 'a'));
     const okC = window.__tpConnect(a, 'out', oi, fx, 'in', 0); const d = window.__fxrDevs()[0];
     return { have: true, okC, route: d.route[0], taps: d.taps, tapsP: window.__P('SYN_RVB_TAPS'), cables: window.__cables().filter(c => /fx-reverb-1/.test(c)) }; });
-  ok(direct.have && direct.okC === true && direct.route === 1 && direct.taps === 1 && Math.round(direct.tapsP * 1023) === 1, '[2] osc A → reverb lights the pill AND sets bit 0 of SYN_RVB_TAPS (a direct tap)', JSON.stringify(direct));
+  ok(direct.have && direct.okC === true && direct.route === 1 && direct.taps === 1 && Math.round(direct.tapsP * 2047) === 1, '[2] osc A → reverb lights the pill AND sets bit 0 of SYN_RVB_TAPS (a direct tap)', JSON.stringify(direct));
   ok(direct.cables && direct.cables.includes('osc-a.out0>fx-reverb-1.in0') && !direct.cables.includes('filter.out0>fx-reverb-1.in0'), '[2] the canvas draws osc A → reverb, not through the filter', JSON.stringify(direct.cables));
   // [3] filter → reverb = post-filter (A must be in the filter for the canvas to route it through)
   const filt = await p.evaluate(() => { const nb = window.__tpNodeByKey, a = nb('osc-a'), f = nb('filter'), fx = nb('fx-reverb-1'); if (!a || !f || !fx) return { have: false };
@@ -66,7 +66,7 @@ const stub = () => {
   ok(filt.cables && filt.cables.includes('osc-a.out0>filter.in0') && filt.cables.includes('filter.out0>fx-reverb-1.in0') && !filt.cables.includes('osc-a.out0>fx-reverb-1.in0'), '[3] the canvas now goes osc A → filter → reverb', JSON.stringify(filt.cables));
   // [4] a pill clicked ON THE CANVAS is a direct tap
   const pill = await p.evaluate(() => { const card = document.querySelector('#tp-page .fxr-dev[data-dev="0"]'); if (!card) return { have: false }; const r = card.querySelector('.fxr-r[data-r="1"]'); if (!r) return { have: false, noPill: true };
-    r.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); const d = window.__fxrDevs()[0]; return { have: true, route: d.route[1], taps: d.taps, tapsP: Math.round(window.__P('SYN_RVB_TAPS') * 1023) }; });
+    r.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); const d = window.__fxrDevs()[0]; return { have: true, route: d.route[1], taps: d.taps, tapsP: Math.round(window.__P('SYN_RVB_TAPS') * 2047) }; });
   ok(pill.have && pill.route === 1 && (pill.taps & 2) === 2 && (pill.tapsP & 2) === 2, '[4] the B pill clicked on the canvas card lights B as a DIRECT tap (bit 1)', JSON.stringify(pill));
   // [5] Chop → Reverb: the card goes IN the rack, before the reverb
   const inl = await p.evaluate(() => { const nb = window.__tpNodeByKey, a = nb('osc-a'), ch = nb('flow-chop'), fx = nb('fx-reverb-1'); if (!a || !ch || !fx) return { have: false };
@@ -75,7 +75,7 @@ const stub = () => {
     const co = Math.max(0, ch.ports.filter(q => q.kind === 'out').findIndex(q => q.el && q.el.dataset.t === 'a'));
     const okF = window.__tpConnect(ch, 'out', co, fx, 'in', 0);
     const d = window.__fxrDevs()[0]; const cables = window.__cables();
-    return { have: true, okA, okF, chopA: window.__P('FLOW_CHOP_SRC_A'), chopTaps: Math.round(window.__P('FLOW_CHOP_TAPS') * 1023), inline: window.__P('FLOW_CHOP_INLINE'), rank: window.__P('FLOW_CHOP_RANK'), rvbRank: d.rank, rvbA: d.route[0],
+    return { have: true, okA, okF, chopA: window.__P('FLOW_CHOP_SRC_A'), chopTaps: Math.round(window.__P('FLOW_CHOP_TAPS') * 2047), inline: window.__P('FLOW_CHOP_INLINE'), rank: window.__P('FLOW_CHOP_RANK'), rvbRank: d.rank, rvbA: d.route[0],
       cable: cables.includes('flow-chop.out0>fx-reverb-1.in0'), edit: window.__cableEdit('flow-chop.out0>fx-reverb-1.in0'), oscToChop: cables.includes('osc-a.out0>flow-chop.in0'), oscToRvb: cables.includes('osc-a.out0>fx-reverb-1.in0') || cables.includes('filter.out0>fx-reverb-1.in0') }; });
   ok(inl.have && inl.okA === true && inl.chopA === 1 && (inl.chopTaps & 1) === 1, '[5] osc A → Chop lights A on the card as a direct tap', JSON.stringify(inl));
   ok(inl.okF === true && inl.inline === 1 && inl.rank > 0 && inl.rank < inl.rvbRank && inl.rvbA === 1, '[5] Chop → Reverb: FLOW_CHOP_INLINE = 1, its rank sits below the reverb\'s, the reverb takes A', JSON.stringify(inl));

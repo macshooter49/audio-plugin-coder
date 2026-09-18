@@ -1717,11 +1717,13 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (args.size() >= 1) retargetCardWindow (args[0].toString());
                 complete (juce::var{});
             })
-            .withNativeFunction("getNoiseViz", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getNoiseViz", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // NOISE visualizer trigger — env level while noise is sounding (0 = off/silent → viz fades out).
-                complete (juce::var (audioProcessor.noiseVizLevel_.load (std::memory_order_relaxed)));
+                // tp42 — getNoiseViz (2) reads Noise 2's (bank 1's most active voice)
+                const bool two = args.size() >= 1 && (int) args[0] == 2;
+                complete (juce::var ((two ? audioProcessor.noiseVizLevelB_ : audioProcessor.noiseVizLevel_).load (std::memory_order_relaxed)));
             })
             .withNativeFunction("getNoiseFollow", [this](const juce::Array<juce::var>&,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)

@@ -338,6 +338,15 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     //   the gather passes the very constants the table lists, so a lookup is one hash of the address.
     for (int i = 0; i < ParameterIDs::kOscRemapCount; ++i)
         oscRemap_[(const void*) ParameterIDs::kOscRemapFrom[i]] = ParameterIDs::kOscRemapTo[i];
+    // tp42 — NOISE 2 rides bank 1: the gather's SYN_NOISE_* reads resolve to SYN_NOISE2_* there
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_ON]       = "SYN_NOISE2_ON";
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_TYPE]     = "SYN_NOISE2_TYPE";
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_LEVEL]    = "SYN_NOISE2_LEVEL";
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_PITCH]    = "SYN_NOISE2_PITCH";
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_PAN]      = "SYN_NOISE2_PAN";
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_PLAYMODE] = "SYN_NOISE2_PLAYMODE";
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_WIDTH]    = "SYN_NOISE2_WIDTH";
+    oscRemap_[(const void*) ParameterIDs::SYN_NOISE_OUT]      = "SYN_NOISE2_OUT";
     // tp20 — THE FLOW POOL's ids: FLOW_ARP_X -> FLOW_ARP{n}_X for instances 2..4, keyed by the constant's pointer
     //   (the stages pass ParameterIDs::FLOW_...), the strings parked in a deque so their c_str() never moves.
     for (int n = 1; n < wc::kFlowInstances; ++n)
@@ -3057,6 +3066,7 @@ bool TerrainAudioProcessor::bankBWanted() const noexcept
 {
     for (int o = ParameterIDs::kOscPerBank; o < ParameterIDs::kOscCount; ++o)
         if (auto* p = apvts.getRawParameterValue (ParameterIDs::kOsc_ENABLE[o]); p != nullptr && p->load() > 0.5f) return true;
+    if (noise2OnRef_ != nullptr && noise2OnRef_->load() > 0.5f) return true;   // tp42 — Noise 2 lives in bank 1
     return false;
 }
 
@@ -7297,7 +7307,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     //  instance 1 exactly like their other parameters.
     {
         auto I = [&layout] (const juce::String& id, const juce::String& nm)
-        { layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id, 1 }, nm, 0, 1023, 0)); };
+        { layout.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id, 1 }, nm, 0, 2047, 0)); };   // tp42 — 11 bits: bit 10 = Noise 2
+        // tp42 — NOISE 2 (Max: "the noise engine as a duplicatable module"). The second oscillator bank's
+        //  idle noise layer becomes a second noise, source bit 10 in every route mask: an `_SRC_N2` pill on
+        //  every device instance (the flow cards' instance 1 here; 2..4 are cloned by the pool block below).
+        auto N2 = [&layout] (const juce::String& id, const juce::String& nm)
+        { layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { id, 1 }, nm, false)); };
         static const std::pair<const char*, const char*> kKinds[] = {
             { "SYN_RVB", "Reverb" }, { "SYN_DLY", "Delay" }, { "SYN_DST", "Distortion" }, { "SYN_GRN", "Granular" },
             { "SYN_TPE", "Tape" }, { "SYN_FLT", "Filter" }, { "SYN_CHO", "Chorus" }, { "SYN_FLA", "Flanger" },
@@ -7309,6 +7324,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                    juce::String (kd.second) + (i == 0 ? juce::String() : " " + juce::String (i + 1)) + " Direct Taps");   // instance 1 is bare, like every other name
         I ("FLOW_CHOP_TAPS", "Flow Chop Direct Taps");
         I ("FLOW_GLI_TAPS",  "Flow Glitch Direct Taps");
+        for (const auto& kd : kKinds)
+            for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+                N2 (juce::String (kd.first) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_SRC_N2",
+                    juce::String (kd.second) + (i == 0 ? juce::String() : " " + juce::String (i + 1)) + " SRC_N2");
+        N2 ("FLOW_CHOP_SRC_N2", "Flow Chop Src Noise 2");
+        N2 ("FLOW_GLI_SRC_N2",  "Flow Glitch Src Noise 2");
         layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "FLOW_CHOP_INLINE", 1 }, "Flow Chop In Rack", false));
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "FLOW_CHOP_RANK", 1 }, "Flow Chop Chain Rank", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
         layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "FLOW_GLI_INLINE", 1 }, "Flow Glitch In Rack", false));
@@ -7335,6 +7356,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             jassertfalse; return nullptr;   // a new parameter class: teach cloneOf about it
         };
         const std::vector<juce::RangedAudioParameter*> base = layout.seen;   // a copy — the clones append as we go
+        // (0) tp42 — NOISE 2: the noise engine's eight parameters, cloned (SYN_NOISE_ON → SYN_NOISE2_ON …).
+        for (auto* src : base)
+        {
+            const juce::String id = src->paramID, nm = src->name;
+            if (id.startsWith ("SYN_NOISE_"))
+                layout.add (cloneOf (src, "SYN_NOISE2_" + id.substring (10),
+                                     nm.contains ("Noise") ? nm.replaceFirstOccurrenceOf ("Noise", "Noise 2") : "Noise 2 " + nm));   // "Noise On" → "Noise 2 On", "Synth Noise Out" → "Synth Noise 2 Out"
+        }
         // (1) OSCILLATORS E–H: oscillator B is the template (its ENABLE defaults OFF, its LEVEL to an audible 0.5).
         for (auto* src : base)
         {
@@ -8242,6 +8271,26 @@ void TerrainAudioProcessor::cacheTapRefs()
         flowRankRef_  [(size_t) flowFlat (kFlowKindGli,  i)] = R ("FLOW_GLI"  + nn + "_RANK");
     }
     for (int q = 0; q < kPoolSendCount; ++q) jassert (poolTapRef_[(size_t) q] != nullptr);
+    // tp42 — the same table, for the Noise 2 pill (`_SRC_N2`) on every device
+    hallN2Ref_ = R ("SYN_RVB_SRC_N2"); dlyN2Ref_ = R ("SYN_DLY_SRC_N2"); dstN2Ref_ = R ("SYN_DST_SRC_N2");
+    for (int e = 0; e < kFxExtra; ++e)
+    {
+        poolN2Ref_[(size_t) e]                  = R ("SYN_DLY" + juce::String (e + 2) + "_SRC_N2");
+        poolN2Ref_[(size_t) (kFxExtra + e)]     = R ("SYN_DST" + juce::String (e + 2) + "_SRC_N2");
+        poolN2Ref_[(size_t) (2 * kFxExtra + e)] = R ("SYN_RVB" + juce::String (e + 2) + "_SRC_N2");
+    }
+    for (const auto& [base, pfx] : kAll)
+        for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+            poolN2Ref_[(size_t) (base + i)] = R (juce::String (pfx) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_SRC_N2");
+    for (int i = 0; i < wc::kFlowInstances; ++i)
+    {
+        const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+        poolN2Ref_[(size_t) (kChpSendBase + i)] = R ("FLOW_CHOP" + nn + "_SRC_N2");
+        poolN2Ref_[(size_t) (kGliSendBase + i)] = R ("FLOW_GLI"  + nn + "_SRC_N2");
+    }
+    outCableRefN2_ = R ("SYN_NOISE2_OUT");
+    noise2OnRef_   = R ("SYN_NOISE2_ON");
+    for (int q = 0; q < kPoolSendCount; ++q) jassert (poolN2Ref_[(size_t) q] != nullptr);
 }
 
 void TerrainAudioProcessor::cacheSendRefs()
@@ -11751,7 +11800,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // (newest key-HELD active voice; fallback newest active so a release tail still sounds) and let only it add the
         // audible noise. Poly modes / no sample → every voice carries (no-op). A note started mid-block is promoted
         // next block (its voice starts muted at note-on and ramps in click-free).
-        const bool monoNoise = (noisePlayMode == 2) && noiseSampleLoaded;
+        const bool monoNoise = (noisePlayMode == 2) && noiseSampleLoaded && ! isB;   // tp42 — Noise 2 has no sample, so never a mono carrier
         tw::SynthVoice* noiseCarrierVoice = nullptr;
         if (monoNoise)
         {
@@ -11872,8 +11921,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setSub (1, subRngB, subFrmB, subWgtB, subHtB);
                 sv->setSub (2, subRngC, subFrmC, subWgtC, subHtC);
                 sv->setSub (3, subRngD, subFrmD, subWgtD, subHtD);
-                sv->setNoise (noiseOn && ! isB, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
-                sv->setNoiseSampleSource (&noiseSampleBuffer_);   // NOISE IMPORT (P5) — looping-sample override (empty buffer = algorithmic type)
+                sv->setNoise (noiseOn, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module) · tp42 — bank 1 = NOISE 2 (its own params through rawParamB)
+                sv->setNoiseSampleSource (isB ? &noiseSampleBufferB_ : &noiseSampleBuffer_);   // NOISE IMPORT (P5) — looping-sample override (empty buffer = algorithmic type) · tp42 — Noise 2 is algorithmic only (its buffer stays empty)
                 tiProf_.acc (3, "cd+sub+noise");
                 sv->setNoisePlayMode      (noisePlayMode);        // fb66 — Random / Envelope / Free (sample playback)
                 sv->setNoiseFreePos       (noiseFreePos_);        // fb66/fb67 — latest global tape position (a Free note reads it once at note-on; no per-block resync)
@@ -12665,18 +12714,29 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //  slots 0..3 = bits 6..9 (E-H), 4 = the shared Sub bit, 5 = 0). Read every block, like the pills.
     {
         auto bits = [] (std::atomic<float>* r) noexcept -> unsigned
-        { return r != nullptr ? (unsigned) juce::jlimit (0, 1023, (int) std::lround (r->load())) : 0u; };
+        { return r != nullptr ? (unsigned) juce::jlimit (0, 2047, (int) std::lround (r->load())) : 0u; };
         auto unpack = [] (unsigned b, float* g6, float* gB6) noexcept
         {
             for (int k = 0; k < 6; ++k) g6[k] = ((b >> (unsigned) k) & 1u) ? 1.0f : 0.0f;
             for (int k = 0; k < 4; ++k) gB6[k] = ((b >> (unsigned) (tw::FxChainTopology::kBank1Shift + k)) & 1u) ? 1.0f : 0.0f;
-            gB6[4] = ((b >> 4) & 1u) ? 1.0f : 0.0f; gB6[5] = 0.0f;
+            gB6[4] = ((b >> 4) & 1u) ? 1.0f : 0.0f; gB6[5] = ((b >> 10) & 1u) ? 1.0f : 0.0f;   // tp42 — bit 10 = Noise 2 (bank 1's slot 5)
         };
         unpack (bits (hallTapRef_), hallTapG_, hallTapGB_);
         unpack (bits (dlyTapRef_),  dlyTapG_,  dlyTapGB_);
         unpack (bits (dstTapRef_),  dstTapG_,  dstTapGB_);
         for (int q = 0; q < kPoolSendCount; ++q)
             unpack (bits (poolTapRef_[(size_t) q]), &poolTapG_[(size_t) (q * 6)], &poolTapGB_[(size_t) (q * 6)]);
+        // tp42 — THE NOISE 2 PILL, per device: source bit 10. A lit pill makes the send "routed" like any other.
+        auto on = [] (std::atomic<float>* r) noexcept { return (r != nullptr && r->load() > 0.5f) ? 1.0f : 0.0f; };
+        hallN2G_ = on (hallN2Ref_); dlyN2G_ = on (dlyN2Ref_); dstN2G_ = on (dstN2Ref_);
+        if (hallN2G_ > 0.0f && hallPower_) hallRouteActive_ = true;
+        if (dlyN2G_  > 0.0f && dlyPower_)  dlyRouteActive_  = true;
+        if (dstN2G_  > 0.0f && dstPower_)  dstRouteActive_  = true;
+        for (int q = 0; q < kPoolSendCount; ++q)
+        {
+            poolN2G_[(size_t) q] = on (poolN2Ref_[(size_t) q]);
+            if (poolN2G_[(size_t) q] > 0.0f) poolRouteAny_[(size_t) q] = true;
+        }
     }
 
     pushFx3Params();     // fb413 — ONE setParams per instance per block, not per sample
@@ -12721,6 +12781,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint16_t) (m | (1u << (unsigned) s));
             if (gB != nullptr)
                 for (int s = 0; s < 4; ++s) if (gB[s] > 0.0f) m = (uint16_t) (m | (1u << (unsigned) (tw::FxChainTopology::kBank1Shift + s)));
+            // tp42 — Noise 2 = bit 10, from the device's own `_SRC_N2` pill
+            float n2 = 0.0f;
+            if      (ce.kind == 0) n2 = (ce.inst == 1) ? hallN2G_ : poolN2G_[(size_t) (2 * kFxExtra + ce.inst - 2)];
+            else if (ce.kind == 1) n2 = (ce.inst == 1) ? dlyN2G_  : poolN2G_[(size_t) (ce.inst - 2)];
+            else if (ce.kind == 2) n2 = (ce.inst == 1) ? dstN2G_  : poolN2G_[(size_t) (kFxExtra + ce.inst - 2)];
+            else if (ce.kind >= 3 && ce.kind < 18) n2 = poolN2G_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)];
+            if (n2 > 0.0f) m = (uint16_t) (m | (1u << (unsigned) tw::FxChainTopology::kNoise2Bit));
             return m;
         };
         uint16_t masks[(size_t) kChainMax] = {};
@@ -12799,7 +12866,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 for (int s = 0; s < 4; ++s)
                     dstArrB[s] = (fxTopo_.entry[c] & (1u << (unsigned) (tw::FxChainTopology::kBank1Shift + s))) ? 1.0f : 0.0f;
                 dstArrB[4] = (fxTopo_.entry[c] & (1u << 4)) ? 1.0f : 0.0f;   // the S pill is shared
-                dstArrB[5] = 0.0f;                                            // bank 1 has no noise layer
+                dstArrB[5] = (fxTopo_.entry[c] & (1u << (unsigned) tw::FxChainTopology::kNoise2Bit)) ? 1.0f : 0.0f;   // tp42 — bank 1's noise layer IS Noise 2
             }
         }
     }
@@ -12859,7 +12926,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
           cutGB_[s] = (oc != nullptr && oc->load() <= 0.5f) ? 1.0f : 0.0f;
       }
       cutGB_[4] = cutG_[4];    // the Sub is shared across the banks
-      cutGB_[5] = 0.0f;        // bank 1 has no noise layer
+      cutGB_[5] = (outCableRefN2_ != nullptr && outCableRefN2_->load() <= 0.5f) ? 1.0f : 0.0f;   // tp42 — Noise 2's cable to Out
       for (int s = 0; s < 6; ++s)
       {
           const bool pulled = (insertMask & (1u << (unsigned) s)) != 0;
@@ -12872,7 +12939,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
           exUnionGB_[s] = pulled ? 1.0f : 0.0f;
           exUnionAny_ = exUnionAny_ || pulled;
       }
-      exUnionGB_[4] = exUnionG_[4]; exUnionGB_[5] = 0.0f;
+      exUnionGB_[4] = exUnionG_[4];
+      { const bool pulled = (insertMask & (1u << (unsigned) tw::FxChainTopology::kNoise2Bit)) != 0;   // tp42 — Noise 2 leaves the mix like any tapped source
+        exUnionGB_[5] = pulled ? 1.0f : 0.0f; exUnionAny_ = exUnionAny_ || pulled; }
     }
     for (int q = 0; q < kPoolSendCount; ++q)                          // per-instance send buses
     {
@@ -13298,6 +13367,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 }
             }
             noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
+            {   // tp42 — Noise 2's viz rides bank 1's most active voice
+                float bestB = 0.f; bool anyB = false;
+                if (bankB_.load (std::memory_order_acquire) != nullptr)
+                    for (int i = 0; i < kSynthVoiceCount; ++i)
+                        if (auto* sv = synthVoicesB_[(size_t) i])
+                            if (sv->isAmpEnvActive()) { const float lv = sv->getAmpEnvLevel(); if (! anyB || lv > bestB) { bestB = lv; anyB = true; } }
+                noiseVizLevelB_.store ((noise2OnRef_ != nullptr && noise2OnRef_->load() > 0.5f && anyB) ? juce::jmax (0.f, bestB) : 0.f, std::memory_order_relaxed);
+            }
             // fb66 — waveform follower position. Free → the global tape head (visible even when idle);
             // Random/Envelope → the loudest sounding voice's read head; -1 = nothing to draw.
             noiseVizPos_.store ((((int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE)) == 2) ? noiseFreeNorm_.load (std::memory_order_relaxed)
