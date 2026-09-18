@@ -1725,29 +1725,29 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 const bool two = args.size() >= 1 && (int) args[0] == 2;
                 complete (juce::var ((two ? audioProcessor.noiseVizLevelB_ : audioProcessor.noiseVizLevel_).load (std::memory_order_relaxed)));
             })
-            .withNativeFunction("getNoiseFollow", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getNoiseFollow", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb66 — waveform playhead follower position 0..1 (-1 = none). Free → global tape; else loudest voice.
-                complete (juce::var (audioProcessor.getNoiseFollow()));
+                complete (juce::var (audioProcessor.getNoiseFollow (args.size() >= 1 ? (int) args[0] : 1)));
             })
-            .withNativeFunction("getNoiseWavePeaks", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getNoiseWavePeaks", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb66 — min/max envelope of the loaded noise sample for the waveform viz ("" if algorithmic).
-                complete (juce::var (audioProcessor.getNoiseWavePeaksJson()));
+                complete (juce::var (audioProcessor.getNoiseWavePeaksJson (args.size() >= 1 ? (int) args[0] : 1)));
             })
             .withNativeFunction("setNoiseVizMode", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb66 — persist the noise viz choice (1 particle · 2 waveform). Survives reopen + saves with the patch.
-                if (args.size() >= 1) audioProcessor.setNoiseVizMode ((int) args[0]);
+                if (args.size() >= 1) audioProcessor.setNoiseVizMode ((int) args[0], args.size() >= 2 ? (int) args[1] : 1);   /* tp43 — (mode, inst) */
                 complete (juce::var (true));
             })
-            .withNativeFunction("getNoiseVizMode", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getNoiseVizMode", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getNoiseVizMode()));   // fb66 — restore viz choice on GUI open
+                complete (juce::var (audioProcessor.getNoiseVizMode (args.size() >= 1 ? (int) args[0] : 1)));   // fb66 — restore viz choice on GUI open
             })
             .withNativeFunction("loadNoiseSample", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1760,16 +1760,18 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (! juce::Base64::convertFromBase64 (decoded, args[1].toString())) { complete (juce::var ("decode-failed")); return; }
                 juce::MemoryBlock mb (decoded.getData(), decoded.getDataSize());
                 if (mb.getSize() == 0) { complete (juce::var ("empty-decode")); return; }
-                loadNoiseSampleFromMemory (std::move (mb), filename);
+                loadNoiseSampleFromMemory (std::move (mb), filename, args.size() >= 3 ? (int) args[2] : 1);   /* tp43 — (name, b64, inst) */
                 complete (juce::var ("ok (memory)"));
             })
-            .withNativeFunction("clearNoiseSample", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("clearNoiseSample", [this](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // NOISE IMPORT (P5) — revert to the algorithmic type (empty the shared buffer).
-                audioProcessor.getNoiseSampleBuffer().store (nullptr);
+                const int inst = args.size() >= 1 ? (int) args[0] : 1;   /* tp43 — (inst) */
+                audioProcessor.getNoiseSampleBuffer (inst).store (nullptr);
+                const juce::String cb = inst == 2 ? "onNoiseSampleCleared2" : "onNoiseSampleCleared";
                 if (webView != nullptr)
-                    webView->evaluateJavascript ("if (window.onNoiseSampleCleared) window.onNoiseSampleCleared();", nullptr);
+                    webView->evaluateJavascript ("if (window." + cb + ") window." + cb + "();", nullptr);
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("scanNoiseFactory", [this](const juce::Array<juce::var>&,
@@ -1839,7 +1841,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 juce::MemoryBlock mb;
                 if (! f.loadFileAsData (mb) || mb.getSize() == 0) { complete (juce::var ("read-failed")); return; }
-                loadNoiseSampleFromMemory (std::move (mb), f.getFileName());
+                loadNoiseSampleFromMemory (std::move (mb), f.getFileName(), args.size() >= 3 ? (int) args[2] : 1);   /* tp43 — (cat, file, inst) */
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("setNoiseSampleSel", [this](const juce::Array<juce::var>& args,
@@ -1847,14 +1849,14 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 // NOISE IMPORT (P5c) — UI reports the current noise-sample selection descriptor (JSON) so it
                 // persists in the preset. Empty string = none (algorithmic type).
-                audioProcessor.setNoiseSampleSel (args.size() > 0 ? args[0].toString() : juce::String());
+                audioProcessor.setNoiseSampleSel (args.size() > 0 ? args[0].toString() : juce::String(), args.size() >= 2 ? (int) args[1] : 1);   /* tp43 — (json, inst) */
                 complete (juce::var ("ok"));
             })
-            .withNativeFunction("getNoiseSampleSel", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getNoiseSampleSel", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // NOISE IMPORT (P5c) — on GUI open the UI reads this to re-load the persisted factory/user sample.
-                complete (juce::var (audioProcessor.getNoiseSampleSel()));
+                complete (juce::var (audioProcessor.getNoiseSampleSel (args.size() >= 1 ? (int) args[0] : 1)));
             })
             .withNativeFunction("pickNoiseFile", [this](const juce::Array<juce::var>&,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1978,7 +1980,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 juce::MemoryBlock mb;
                 if (! f.loadFileAsData (mb) || mb.getSize() == 0) { complete (juce::var ("read-failed")); return; }
-                loadNoiseSampleFromMemory (std::move (mb), f.getFileName());
+                loadNoiseSampleFromMemory (std::move (mb), f.getFileName(), args.size() >= 2 ? (int) args[1] : 1);   /* tp43 — (path, inst) */
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("loadWavetableByPath", [this](const juce::Array<juce::var>& args,
@@ -2449,6 +2451,17 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 int dur = args.size() > 0 ? static_cast<int>(args[0]) : 60;
                 audioProcessor.exportCapture(dur);
                 complete({});
+            })
+            .withNativeFunction("setCaptureEnabled", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // tp43 — Settings: DAW capture on/off (the ~202 MB rolling ring)
+                if (args.size() >= 1) audioProcessor.setCaptureEnabled ((int) args[0] != 0);
+                complete (juce::var (audioProcessor.getCaptureEnabled()));
+            })
+            .withNativeFunction("getCaptureEnabled", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getCaptureEnabled()));
             })
             .withNativeFunction("resetCaptureState", [this](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -14747,7 +14760,7 @@ static std::shared_ptr<juce::AudioBuffer<float>>
     return out;
 }
 
-void TerrainUiCore::loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
+void TerrainUiCore::loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename, int inst)
 {
     double rate = 0.0;
     auto raw = readAudioFromMemory (data.getData(), data.getSize(), rate);
@@ -14767,12 +14780,13 @@ void TerrainUiCore::loadNoiseSampleFromMemory (juce::MemoryBlock data, const juc
         raw = trimmed;
     }
     auto looped = bakeSeamlessNoiseLoop (raw);
-    auto& target = audioProcessor.getNoiseSampleBuffer();
+    auto& target = audioProcessor.getNoiseSampleBuffer (inst);   // tp43 — Noise 2 has its own buffer
     target.setSampleRate (rate);
     target.store (looped);                                       // atomic swap → audio thread picks it up next block
+    const juce::String cb = inst == 2 ? "onNoiseSampleLoaded2" : "onNoiseSampleLoaded";
     if (webView != nullptr)
         webView->evaluateJavascript (
-            "if (window.onNoiseSampleLoaded) window.onNoiseSampleLoaded(" + juce::JSON::toString (juce::var (filename)) + ");",
+            "if (window." + cb + ") window." + cb + "(" + juce::JSON::toString (juce::var (filename)) + ");",
             nullptr);
 }
 

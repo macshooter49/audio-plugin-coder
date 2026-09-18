@@ -6986,6 +6986,16 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         <!-- fb563 — PITCH BEND RANGE. A global performance setting, so it lives here (the voice column
              is a fixed-height box: one more row there pushed the rack's knob words off the window).
              Drag the number, double-click for 2. Relay-free (setSynParam / getSynParam). -->
+        <!-- tp43 — DAW CAPTURE. Max: "give us a way to turn off Terrain capture … for memory's sake". The rolling
+             capture ring is ~202 MB; Off releases it and nothing is recorded. A global preference (a marker file the
+             plugin reads before it ever arms), not a preset setting. -->
+        <div class="settings-row" id="capture-row" title="Terrain's rolling DAW capture keeps the last minute of audio ready to export. Off frees ~200 MB and records nothing.">
+          <span class="settings-label">DAW capture</span>
+          <div class="settings-theme-btns">
+            <button class="theme-btn active" id="capture-on-btn">On</button>
+            <button class="theme-btn" id="capture-off-btn">Off</button>
+          </div>
+        </div>
         <div class="settings-row" id="rr-bend-row" title="Pitch bend range in semitones — drag the number, double-click for 2">
           <span class="settings-label">Pitch bend range</span>
           <span><b style="cursor:ns-resize;user-select:none;font-weight:400;font-variant-numeric:tabular-nums;">2</b><span style="opacity:.55;margin-left:4px;">st</span></span>
@@ -10688,7 +10698,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                    knobs:[['Center',50,'SYN_PHA_CENTER'],['Stages',35,'SYN_PHA_STAGES'],['Spread',20,'SYN_PHA_SPREAD'],['Stereo',30,'SYN_PHA_STEREO'],
                           ['Touch',50,'SYN_PHA_TOUCH'],['Lag',30,'SYN_PHA_LAG'],['Floor',20,'SYN_PHA_FLOOR'],['Color',0,'SYN_PHA_COLOR']]}},
             {name:'Tape',core:'tape',type:'Studio',
-             types:['Studio','Cassette'],
+             types:['Studio','Cassette','Reel'],   /* tp43 — Reel (15 IPS) joins: the three machines, each per cable */
              preset:'Init',code:'',on:false,pwrP:'SYN_TPE_POWER',tp:'SYN_TPE_TYPE',
              // 🔑🔑 tpN — THE PARAM'S CHOICE COUNT, WHICH IS NOT THE DROPDOWN'S OPTION COUNT.
              // SYN_TPE_TYPE was born choice(8) at fb365 (2 live + 6 reserved, so the live
@@ -14970,6 +14980,15 @@ function initSettingsPanel() {
     darkBtn.classList.add('active'); lightBtn.classList.remove('active');
     drawSettingsIcon(); saveSettings();
   });
+  /* tp43 — DAW capture on/off: a native preference, read back on open */
+  (function(){ var onB=document.getElementById('capture-on-btn'), offB=document.getElementById('capture-off-btn'); if(!onB||!offB) return;
+    function paint(on){ onB.classList.toggle('active',!!on); offB.classList.toggle('active',!on); try{ document.body.classList.toggle('ti-capture-off',!on); }catch(e){} }
+    function nfn(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+    function set(on){ paint(on); var f=nfn('setCaptureEnabled'); if(f){ try{ f(on?1:0); }catch(e){} } }
+    onB.addEventListener('click',function(){ set(true); }); offB.addEventListener('click',function(){ set(false); });
+    var g=nfn('getCaptureEnabled'); if(g){ try{ Promise.resolve(g()).then(function(v){ paint(!!v); }).catch(function(){}); }catch(e){} }
+    window.__tiCaptureSet=set;   /* the gates */
+  })();
   // Sync button state with current theme (may have been injected by C++ at page serve time)
   lightBtn.classList.toggle('active', currentTheme.name === 'light');
   darkBtn.classList.toggle('active', currentTheme.name === 'dark');
@@ -39520,9 +39539,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       try { var r = new FileReader (); r.onload = function () { var s = String (r.result || ''); var k = s.indexOf (','); cb (k >= 0 ? s.slice (k + 1) : ''); }; r.onerror = function () { cb (''); }; r.readAsDataURL (file); } catch (e) { cb (''); }
     }
     function nsJuceFn (nm) { try { if (! (window.Juce && window.Juce.getNativeFunction)) return null;
-      if (INST === 2) {   /* tp42 — Noise 2 has no sample import, no factory library, no persisted selection (yet): those natives read as absent */
+      if (INST === 2) {   /* tp43 — Noise 2 owns the SAME library: every sample native takes a trailing instance (2); the two file
+                             dialogs (pickNoiseFile / pickNoiseImport / removeNoiseImport) call back fixed names, so they stay Noise 1's */
         if (nm === 'getNoiseViz') { var f2 = window.Juce.getNativeFunction ('getNoiseViz'); return f2 ? function () { return f2 (2); } : null; }
-        if (nm !== 'getSynParam' && nm !== 'qwertyNote' && nm !== 'stopPreview' && nm !== 'auditionNoise') return null; }
+        var INST2 = { loadNoiseSample: 1, clearNoiseSample: 1, loadNoiseFactory: 1, loadNoiseByPath: 1, setNoiseSampleSel: 1, getNoiseSampleSel: 1, getNoiseWavePeaks: 1, getNoiseFollow: 1, getNoiseVizMode: 1, setNoiseVizMode: 1 };
+        if (INST2[nm]) { var fi = window.Juce.getNativeFunction (nm); return fi ? function () { var a = [].slice.call (arguments); a.push (2); return fi.apply (null, a); } : null; }
+        var SHARED = { getSynParam: 1, qwertyNote: 1, stopPreview: 1, auditionNoise: 1, scanNoiseFactory: 1, listNoiseImports: 1 };
+        if (! SHARED[nm]) return null; }
       return window.Juce.getNativeFunction (nm); } catch (e) { return null; } }
     function clearSample () { var fc = nsJuceFn ('clearNoiseSample'); if (fc) { try { fc (); } catch (e) {} } sampleActive = false; factIdx = -1; saveSel (null); }
     function loadNoise (file) {   // decode the dropped/picked audio in the WebView → base64 → native in-memory loader
@@ -39530,8 +39553,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       nsReadB64 (file, function (b64) { if (! b64) { crumb ('noise: could not read ' + (file.name || 'file')); return; } var fn = nsJuceFn ('loadNoiseSample'); if (! fn) { crumb ('noise: loadNoiseSample missing'); return; }
         try { Promise.resolve (fn (file.name, b64)).then (function (r) { if (String (r).indexOf ('ok') !== 0) crumb ('noise load → ' + r); else saveSel (b64.length < 8000000 ? { kind: 'user', name: file.name, b64: b64 } : null); }).catch (function (e2) { crumb ('noise err: ' + e2); }); } catch (e) {} });
     }
-    window.onNoiseSampleLoaded  = function (name) { sampleActive = true; sampleName = (factIdx >= 0 && FACT[factIdx]) ? FACT[factIdx].name : (name || 'Sample'); var e = nName (); if (e) e.textContent = sampleName; refreshWave (); };   // fb71 — redraw the waveform INSTANTLY on change (was ~1s behind, waiting on the healer)
-    window.onNoiseSampleCleared = function () { sampleActive = false; var e = nName (); if (e) e.textContent = FLAT[cur]; wavePeaks = null; refreshWave (); };   // fb71 — clear instantly → scope fallback
+    window[G('onNoiseSampleLoaded')]  = function (name) { sampleActive = true; sampleName = (factIdx >= 0 && FACT[factIdx]) ? FACT[factIdx].name : (name || 'Sample'); var e = nName (); if (e) e.textContent = sampleName; refreshWave (); };   // fb71 — redraw the waveform INSTANTLY on change (was ~1s behind, waiting on the healer)
+    window[G('onNoiseSampleCleared')] = function () { sampleActive = false; var e = nName (); if (e) e.textContent = FLAT[cur]; wavePeaks = null; refreshWave (); };   // fb71 — clear instantly → scope fallback
     var KN = [ { id:(NP + 'LEVEL'), bip:false, def:0.08, kind:'level' }, { id:(NP + 'PITCH'), bip:true, def:0.5, kind:'scan' }, { id:(NP + 'PAN'), bip:true, def:0.5, kind:'pan' } ];   // fb80 — level def 0.35→0.08 (matches the APVTS default; RESET must equal LOAD-DEFAULT). SYN_NOISE_PITCH id kept; it's the SCAN control
     function setP (id, nn) { try { if (window.__setSynParam) window.__setSynParam (id, Math.max (0, Math.min (1, nn))); } catch (e) {} }
     function getP (id, cb) { try { var f = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('getSynParam') : null;
@@ -40232,7 +40255,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     // FOLDER = its own category w/ live count, single FILES under "Imports"). Fetches the registry async then opens.
     var noiseImpSel = null;   // abs path of the currently-loaded user import (initial • selection on reopen)
     function loadNoiseByPathJS (path) { factIdx = -1; noiseImpSel = path; var f = nsJuceFn ('loadNoiseByPath'); if (f) { try { f (path); } catch (e) {} } }
-    window.onNoiseImportsChanged = function () { if (window[G('__noiseReopen')]) window[G('__noiseReopen')] (); };   // native fires this after an import lands → reopen shows it
+    window[G('onNoiseImportsChanged')] = function () { if (window[G('__noiseReopen')]) window[G('__noiseReopen')] (); };   // native fires this after an import lands → reopen shows it
     function noiseBrowserOpen (ev) {
       window[G('__noiseReopen')] = function () { noiseBrowserOpen (ev); };
       var mkImp = function (it) { return { name: it.name, path: it.path, sel: (noiseImpSel === it.path), pick: (function (p) { return function () { loadNoiseByPathJS (p); }; }) (it.path) }; };
@@ -42453,6 +42476,19 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-node[data-core="tape"] > .tp-body > .fxr-dev .fxr-head { position: relative; }
 #tp-page .tp-node[data-core="tape"] > .tp-body > .fxr-dev .fxr-head .fxr-preset { position: absolute; left: 50%; transform: translateX(-50%); }
 #tp-page .tp-node.off > .tp-body > .fxr-dev .fxr-pwr { display: inline-block; }   /* a bypassed card shows its power so it can come back */
+/* tp43 — THE VOICES MODULE on the canvas (Max: "give us a better version of the voices … the buttons were weird, everything
+   looks poorly spaced out"). Only inside #tp-page: the synth page keeps its column exactly as it is. */
+#tp-page .tp-node[data-kind="voice"] .voice-meta.tp-voice { padding: 12px 14px 12px; gap: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; }
+#tp-page .voice-meta.tp-voice .voice-toggle-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; padding: 0; }
+#tp-page .voice-meta.tp-voice .voice-toggle { height: 24px; line-height: 24px; padding: 0; border-radius: 12px; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,.42); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); transition: background .15s, color .15s; }
+#tp-page .voice-meta.tp-voice .voice-toggle:hover { color: rgba(255,255,255,.75); background: rgba(255,255,255,.08); }
+#tp-page .voice-meta.tp-voice .voice-toggle.on { color: #fff; background: rgba(183,148,255,.22); border-color: rgba(183,148,255,.55); }
+#tp-page .voice-meta.tp-voice .vm-voiceview { display: flex; flex-direction: column; gap: 4px; }
+#tp-page .voice-meta.tp-voice .voice-row { grid-template-columns: 1fr auto; height: 22px; padding: 0 6px; border-radius: 6px; background: rgba(255,255,255,.035); }
+#tp-page .voice-meta.tp-voice .voice-row span { font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(255,255,255,.55); }
+#tp-page .voice-meta.tp-voice .voice-row .vel-src { color: rgba(183,148,255,.85); }
+#tp-page .voice-meta.tp-voice .voice-row b { font-size: 12px; font-variant-numeric: tabular-nums; }
+#tp-page .voice-meta.tp-voice .vm-macroview { padding-top: 2px; }
 #tp-page.viz .tp-node > .tp-body > .fxr-dev .fxr-core { display: block !important; }   /* tp10 — a card flipped to its back panel still shows its picture in the eye (it measured 0 and vanished) */
 #tp-page .tp-node > .tp-body > .fxr-dev .fxr-pwr { display: none; }                          /* tp6 — no power dots: a card on the canvas is on */
 #tp-page .tp-node[data-core="tape"] > .tp-body > .fxr-dev .fxr-type { display: none; }       /* the machine IS the picture (Studio / Cassette are separate nodes) */
@@ -42663,7 +42699,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var page=null, world=null, cg=null, drawg=null, nodesEl=null, addM=null, nMenu=null, toastEl=null, miniEl=null, modesEl=null, modesHome=null, tileHome={}, tileOrder=[];
   var isOpen=false, built=false, view={x:0,y:0,z:0.6}, nodes=[], cables=[], sel=null, drag=null, raf=0, shims={}, addCtx=null, addCat='All', suppressClick=false, syncT=0, applying=false, prevTapeTab=null, zTop=1;
   var layout={v:6,pos:{},ext:{},view:null,aim:'anything',dlevel:'medium',rlevel:'medium',rlinks:[],viz:false,nodes:[],finl:{}};   /* tp41 — finl: an inline flow card's anchor, the rack device it sits after */
-  var SIZES={osc:[332,140],noise:[220,140],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
+  var SIZES={osc:[332,140],noise:[220,140],voiceCanvas:[300,236],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
   /* tp11 — Max: "extend the bottom … then the top … evenly": a module with dots under its knobs gets 7 px of air on top and 17 at the bottom, so a dot never lands on a knob's LFO streak */
   var PADK={osc:1,filter:1,fx:1,tape:1,noise:1}, PADT=7, PADB=17;
   function padOf(kind){ return PADK[kind]?[PADT,PADB]:[0,0]; }
@@ -42672,7 +42708,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var FXNAMES={reverb:'Reverb',delay:'Delay',saturate:'Distortion',granular:'Granular',flt:'Filter',cho:'Chorus',fla:'Flanger',pha:'Phaser',tape:'Tape',eqz:'Equalizer',wid:'Widen',cmp:'Compress',ott:'Multiband',bod:'Bode',utl:'Utility',spl:'Splitter'};
   var FXLIST=['reverb','delay','saturate','granular','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];   /* the Tape card lives in the Tape category */
   var OSC=['a','b','c','d'], FLOWS=['arp','drift','chop','glitch'], FLOWNAME={arp:'Arp',drift:'Robin',chop:'Chop',glitch:'Glitch'}, FLOW_INST_MAX={arp:4,drift:1,chop:4,glitch:4};   /* tp20 — the Flow pool */
-  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette'];
+  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette','Reel'];   /* tp43 — the routed tape card carries all three machines; the global machines leave the browser */
   function oscList(){ try{ if(window.__oscPool&&window.__oscPool.length) return window.__oscPool.slice(); }catch(e){} return OSC; }   /* the oscillator pool (E–Z land here when the engine has them) */
   var IC={ fit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
     tidy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -42704,7 +42740,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function OX(o){ return 'SYN_OSC_'+String(o).toUpperCase()+'_'; }
   function nodeName(n){ if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='noise') return n.sub==='n2'?'Noise 2':'Noise'; if(n.kind==='fx') return (n.core==='tape'?'Tape · '+(n.type||''):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return flowLabel(n.sub);
     if(n.kind==='tape'){ var S=ST(); return 'Tape · '+(MACHINES[S?S.tapeMachine|0:0]||''); }
-    return {midi:'MIDI In',out:'Out',filter:'Filter',env:'Envelope',lfo:'LFO',tapeloop:'Deck',voice:'Voice',rnd:'Randomizer'}[n.kind]||n.kind; }
+    return {midi:'MIDI In',out:'Out',filter:'Filter',env:'Envelope',lfo:'LFO',tapeloop:'Deck',voice:'Voices',rnd:'Randomizer'}[n.kind]||n.kind; }
 
   /* ── the page (built once, inside #syn-panel so every device keeps its CSS) ── */
   function build(){ if(built) return; var sp=document.getElementById('syn-panel'); if(!sp) return; built=true;
@@ -42723,7 +42759,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 
   /* ── the layout blob (positions, extended cards, the view, the dice's aim + reach, the eye, the node list the browser counts) ── */
   function loadLayout(cb){ var g=NF('getPatcherJson'), done=false;
-    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',cpuCap:(o.cpuCap==='off'||(typeof o.cpuCap==='number'&&o.cpuCap>0))?o.cpuCap:'auto',aims:Array.isArray(o.aims)?o.aims.filter(function(a){ return typeof a==='string'; }):[],blocks:Object.assign({osc:0,flt:0,env:0,fx:0,mod:0,flow:0},(o.blocks&&typeof o.blocks==='object')?o.blocks:{}),rlevel:o.rlevel||'medium',finl:(o.finl&&typeof o.finl==='object')?o.finl:{},rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
+    function parse(s){ try{ var o=JSON.parse(s||'{}'); if(o&&typeof o==='object'){ var pos=o.pos||{}; if(!(o.v>=2)) FLOWS.forEach(function(m){ delete pos['flow-'+m]; }); if(!(o.v>=3)) delete pos.rnd; var fresh=!(o.v>=6); if(fresh) pos={}; layout={v:6,pos:pos,ext:o.ext||{},view:fresh?null:(o.view||null),aim:o.aim||'anything',dlevel:o.dlevel||'medium',cpuCap:(o.cpuCap==='off'||(typeof o.cpuCap==='number'&&o.cpuCap>0))?o.cpuCap:'auto',aims:Array.isArray(o.aims)?o.aims.filter(function(a){ return typeof a==='string'; }):[],blocks:Object.assign({osc:0,flt:0,env:0,fx:0,mod:0,flow:0},(o.blocks&&typeof o.blocks==='object')?o.blocks:{}),rlevel:o.rlevel||'medium',finl:(o.finl&&typeof o.finl==='object')?o.finl:{},voice:o.voice?1:0,rlinks:Array.isArray(o.rlinks)?o.rlinks.slice():[],viz:!!o.viz,nodes:o.nodes||[]}; } }catch(e){} }
     function first(){ if(done) return; done=true; cb(); }
     if(g){ try{ Promise.resolve(g()).then(function(s){ parse(s); if(done) applyLate(); else first(); }).catch(first); }catch(e){ first(); } setTimeout(first,300); }
     else { var s=null; try{ s=localStorage.getItem('tpLayout'); }catch(e){} parse(s); first(); } }
@@ -42748,7 +42784,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     noteT.forEach(function(n,i){ P[n.key]=[x0+Math.round((S.midi[0]-S.flow[0])/2), midiY+S.midi[1]+G+i*(S.flow[1]+G)]; });
     oscs.forEach(function(n,i){ P[n.key]=[x1,i*(S.osc[1]+G)]; });
     nzs.forEach(function(n,i){ P[n.key]=[x1,Math.max(1,oscs.length)*(S.osc[1]+G)+i*(S.noise[1]+G)]; });   /* tp42 */
-    P.filter=[x2,0]; P.env=[x2,S.filter[1]+G];
+    P.filter=[x2,0]; P.env=[x2,S.filter[1]+G]; P.voice=[x2,S.filter[1]+G+S.env[1]+G];   /* tp43 — the voice column under the envelope */
     fxs.forEach(function(n,i){ P[n.key]=[x3+Math.floor(i/4)*(S.fx[0]+G),(i%4)*(S.fx[1]+G)]; });
     var nC=Math.ceil(fxs.length/4), x4=nC?x3+nC*(S.fx[0]+G)+30:x3, y4=0;   /* no effects = no empty column */
     if(all.some(function(n){ return n.kind==='tape'; })){ P.tape=[x4,0]; y4=S.tape[1]+G; }
@@ -42828,6 +42864,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     mkNode('midi','midi',null).body.innerHTML='<div class="tp-end tp-viz"><div class="tp-keys">'+'wbwbwwbwbwbw'.split('').map(function(k){return '<i class="'+(k==='b'?'bk':'')+'"></i>';}).join('')+'</div></div>';
     oscList().forEach(function(o){ if(oscOn(o)) adoptOsc(o); });
     [1,2].forEach(function(i){ if(noiseOn(i)) adoptNoise(i); });   /* tp42 */
+    if(layout.voice) adoptVoice();   /* tp43 */
     var fd=q('#filter-device'); if(fd) mkNode('filter','filter',fd);
     var ev=q('#syn-panel .device.envs'); if(ev) mkNode('env','env',ev);
     var lf=q('#syn-panel .device.mod'); if(lf) mkNode('lfo','lfo',lf);
@@ -42855,6 +42892,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function noiseInFilter(){ return pv('SYN_FILTER1_SRC_NOISE',0)>0.5||pv('SYN_FILTER2_SRC_NOISE',0)>0.5; }
   function adoptNoise(i,at){ var el=noiseEl(i); if(!el||nodeByKey(noiseKey(i))) return null; var n=mkNode(noiseKey(i),'noise',el,{sub:i===2?'n2':'n',inst:i,at:at}); modDots(n); return n; }
   function returnNoise(n){ reclip(n); if(n.viz) clearVizStyle(n.viz); leave(n,function(){ if(n.el&&n.el.parentNode===n.body) goHome(n); }); }
+  /* tp43 — THE VOICE COLUMN as a module (Mono/Legato/Poly, Voices, Velocity + Key as drag sources, Portamento, Glide, Macros). */
+  function adoptVoice(at){ var el=q('#syn-panel .voice-meta'); if(!el||nodeByKey('voice')) return null; var n=mkNode('voice','voice',el,{at:at}); el.classList.add('tp-voice'); resizeNode(n,SIZES.voiceCanvas[0],SIZES.voiceCanvas[1]); return n; }   /* its own canvas size: the synth page's box is a column, not a module */
+  function returnVoice(n){ reclip(n); if(n.viz) clearVizStyle(n.viz); if(n.el) n.el.classList.remove('tp-voice'); goHome(n); dropNode(n); }
   function returnOsc(n){ wfBack(n); reclip(n); if(n.viz) clearVizStyle(n.viz); if(n.xEl){ n.xEl.remove(); n.xEl=null; } if(n.wasHidden) n.el.classList.add('osc-hidden'); leave(n,function(){ if(n.el&&n.el.parentNode===n.body) goHome(n); }); }
   function goHome(n){ if(n.el&&n.home&&n.home.parent){ try{ n.home.parent.insertBefore(n.el, n.home.next&&n.home.next.parentNode===n.home.parent?n.home.next:null); }catch(e){ n.home.parent.appendChild(n.el); } } }
   function adoptTape(at){ var tpg=document.getElementById('fxPageTape'); if(!tpg||nodeByKey('tape')) return null; var tn=mkNode('tape','tape',tpg,{at:at}); window.__tpTapeSize=TAPE_VIZ.slice(); modDots(tn); try{ if(window._fxSizeFn) setTimeout(window._fxSizeFn,30); }catch(e){} return tn; }
@@ -43608,8 +43648,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           var count=ispan(R.fx), picked=[]; if((aim==='pads'||aim==='keys'||aim==='textures')&&rnd()<.7){ picked.push('reverb'); }
           shuffle(fp).forEach(function(k){ if(picked.length<count&&picked.indexOf(k)<0) picked.push(k); });
           picked.push('cmp');   /* every chain the dice builds ends in a compressor, default settings (Max) */
+          /* tp43 — DIRECT SENDS IN THE DICE (Max: "some things can still do a chain, but oscillator D sent separately to a widen and
+             separately to a bode — that's not in a chain, both are separated"). Some oscillators leave the chain and get their OWN
+             effects: one or two devices routed to that oscillator alone, tapped DIRECT more often than not (raw, not the filter).
+             The chain never hears a separated oscillator, so the engine keeps the lanes apart (the four-tires rule). */
+          var capOn=isFinite(capOf(lvl)); var sepCount=(generate.tight>0)?0:(big?Math.min(2,Math.max(0,on.length-1)):(lvl==='medium'&&on.length>1&&rnd()<.5?1:0)), separated=shuffle(on.slice()).slice(0,sepCount), chainOsc=on.filter(function(o){ return separated.indexOf(o)<0; });   /* tp36 — a capped re-roll has no room for extra lanes */
+          if(!chainOsc.length){ chainOsc=on.slice(); separated=[]; }
+          rollInfo._separated=separated.slice();
           picked.forEach(function(core,pi){ var ri=window.__fxrAdd?window.__fxrAdd(core):-1; if(ri<0) return; var last=(pi===picked.length-1);
-            var hears=(last||rnd()>R.subset)?on.slice():subsetOf(on);   /* per-oscillator routing: some effects hear only B, or C and D … */
+            var hears=(last||rnd()>R.subset)?chainOsc.slice():subsetOf(chainOsc);   /* per-oscillator routing: some effects hear only B, or C and D … */
             hears.forEach(function(o){ var oi=srcIdx(o); if(oi>=0) window.__fxrSetRoute&&window.__fxrSetRoute(ri,oi,1); });   /* tp40 — E-H route into the effects too (their pills are 6..9) */
             var d=(window.__fxrDevs?window.__fxrDevs():[])[ri]; if(!d) return; fxAdded.push({core:d.core,inst:d.inst});
             if(last) return;
@@ -43621,6 +43668,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             if(core==='reverb'&&d.back&&d.back.d2&&d.back.d2.p&&d.back.d2.opts&&NOMODD.test(d.back.d2.k||'')) P(d.back.d2.p, choiceNorm(d.back.d2.p, 2, d.back.d2.opts.length));   /* tp39e — and the mod-mode dropdown back to Lush (index 2) where the type has one */
             if(d.back&&rnd()<R.back){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1&&!(core==='reverb'&&NOMODD.test(b.k||''))) P(b.p, choiceNorm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
               (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]&&!((core==='reverb'||core==='delay')&&(NOMOD.test(kn[0]||'')||NOMODP.test(kn[2]||'')))) P(kn[2], between(lo, hot?.6:hi)); }); } }); },
+      function(){ if(!B.fx||!(rollInfo._separated||[]).length) return;   /* tp43 — the separated oscillators' own effects (see DIRECT SENDS above) */
+          var pool=diceableFx((FXPOOL[aim]||FXPOOL.pads).concat(FXMORE)).filter(function(k){ return k!=='cmp'; });
+          (rollInfo._separated||[]).forEach(function(o){ var oi=srcIdx(o); if(oi<0) return; var n=isFinite(capOf(lvl))?1:1+(rnd()<.45?1:0); shuffle(pool.slice()).slice(0,n).forEach(function(core,k){
+              var ri=window.__fxrAdd?window.__fxrAdd(core):-1; if(ri<0) return; var direct=rnd()<.65;
+              window.__fxrSetRoute&&window.__fxrSetRoute(ri,oi,1,(k===0&&direct)?1:0);   /* the first device taps the oscillator (direct, more often than not); a second one eats the first */
+              var d=(window.__fxrDevs?window.__fxrDevs():[])[ri]; if(d){ fxAdded.push({core:d.core,inst:d.inst}); if(d.types&&d.types.length>1&&rnd()<R.types){ var tys=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(tys.length) setFxType(ri,pick(tys)); } } }); }); },
       function(){ if(!B.mod&&!B.flow) return; toast(B.mod?'Wiring the modulation…':'Dealing the flow cards…');   /* tp39c — two blocks: flow cards (the chain) and modulation (routes + LFOs) */
           if(B.mod){ if(window.__tiBatchBegin) window.__tiBatchBegin(); (window.__tiRoutes?window.__tiRoutes():[]).forEach(function(r){ window.__tiRemoveRoute&&window.__tiRemoveRoute(r.s,r.d); }); }
           /* tp23 — MULTIPLE FLOW CARDS (Max: "I see two ARPs and two glitches and stuff like that, and glitches are
@@ -43653,7 +43706,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
              real APVTS params (PluginProcessor clones the base list into FLOW_GLI2_*), and knobDest returns null for
              anything this build does not carry — so naming more than exists stays safe (the tp13 rule). */
           var FLOWPFX={arp:'FLOW_ARP',chop:'FLOW_CHOP',glitch:'FLOW_GLI',drift:'FLOW_RBN'};   /* tp39f — Round Robin too (Max: "Glitch, Chop, Arpeggiator, Round Robin") */
-          var FLOWKNOB={arp:['BLEND','GATE','GLIDE','MORPH'],chop:['BLEND','GRIT','FILTER','DETUNE'],glitch:['BLEND','DECAY','DEJAVU','BURST'],drift:['VARY','DRIFT','WOBBLE','GLIDE']};   /* never LATCH */
+          var FLOWKNOB={arp:['GATE','GLIDE','MORPH'],chop:['GRIT','FILTER','DETUNE'],glitch:['DECAY','DEJAVU','BURST'],drift:['VARY','DRIFT','WOBBLE','GLIDE']};   /* never LATCH · tp43 — never the MIX (BLEND): Max: "the mix does not get modulated, that stuff is practical" */
           chain.forEach(function(m){ var fk2=fKind(m), fn2=fInst(m), pfx=FLOWPFX[fk2]; if(!pfx) return;
             var head=pfx+(fn2>1?fn2:'')+'_';
             (FLOWKNOB[fk2]||[]).forEach(function(kn){ var d=knobDest(head+kn); if(d!=null) dpool.push({d:d,k:'flow',card:m}); }); });
@@ -43756,7 +43809,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   }   /* tp9 — no self re-arm: window.__tiFrame drives it (see openPage) */
 
   /* ── interaction ── */
-  var CONTROL='input, select, button, textarea, .noise-pow, .noise-nav, .noise-name, .noise-viz, .knob, .knob-ring, .fk-em, .fxr-dial, .fxr-knob, .fxr-pill, .fxr-r, .fxr-type, .fxr-preset, .fxr-swap, .fxr-x, .fxr-snd, .swap-btn, .osc-letter, .engine-wrap, .preset-wrap, .samp-sel, .uni-voices, .uni-stack, .uni-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .gk-arrow, .bl-arrow, .set-prev, .sel, .blend-pill, .ft-pill, .filt-exp, .flt-nav, .dd-trigger, .mv-c, .mv-seg, .mv-tabs, .mv-dep, .env-shelf, .env-sel, .reso-menu, .samp-h, .fade-sq, .fade-cv, .samp-drop, .samp-exp, .tp-port, .device-label, .knob-canvas-wrap, .fx-knob-wrap, .fx-knob-group, .tp-min, .ti-card .b, .ti-card .mix, .ti-card .pset';   /* tp9 — displays (filter curve, envelope grid, LFO scope, FX pictures, osc display) DRAG the node; play them on the synth page (Max) */
+  var CONTROL='input, select, button, textarea, .wt-nav, .noise-pow, .noise-nav, .noise-name, .noise-viz, .knob, .knob-ring, .fk-em, .fxr-dial, .fxr-knob, .fxr-pill, .fxr-r, .fxr-type, .fxr-preset, .fxr-swap, .fxr-x, .fxr-snd, .swap-btn, .osc-letter, .engine-wrap, .preset-wrap, .samp-sel, .uni-voices, .uni-stack, .uni-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .gk-arrow, .bl-arrow, .set-prev, .sel, .blend-pill, .ft-pill, .filt-exp, .flt-nav, .dd-trigger, .mv-c, .mv-seg, .mv-tabs, .mv-dep, .env-shelf, .env-sel, .reso-menu, .samp-h, .fade-sq, .fade-cv, .samp-drop, .samp-exp, .tp-port, .device-label, .knob-canvas-wrap, .fx-knob-wrap, .fx-knob-group, .tp-min, .ti-card .b, .ti-card .mix, .ti-card .pset';   /* tp9 — displays (filter curve, envelope grid, LFO scope, FX pictures, osc display) DRAG the node; play them on the synth page (Max) */
   var FXCTL=CONTROL+', .fxr-pwr, .fxr-bk-sel, .fxr-bk-knob, .fxr-bk-v, .spl-add, [data-act], a, .fxr-core[data-core="eqz"], .fxr-core[data-core="ott"], .fxr-core[data-core="bod"], .fxr-core[data-core="spl"], .fxr-core[data-core="flt"]';
   var EDGE_ALL=9; function nearEdge(n,e){ if(!e||e.clientX==null) return false; try{ var r=n.wrap.getBoundingClientRect(), z=view.z||1, x=(e.clientX-r.left)/z, y=(e.clientY-r.top)/z; return x<EDGE_ALL||y<EDGE_ALL||x>n.w-EDGE_ALL||y>n.h-EDGE_ALL; }catch(x){ return false; } }
   function isCtl(n,tgt,e){ if(!tgt||!tgt.closest) return false; if(tgt.closest('.tp-port')) return true; if(e&&e.altKey) return false;
@@ -43851,6 +43904,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function removeNode(n){ if(n.kind==='fx'){ window.__fxrRemove&&window.__fxrRemove(n.idx); }
     else if(n.kind==='osc'){ if(nodes.filter(function(x){return x.kind==='osc';}).length<=1){ toast('The last oscillator stays'); return; } setOscOn(n.sub,false); }
     else if(n.kind==='noise'){ setNoiseOn(n.inst||1,false); }   /* tp42 */
+    else if(n.kind==='voice'){ layout.voice=0; saveLayout(); returnVoice(n); commit(); soon(); return; }   /* tp43 */
     else if(n.kind==='tape'){ setToggle('tape-toggle',false); }
     else if(n.kind==='tapeloop'){ setToggle('loop-toggle',false); }
     else if(n.kind==='flow'){ var ch=window.__flowChain?window.__flowChain():[]; window.__flowSetChain&&window.__flowSetChain(ch.filter(function(m){return m!==n.sub;})); }
@@ -43862,7 +43916,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function openNodeMenu(cx,cy,n,c){ closeMenus(); var h='';
     if(c){ h='<div class="ps">Cable</div><div class="pi danger" data-a="cut">Cut</div>'; }
     else if(n.kind==='flow'){ h='<div class="ps">'+nodeName(n)+'</div><div class="pi" data-a="ext">'+(n.ext?'Minimize':'Extend')+'</div>'+(flowInline(n.sub)?'<div class="pi" data-a="uninl">Run after the rack</div>':'')+'<div class="pi danger" data-a="rm">Remove from the chain</div>'; }
-    else if(n.kind==='osc'||n.kind==='noise'||n.kind==='fx'||n.kind==='tape'||n.kind==='tapeloop'){ h='<div class="ps">'+nodeName(n)+'</div>'+(n.kind==='fx'?'<div class="pi" data-a="pwr">'+(n.wrap.classList.contains('off')?'Turn on':'Bypass')+'</div>':'')+'<div class="pi danger" data-a="rm">Remove</div>'; }
+    else if(n.kind==='osc'||n.kind==='noise'||n.kind==='voice'||n.kind==='fx'||n.kind==='tape'||n.kind==='tapeloop'){ h='<div class="ps">'+nodeName(n)+'</div>'+(n.kind==='fx'?'<div class="pi" data-a="pwr">'+(n.wrap.classList.contains('off')?'Turn on':'Bypass')+'</div>':'')+'<div class="pi danger" data-a="rm">Remove</div>'; }
     else { h='<div class="ps">'+nodeName(n)+'</div><div class="pi dis">Part of the synth</div>'; }
     nMenu.innerHTML=h; placeMenu(nMenu,cx,cy);
     nMenu.onmousedown=function(ev){ ev.stopPropagation();
@@ -43935,16 +43989,19 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(a==='modulation') return rollRack('mod');
     generate(); }
   /* the add browser — two panes, names only: All · Oscillators · Filters · Flow · Tape · Effects */
-  var CATS=['All','Oscillators','Filters','Flow','Tape','Effects'];
+  var CATS=['All','Oscillators','Filters','Flow','Tape','Effects','Utility'];   /* tp43 — Utility: the voice column */
   function catalog(){ var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');
     oscList().forEach(function(o){ var on=!!nodeByKey('osc-'+o); it.push({k:'osc:'+o,n:'Oscillator '+oscLetter(o),cat:'Oscillators',dis:on,note:on?'Already on the canvas':null}); });
     [1,2].forEach(function(i){ var on=!!nodeByKey(noiseKey(i)); it.push({k:'noise:'+i,n:i===2?'Noise 2':'Noise',cat:'Oscillators',dis:on,note:on?'Already on the canvas':null}); });   /* tp42 — the noise modules */
     it.push({k:'flt',n:'Filter',cat:'Filters'});   /* tp9 — another filter = the rack's Filter card (the whole roster), as many as its pool holds */
+    { var vOn=!!nodeByKey('voice'); it.push({k:'voice',n:'Voices',cat:'Utility',dis:vOn,note:vOn?'Already on the canvas':null}); }   /* tp43 — Max: "add the voice menu back … there's a couple of things we can drag from there" */
     FLOWS.forEach(function(m){ var mx=FLOW_INST_MAX[m]||1, free=null; for(var n=1;n<=mx;n++){ var key=n>1?m+n:m; if(!nodeByKey('flow-'+key)){ free=key; break; } }
       if(free) it.push({k:'flow:'+free,n:flowLabel(free),cat:'Flow'});
       else it.push({k:'flow:'+m,n:FLOWNAME[m],cat:'Flow',dis:true,note:mx>1?('All '+mx+' are on the canvas'):'Already on the canvas'}); });   /* tp20 — the next free instance */
-    MACHINES.forEach(function(nm,i){ var cur=tapeUp&&mach===i; it.push({k:'tape:'+i,n:nm,cat:'Tape',dis:cur,note:cur?'A second machine lands with the engine pools (next)':null}); });
-    TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:nm,cat:'Tape'}); });
+    /* tp43 — Max: "these tape modes need to stop being global … actually follow the patcher's cables". The browser offers the
+       ROUTED tape card in its three machines; the global master machine is no longer spawned from here (a patch that has it on
+       still shows its node). */
+    TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:'Tape · '+nm,cat:'Tape'}); });
     FXLIST.forEach(function(k){ it.push({k:k,n:FXNAMES[k],cat:'Effects'}); }); return it; }
   function fitsCtx(it){ if(!addCtx) return true; var t=addCtx.t; if(t==='m') return false; if(t==='n') return it.cat==='Flow'&&/arp|drift/.test(it.k); if(t==='a') return it.cat==='Effects'||it.cat==='Tape'||(it.cat==='Flow'&&/chop|glitch/.test(it.k)); return false; }
   function openAdd(cx,cy,ctx){ closeMenus(); addCtx=ctx; var w=toWorld(cx,cy); addM.dataset.wx=w.x; addM.dataset.wy=w.y; addM.querySelector('input').value=''; renderAdd(); placeMenu(addM,cx,cy); try{ addM.querySelector('input').focus(); }catch(e){} }
@@ -43967,6 +44024,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else if((m=/^tape:(\d)$/.exec(k))){ var had=nodeByKey('tape'); setToggle('tape-toggle',true); setMachine(+m[1]); n=had||adoptTape(at); if(had) toast('One tape machine at a time — it is '+MACHINES[+m[1]]+' now'); }
     else if((m=/^tapefx:(.+)$/.exec(k))){ var idx=window.__fxrAdd?window.__fxrAdd('tape'):-1; if(idx<0){ toast('No free slot for Tape'); closeMenus(); return; } setFxType(idx,m[1]); pendingAt=at; adoptFx(); var devs=window.__fxrDevs?window.__fxrDevs():[]; var d=devs[idx]; n=d?nodeByKey('fx-'+d.core+'-'+d.inst):null; }
     else if(k==='deck'){ setToggle('loop-toggle',true); n=adoptLoop(at); }
+    else if(k==='voice'){ n=adoptVoice(at); if(n){ layout.voice=1; } }   /* tp43 */
     else { var idx2=window.__fxrAdd?window.__fxrAdd(k):-1; if(idx2<0){ toast('No free slot for '+(FXNAMES[k]||k)); closeMenus(); return; } pendingAt=at; adoptFx(); var devs2=window.__fxrDevs?window.__fxrDevs():[]; var d2=devs2[idx2]; n=d2?nodeByKey('fx-'+d2.core+'-'+d2.inst):null; }
     if(n){ if(!layout.pos[n.key]){ n.x=at[0]; n.y=at[1]; place(n); } layout.pos[n.key]=[n.x,n.y]; if(addCtx&&addCtx.pk==='out'&&n.ports.some(function(p){return p.kind==='in';})) connect(addCtx.n,'out',addCtx.pi,n,'in',0); }
     saveLayout(); closeMenus(); commit(); soon(); }

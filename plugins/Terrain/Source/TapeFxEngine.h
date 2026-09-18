@@ -81,7 +81,8 @@ public:
     // already has a Distortion device; it does not need a second one wearing a tape badge.
     //   type 0 = Studio  -> machine 2 (Wire)
     //   type 1 = Cassette-> machine 1 (Cassette)
-    static int machineFor (int t) noexcept { return (t == 1) ? 1 : 2; }
+    //   type 2 = Reel    -> machine 0 (Studio, 15 IPS)   — tp43, Max: "we need three tape modes … Reel, Wire and Studio"
+    static int machineFor (int t) noexcept { return (t == 1) ? 1 : (t == 2) ? 0 : 2; }
 
     // ═══ fb368 — THE TRANSPORT IS PART OF THE MACHINE ════════════════════════════
     //  Max: "studio is exactly the same as cassette and these need to be different
@@ -142,7 +143,9 @@ public:
         //                 hf     hp    bHz    bQ    bDb  hissK hissTop  fl1   fl2   fl3  drift dep  comp lpN mgain
         static const Voice C { 13000.f, 32.f,  90.f, 1.70f, 12.f, 6.4f, 0.000f, 9.6f, 13.7f, 6.3f, 0.08f, 1.00f, 1.0f, 2, 2.2f };
         static const Voice W {  2800.f, 130.f, 185.f, 1.30f, 12.f, 0.95f, 0.075f, 5.9f,  8.4f, 3.7f, 0.26f, 1.55f, 0.25f, 4, 5.0f };
-        return (mch == 1) ? C : W;
+        // tp43 — REEL (StudioMachine, 15 IPS): wide, quiet, a shallow low bump at 55 Hz, the least flutter of the three
+        static const Voice S { 18000.f, 24.f,  55.f, 1.20f,  6.f, 3.0f, 0.000f, 7.2f, 11.1f, 4.6f, 0.03f, 0.55f, 1.0f, 1, 1.4f };
+        return (mch == 1) ? C : (mch == 0) ? S : W;
     }
 
     static const CharSpec& charSpec (int c) noexcept

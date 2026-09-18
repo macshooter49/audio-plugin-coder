@@ -130,6 +130,19 @@ public:
 
     double getSampleRate() const { return sr; }
 
+    // tp43 — DISARM: un-publish first (nothing may index the vectors once they are gone), then give the
+    //  ~202 MB back. Message thread; the caller waits a block after the un-publish before freeing.
+    void unpublish() noexcept { maxSamples.store (0, std::memory_order_release); }
+    void release()
+    {
+        maxSamples.store (0, std::memory_order_release);
+        std::vector<float>().swap (bufL);
+        std::vector<float>().swap (bufR);
+        writePos.store (0, std::memory_order_relaxed);
+        samplesWritten.store (0, std::memory_order_relaxed);
+        sr = 0.0;
+    }
+
 private:
     double sr = 0.0;
     std::atomic<int> maxSamples { 0 };   // 0 = not armed; published LAST (release)

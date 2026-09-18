@@ -84,7 +84,7 @@ private:
     // per-layer, per-osc and osc-from-memory callbacks all did a bare `if (! r.success) return;`
     // so a bad decode was invisible. `where` names the slot ("osc B", "layer 2", …).
     void reportLoadError (const juce::String& where, const juce::String& message);
-    void loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename);   // NOISE IMPORT (P5) — sandbox-safe looping-noise sample
+    void loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename, int inst = 1);   /* tp43 — inst 2 = Noise 2 */   // NOISE IMPORT (P5) — sandbox-safe looping-noise sample
     void loadPatch         (const juce::File& patchFile);    // Task 18 stub
     void afterPatchLoad (bool fromHost = false);             // fb620 — the one law for every load: C++ pushes, then onPatchLoaded
     uint32_t announcedLoadGen_ = 0;                          // fb635 — the processor's stateLoadGen_ the page last heard about

@@ -1193,11 +1193,11 @@ juce::String TerrainAudioProcessor::getWaterfallViewJson()
     return j + "}";
 }
 
-juce::String TerrainAudioProcessor::getNoiseWavePeaksJson()
+juce::String TerrainAudioProcessor::getNoiseWavePeaksJson (int inst)
 {
     // fb66 — compact min/max envelope of the loaded noise sample for the waveform viz. Empty ("") when no
     // sample is loaded (algorithmic type) → the UI draws the live oscilloscope instead. Msg-thread only.
-    auto buf = noiseSampleBuffer_.load();
+    auto buf = (inst == 2 ? noiseSampleBufferB_ : noiseSampleBuffer_).load();   // tp43 — per instance
     const int len = (buf != nullptr) ? buf->getNumSamples() : 0;
     if (buf == nullptr || len < 2) return {};
     const int cols = 220;                                   // downsample to ~viz width
@@ -6443,7 +6443,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             // is out of this device entirely. The roster keeps its eight slots (born that way
             // at fb365) so the two live entries never renumber a saved patch.
             const juce::StringArray tpeTypes { "Studio","Cassette",
-                                               "Reserved 3","Reserved 4","Reserved 5",
+                                               "Reel","Reserved 4","Reserved 5",   // tp43 — Reel = the 15 IPS StudioMachine, per cable
                                                "Reserved 6","Reserved 7","Reserved 8" };
             const juce::StringArray tpeChars { "Fresh","Ferric","Chrome","Vintage","Worn","Chewed","Hot","Cold" };
             const juce::StringArray tpeHeads { "Single","Dual","Triple","Quad","Spread","Swell","Ping","Cascade" };
@@ -9503,7 +9503,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     // fb496 — the Export ring (~202 MB) is armed on first editor open, not here.
     // Once armed, prepare() runs exactly as before (it keeps the captured audio when
     // the rate is unchanged and reallocates when it is not).
-    if (captureArmRequested_.load (std::memory_order_acquire))
+    if (captureArmRequested_.load (std::memory_order_acquire) && captureEnabled_.load (std::memory_order_acquire))   // tp43 — never while DAW capture is off
         captureBuffer.prepare(sampleRate, samplesPerBlock);
 
     // fb496 — build the four factory wavetables this patch actually points at before
@@ -13374,6 +13374,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                         if (auto* sv = synthVoicesB_[(size_t) i])
                             if (sv->isAmpEnvActive()) { const float lv = sv->getAmpEnvLevel(); if (! anyB || lv > bestB) { bestB = lv; anyB = true; } }
                 noiseVizLevelB_.store ((noise2OnRef_ != nullptr && noise2OnRef_->load() > 0.5f && anyB) ? juce::jmax (0.f, bestB) : 0.f, std::memory_order_relaxed);
+                tw::SynthVoice* bestVB = nullptr; float lvB = -1.f;
+                if (bankB_.load (std::memory_order_acquire) != nullptr)
+                    for (int i = 0; i < kSynthVoiceCount; ++i)
+                        if (auto* sv = synthVoicesB_[(size_t) i]) if (sv->isAmpEnvActive() && sv->getAmpEnvLevel() > lvB) { lvB = sv->getAmpEnvLevel(); bestVB = sv; }
+                noiseVizPosB_.store (bestVB != nullptr ? bestVB->noiseFollowPos01() : -1.0f, std::memory_order_relaxed);   // Noise 2 has no Free tape: the loudest voice's head, or nothing
             }
             // fb66 — waveform follower position. Free → the global tape head (visible even when idle);
             // Random/Envelope → the loudest sounding voice's read head; -1 = nothing to draw.
@@ -15735,8 +15740,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //    after Chop, Glitch and the auditions, the capture is exactly what the host receives — and anything added to the
     //    chain later (the patcher) is inside it automatically, as long as it runs above this line. No return statement
     //    sits between the audio stages and here, so every block is captured. Tests/capture_last_gate.py pins the order.
-    captureBuffer.writeBlock (leftChannel,
-        numChannels > 1 ? rightChannel : nullptr, numSamples);
+    if (captureEnabled_.load (std::memory_order_relaxed))   // tp43 — off = no ring, no write
+        captureBuffer.writeBlock (leftChannel,
+            numChannels > 1 ? rightChannel : nullptr, numSamples);
 
     // (The masterFx ring for the WET stems is written right after the FLOW dispatch loop, above the auditions: see there.)
 
@@ -15757,6 +15763,7 @@ juce::AudioProcessorEditor* TerrainAudioProcessor::createEditor()
     // the rolling window behaves exactly as it always did from here on.
     // fb528 — the arm calls captureBuffer.prepare(), which prepareToPlay also calls; take the
     // prepare lock so an editor opening cannot resize the ring under a concurrent prepareToPlay.
+    if (captureOffMarker().existsAsFile()) captureEnabled_.store (false, std::memory_order_release);   // tp43 — the user's preference, before the first arm
     { const std::lock_guard<std::mutex> prepGuard (prepLock_); ensureCaptureBufferAllocated(); }
     prefetchImportsJson();   // fb639 — the browser lists are built OFF this thread before anyone opens a browser
     return new TerrainAudioProcessorEditor(*this);
@@ -15854,8 +15861,26 @@ void TerrainAudioProcessor::ensureStemLayerAllocated (int layerIdx)
 }
 
 // fb496 — arm the Export ring. Idempotent; MESSAGE THREAD ONLY.
+juce::File TerrainAudioProcessor::captureOffMarker()
+{
+    return juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile ("Library/Caches/Terrain/capture-off");
+}
+
+void TerrainAudioProcessor::setCaptureEnabled (bool on)
+{
+    captureEnabled_.store (on, std::memory_order_release);
+    try { if (on) captureOffMarker().deleteFile(); else { captureOffMarker().getParentDirectory().createDirectory(); captureOffMarker().replaceWithText ("1"); } } catch (...) {}
+    const std::lock_guard<std::mutex> prepGuard (prepLock_);
+    if (on) { ensureCaptureBufferAllocated(); return; }
+    captureArmRequested_.store (false, std::memory_order_release);  // a later prepareToPlay must not re-arm it
+    captureBuffer.unpublish();                                      // the audio thread stops indexing it now
+    juce::Thread::sleep (30);                                       // a block or two, so a write already inside the ring finishes
+    captureBuffer.release();                                        // ~202 MB back
+}
+
 void TerrainAudioProcessor::ensureCaptureBufferAllocated()
 {
+    if (! captureEnabled_.load (std::memory_order_acquire)) return;   // tp43 — DAW capture is off: never arm
     captureArmRequested_.store (true, std::memory_order_release);
     const double sr = preparedSampleRate_.load (std::memory_order_acquire);
     if (sr <= 0.0) return;   // editor opened before the first prepareToPlay — it will arm us
@@ -17365,15 +17390,19 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
     //   {"kind":"user","name":…,"b64":…}               → the audio is IN the patch already
     // Both are restorable with no editor at all; before fb602 only the JS restoreNoiseSel() on GUI
     // open ever did it, so a headless render got the algorithmic noise type instead of the sample.
+    for (int ni = 0; ni < 2; ++ni)   // tp43 — Noise 1, then Noise 2 (its own selection, its own buffer)
     {
-        const juce::String sel = noiseSampleSelJson_;
+        juce::String& selRef    = (ni == 1) ? noiseSampleSelJson2_ : noiseSampleSelJson_;
+        juce::String& loadedRef = (ni == 1) ? noiseLoadedSel2_     : noiseLoadedSel_;
+        tw::SampleBuffer& nbuf  = (ni == 1) ? noiseSampleBufferB_  : noiseSampleBuffer_;
+        const juce::String sel = selRef;
         if (sel.isEmpty())
         {
-            noiseLoadedSel_.clear();   // algorithmic noise — nothing to restore, and NOT a miss
+            loadedRef.clear();   // algorithmic noise — nothing to restore, and NOT a miss
         }
-        else if (! (noiseSampleBuffer_.getNumSamples() > 0 && noiseLoadedSel_ == sel))
+        else if (! (nbuf.getNumSamples() > 0 && loadedRef == sel))
         {
-            noiseLoadedSel_.clear();
+            loadedRef.clear();
             auto v = juce::JSON::parse (sel);
             auto* o = v.getDynamicObject();
             if (o == nullptr) miss ("noise", "(selection)", "selection-json-unparseable");
@@ -17414,9 +17443,9 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
                         for (int c = 0; c < raw->getNumChannels(); ++c) trimmed->copyFrom (c, 0, *raw, c, 0, cap);
                         raw = trimmed;
                     }
-                    noiseSampleBuffer_.setSampleRate (rate);
-                    noiseSampleBuffer_.store (bakeSeamlessNoiseLoop (raw));
-                    noiseLoadedSel_ = sel;
+                    nbuf.setSampleRate (rate);
+                    nbuf.store (bakeSeamlessNoiseLoop (raw));
+                    loadedRef = sel;
                     ++filled;
                 }
                 else if (raw != nullptr) miss ("noise", what, "too-short");
@@ -17544,6 +17573,8 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
     else state.removeProperty ("noiseSampleSel", nullptr);   // fb618
+    if (noiseSampleSelJson2_.isNotEmpty()) state.setProperty ("noiseSampleSel2", noiseSampleSelJson2_, nullptr); else state.removeProperty ("noiseSampleSel2", nullptr);   // tp43 — Noise 2
+    if (noiseVizMode2_ != 1) state.setProperty ("noiseVizMode2", noiseVizMode2_, nullptr); else state.removeProperty ("noiseVizMode2", nullptr);
     // fb621 — THE ENVIRONMENT SEAT. Empty until the patcher exists; written and cleared by the same
     // law as every blob beside it, so the day it carries a graph nothing else has to change.
     if (patcherJson_.isNotEmpty()) state.setProperty ("patcherJson", patcherJson_, nullptr);
@@ -18483,6 +18514,8 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             }
             patcherJson_ = newState.getProperty ("patcherJson", juce::String()).toString();   // fb621 — the seat
             noiseSampleSelJson_ = newState.getProperty ("noiseSampleSel", juce::String()).toString();
+            noiseSampleSelJson2_ = newState.getProperty ("noiseSampleSel2", juce::String()).toString();   // tp43
+            noiseVizMode2_ = (int) newState.getProperty ("noiseVizMode2", 1);
             if (noiseSampleSelJson_.isEmpty())   // fb618 — absent means algorithmic noise, not the previous patch's loop
             { noiseLoadedSel_.clear(); noiseSampleBuffer_.store (nullptr); noiseSampleBuffer_.setSampleRate (0.0); }
             noiseVizMode_ = (int) newState.getProperty ("noiseVizMode", 1);   // fb66 — restore noise viz choice (default particle)

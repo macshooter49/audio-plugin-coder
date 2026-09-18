@@ -956,15 +956,15 @@ public:
     // PEROSC-BUFFERS — per-OSC Sample oscillator buffers (synth-side; A/B/C/D independent).
     tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)]; }
     // NOISE IMPORT (P5) — one shared looping-sample source for the Noise module (user drop or factory sample).
-    tw::SampleBuffer& getNoiseSampleBuffer () noexcept { return noiseSampleBuffer_; }
+    tw::SampleBuffer& getNoiseSampleBuffer (int inst = 1) noexcept { return inst == 2 ? noiseSampleBufferB_ : noiseSampleBuffer_; }   // tp43 — Noise 2 has its own
     // NOISE IMPORT (P5c) — persisted noise-sample selection descriptor (JSON): factory path or embedded user audio.
-    void         setNoiseSampleSel (const juce::String& j) { noiseSampleSelJson_ = j; }
-    juce::String getNoiseSampleSel () const                { return noiseSampleSelJson_; }
+    void         setNoiseSampleSel (const juce::String& j, int inst = 1) { (inst == 2 ? noiseSampleSelJson2_ : noiseSampleSelJson_) = j; }
+    juce::String getNoiseSampleSel (int inst = 1) const                { return inst == 2 ? noiseSampleSelJson2_ : noiseSampleSelJson_; }
     // fb66 — NOISE right-click engine bridges: waveform follower + peaks + persisted viz choice.
-    float        getNoiseFollow () const noexcept { return noiseVizPos_.load (std::memory_order_relaxed); }   // representative follower 0..1 (-1 = none)
-    juce::String getNoiseWavePeaksJson ();                        // min/max envelope of the loaded noise sample ("" if none)
-    void         setNoiseVizMode (int m) noexcept { noiseVizMode_ = juce::jlimit (1, 2, m); }   // 1 particle · 2 waveform (UI state, persisted)
-    int          getNoiseVizMode () const noexcept { return noiseVizMode_; }
+    float        getNoiseFollow (int inst = 1) const noexcept { return (inst == 2 ? noiseVizPosB_ : noiseVizPos_).load (std::memory_order_relaxed); }   // representative follower 0..1 (-1 = none)
+    juce::String getNoiseWavePeaksJson (int inst = 1);            // min/max envelope of the loaded noise sample ("" if none)
+    void         setNoiseVizMode (int m, int inst = 1) noexcept { (inst == 2 ? noiseVizMode2_ : noiseVizMode_) = juce::jlimit (1, 2, m); }   // 1 particle · 2 waveform (UI state, persisted)
+    int          getNoiseVizMode (int inst = 1) const noexcept { return inst == 2 ? noiseVizMode2_ : noiseVizMode_; }
     void startNoiseAudition () noexcept { noiseAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // headphone preview (browser)
     void startWavetableAudition (int osc) noexcept { wtAudReqOsc_.store (juce::jlimit (0, ParameterIDs::kOscCount - 1, osc), std::memory_order_relaxed); wtAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // WT headphone preview
     void startOscSampleAudition (int osc) noexcept { sampAudReqOsc_.store (juce::jlimit (0, ParameterIDs::kOscCount - 1, osc), std::memory_order_relaxed); sampAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // fb74 — SAMPLE browser headphone preview (plays the osc's current sample once)
@@ -1850,6 +1850,13 @@ public:
     // a host may create the editor BEFORE the first prepareToPlay, and then there is no
     // sample rate to size the ring with yet — prepareToPlay honours the request instead.
     std::atomic<bool>   captureArmRequested_ { false };
+    // tp43 — DAW CAPTURE ON/OFF (Max: "give us a way to turn off Terrain capture … to save memory"). A global
+    //  preference, kept as a marker file (~/Library/Caches/Terrain/capture-off) so a fresh instance never
+    //  arms the ~202 MB ring in the first place. Off = the ring is released and processBlock skips the write.
+    std::atomic<bool>   captureEnabled_ { true };
+    static juce::File   captureOffMarker();
+    bool getCaptureEnabled() const noexcept { return captureEnabled_.load (std::memory_order_acquire); }
+    void setCaptureEnabled (bool on);   // message thread
     // The sample rate the host last prepared us at — the rate a lazy arm must use.
     // 0 until the first prepareToPlay; arming before that is deferred, not guessed.
     std::atomic<double> preparedSampleRate_ { 0.0 };
@@ -2545,6 +2552,10 @@ private:
     tw::SampleBuffer                          noiseSampleBuffer_;   // NOISE IMPORT (P5) — shared looping-sample noise source
     tw::SampleBuffer                          noiseSampleBufferB_;  // tp42 — Noise 2's, deliberately EMPTY (algorithmic only; no import yet)
     juce::String                              noiseSampleSelJson_;  // NOISE IMPORT (P5c) — persisted selection (factory path / user audio)
+    juce::String                              noiseSampleSelJson2_; // tp43 — Noise 2's
+    juce::String                              noiseLoadedSel2_;     // tp43 — what Noise 2's buffer currently holds (restore skips a repeat)
+    int                                       noiseVizMode2_ = 1;   // tp43 — Noise 2's viz choice
+    std::atomic<float>                        noiseVizPosB_ { -1.0f };   // tp43 — Noise 2's follower (bank 1's loudest voice)
     double                                    noiseFreePos_ = 0.0;  // fb66 — NOISE Free-mode global tape playhead (samples; audio thread)
     int                                       noiseVizMode_ = 1;    // fb66 — NOISE viz choice (1 particle · 2 waveform), persisted
     std::atomic<int> noiseAuditionReq_ { 0 };                       // NOISE AUDITION — bumped (msg thread) to trigger a headphone preview
