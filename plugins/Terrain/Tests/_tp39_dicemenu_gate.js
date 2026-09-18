@@ -5,7 +5,8 @@
 //       another file, and three failures put the oscillator back on a wavetable;  [4] several aims: the rolls draw from
 //       them only;  [5] blocks: Effects unticked = the rack is not touched, Oscillators unticked = ENABLE untouched;
 //   [6] crazy rolls draw CUSTOM LFO shapes through __lfoDrawRandom;  [8] ticks commit live;  [9] the dice pressed through the open
-//       sheet closes it and rolls with the ticks (tp39c);  [10] Flow cards is a block apart from Modulation;  [11] ONLY semantics (tp39d): styles = the whole preset, ticked blocks = only those.     node Tests/_tp39_dicemenu_gate.js [index.html]
+//       sheet closes it and rolls with the ticks (tp39c);  [10] Flow cards is a block apart from Modulation;  [11] ONLY semantics (tp39d): styles = the whole preset, ticked blocks = only those;  [12] reverb/delay mod knobs pinned;
+//   [13] Arp Latch forced OFF + the dots drawn (tp39f);  [14] one LFO per flow card, Robin included, never Latch.     node Tests/_tp39_dicemenu_gate.js [index.html]
 const puppeteer = require('puppeteer-core');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SRC = process.argv[2] || (process.cwd() + '/Source/ui/public/index.html');
@@ -155,6 +156,23 @@ const stub = () => {
   ok(sawRvb >= 3 && sawDly >= 1 && pinBad.length === 0, '[12] over 8 crazy pad rolls (' + sawRvb + ' reverbs, ' + sawDly + ' delays) Mod Rate / Mod Depth stay at the defaults', pinBad.join(' '));
   ok(hitDest === 0, '[12] and no LFO / envelope route ever lands on them', 'hits=' + hitDest);
   ok(modeMoved === 0, '[12] the reverb Mod Mode dropdown is not rolled either', 'moved=' + modeMoved);
+  // [13] tp39f — the arp's LATCH is never rolled: the card dice turns it OFF
+  const latch = await p.evaluate(async () => { try { window.Juce.getSliderState('FLOW_ARP_LATCH').setNormalisedValue(1); } catch (e) {} window.__tiDiceMode('arp', true); await new Promise(r => setTimeout(r, 200)); return { latch: window.__P('FLOW_ARP_LATCH'), hasLanes: !!(window.__tiArpLanes && window.__tiArpLanes[0]) }; });
+  ok(latch.latch === 0 && latch.hasLanes, '[13] the card dice forces Arp Latch OFF and the arp exposes its lanes', JSON.stringify(latch));
+  // [13] the dots are drawn: a whole crazy roll whose chain holds an arp leaves a non-flat pitch lane
+  let lanes = null; for (let k = 0; k < 10 && !(lanes && lanes.hasArp); k++) { await p.evaluate(() => { window.__tpDiceAims(['plucks']); window.__tpDiceBlocks({}); window.__tpDiceLevelSet('crazy'); window.__tiArpLanes[0].set({ pitch: [3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3] }); window.__tpDice(); }); await sleep(700);
+    lanes = await p.evaluate(() => { const ch = window.__flowChain ? window.__flowChain() : []; const L = window.__tiArpLanes[0].get(); return { hasArp: ch.some(m => /^arp/.test(m)), chain: ch, flat: L.pitch.every(v => v === 3), gateVar: new Set(L.gate.map(v => v.toFixed(2))).size }; }); }
+  ok(lanes && lanes.hasArp && !lanes.flat && lanes.gateVar > 1, '[13] a crazy roll with an arp in the chain draws its dots (pitch not flat, gates vary)', JSON.stringify(lanes));
+  // [14] tp39f — every flow card in the chain gets an LFO of its own, Round Robin included
+  const perCard = await p.evaluate(async () => { window.__flowSetChain(['arp', 'glitch', 'drift']); window.__tpDiceAims(['keys']); window.__tpDiceBlocks({ mod: 1 }); window.__tpDice(); await new Promise(r => setTimeout(r, 700));
+    const routes = window.__tiRoutes ? window.__tiRoutes() : []; const kd = (n) => window.__tpKnobDest(n);
+    const sets = { arp: ['BLEND','GATE','GLIDE','MORPH'].map(k => kd('FLOW_ARP_' + k)), glitch: ['BLEND','DECAY','DEJAVU','BURST'].map(k => kd('FLOW_GLI_' + k)), drift: ['VARY','DRIFT','WOBBLE','GLIDE'].map(k => kd('FLOW_RBN_' + k)) };
+    const hits = {}; Object.keys(sets).forEach(c => { hits[c] = routes.filter(r => sets[c].indexOf(r.d) >= 0).length; }); const latchD = kd('FLOW_ARP_LATCH');
+    return { chain: window.__flowChain(), hits, routes: routes.length, latchRouted: latchD != null && routes.some(r => r.d === latchD) }; });
+  ok(perCard.hits.arp >= 1 && perCard.hits.glitch >= 1 && perCard.hits.drift >= 1 && !perCard.latchRouted, '[14] Only: Modulation with arp + glitch + Robin in the chain: each card gets at least one route, Latch never', JSON.stringify(perCard));
+  // [15] tp39f — the chop card's TIME never rolls a bar-long grid (index < 5 = 1/1 … 1/2T) nor the 1/128-1/256 buzz
+  const chopTimes = await p.evaluate(() => { const out = []; for (let k = 0; k < 40; k++) { window.__tiDiceMode('chop', true); const d = window.__tiDice && window.__tiDice.chop; out.push(d ? d.S.v.time : -1); } return out; });
+  ok(chopTimes.every(v => v >= 5 && v <= 16), '[15] 40 chop card rolls: TIME stays within 1/4 … 1/64', JSON.stringify(chopTimes));
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
   await b.close(); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log('FAIL', e); process.exit(1); });

@@ -16004,13 +16004,17 @@ window.__synArc = function (ring, n, bipolar) {
        ladder is NOT linear — a float here is garbage, which is why TIME "never moved").
        Unknown integer enums are left alone. Glitch's per-effect Out GRIDs roll too. */
     var DICE_SKIP  ={ gli:{drop:1,bend:1} };
-    var DICE_LADDER={ gli:{grate:19}, chop:{time:19,slices:6,loop:6} };
+    var DICE_LADDER={ gli:{grate:19}, chop:{time:16,slices:6,loop:6} };
+    /* tp39f — the chop's TIME never rolls the bar-long grids: index 0 (1/1) … 4 (1/2T) leave the oscillators behind the card silent
+       for most of a bar (measured: a Modal pluck at −99.6 dBFS for 0.6 s), and 17-18 (1/128, 1/256) are a buzz. 5 = 1/4 … 16 = 1/64. */
+    var DICE_FLOOR={ chop:{time:5} };
     function diceMode(id,wide){
       try{ if(window.__tiEnsure&&window.__tiEnsure[id]) window.__tiEnsure[id](); }catch(e){}
       var d=window.__tiDice&&window.__tiDice[id]; if(!d) return;
       var skip=DICE_SKIP[id]||{}, lad=DICE_LADDER[id]||{};
       Object.keys(d.DEF).forEach(function(k){
         if(skip[k]) return;
+        if(k==='latch'){ d.S.set(k,0); return; }   /* tp39f — Max: "stop modulating latch … it just plays without me playing": the dice never rolls it, and turns it OFF */
         var dv=d.DEF[k]; if(typeof dv!=='number') return;   // lanes/tiles/strings keep their shape
         var cur=d.S.v[k];
         // fb569 — KEEP THE PANNING IN THE CENTRE. Max: "the glitch fucks with the panning... I want all
@@ -16018,7 +16022,7 @@ window.__synArc = function (ring, n, bipolar) {
         //  (centre); width/spread are left alone (never widened by the dice into a mono-killing extreme).
         if(/pan|balance/i.test(k)){ d.S.set(k, dv); return; }
         if(/width|spread/i.test(k)) return;
-        if(lad[k]!=null){ d.S.set(k, Math.floor(Math.random()*(lad[k]+1))); return; }
+        if(lad[k]!=null){ var lo=(DICE_FLOOR[id]||{})[k]||0; d.S.set(k, lo+Math.floor(Math.random()*(lad[k]-lo+1))); return; }
         if((dv===0||dv===1)&&(cur===0||cur===1)){ d.S.set(k, Math.random()<0.5?0:1); return; }
         if(dv>1&&Math.round(dv)===dv) return;               // unknown enum/index — hands off
         // fb569 — A MUSICAL RANGE, not the raw 0..1. The extremes are where the dice "spits out
@@ -35647,10 +35651,14 @@ restoreThemeFromBackend();
           pushT=setTimeout(function(){ try{ laneSet(JSON.stringify({steps:N,pitch:P.pitch,gate:P.gate,
             vel:P.vel,oct:P.oct,ratchet:P.ratchet,prob:P.prob,wt:P.wt})); }catch(e){} },120); }
         var P0=JSON.parse(JSON.stringify(P));   /* fb620 — the boot lanes: a preset without lanes lands here, not on the last preset's */
-        function pullLanes(){ if(!laneGetFn)return; try{ Promise.resolve(laneGetFn(INST)).then(function(s){ var o=null; try{ o=JSON.parse(s||'null'); }catch(e){} o=o||{};
+        var laneSetAt=0;   /* tp39f — a pull that lands after the dice drew the dots must not overwrite them (the card's first build pulls async) */
+        function pullLanes(){ if(!laneGetFn)return; try{ Promise.resolve(laneGetFn(INST)).then(function(s){ if(Date.now()-laneSetAt<2000) return; var o=null; try{ o=JSON.parse(s||'null'); }catch(e){} o=o||{};
           try{ for(var k in P) P[k]=(o[k]&&o[k].length)?o[k].slice(0,N).map(Number):P0[k].slice();
           heroPaint(); }catch(e){} }).catch(function(){}); }catch(e){} }
         pullLanes(); window.__tiPullArpLanes=pullLanes;
+        /* tp39f — the dice draws the dots (Max: "it has a sequencer inside … I don't mind if you play with those as well") */
+        window.__tiArpLanes=window.__tiArpLanes||{}; window.__tiArpLanes[INST]={ get:function(){ return JSON.parse(JSON.stringify(P)); },
+          set:function(o){ try{ laneSetAt=Date.now(); for(var k in P) if(o&&o[k]&&o[k].length) P[k]=o[k].slice(0,N).map(Number); heroPaint(); pushLanes(); }catch(e){} } };
 
         /* MOTION pane */
         var mb=TIC.el('<div class="gbox"><span class="gbl">Feel</span><div class="gr4"></div></div>');
@@ -43114,7 +43122,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var FX_NEVER_DICE={granular:1};
   function diceableFx(list){ return (list||[]).filter(function(k){ return !FX_NEVER_DICE[k]; }); }
   function destOfKnob(sel){ try{ var k=document.querySelector(sel); var g=k&&window.__ctlDestAt?window.__ctlDestAt(k):null; return (g&&g.dest!=null)?g.dest:null; }catch(e){ return null; } }
-  function knobDest(p){ try{ if(window.__knobDest){ var d=window.__knobDest(p); if(d!=null) return d; } }catch(e){} return destOfKnob('#syn-panel .knob[data-syn="'+p+'"]'); }
+  function knobDest(p){ try{ if(window.__knobDest){ var d=window.__knobDest(p); if(d!=null) return d; } }catch(e){}
+    try{ if(window.__flowModDestOf){ var fd=window.__flowModDestOf(p); if(fd!=null) return fd; } }catch(e){}   /* tp39f — the flow cards' own table: a card that is not built yet is still a target */
+    return destOfKnob('#syn-panel .knob[data-syn="'+p+'"]'); }
+  window.__tpKnobDest=knobDest;   /* the gates */
   function uniNorm(v){ v=Math.max(1,Math.min(7,Math.round(v))); return (v-1)/15; }   /* SYN_OSC_x_UNISON is int 1..16 — the dice never goes past 7 */
   /* ══ tp36 — THE DICE'S CPU CAP. Max: "every time I try to randomize a crazy preset I can't even use it because the CPU is
      too high ... is there like a gate cap that we can have whenever we randomize presets?" The census of his 123 presets
@@ -43235,6 +43246,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function phase180(X,P){ P(X+'PHASE', .5); P(X+'PHASE_AMT', 1); P(X+'PHASE_MODE', choiceNorm(X+'PHASE_MODE', 0, 4)); }
   /* the sample engines' own knobs, rolled (Max: "loop them, reverse them, chop them, stretch them, formant-shift them"). SCAN is −1..+1 (0.75
      normalised = 1x forward; below the middle plays BACKWARDS); FORMANT −1..+1 (0.5 = none). */
+  /* tp39f — THE ARP'S DOTS. pitch rows 0..6 (3 = centre, <0 = rest), gate .05..1, vel 0..1, oct -1/0/1, ratchet 1..4, prob 0..1, wt 0..1.
+     light = a textbook arp with a little life; crazy = jumps, rests, rolls and chance. Never latch — that is the card's own switch. */
+  function rollArpLanes(inst,lvl){ var L=window.__tiArpLanes&&window.__tiArpLanes[inst]; if(!L) return; var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'), wild=(lvl==='wild'||lvl==='crazy'), n=16;
+    function arr(f){ var a=[]; for(var i=0;i<n;i++) a.push(f(i)); return a; }
+    var style=pick(lvl==='light'?['flat','flat','walk']:lvl==='medium'?['flat','walk','walk','rise']:['walk','rise','jump','jump','fall']), cur=3;
+    var pitch=arr(function(i){ if(style==='flat') return 3; if(style==='rise') return Math.min(6,Math.floor(i/(wild?2:3))); if(style==='fall') return Math.max(0,6-Math.floor(i/3));
+      if(style==='jump') return rnd()<.35?Math.floor(rnd()*7):cur; cur=Math.max(0,Math.min(6,cur+(rnd()<.55?0:(rnd()<.5?-1:1)))); return cur; });
+    if(wild) pitch=pitch.map(function(v){ return rnd()<(lvl==='crazy'?.14:.08)?-1:v; });   /* rests */
+    var gate=arr(function(){ return rnd()<(big?.3:.15)?between(.15,.4):between(.5,1); }), vel=arr(function(i){ return (i%4===0?between(.85,1):between(.45,.9)); });
+    var oct=arr(function(){ return big&&rnd()<(wild?.22:.1)?(rnd()<.6?1:-1):0; }), ratchet=arr(function(){ return big&&rnd()<(wild?.18:.06)?pick([2,2,3,4]):1; });
+    var prob=arr(function(){ return wild&&rnd()<.3?between(.4,.9):1; }), w=rnd(), wt=arr(function(){ w=Math.max(0,Math.min(1,w+between(-.2,.2))); return w; });
+    L.set({pitch:pitch,gate:gate,vel:vel,oct:oct,ratchet:ratchet,prob:prob,wt:wt}); }
   function rollSample(X,eng,aim,lvl,P){ var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'), wild=(lvl==='wild'||lvl==='crazy'), S=X+'SAMPLE_';   /* eng: 1 = Sample · 3 = Resynth (Granular is off the table, tp13) */
     var lm=pick(big?[0,1,2,3,4,2,1]:[0,0,1,4,2]); if(aim==='pads'||aim==='textures') lm=pick([1,3,4,2,1]); if(aim==='plucks') lm=pick([0,0,4,2]);
     P(S+'LOOP_MODE', choiceNorm(S+'LOOP_MODE', lm, 5));   /* One-Shot · Forward · Reverse · Ping-Pong · Tailed */
@@ -43475,7 +43498,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
             fUsed[fk]++; chain.push(fUsed[fk]>1?fk+fUsed[fk]:fk); }
           chain=shuffle(chain); rollInfo._arp=chain.some(function(k){ return /^arp/.test(k); });   /* tp36 — the cap bounds an arp roll's release */
           window.__flowSetChain&&window.__flowSetChain(chain);
-          chain.forEach(function(m){ try{ if(window.__tiDiceMode) window.__tiDiceMode(cardPidOf(m),big); }catch(e){} }); }   /* each instance re-rolled whole, on its own card */
+          chain.forEach(function(m){ try{ if(window.__tiDiceMode) window.__tiDiceMode(cardPidOf(m),big); }catch(e){} }); 
+          chain.forEach(function(m){ if(fKind(m)==='arp') rollArpLanes(fInst(m)-1,lvl); }); }   /* each instance re-rolled whole, on its own card; tp39f — and the arp's dots are drawn */
           else { chain=window.__flowChain?window.__flowChain():[]; rollInfo._flow=chain.length; rollInfo._arp=chain.some(function(k){ return /^arp/.test(k); }); }   /* tp39c — flow unticked: the chain that is there stays, and its knobs are still targets */
           if(!B.mod) return;   /* tp39c — modulation unticked: every route and LFO stays as it is */
           var dpool=[];
@@ -43484,11 +43508,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
              other never sees, so every instance in the chain puts ITS OWN knobs into the pool. Instance 2+ ids are
              real APVTS params (PluginProcessor clones the base list into FLOW_GLI2_*), and knobDest returns null for
              anything this build does not carry — so naming more than exists stays safe (the tp13 rule). */
-          var FLOWPFX={arp:'FLOW_ARP',chop:'FLOW_CHOP',glitch:'FLOW_GLI'};
-          var FLOWKNOB={arp:['BLEND','GATE','GLIDE','MORPH'],chop:['BLEND','GRIT','FILTER','DETUNE'],glitch:['BLEND','DECAY','DEJAVU','BURST']};
+          var FLOWPFX={arp:'FLOW_ARP',chop:'FLOW_CHOP',glitch:'FLOW_GLI',drift:'FLOW_RBN'};   /* tp39f — Round Robin too (Max: "Glitch, Chop, Arpeggiator, Round Robin") */
+          var FLOWKNOB={arp:['BLEND','GATE','GLIDE','MORPH'],chop:['BLEND','GRIT','FILTER','DETUNE'],glitch:['BLEND','DECAY','DEJAVU','BURST'],drift:['VARY','DRIFT','WOBBLE','GLIDE']};   /* never LATCH */
           chain.forEach(function(m){ var fk2=fKind(m), fn2=fInst(m), pfx=FLOWPFX[fk2]; if(!pfx) return;
             var head=pfx+(fn2>1?fn2:'')+'_';
-            (FLOWKNOB[fk2]||[]).forEach(function(kn){ var d=knobDest(head+kn); if(d!=null) dpool.push({d:d,k:'flow'}); }); });
+            (FLOWKNOB[fk2]||[]).forEach(function(kn){ var d=knobDest(head+kn); if(d!=null) dpool.push({d:d,k:'flow',card:m}); }); });
+          /* tp39f — EVERY flow card in the chain gets an LFO of its own on every roll (Max: "you can put modulation on those every time I randomize") */
+          var flowLeft=chain.filter(function(m){ return dpool.some(function(p){ return p.k==='flow'&&p.card===m; }); });
+          function takeFlowOf(m){ var c=dpool.filter(function(p){ return !used[p.d]&&p.k==='flow'&&p.card===m; }); if(!c.length) return null; var p=pick(c); used[p.d]=1; return p; }
 
           var tapeOn=rnd()<Math.max(R.tape,big?.45:0)&&(aim==='pads'||aim==='keys'||aim==='textures'||aim==='bass'||big), tapeMach=Math.floor(rnd()*3);   /* tp12 — decided first: its knobs come up and join the targets */
           if(tapeOn){ rollTape(lvl,P); [1887,1888,1889].forEach(function(d){ dpool.push({d:d,k:'tape'}); }); }
@@ -43505,8 +43532,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           var used={}; function take(kind){ var c=dpool.filter(function(p){ return !used[p.d]&&(!kind||p.k===kind); }); if(!c.length) c=dpool.filter(function(p){ return !used[p.d]; }); if(!c.length) return null; var p=pick(c); used[p.d]=1; return p; }
           function route(tag,addFn,dest,depth){ if(dest==null) return; addFn(dest); if(window.__tiSetDepth) window.__tiSetDepth(tag,dest,Math.max(-1,Math.min(1,depth))); }
           function dep(){ return between(R.depth[0],R.depth[1])*(rnd()<.25?-1:1); }
-          var nL=Math.min(10,ispan(R.lfo)), lfoN=0;
-          for(var n=1;n<=nL;n++){ var tgt=(n===1)?take('wt'):(chain.length&&rnd()<.3)?take('flow'):(rnd()<R.fxMod)?(rnd()<.5?take('fxback'):take('fx')):(rnd()<.35?take('fltback'):take(null)); if(!tgt) break; lfoN=n;   /* tp23 — the flow instances take their share */   /* tp13 — the back panels get their share */
+          var nL=Math.min(10,Math.max(ispan(R.lfo),1+flowLeft.length)), lfoN=0;   /* tp39f — room for one LFO per flow card */
+          for(var n=1;n<=nL;n++){ var tgt=(n===1)?take('wt'):flowLeft.length?takeFlowOf(flowLeft.shift()):(chain.length&&rnd()<.3)?take('flow'):(rnd()<R.fxMod)?(rnd()<.5?take('fxback'):take('fx')):(rnd()<.35?take('fltback'):take(null)); if(!tgt) break; lfoN=n;   /* tp23 — the flow instances take their share */   /* tp13 — the back panels get their share */
             var shape=rnd()<R.wideLfo?Math.floor(rnd()*11):pick([0,0,1,2]);
             /* tp39 — THE DICE DRAWS ITS LFOs (Max: "I want the craziest drawings, the craziest chaos patterns"). From heavy up a share of the
                LFOs are CUSTOM shapes drawn by the card's own Random flat / curve / both with the grid turned up — crazy = 'both' on a

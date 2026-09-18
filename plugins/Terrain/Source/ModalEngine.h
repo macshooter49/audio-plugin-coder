@@ -136,7 +136,7 @@ public:
     void setUnisonScale (int n) noexcept { uniN_ = n < 1 ? 1 : n; }
     void setParams (const ModalParams& p) noexcept { p_ = p; computeLoopBounds(); }
     void setPitchRatio (double r) noexcept { pitchMul_ = r > 0.0 ? r : 1.0; }
-    void setPlayedHz (double hz) noexcept { if (hz > 8.0) playedHz_ = hz; }
+    void setPlayedHz (double hz) noexcept { if (hz > 8.0) { playedHz_ = hz; exNoteMul_ = (float) (hz * (1.0 / 261.6255653)); } }
     void setDisplayMode (bool on) noexcept { displayMode_ = on; }
     // ── follower: exciter read position 0..1 — drives the white MIDI follower EXACTLY like
     //    Sample/Granular/Resynth. -1 when not reading a sample exciter; one-shot parks when done. ──
@@ -163,6 +163,13 @@ public:
     void noteOn (double playedHz, std::uint32_t seed, float velocity = 0.9f) noexcept
     {
         playedHz_ = playedHz > 8.0 ? playedHz : 130.8128;
+        // tp39f — THE STRIKER FOLLOWS THE KEY. Max: "some one shots stay locked to one note … no matter what key I play it gets
+        // snapped to one note." The dropped one-shot was read at its native rate whatever the note, and the WHOLE sample is
+        // injected — a tonal striker (a bell, a key) rang at its own pitch on every key and drowned the resonator (measured:
+        // Pluck / Brass / Skin oscillators all sounding C4 / C5 / C6 for G3 and C4). Now it is transposed like the Sample
+        // engine: root C at MIDI 60 (261.63 Hz) plays 1x, every other key scales it — the same one-shot lands on the same
+        // pitch whether it is an oscillator or a striker.
+        exNoteMul_ = (float) (playedHz_ * (1.0 / 261.6255653));
         seed_ = seed ? seed : 0x9E3779B9u;
         rng_  = seed_ ^ 0xA511E9B3u;
         vel_  = velocity < 0.02f ? 0.02f : (velocity > 1.f ? 1.f : velocity);
@@ -877,7 +884,7 @@ private:
                 raw = (idx < exDataLen_ - 1)
                     ? lerpf (exData_[(size_t) idx], exData_[(size_t) (idx + 1)], exRead_ - (float) idx)
                     : exData_[(size_t) (exDataLen_ - 1)];
-                exRead_ += exSrcStep_ * (float) exDir_;
+                exRead_ += exSrcStep_ * exNoteMul_ * (float) exDir_;   // tp39f — pitched with the key
                 // loop-mode boundary handling — Sample/Granular LOOP-CATCH model: play a forward
                 // LEAD-IN from the sample start, and only once the read first reaches the purple box
                 // [loopLo_,loopHi_] does it "catch" and loop THERE. One-Shot ignores the box (reads once).
@@ -1210,7 +1217,7 @@ private:
     int    nModes_ = 0;
 
     // excitation
-    const float* exData_ = nullptr; int exDataLen_ = 0; float exSrcStep_ = 1.f;
+    const float* exData_ = nullptr; int exDataLen_ = 0; float exSrcStep_ = 1.f, exNoteMul_ = 1.f;   // tp39f — exNoteMul_ = playedHz / C4
     bool   useSample_ = false;
     int    exPos_ = 0, exLen_ = 0, burstLen_ = 64, exDir_ = 1;
     bool   caught_ = false;   // loop-catch: has the forward lead-in reached the purple box yet?

@@ -91,6 +91,21 @@ struct Au
     }
     void note (int n, int v) { MusicDeviceMIDIEvent (au, v ? 0x90 : 0x80, (UInt32) n, (UInt32) v, 0); }
     void pump (double sec) { const double t0 = CFAbsoluteTimeGetCurrent(); while (CFAbsoluteTimeGetCurrent() - t0 < sec) CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.01, false); }
+    void capture (int blocks, std::vector<float>& mono)   // tp39f — raw left-channel samples (the pitch probe)
+    {
+        std::vector<float> bl ((size_t) BLK), br ((size_t) BLK);
+        AudioBufferList* abl = (AudioBufferList*) calloc (1, sizeof (AudioBufferList) + sizeof (AudioBuffer));
+        for (int b = 0; b < blocks; ++b)
+        {
+            abl->mNumberBuffers = 2;
+            abl->mBuffers[0].mNumberChannels = 1; abl->mBuffers[0].mDataByteSize = BLK * 4; abl->mBuffers[0].mData = bl.data();
+            abl->mBuffers[1].mNumberChannels = 1; abl->mBuffers[1].mDataByteSize = BLK * 4; abl->mBuffers[1].mData = br.data();
+            AudioUnitRenderActionFlags fl = 0; AudioTimeStamp ts {}; ts.mSampleTime = stamp; ts.mFlags = kAudioTimeStampSampleTimeValid;
+            AudioUnitRender (au, &fl, &ts, 0, BLK, abl); stamp += BLK;
+            mono.insert (mono.end(), bl.begin(), bl.end());
+        }
+        free (abl);
+    }
     void render (int blocks, std::vector<double>* times, float* peakOut = nullptr)
     {
         std::vector<float> bl ((size_t) BLK), br ((size_t) BLK);
@@ -244,6 +259,116 @@ int main (int argc, char** argv)
         a.allOff(); blocks (2 * sec);
         for (int n : CHORD8) a.note (n, 100); blocks (sec); a.allOff(); blocks (2 * sec);
         fclose (f); free (abl); a.close(); printf ("wrote %s (%d s)\n", argv[3], 7); return 0;
+    }
+    if (mode == "pitch")   // tp39f — pitch <preset>: every ENABLED oscillator alone, ONE note at a time (48 / 55 / 60) — does the fundamental follow the key? (Max: "some one shots stay locked to one note")
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }
+        static const int NOTES[3] = { 48, 55, 60 }; static const double EXP[2] = { 7.0 / 12.0, 5.0 / 12.0 };
+        static const char* EN[] = { "WT", "Sample", "Granular", "Resynth", "FM", "Additive", "Modal" };
+        auto f0of = [] (const std::vector<float>& x, double& quality) -> double
+        {
+            const int N = (int) x.size(); quality = 0; if (N < 8192) return 0;
+            double mean = 0; for (float v : x) mean += v; mean /= N;
+            std::vector<double> y ((size_t) N); double e0 = 0; for (int i = 0; i < N; ++i) { y[(size_t) i] = x[(size_t) i] - mean; e0 += y[(size_t) i] * y[(size_t) i]; }
+            if (e0 / N < 1e-10) return 0;   // silent
+            const int minLag = (int) (SR / 1200.0), maxLag = (int) (SR / 30.0), W = N - maxLag;   // 30 Hz .. 1.2 kHz — two octaves either side of the notes played
+            std::vector<double> r ((size_t) maxLag + 1, 0.0);
+            for (int l = minLag; l <= maxLag; ++l) { double sxy = 0, sxx = 0, syy = 0; for (int i = 0; i < W; ++i) { const double a = y[(size_t) i], b = y[(size_t) (i + l)]; sxy += a * b; sxx += a * a; syy += b * b; } r[(size_t) l] = sxy / (std::sqrt (sxx * syy) + 1e-12); }
+            // LOCAL maxima only (a boundary lag is never a period), then the LOWEST lag whose peak is within 15 % of the strongest — the fundamental, not a sub-multiple
+            double bestR = -1; int bestL = 0; for (int l = minLag + 1; l < maxLag; ++l) if (r[(size_t) l] > r[(size_t) l - 1] && r[(size_t) l] >= r[(size_t) l + 1] && r[(size_t) l] > bestR) { bestR = r[(size_t) l]; bestL = l; }
+            if (bestL > 0) for (int l = minLag + 1; l < bestL; ++l) if (r[(size_t) l] > r[(size_t) l - 1] && r[(size_t) l] >= r[(size_t) l + 1] && r[(size_t) l] >= 0.85 * bestR) { bestR = r[(size_t) l]; bestL = l; break; }
+            quality = bestR; return bestL > 0 ? SR / bestL : 0;
+        };
+        int locked = 0, tracks = 0, unsure = 0;
+        for (auto& p : ps)
+        {
+            Au a0; if (! a0.open() || ! a0.loadChunk (p.chunk)) continue; a0.pump (0.8); a0.render (20, nullptr); a0.pump (0.4);
+            float en[8], eng[8]; for (char o = 'A'; o <= 'H'; ++o) { en[o - 'A'] = a0.get (std::string ("Osc ") + o + " Enable"); eng[o - 'A'] = a0.get (std::string ("Synth OSC ") + o + " Engine"); }
+            a0.close();
+            printf ("== %s ==\n", p.name.c_str());
+            for (char o = 'A'; o <= 'H'; ++o)
+            {
+                if (en[o - 'A'] < 0.5f) continue;
+                double f0[3] = { 0, 0, 0 }, q[3] = { 0, 0, 0 };
+                for (int ni = 0; ni < 3; ++ni)
+                {
+                    Au a; if (! a.open() || ! a.loadChunk (p.chunk)) continue; a.pump (0.8); a.render (20, nullptr); a.pump (0.6);
+                    for (char qo = 'A'; qo <= 'H'; ++qo) if (qo != o) a.setRaw (std::string ("Osc ") + qo + " Enable", 0.0f);
+                    for (auto& kv : a.byName) { const std::string& nm = kv.first;   // the ENGINE alone: no effect, no flow card, no filter, no unison, no latch
+                        if (nm.size() > 6 && nm.compare (nm.size() - 6, 6, " Power") == 0) a.setRaw (nm, 0.0f);
+                        if (nm.rfind ("Flow", 0) == 0 && nm.find (" Mode") != std::string::npos) a.setRaw (nm, 0.0f);
+                        if (nm == "Synth Filter 1 Mix" || nm == "Synth Filter 2 Mix" || nm == "Filter 2 Mix") a.setRaw (nm, 0.0f);
+                        if (nm.rfind ("Synth OSC ", 0) == 0 && nm.size() == 18 && nm.compare (12, 6, "Unison") == 0) a.setRaw (nm, 0.0f);
+                        if (nm.find ("Latch") != std::string::npos) a.setRaw (nm, 0.0f); }
+                    a.render (20, nullptr); a.note (NOTES[ni], 100); a.render (30, nullptr);
+                    std::vector<float> mono; a.capture (56, mono); a.allOff(); a.render (6, nullptr); a.close();
+                    f0[ni] = f0of (mono, q[ni]);
+                }
+                const int ei = (int) std::lround (eng[o - 'A']); const char* en_ = (ei >= 0 && ei < 7) ? EN[ei] : "?";
+                std::string extra; if (ei == 6) { Au ax; if (ax.open() && ax.loadChunk (p.chunk)) { ax.pump (0.5); const std::string b = std::string ("Synth OSC ") + o + " Modal "; static const char* FAM[] = { "Grand", "Pluck", "Bow", "Flute", "Reed", "Brass", "Bars", "Bells", "Skin" }; const int fam = (int) std::lround (ax.get (b + "Family")); extra = std::string ("  [") + (fam >= 0 && fam < 9 ? FAM[fam] : "?") + " form " + std::to_string ((int) std::lround (ax.get (b + "Form"))) + " src " + std::to_string ((int) std::lround (ax.get (b + "Source"))) + " stretch " + std::to_string (ax.get (b + "Stretch")).substr (0, 4) + "]"; ax.close(); } }
+                const bool silent = f0[0] <= 0 || f0[1] <= 0 || f0[2] <= 0, noisy = q[0] < 0.3 || q[1] < 0.3 || q[2] < 0.3;
+                double d1 = silent ? 0 : std::log2 (f0[1] / f0[0]), d2 = silent ? 0 : std::log2 (f0[2] / f0[1]);
+                const char* verdict = silent ? "silent" : noisy ? "noisy/unpitched" : (std::fabs (d1) < 0.12 && std::fabs (d2) < 0.12) ? "LOCKED <-- one pitch for every key"
+                                    : (std::fabs (d1 - EXP[0]) < 0.12 && std::fabs (d2 - EXP[1]) < 0.12) ? "tracks" : "odd (octave/other)";
+                if (! silent && ! noisy) { if (verdict[0] == 'L') ++locked; else if (verdict[0] == 't') ++tracks; else ++unsure; }
+                printf ("  osc %c  %-9s f0 @48 %7.1f  @55 %7.1f  @60 %7.1f   (q %.2f %.2f %.2f)  d %+.2f %+.2f oct   %s%s\n", o, en_, f0[0], f0[1], f0[2], q[0], q[1], q[2], d1, d2, verdict, extra.c_str());
+            }
+        }
+        printf ("summary: tracks %d  LOCKED %d  odd %d\n", tracks, locked, unsure); return 0;
+    }
+    if (mode == "modalscan")   // tp39f — modalscan <preset> <osc>: that oscillator alone, every family x STRETCH 0..0.5 overriding the patch, one note — the peak (a silent cell = a dead setting)
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty() || argc < 4) { printf ("usage: modalscan <preset> <osc>\n"); return 1; }
+        const char O = argv[3][0]; const std::string P = std::string ("Synth OSC ") + O + " ";
+        static const char* FAM[] = { "Grand", "Pluck", "Bow", "Flute", "Reed", "Brass", "Bars", "Bells", "Skin" };
+        static const float ST[] = { 0.0f, 0.02f, 0.05f, 0.1f, 0.15f, 0.3f, 0.5f };
+        printf ("%-7s", "family"); for (float st : ST) printf ("  st%.2f", st); printf ("\n");
+        for (int fam = 0; fam < 9; ++fam)
+        {
+            printf ("%-7s", FAM[fam]);
+            for (float st : ST)
+            {
+                Au a; if (! a.open() || ! a.loadChunk (ps[0].chunk)) { printf ("   open?"); continue; } a.pump (0.8); a.render (20, nullptr); a.pump (0.6);
+                for (char q = 'A'; q <= 'H'; ++q) a.setRaw (std::string ("Osc ") + q + " Enable", q == O ? 1.0f : 0.0f);
+                a.setRaw (P + "Engine", 6.0f); a.setRaw (P + "Modal Family", (float) fam); a.setRaw (P + "Modal Stretch", st);
+                a.render (20, nullptr); a.note (60, 100); std::vector<double> t; float pk = 0; a.render (60, &t, &pk); a.allOff(); a.close();
+                printf ("  %6.1f", 20.0 * std::log10 (std::max (1e-12f, pk)));
+            }
+            printf ("\n");
+        }
+        return 0;
+    }
+    if (mode == "override")   // tp39f — override <preset> <osc> "Display Name=value" ... : that oscillator alone with those parameters forced, one note 60 — the peak
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty() || argc < 4) { printf ("usage: override <preset> <osc> \"Name=value\"...\n"); return 1; }
+        const char O = argv[3][0];
+        Au a; if (! a.open() || ! a.loadChunk (ps[0].chunk)) return 1; a.pump (0.8); a.render (20, nullptr); a.pump (0.6);
+        for (char q = 'A'; q <= 'H'; ++q) a.setRaw (std::string ("Osc ") + q + " Enable", q == O ? 1.0f : 0.0f);
+        for (int i = 4; i < argc; ++i) { std::string kv = argv[i]; auto eq = kv.find ('='); if (eq == std::string::npos) continue; const std::string nm = kv.substr (0, eq); const float v = (float) atof (kv.c_str() + eq + 1); printf ("  set %-40s = %6.3f  %s\n", nm.c_str(), v, a.setRaw (nm, v) ? "" : "<-- NO SUCH PARAM"); }
+        a.render (20, nullptr); a.note (60, 100); std::vector<double> t; float pk = 0; a.render (60, &t, &pk); a.allOff(); a.close();
+        printf ("  osc %c alone, note 60: peak %.1f dBFS\n", O, 20.0 * std::log10 (std::max (1e-12f, pk))); return 0;
+    }
+    if (mode == "bisect")   // tp39f — bisect <preset> <osc>: which of the oscillator's own non-default parameters silences it (each reset to default alone; then all)
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty() || argc < 4) { printf ("usage: bisect <preset> <osc>\n"); return 1; }
+        const char O = argv[3][0]; std::string k1 = std::string ("OSC ") + O + " ", k2 = std::string ("Osc ") + O + " ";
+        if (argc > 4) { k1 = argv[4]; k2 = argv[4]; }   // an optional name filter instead of the oscillator's own parameters (e.g. "Chop")
+        auto peakWith = [&] (const std::vector<std::pair<std::string, float>>& sets) -> double
+        {
+            Au a; if (! a.open() || ! a.loadChunk (ps[0].chunk)) return -999; a.pump (0.8); a.render (20, nullptr); a.pump (0.6);
+            for (char q = 'A'; q <= 'H'; ++q) a.setRaw (std::string ("Osc ") + q + " Enable", q == O ? 1.0f : 0.0f);
+            for (auto& kv : sets) a.setRaw (kv.first, kv.second);
+            a.render (20, nullptr); a.note (60, 100); std::vector<double> t; float pk = 0; a.render (60, &t, &pk); a.allOff(); a.close();
+            return 20.0 * std::log10 (std::max (1e-12f, pk));
+        };
+        // the oscillator's non-default parameters
+        std::vector<std::pair<std::string, float>> nd;
+        { Au a; if (! a.open() || ! a.loadChunk (ps[0].chunk)) return 1; a.pump (0.8);
+          for (auto& kv : a.byName) { const std::string& nm = kv.first; if (nm.find (k1) == std::string::npos && nm.find (k2) == std::string::npos) continue; if (nm.find ("Enable") != std::string::npos) continue;
+              const float v = a.get (nm), d = a.info[kv.second].defaultValue; if (std::fabs (v - d) > 1e-4f) nd.push_back ({ nm, d }); } a.close(); }
+        printf ("osc %c: %zu non-default parameters; as rolled %.1f dBFS; all reset %.1f dBFS\n", O, nd.size(), peakWith ({}), peakWith (nd));
+        for (auto& kv : nd) { const double pk = peakWith ({ kv }); if (pk > -60) printf ("  RESET %-40s -> %6.1f dBFS  <-- this one silences it\n", kv.first.c_str(), pk); }
+        printf ("bisect done\n"); return 0;
     }
     if (mode == "solo")   // solo <preset>: every ENABLED oscillator alone (the others off) — its engine, and whether it makes sound (8 notes, peak dBFS)
     {
