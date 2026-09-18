@@ -11754,7 +11754,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var EQZ_LO=[20,100,700,6000], EQZ_HI=[500,3000,14000,20000], drag=null, HIT=8, ctxAt=0;
             var NAMES=['Low','Body','Bite','Air','Band 5','Band 6','Band 7','Band 8'];
             function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
-            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='eqz')?d:null; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=+card.getAttribute('data-dev'); var d=DEVS[idx];   /* tp40 — by attribute: on the canvas the card is alone in its node */ return (d&&d.core==='eqz')?d:null; }
             // bands 4..7 are the FREE BELLS: full-range log Hz, no back knob, model d.xb[k]=[hz,gain,on]
             function gainRef(d,b){ if(b>=4){ var k=b-4; return {get:function(){return d.xb[k][1];},set:function(v){d.xb[k][1]=v; try{window.__setSynParam(d.xp[k][1],v/100);}catch(e){}}}; }
                                    return b<3?{get:function(){return d.back.knobs[2*b+1][1];},set:function(v){d.back.knobs[2*b+1][1]=v; try{window.__setSynParam(d.back.knobs[2*b+1][2],v/100);}catch(e){}}}
@@ -11921,7 +11921,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           (function(){
             var drag=null;
             function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
-            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='ott')?d:null; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=+card.getAttribute('data-dev'); var d=DEVS[idx];   /* tp40 — by attribute: on the canvas the card is alone in its node */ return (d&&d.core==='ott')?d:null; }
             document.addEventListener('pointerdown',function(e){ try{
               var core=e.target.closest&&e.target.closest('.fxr-core[data-core="ott"]'); if(!core) return;
               var d=devFor(core); if(!d) return; var svg=core.querySelector('svg'), u=unit(svg,e);
@@ -11947,7 +11947,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           (function(){
             var drag=null, lastMenu=0;
             function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
-            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='bod')?d:null; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=+card.getAttribute('data-dev'); var d=DEVS[idx];   /* tp40 — by attribute: on the canvas the card is alone in its node */ return (d&&d.core==='bod')?d:null; }
             function near(core,u){ var n=core.querySelector('.bod-n'); if(!n) return false; var dx=u.x-(+n.getAttribute('cx')), dy=u.y-(+n.getAttribute('cy')); return Math.sqrt(dx*dx+dy*dy)<=8; }
             function hot(core,on){ var n=core.querySelector('.bod-n'); if(n){ n.classList.toggle('hot',!!on); n.setAttribute('r',on?'3.2':'2.4'); } core.classList.toggle('bod-over',!!on); }
             function setKnob(d,i,v){ v=Math.max(0,Math.min(100,v)); d.knobs[i].v=v; try{ window.__setSynParam(d.knobs[i].p,v/100); }catch(e){} try{ if(window.__fxRedrawKnobs) window.__fxRedrawKnobs(d); }catch(e2){} }
@@ -11990,7 +11990,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           (function(){
             var drag=null, lastMenu=0;
             function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
-            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='spl')?d:null; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=+card.getAttribute('data-dev'); var d=DEVS[idx];   /* tp40 — by attribute: on the canvas the card is alone in its node */ return (d&&d.core==='spl')?d:null; }
             function pickNode(core,u){ var ns=core.querySelectorAll('.spl-n'), best=-1, bd=1e9;
               for(var i=0;i<ns.length;i++){ if(ns[i].getAttribute('opacity')==='0') continue; var dx=u.x-(+ns[i].getAttribute('cx')), dy=u.y-39; var dd=Math.sqrt(dx*dx+dy*dy); if(dd<bd){ bd=dd; best=+ns[i].getAttribute('data-k'); } }
               return bd<=8?best:-1; }
@@ -13156,9 +13156,10 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
           }catch(e){} }
           /* drag-drop an IR onto the Convolution core → base64 → in-memory decode native (no disk) */
           function fileToB64(file){ return new Promise(function(res,rej){ try{ var r=new FileReader(); r.onload=function(){ try{ var s=String(r.result||''), i=s.indexOf(','); res(i>=0?s.slice(i+1):s); }catch(e){ rej(e); } }; r.onerror=function(){ rej(); }; r.readAsDataURL(file); }catch(e){ rej(e); } }); }
-          rack.addEventListener('dragover',function(e){ try{ var c=e.target.closest&&e.target.closest('.fxr-core[data-conv="1"]'); if(c){ e.preventDefault(); if(e.dataTransfer)e.dataTransfer.dropEffect='copy'; c.classList.add('conv-drag'); } }catch(err){} });
-          rack.addEventListener('dragleave',function(e){ try{ var c=e.target.closest&&e.target.closest('.fxr-core[data-conv="1"]'); if(c&&!c.contains(e.relatedTarget)) c.classList.remove('conv-drag'); }catch(err){} });
-          rack.addEventListener('drop',function(e){ try{ var c=e.target.closest&&e.target.closest('.fxr-core[data-conv="1"]'); if(!c)return; e.preventDefault(); c.classList.remove('conv-drag');
+          function rackOn(ev,fn,opts){ rack.addEventListener(ev,fn,opts); var pg=document.getElementById('tp-page'); if(pg) pg.addEventListener(ev,fn,opts); }   /* tp40 — a card the Patcher adopted is no longer INSIDE the rack: every rack gesture (+, ×, power, type, pills, dials, grips, drops) must also be heard on the canvas (Max: "the effects can't use their back panels") */
+          rackOn('dragover',function(e){ try{ var c=e.target.closest&&e.target.closest('.fxr-core[data-conv="1"]'); if(c){ e.preventDefault(); if(e.dataTransfer)e.dataTransfer.dropEffect='copy'; c.classList.add('conv-drag'); } }catch(err){} });
+          rackOn('dragleave',function(e){ try{ var c=e.target.closest&&e.target.closest('.fxr-core[data-conv="1"]'); if(c&&!c.contains(e.relatedTarget)) c.classList.remove('conv-drag'); }catch(err){} });
+          rackOn('drop',function(e){ try{ var c=e.target.closest&&e.target.closest('.fxr-core[data-conv="1"]'); if(!c)return; e.preventDefault(); c.classList.remove('conv-drag');
             var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(!f)return;
             var dev=c.closest('.fxr-dev'), idx=dev?+dev.getAttribute('data-dev'):-1;
             fileToB64(f).then(function(b64){ var fn=NFX('loadConvIRFromBase64'); if(fn){ fn(b64,f.name,(DEVS[idx]&&DEVS[idx].inst)||1).then(function(nm){ nm=String(nm||''); if(nm&&idx>=0)setPillName(idx,nm); }).catch(function(){}); } }).catch(function(){});
@@ -13762,7 +13763,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
           })();
           /* fb328 — right-click the Distortion core → Extend (Max: NO icon on the face; the LFO's
              right-click grammar). Non-shaper modes also offer the §6.6 send. */
-          rack.addEventListener('contextmenu',function(e){ try{
+          rackOn('contextmenu',function(e){ try{
             var c=e.target.closest&&e.target.closest('.fxr-core[data-core="saturate"]'); if(!c)return;
             e.preventDefault();
             var dd=null; for(var k=0;k<DEVS.length;k++){ if(DEVS[k]&&DEVS[k].core==='saturate'){ dd=DEVS[k]; break; } }
@@ -13775,7 +13776,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
           }catch(err){} });
           function flash(el){ try{ el.style.borderColor='var(--purple-400)'; el.style.color='var(--purple-400)'; setTimeout(function(){el.style.borderColor='';el.style.color='';},180); }catch(e){} }
           // clicks (delegated)
-          rack.addEventListener('click',function(e){ try{
+          rackOn('click',function(e){ try{
             var dev=e.target.closest('.fxr-dev'), act=e.target.closest('[data-act]');
             if(act){ var a=act.getAttribute('data-act');
               if(a==='add'){ flash(act);   // fb346 — the + is LIVE: the shared purple menu (it clamps,
@@ -13872,7 +13873,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             }
           }catch(err){}
 
-          rack.addEventListener('change',function(e){ try{
+          rackOn('change',function(e){ try{
             var t=e.target, dv=t.closest&&t.closest('.fxr-dev'); if(!dv) return; var di=+dv.getAttribute('data-dev');
             if(t.classList.contains('fxr-type-native')){ var tp=t.closest('.fxr-type'), tl=tp&&tp.querySelector('.fxr-tl'); if(tl&&tl.firstChild) tl.firstChild.nodeValue=t.value; if(DEVS[di]) DEVS[di].type=t.value; if(DEVS[di]&&DEVS[di].core==='flt'&&DEVS[di].back&&DEVS[di].back.d1) DEVS[di].back.d1.v=t.value;   /* fb635 — the curve reads d1 */ var tpid=t.getAttribute('data-p'); if(tpid){ var tn=(DEVS[di]&&DEVS[di].tpN)?DEVS[di].tpN:t.options.length;   /* fb373 — the PARAM's cardinality, never the list's */ window.__setSynParam(tpid, tn>1?t.selectedIndex/(tn-1):0); }
               if(DEVS[di]&&DEVS[di].core==='reverb'){ DEVS[di].back=rvbBuildBack(DEVS[di],t.value);   /* fb281 — relabel back panel per type (Hall↔Room) */
@@ -13895,7 +13896,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                         window.__setSynParam(bpid, bn>1?t.selectedIndex/(bn-1):0); } if(DEVS[di]&&DEVS[di].core==='delay'&&DEVS[di].back&&kk&&DEVS[di].back.d2.k===kk.textContent) refreshDlyTimeKnob(di);   /* fb298 — division dropdown updates the Time-knob label */ return; }
           }catch(e){} });
           // knob drag (visual only)
-          rack.addEventListener('pointerdown',function(e){ try{
+          rackOn('pointerdown',function(e){ try{
             var dial=e.target.closest('.fxr-dial'); if(!dial) return; e.preventDefault();
             var dev=dial.closest('.fxr-dev'),di=+dev.getAttribute('data-dev');
             var kAttr=dial.getAttribute('data-k'), pid=dial.getAttribute('data-p');   /* fb276 — front (data-k) + back knobs both drag + push their param */
@@ -14002,7 +14003,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             }catch(e){}
             return null;
           }
-          rack.addEventListener('dblclick',function(e){ try{
+          rackOn('dblclick',function(e){ try{
             var dial=e.target.closest('.fxr-dial'); if(!dial) return;
             e.preventDefault(); e.stopPropagation();
             var dev=dial.closest('.fxr-dev'), di=+dev.getAttribute('data-dev'), dd=DEVS[di]; if(!dd) return;
@@ -14017,7 +14018,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             if(dd.core==='delay') refreshDlyTimeKnob(di);
           }catch(_){} });
           // grip drag-reorder
-          rack.addEventListener('pointerdown',function(e){ try{
+          rackOn('pointerdown',function(e){ try{
             var grip=e.target.closest('.fxr-grip'); if(!grip) return; e.preventDefault();
             var dev=grip.closest('.fxr-dev'); if(!dev) return; dev.classList.add('fxr-drag');
             function mv(ev){ try{
@@ -20223,6 +20224,31 @@ setTimeout(function wireSynControls () {
         });
       }
     } catch (eOscB) { console.warn('[SYN-osc-b] mirror init failed', eOscB); }
+
+    /* tp40 — E-H ARE CLONES OF B'S MARKUP (tp20, minted at parse time) and never got B's per-element wiring: their + never
+       flipped the back panel, their wavetable NAME never followed the preset (Max: "the other four oscillators can't turn their
+       back panels … can't scroll the wavetables on the patcher"). The same three wirings, per letter. */
+    ['e', 'f', 'g', 'h'].forEach(function (L) {
+      try {
+        const U = L.toUpperCase();
+        const swapBtn = document.getElementById('osc-' + L + '-swap-btn'), dev = document.getElementById('osc-' + L + '-device');
+        if (swapBtn && dev) swapBtn.addEventListener('click', function () { try { dev.classList.toggle('swapped'); swapBtn.classList.toggle('act'); } catch (e) {} });
+        const disp = document.getElementById('osc-' + L + '-preset-display'), sel = document.getElementById('osc-' + L + '-preset-select');
+        if (disp && sel) {
+          const sync = function () { try { const idx = sel.selectedIndex; if (idx >= 0) disp.textContent = sel.options[idx].text; } catch (e) {} };
+          sync(); sel.addEventListener('change', sync); sel.addEventListener('input', sync);
+          try { const st = window.Juce && window.Juce.getSliderState ? window.Juce.getSliderState('SYN_OSC_' + U + '_WT_PRESET') : null; if (st && st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(sync); } catch (e) {}
+        }
+        const pills = document.querySelectorAll('#osc-' + L + '-device .engine-pills .eng[data-eng-b-idx]');
+        if (pills.length === 6 && window.Juce && window.Juce.getSliderState) {
+          const st = window.Juce.getSliderState('SYN_OSC_' + U + '_ENGINE');
+          const setAct = function (idx) { pills.forEach(function (q, i) { q.classList.toggle('act', i === idx); }); };
+          if (st) { try { setAct(Math.max(0, Math.min(5, Math.round(st.getScaledValue ? st.getScaledValue() : 0)))); } catch (e) {}
+            pills.forEach(function (q, idx) { q.style.cursor = 'pointer'; q.addEventListener('click', function () { try { st.setNormalisedValue(idx / 5); setAct(idx); } catch (e) {} }); });
+            if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(function () { try { setAct(Math.max(0, Math.min(5, Math.round(st.getScaledValue ? st.getScaledValue() : 0)))); } catch (e) {} }); }
+        }
+      } catch (eL) { console.warn('[SYN-osc-' + L + '] mirror init failed', eL); }
+    });
 
     // Phase 9: OSC C mirror — swap button, preset sync (APVTS-wired), engine pill (APVTS-wired).
     try {
@@ -42983,7 +43009,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function reclip(n){ (n.vizOv||[]).forEach(function(r){ try{ r[0].style.overflow=r[1]; }catch(e){} }); n.vizOv=null; }
 
   /* ── writes — a drawn cable becomes the parameter it stands for ── */
-  function connect(a,ak,ai,b,bk,bi){
+  function connect(a,ak,ai,b,bk,bi){   /* window.__tpConnect below — the gates */
     if(bk==='rin'){ if(a.kind!=='rnd') return false; if(!layout.rlinks) layout.rlinks=[]; if(layout.rlinks.indexOf(b.key)<0) layout.rlinks.push(b.key); saveLayout(); toast('Randomizer → '+nodeName(b)); return true; }   /* tp11 */
     var t=(ak==='out')?a.ports.filter(function(p){return p.kind==='out';})[ai].el.dataset.t:null;
     if(bk==='mod'){ var mp=b.mods&&b.mods[bi]; if(!mp) return false;
@@ -42992,7 +43018,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(t==='n'){ if(b.kind==='flow'){ var ch=window.__flowChain?window.__flowChain():[]; if(ch.indexOf(b.sub)<0){ ch.push(b.sub); window.__flowSetChain&&window.__flowSetChain(ch); } return true; } if(b.kind==='osc'){ toast('Every oscillator already takes the notes'); return true; } return false; }
     if(t==='a'){
       if(b.kind==='filter'&&a.kind==='osc'){ setP(OX(a.sub)+'F'+curFilterSlot()+'MIX',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} return true; }
-      if(b.kind==='fx'){ var oscIdx=[]; if(a.kind==='osc') oscIdx=[OSC.indexOf(a.sub)]; else if(a.kind==='filter'||a.kind==='tape'||a.kind==='tapeloop') oscIdx=OSC.map(function(o,i){ return (a.kind!=='filter'||pv(OX(o)+'F1MIX')>0.001||pv(OX(o)+'F2MIX')>0.001)?i:-1; }).filter(function(i){return i>=0;});
+      if(b.kind==='fx'){ var oscIdx=[]; if(a.kind==='osc') oscIdx=[srcIdx(a.sub)];   /* tp40 — E-H too (Max: "make sure I can put effects on E, F, G and H" — it said 'That does not fit'): the route index is the pill's, 0..3 = A-D, 6..9 = E-H */
+        else if(a.kind==='filter'||a.kind==='tape'||a.kind==='tapeloop') oscIdx=OSC.concat(['e','f','g','h']).map(function(o){ return (a.kind!=='filter'||pv(OX(o)+'F1MIX')>0.001||pv(OX(o)+'F2MIX')>0.001)?srcIdx(o):-1; }).filter(function(i){return i>=0;});
         oscIdx=oscIdx.filter(function(i){ return i>=0; }); if(oscIdx.length){ oscIdx.forEach(function(i){ window.__fxrSetRoute&&window.__fxrSetRoute(b.idx,i,1); }); return true; }
         if(a.kind==='fx'){ var devs=window.__fxrDevs?window.__fxrDevs():[]; var order=[]; for(var i=0;i<devs.length;i++) order.push(i); order.splice(order.indexOf(b.idx),1); order.splice(order.indexOf(a.idx)+1,0,b.idx); window.__fxrReorder&&window.__fxrReorder(order); return true; }
         if(a.kind==='flow'){ toast('Chop and Glitch run after the rack'); return true; } return false; }
@@ -43280,7 +43307,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* the BACK PANEL — the Blend slots: another oscillator (or an LFO, or itself) FMs / PDs / AMs / RMs / FM-Exps / FM-Clamps this one (Max:
      "don't forget about other synths modulating other synths"). Modes: Off FM PD AM RM Sync Warp Dist Filter FM-Exp FM-Clamp (11). Sources: A B C D
      Sub Noise Self LFO1…10 (17). */
-  function rollBlend(o,X,lvl,P){ var peers=(blendPeers||oscList().filter(oscOn)).filter(function(q){ return q!==o; }), n=0, pr=BLENDR[lvl]||.35, mx=lvl==='wild'?3:lvl==='heavy'?2:1;
+  function rollBlend(o,X,lvl,P){ var peers=(blendPeers||oscList().filter(oscOn)).filter(function(q){ return q!==o&&OSC.indexOf(q)>=0; }), n=0,   /* tp40 — the blend source list is A-D/Sub/Noise/Self/LFO: an E-H peer used to index -1 → 'Osc A' */ pr=BLENDR[lvl]||.35, mx=lvl==='wild'?3:lvl==='heavy'?2:1;
     for(var sl=1;sl<=4;sl++){ var W=X+'WSLOT'+sl+'_';
       if(n<mx&&rnd()<pr){ n++; var md=pick([1,1,2,2,3,4,9,10]); var src=(md===2&&rnd()<.3)?6:(peers.length&&rnd()<.75)?OSC.indexOf(pick(peers)):(rnd()<.5?4:7+Math.floor(rnd()*3));
         P(W+'MODE', choiceNorm(W+'MODE', md, 11)); P(W+'SRC', choiceNorm(W+'SRC', src, 17)); P(W+'DEPTH', between(.08, lvl==='wild'?.8:lvl==='heavy'?.55:.3)); }
@@ -43466,7 +43493,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           picked.push('cmp');   /* every chain the dice builds ends in a compressor, default settings (Max) */
           picked.forEach(function(core,pi){ var ri=window.__fxrAdd?window.__fxrAdd(core):-1; if(ri<0) return; var last=(pi===picked.length-1);
             var hears=(last||rnd()>R.subset)?on.slice():subsetOf(on);   /* per-oscillator routing: some effects hear only B, or C and D … */
-            hears.forEach(function(o){ var oi=OSC.indexOf(o); if(oi>=0) window.__fxrSetRoute&&window.__fxrSetRoute(ri,oi,1); });
+            hears.forEach(function(o){ var oi=srcIdx(o); if(oi>=0) window.__fxrSetRoute&&window.__fxrSetRoute(ri,oi,1); });   /* tp40 — E-H route into the effects too (their pills are 6..9) */
             var d=(window.__fxrDevs?window.__fxrDevs():[])[ri]; if(!d) return; fxAdded.push({core:d.core,inst:d.inst});
             if(last) return;
             if(d.types&&d.types.length>1&&rnd()<R.types){ var tys=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(tys.length) setFxType(ri,pick(tys)); d=(window.__fxrDevs?window.__fxrDevs():[])[ri]||d; }
@@ -43671,7 +43698,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         if(e.target.closest('.ti-card .h .x, .ti-card .h .tp-min')){ e.stopPropagation(); e.preventDefault(); setFlowExt(n,false); commit(); return; } }
       if(n&&!isCtl(n,e.target,e)){ e.stopPropagation(); e.preventDefault(); return; }   /* tp9 — a click on a display is not the display's (no waterfall flip, no filter jump) */
       },true);
+    function wheelIsModules(t){ if(!t||!t.closest) return false; if(t.closest(CONTROL+', .fxr-clip, .pmenu, .tp-list, [data-wheel]')) return true;   /* tp40 — a knob, pill, select, list: the module's wheel, exactly as on the synth page */
+      for(var el=t; el&&el!==page; el=el.parentElement){ try{ var cs=getComputedStyle(el); if((cs.overflowY==='auto'||cs.overflowY==='scroll')&&el.scrollHeight>el.clientHeight+1) return true; }catch(x){} } return false; }
     page.addEventListener('wheel',function(e){ if(e.target.closest&&e.target.closest('.tp-menu')) return;   /* the browser scrolls under the mouse (tp3, Max) */
+      if(!(e.ctrlKey||e.metaKey)&&wheelIsModules(e.target)) return;   /* tp40 — Max: "make it work just like on the synth page" — the wheel over a control belongs to the control */
       e.preventDefault(); e.stopPropagation();   /* tp9 — CAPTURE: the wheel is the canvas's (pan / zoom), never a module's (the filter's scroll-to-play stays on the synth page) */ if(e.ctrlKey||e.metaKey){ var r=page.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top, k=Math.max(0.8,Math.min(1.25,Math.exp(-e.deltaY*0.006))), nz=Math.max(0.22,Math.min(2,view.z*k)); view.x=mx-(mx-view.x)*(nz/view.z); view.y=my-(my-view.y)*(nz/view.z); view.z=nz; }
       else if(e.shiftKey&&!e.deltaX) view.x-=e.deltaY; else { view.x-=e.deltaX; view.y-=e.deltaY; } applyView(); saveView(); },{passive:false,capture:true});
     page.addEventListener('contextmenu',function(e){ if(e.target.closest('.tp-mini, .tp-menu')) { e.preventDefault(); return; }
@@ -43833,7 +43863,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       setTimeout(function(){ hist.cur=snapshot(); paintTools(); },200); if(window.__tiFrameReg) window.__tiFrameReg('tp',frame); else if(!raf) raf=requestAnimationFrame(function loop(ts){ frame(ts); if(isOpen) raf=requestAnimationFrame(loop); else raf=0; }); requestAnimationFrame(frame); }); }
   function closePage(){ if(!isOpen) return; isOpen=false; closeMenus(); try{ if(window.__tiFrameUnreg) window.__tiFrameUnreg('tp'); }catch(e){} try{ returnAll(); }catch(e){ try{ console.warn('[tp] return',e); }catch(_){} } if(raf){ cancelAnimationFrame(raf); raf=0; } lastT=0; }
   window.__tpOpen=openPage; window.__tpClose=closePage; window.__tpNodes=function(){ return nodes.map(function(n){ return {key:n.key,x:n.x,y:n.y,w:n.w,h:n.h,ext:!!n.ext}; }); }; window.__tpCables=function(){ return cables.map(function(c){ return c.id; }); }; window.__tpSync=sync; window.__tpDrag=function(){ return drag?{kind:drag.kind,moved:!!drag.moved,ctl:!!drag.ctl}:null; };
-  window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpLayout=function(){ return layout; }; window.__tpAdd=function(k,x,y){ addFromList(k,x||200,y||200); }; window.__tpRemove=function(key){ var n=nodeByKey(key); if(n) removeNode(n); }; window.__tpExt=function(key,on){ var n=nodeByKey(key); if(n&&n.kind==='flow') setFlowExt(n,!!on); }; window.__tpTidy=glideTidy; window.__tpRollOsc=rollOscNow; window.__tpOscList=function(){ return nodes.filter(function(n){return n.kind==='osc';}).map(function(n){return n.sub;}); };
+  window.__tpConnect=connect; window.__tpNodeByKey=nodeByKey; window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpLayout=function(){ return layout; }; window.__tpAdd=function(k,x,y){ addFromList(k,x||200,y||200); }; window.__tpRemove=function(key){ var n=nodeByKey(key); if(n) removeNode(n); }; window.__tpExt=function(key,on){ var n=nodeByKey(key); if(n&&n.kind==='flow') setFlowExt(n,!!on); }; window.__tpTidy=glideTidy; window.__tpRollOsc=rollOscNow; window.__tpOscList=function(){ return nodes.filter(function(n){return n.kind==='osc';}).map(function(n){return n.sub;}); };
   window.__tpView=function(){ return {x:view.x,y:view.y,z:view.z,lod:!!(page&&page.classList.contains('lod')),viz:!!(page&&page.classList.contains('viz'))}; }; window.__tpSetView=function(x,y,z){ view.x=x; view.y=y; view.z=z; applyView(); }; window.__tpViz=setViz; window.__tpFit=fit; window.__tpParam=function(id){ return pv(id); };
   window.__tpRect=function(el){ var r=el.getBoundingClientRect(); if(!isOpen||!page||!page.contains(el)) return r; var z=view.z||1; return {left:r.left,top:r.top,width:r.width/z,height:r.height/z,right:r.right,bottom:r.bottom}; };   /* tp5 — a painter's sizing rect in LAYOUT px while the module sits in the scaled world */
   window.__tpZoomOf=function(el){ try{ return (isOpen&&page&&el&&page.contains(el))?(view.z||1):1; }catch(e){ return 1; } };

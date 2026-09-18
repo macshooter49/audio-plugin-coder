@@ -49,6 +49,15 @@ struct Au
 {
     AudioUnit au = nullptr; std::map<std::string, AudioUnitParameterID> byName; std::map<AudioUnitParameterID, AudioUnitParameterInfo> info;
     double stamp = 0.0;
+    static OSStatus hcBeatTempo (void* ref, Float64* outBeat, Float64* outTempo) { auto* a = (Au*) ref; if (outBeat) *outBeat = a->stamp / SR * 2.0; if (outTempo) *outTempo = 120.0; return noErr; }
+    static OSStatus hcTransport (void* ref, Boolean* playing, Boolean* changed, Float64* sampleInLoop, Boolean* looping, Float64* cycleStart, Float64* cycleEnd)
+    { auto* a = (Au*) ref; if (playing) *playing = true; if (changed) *changed = false; if (sampleInLoop) *sampleInLoop = a->stamp; if (looping) *looping = false; if (cycleStart) *cycleStart = 0; if (cycleEnd) *cycleEnd = 0; return noErr; }
+    void hostTransport()   // tp39g — TP_TRANSPORT=1: the host says "playing" with a beat clock (arp / chop / glitch run transport-locked)
+    {
+        if (! getenv ("TP_TRANSPORT")) return;
+        HostCallbackInfo cb {}; cb.hostUserData = this; cb.beatAndTempoProc = hcBeatTempo; cb.transportStateProc = hcTransport;
+        AudioUnitSetProperty (au, kAudioUnitProperty_HostCallbacks, kAudioUnitScope_Global, 0, &cb, sizeof cb);
+    }
     bool open()
     {
         setenv ("TERRAIN_DETERMINISTIC", "1", 1);
@@ -370,6 +379,25 @@ int main (int argc, char** argv)
         printf ("osc %c: %zu non-default parameters; as rolled %.1f dBFS; all reset %.1f dBFS\n", O, nd.size(), peakWith ({}), peakWith (nd));
         for (auto& kv : nd) { const double pk = peakWith ({ kv }); if (pk > -60) printf ("  RESET %-40s -> %6.1f dBFS  <-- this one silences it\n", kv.first.c_str(), pk); }
         printf ("bisect done\n"); return 0;
+    }
+    if (mode == "play")   // tp39g — play <preset> <secs>: the way Max plays — transport running (TP_TRANSPORT=1), 4-note chords re-struck every 0.5 s, single notes in between, for N seconds; survives = no crash; prints peak + a CPU number per 5 s
+    {
+        auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }
+        const int secs = argc > 3 ? atoi (argv[3]) : 20;
+        for (auto& p : ps)
+        {
+            Au a; if (! a.open() || ! a.loadChunk (p.chunk)) { printf ("== %s == open/load failed\n", p.name.c_str()); continue; } a.hostTransport(); a.pump (0.8); a.render (20, nullptr); a.pump (0.5);
+            printf ("== %s ==  transport %s\n", p.name.c_str(), getenv ("TP_TRANSPORT") ? "PLAYING" : "stopped"); fflush (stdout);
+            const int blocksPerSec = (int) (SR / BLK); int held = 0;
+            for (int t = 0; t < secs * 2; ++t)
+            {
+                if ((t % 2) == 0) { a.allOff(); for (int n : CHORD4) a.note (n + ((t / 2) % 3) * 2, 100); held = 4; } else { a.note (72 + (t % 7), 90); }
+                std::vector<double> tm; float pk = 0; a.render (blocksPerSec / 2, &tm, &pk);
+                if ((t % 10) == 9) { double s = 0; for (double x : tm) s += x; printf ("  %3d s  peak %6.1f dBFS  cpu %5.1f%%\n", (t + 1) / 2, 20.0 * std::log10 (std::max (1e-12f, pk)), 100.0 * (s / tm.size()) / (BLK / SR)); fflush (stdout); }
+            }
+            a.allOff(); a.render (20, nullptr); a.close(); printf ("  survived %d s\n", secs);
+        }
+        return 0;
     }
     if (mode == "solo")   // solo <preset>: every ENABLED oscillator alone (the others off) — its engine, and whether it makes sound (8 notes, peak dBFS)
     {
