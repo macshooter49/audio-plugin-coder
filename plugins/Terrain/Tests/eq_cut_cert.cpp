@@ -190,6 +190,35 @@ int main()
         gate (z.lvl <= 0.0f, "K9b and it reports NO level, because it is passing no audio", d2);
     }
 
+
+    // ── tp44 — THE BANDS' OWN CURVES ARE STATIC UNDER THE DYNAMIC RIDE ─────────────────────
+    //  Max: "every time I press a MIDI it goes to its original position, and when I stop holding
+    //  the MIDI it shifts somewhere else". Under the Dynamic type a cut only acts when its band is
+    //  loud, so the composite (and nodeDb, post-ride) MUST move with the audio — and the card's
+    //  dots must NOT. viz().band[] is the design, ride divided out: identical in silence and under
+    //  a 0 dBFS tone at the band, while nodeDb swings by the whole cut.
+    {
+        tw::TerrainEqualizerFx e; e.prepare (SR, 512);
+        tw::TerrainEqualizerFx::Params p; p.mix = 1.0f; p.type = 5; p.b4 = 0.0f;   // Dynamic · Body -30 dB at its default 550 Hz
+        e.setParams (p);
+        std::vector<float> l (512), r (512);
+        for (int n = 0; n < 240; ++n) { std::fill (l.begin(), l.end(), 0.0f); std::fill (r.begin(), r.end(), 0.0f); e.processStereo (l.data(), r.data(), 512); }
+        const tw::TerrainEqualizerFx::Viz quiet = e.viz();
+        long ph = 0;
+        for (int n = 0; n < 240; ++n) { for (int k = 0; k < 512; ++k, ++ph) { l[(size_t) k] = r[(size_t) k] = (float) std::sin (2.0 * M_PI * 550.0 * (double) ph / SR); } e.processStereo (l.data(), r.data(), 512); }
+        const tw::TerrainEqualizerFx::Viz loud = e.viz();
+        double worst = 0.0, deepest = 0.0;
+        for (int i = 0; i < tw::TerrainEqualizerFx::kBandBins; ++i)
+        {
+            worst = std::max (worst, (double) std::fabs (loud.band[1][i] - quiet.band[1][i]));
+            deepest = std::min (deepest, (double) quiet.band[1][i]);
+        }
+        const double swing = std::fabs ((double) loud.nodeDb[1] - (double) quiet.nodeDb[1]);
+        double othersFlat = 0.0; for (int b = 0; b < 4; ++b) if (b != 1) for (int i = 0; i < tw::TerrainEqualizerFx::kBandBins; ++i) othersFlat = std::max (othersFlat, (double) std::fabs (quiet.band[b][i]));
+        char d[240]; snprintf (d, sizeof d, "band[Body] quiet vs loud differs by %.3f dB (want < 0.1); its static curve bottoms at %.1f dB (want < -20); nodeDb rides %.1f dB (want > 3); the other bands' own curves peak at %.3f dB (want < 0.05)", worst, deepest, swing, othersFlat);
+        gate (worst < 0.1 && deepest < -20.0 && swing > 3.0 && othersFlat < 0.05, "tp44  the bands' OWN curves hold still under the Dynamic ride, and only the cut band draws one", d);
+    }
+
     printf ("\n  PASS %d   FAIL %d\n\n", gPass, gFail);
     return gFail == 0 ? 0 : 1;
 }

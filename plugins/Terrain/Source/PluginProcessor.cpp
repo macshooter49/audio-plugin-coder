@@ -7944,7 +7944,7 @@ juce::String TerrainAudioProcessor::getFx4VizJson()
     {
         if (i) j << ",";
         const auto& V = eqzRefs_[(size_t) i];
-        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; eqzCurveSent_[(size_t) i] = -1.0e9f; continue; }
+        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; eqzCurveSent_[(size_t) i] = -1.0e9f; eqzBandSent_[(size_t) i] = -1.0e9f; continue; }
         const auto& z = eqzPool_[(size_t) i].viz();
         j << "{\"lvl\":" << N (z.lvl, 3) << ",\"hz\":[";
         for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b) { if (b) j << ","; j << N (z.nodeHz[b], 1); }
@@ -7963,6 +7963,26 @@ juce::String TerrainAudioProcessor::getFx4VizJson()
             j << ",\"curve\":[";
             for (int k = 0; k < tw::TerrainEqualizerFx::kCurveBins; ++k) { if (k) j << ","; j << N (z.curve[k], 1); }
             j << "]";
+        }
+        // tp44 — the bands' OWN static curves (bc[8][48]), on the curve's cadence and only when they change: the card
+        // pins each dot to its own band (see TerrainEqualizerFx::Viz::band). ~2 KB when a band moves, nothing at rest.
+        {
+            float bsum = 0.0f;
+            for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b)
+                for (int k = 0; k < tw::TerrainEqualizerFx::kBandBins; ++k) bsum += z.band[b][k] * (1.0f + 0.003f * (float) (b * tw::TerrainEqualizerFx::kBandBins + k));
+            if (curveFrame && (keepalive || std::fabs (bsum - eqzBandSent_[(size_t) i]) > 0.02f))
+            {
+                eqzBandSent_[(size_t) i] = bsum;
+                j << ",\"bc\":[";
+                for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b)
+                {
+                    if (b) j << ",";
+                    j << "[";
+                    for (int k = 0; k < tw::TerrainEqualizerFx::kBandBins; ++k) { if (k) j << ","; j << N (z.band[b][k], 1); }
+                    j << "]";
+                }
+                j << "]";
+            }
         }
         j << "}";
     }

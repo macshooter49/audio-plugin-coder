@@ -115,6 +115,7 @@ public:
     //  see pushCurve(). Bounce after: 0.13 dB. The wire stays where it was because the curve
     //  now rides every SECOND frame (PluginProcessor.cpp, the fx4 push).
     static constexpr int kCurveBins = 192;
+    static constexpr int kBandBins  = 48;     // tp44 — each node's OWN static curve (see pushCurve): 48 log bins, 20 Hz..20 kHz
     static constexpr int kCurveSub  = 9;      // sub-frequencies per bin; ODD, so the middle one
                                               // is curveBinHz(i) EXACTLY and the old point
                                               // sample is always among the candidates.
@@ -335,6 +336,12 @@ public:
         bool  nodeOn[kNumNodes] { true, true, true, true, false, false, false, false };   // fb438 — the free bells
         float nodeQ[kNumNodes] { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };        // fb441 — each node's FINAL Q (post law, post wheel, post usableQ) for the readout
         float lvl = 0.0f;
+        // tp44 — band[n][i]: node n's OWN response alone, in dB, on kBandBins log bins (20 * 1000^(i/47) Hz), STATIC:
+        //        designed from the knobs with the Dynamic ride divided back out. The card pins each dot to its own
+        //        band's curve, so moving one band never moves another's dot and a level-dependent ride never drags
+        //        a dot around (Max: the EQ "can't stay still" / "shifts when I stop holding MIDI"). The composite
+        //        `curve` above stays live and honest — it is what you hear.
+        float band[kNumNodes][kBandBins] {};
     };
 
     static float curveBinHz (int i) noexcept
@@ -1387,6 +1394,7 @@ private:
         }
 
         for (int b = 0; b < 4; ++b) g[b] = clampf (g[b] * amount, -96.0f, kGainCeil);
+        for (int b = 0; b < 4; ++b) preG_[b] = g[b];                  // tp44 — the designed gain BEFORE the Dynamic ride (the static curves)
 #ifdef EQ_MUT_POLITE_CELL
         // MUTATION: a polite console ceiling on exactly ONE cell — Passive x `Deep Atten`.
         if (type_ == 3 && char_ == 6)
@@ -1705,6 +1713,51 @@ private:
             }
             viz_.curve[i] = clampf (best, -120.0f, 80.0f);
         }
+
+        // ═══ tp44 — THE BANDS' OWN CURVES: one per node, STATIC, 48 log bins ══════════════════════════
+        //  Max, 2026-09-18: "whenever I'm controlling a point in EQ, I don't want it to move the other
+        //  point" — and, on the Dynamic type: "every time I press a MIDI it goes to its original position,
+        //  and when I stop holding the MIDI it shifts somewhere else". Both were the same drawing rule
+        //  (fb592): the dot sat on the COMPOSITE line, which every other band and the level-dependent ride
+        //  reshape under it. The card now pins each dot to ITS OWN band, and that band is drawn from the
+        //  stages AS DESIGNED — the four role bands with the ride divided back out (preG_), the free bands as
+        //  they are (they never ride). Q is the live Q; under Dynamic a proportional-Q law can move it a
+        //  little with the ride, which is invisible at this resolution. A cut is drawn at its true corner.
+        for (int n = 0; n < kNumNodes; ++n)
+        {
+            const int sA = (n < kNumBands) ? n * 2     : kFree0 + (n - kNumBands);
+            const int sB = (n < kNumBands) ? n * 2 + 1 : kFree1 + (n - kNumBands);
+            const Stage& A = st_[sA]; const Stage& B = st_[sB];
+            float gA = A.g, gB = B.g; bool onA = A.on, onB = B.on;
+            if (n < kNumBands)
+            {
+                const float gl = A.g + (B.on && B.kind == A.kind ? B.g : 0.0f), gp = preG_[n];   // the pair's live gain vs the designed gain
+                const bool  twin = B.on && B.kind == A.kind && std::fabs (B.f - A.f) < 1e-3f;      // the 24 dB/oct half-gain pair
+                if (std::fabs (gl) > 1e-3f) { const float k = gp / gl; gA *= k; gB *= k; }         // the ride is a pure gain multiplier: undo it
+                else { onA = std::fabs (gp) > 1e-4f; gA = twin ? gp * 0.5f : gp; onB = twin && onA; gB = twin ? gp * 0.5f : 0.0f; }   // fully ridden out: rebuild from the designed gain
+            }
+            Coeffs cA, cB; bool haveA = false, haveB = false;
+            const auto des = [this] (const Stage& S, float g, Coeffs& out) -> bool
+            {
+                if (isCutKind (S.kind)) { out = designCut (S.kind, (double) S.f, (double) S.q, (double) fs_); return true; }
+                if (std::fabs (g) < 1e-4f) return false;
+                out = (S.kind >= 3) ? designOnePole (S.kind, (double) S.f, (double) g, (double) fs_)
+                                    : designBand    (S.kind, (double) S.f, (double) S.q, (double) g, (double) fs_);
+                return true;
+            };
+            if (onA) haveA = des (A, gA, cA);
+            if (onB) haveB = des (B, gB, cB);
+            for (int i = 0; i < kBandBins; ++i)
+            {
+                const double hz  = 20.0 * std::pow (1000.0, (double) i / (double) (kBandBins - 1));
+                const double sp  = std::sin (3.14159265358979 * hz / (double) fs_);
+                const double phi = sp * sp;
+                double lin = 1.0;
+                if (haveA) lin *= std::max (1e-30, magSq (cA, phi));
+                if (haveB) lin *= std::max (1e-30, magSq (cB, phi));
+                viz_.band[n][i] = clampf ((float) (10.0 * std::log10 (std::max (1e-300, lin))), -120.0f, 80.0f);
+            }
+        }
     }
 
     // ── the one measured constant in this file. A band-pass detector on a broadband
@@ -1740,6 +1793,7 @@ private:
 
     // Dynamic detectors
     float  d1_[4] {}, d2_[4] {}, env_[4] {}, ride_[4] { 1,1,1,1 };
+    float  preG_[4] {};                        // tp44 — pre-ride band gains, dB
     float  sA1_[4] { 0.5f,0.5f,0.5f,0.5f }, sA2_[4] {}, sA3_[4] {};
     float  dAtk_[4] { 0.01f,0.01f,0.01f,0.01f }, dRel_[4] { 0.001f,0.001f,0.001f,0.001f };
     float  envW_ = 0.0f;

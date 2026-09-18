@@ -3232,6 +3232,7 @@ private:
     std::array<float, (size_t) ParameterIDs::kFxInstances> bodEnv_ {};                                     // fb444
     // fb437 — change-gating for the two big fx4 viz arrays (EQ curve, compressor knee) + the keepalive tick
     std::array<float, (size_t) ParameterIDs::kFxInstances> eqzCurveSent_ {}, cmpKneeSent_ {};
+    std::array<float, (size_t) ParameterIDs::kFxInstances> eqzBandSent_ {};   // tp44 — the bands' own curves, sent on change
     uint32_t fx4VizTick_ = 0;
     double fx3PrepSr_ = 0.0;
     // fb414 — SEND MODE, per device kind x instance. [kind][inst0]; nullptr reads as insert.

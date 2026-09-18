@@ -10148,6 +10148,10 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              the fallback for the frames before the first push. kCurveBins in TerrainEqualizerFx.h
              is the authority, and the two agreeing is gated (fx4_ui.js). */
           var FX4_EQ_BINS=192;
+          /* tp44 — THE BANDS' OWN CURVES. One faint path per node, drawn from the engine's static per-band response (Viz::band, pushed as
+             `bc`), and each dot sits on ITS OWN band's curve — never on the composite (fb592 reversed: Max, "whenever I'm controlling a
+             point I don't want it to move the other point"; and the Dynamic type's ride no longer drags a dot around on MIDI on/off). */
+          function fx4BcPaths(){ var o=''; for(var b=0;b<8;b++) o+='<path class="eqz-bc" data-b="'+b+'" d="" fill="none" stroke="#B794FF" stroke-width="0.7" opacity="0.22" stroke-linejoin="round"/>'; return o; }
           var FX4_BOD_DIV=['4 bar','3 bar','2 bar','1.5 bar','1 bar','1/2.','1/2','1/4.',
                            '1/4','1/8.','1/8','1/16.','1/16','1/32.','1/32','1/48','1/64','1/128','1/192','1/256'];
           function fx4SplGainLbl(v){ var t=v/100; if(t<=0) return 'Kill'; var db=t<0.5?-60*Math.pow(1-2*t,1.5):24*(t-0.5); var a=Math.abs(db); return a<0.05?'0.0':(db>0?'+':'−')+(a>=10?''+Math.round(a):a.toFixed(1)); }
@@ -10178,6 +10182,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 +'<g stroke="rgba(255,255,255,0.07)" stroke-width="1">'+g+'</g>'
                 +'<line x1="6.5" y1="39" x2="219.5" y2="39" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
                 +'<path class="eqz-fill" d="" fill="#B794FF" opacity="0.05"/>'
+                +fx4BcPaths()   /* tp44 — under the composite: the bands' own curves */
                 +'<path class="eqz-glow" d="'+fx4FlatD(95)+'" fill="none" stroke="#B794FF" stroke-width="3.4" opacity="0"/>'
                 +'<path class="eqz-curve dst-curve" d="'+fx4FlatD(95)+'"/>'
                 +'<g class="eqz-nodes">'+n+'</g>'
@@ -11275,6 +11280,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               return ((dev.knobs&&dev.knobs[1]) ? (dev.knobs[1].v/100*2-1)*30 : 0);
             }catch(e){ return 0; }
           }
+          /* tp44 — a node's OWN gain at its own frequency: sampled from its band curve (log-interpolated), the model before the first push. */
+          var FX4_EQZ_LO=[20,100,700,6000], FX4_EQZ_HI=[500,3000,14000,20000];
+          function fx4ModelHz(dev,b,dflt){ try{ if(b>=4){ var xb=dev.xb&&dev.xb[b-4]; return xb?20*Math.pow(1000,xb[0]/100):dflt; } var kn=dev.back&&dev.back.knobs&&dev.back.knobs[2*b]; if(!kn) return dflt; var t=kn[1]/100; return FX4_EQZ_LO[b]*Math.pow(FX4_EQZ_HI[b]/FX4_EQZ_LO[b],t); }catch(e){ return dflt; } }
+          function fx4OwnDb(st,dev,b,hz,f){ var arr=st&&st.bc&&st.bc[b]; if(arr&&arr.length>1){ var M=arr.length, pos=Math.log(Math.max(20,Math.min(20000,hz))/20)/Math.log(1000)*(M-1), i0=Math.max(0,Math.min(M-1,Math.floor(pos))), i1=Math.min(M-1,i0+1), t=pos-i0; var v=(+arr[i0])+((+arr[i1])-(+arr[i0]))*(isFinite(t)?t:0); return isFinite(v)?v:0; }
+            if(f&&f.db&&f.db.length>b&&isFinite(f.db[b])) return f.db[b];   /* no band curves yet: the feed's own gain (a push older than tp44, or the first frame) */
+            return modelDb(dev,b); }
           function fx4DrawEqz(core,dev,f){
             var st=dev.__st||(dev.__st={});
             /* fb452 — NEVER a literal length here. The old `f.curve.length===96` test meant that the
@@ -11282,6 +11293,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                sit on a stale line with nothing failing (fb373: verify the path, not just the engine).
                The feed's own length is the grid; FX4_EQ_BINS only covers the frames before it lands. */
             if(f&&f.curve&&f.curve.length>1) st.src=f.curve;                   // the C++ sends it only on change
+            if(f&&f.bc&&f.bc.length){ st.bc=f.bc; st.bcv=(st.bcv|0)+1; }       // tp44 — the bands' own curves, only on change
             var N=(st.src&&st.src.length)||FX4_EQ_BINS;
             if(!st.c||st.c.length!==N) st.c=new Float32Array(N);
             st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
@@ -11292,6 +11304,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               d+=(i?'L':'M')+(FX4_X0+FX4_PW*i/(N-1)).toFixed(1)+' '+fx4DbY(fx4EffDb(st.c[i],mix)).toFixed(1); }
             var curve=core.querySelector('.eqz-curve');
             if(curve&&curve.getAttribute('d')!==d){ curve.setAttribute('d',d); fx4SetA(core.querySelector('.eqz-glow'),'d',d); fx4SetA(core.querySelector('.eqz-fill'),'d',d+'L'+FX4_X1+' '+FX4_CY+'L'+FX4_X0+' '+FX4_CY+'Z'); }
+            /* tp44 — each band's own curve, redrawn only when a new set lands; a flat band (off, or 0 dB) draws nothing */
+            if(st.bc&&st.bcDrawn!==st.bcv){ st.bcDrawn=st.bcv; var bcs=core.querySelectorAll('.eqz-bc');
+              for(var bb=0;bb<bcs.length;bb++){ var arr=st.bc[bb]; if(!arr||arr.length<2){ fx4SetA(bcs[bb],'d',''); continue; }
+                var M=arr.length, flat=true, dd=''; for(var q2=0;q2<M;q2++){ var vv=+arr[q2]; if(!isFinite(vv)) vv=0; if(Math.abs(vv)>0.05) flat=false; dd+=(q2?'L':'M')+(FX4_X0+FX4_PW*q2/(M-1)).toFixed(1)+' '+fx4DbY(vv).toFixed(1); }
+                fx4SetA(bcs[bb],'d',flat?'':dd); } }
             // the nodes: at the band's LIVE centre, ON the drawn line (interpolated from the same bins)
             var nodes=core.querySelectorAll('.eqz-n');
             for(var b=0;b<nodes.length;b++){
@@ -11299,7 +11316,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               var on=(b<4)||((f&&f.on)?!!f.on[b]:!!(dev.xb&&dev.xb[b-4]&&dev.xb[b-4][2]));
               if(!on){ fx4SetA(nodes[b],'opacity','0'); nodes[b].__off=true; continue; } if(nodes[b].__off){ fx4SetA(nodes[b],'opacity','1'); nodes[b].__off=false; }
               var dflt=[100,550,3100,15500,632,632,632,632][b]; if(b>=4&&dev.xb&&dev.xb[b-4]) dflt=20*Math.pow(1000,dev.xb[b-4][0]/100);
-              var hz=fx4GlLog(st,'hz'+b,(f&&f.hz&&f.hz.length>b)?f.hz[b]:dflt,0.5);
+              var hz=fx4GlLog(st,'hz'+b,(f&&f.hz&&f.hz.length>b)?f.hz[b]:fx4ModelHz(dev,b,dflt),0.5);   /* tp44 — no feed yet: the MODEL's Hz, never the template default */
               var x=Math.max(FX4_X0,Math.min(FX4_X1,fx4HzX(hz)));
               /* 🚨 fb468 — THE DOT SITS AT ITS OWN GAIN, NOT ON THE SUMMED CURVE.
                  It used to be drawn by sampling the mix-scaled composite response at the node's x —
@@ -11345,7 +11362,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               var fi=(N-1)*(x-FX4_X0)/FX4_PW, i0=Math.max(0,Math.min(N-1,Math.floor(fi)));
               var i1=Math.min(N-1,i0+1), ft=fi-i0;
               var cv0=st.c[i0]||0, cv1=st.c[i1]||0, cvx=cv0+(cv1-cv0)*(isFinite(ft)?ft:0);
-              fx4SetA(nodes[b],'cx',x.toFixed(1)); fx4SetA(nodes[b],'cy',fx4DbY(fx4EffDb(cvx,mix)).toFixed(1)); }
+              /* tp44 — THE DOT SITS ON ITS OWN BAND, at its own static gain. Not on the composite (fb592), not on the ride. */
+              fx4SetA(nodes[b],'cx',x.toFixed(1)); fx4SetA(nodes[b],'cy',fx4DbY(fx4OwnDb(st,dev,b,hz,f)).toFixed(1)); }
             fx4SpecCv(core);   // fb442 — the audio layer, on its own canvas at device resolution
           }
           /* ═══ fb442 — THE CARD SPECTRUM IS A CANVAS ═════════════════════════════════════════
@@ -11819,7 +11837,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 var tie=cands.filter(function(c){ return c.d<=bd+1.5; });
                 if(tie.length>1){ var ba=1e9;
                   for(var t2=0;t2<tie.length;t2++){
-                    var own=fx4DbY((dv&&dv.__vz&&dv.__vz.db&&isFinite(dv.__vz.db[tie[t2].b])) ? dv.__vz.db[tie[t2].b] : modelDb(dv,tie[t2].b));
+                    var own=fx4DbY(dv?fx4OwnDb(dv.__st,dv,tie[t2].b,liveHz(dv,tie[t2].b),dv.__vz):0);   /* tp44 — the dot's own (static) gain, where it is drawn */
                     var ad=Math.abs(u.y-own); if(ad<ba){ ba=ad; best=tie[t2].b; } } }
               }
               return bd<=HIT?best:-1;
@@ -11830,7 +11848,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                printed: the node moves, the curve follows, and the back-panel knobs (Low Hz / Low / ... ) carry
                the numbers under the READOUT LAW. The one message that was not redundant — "no free bands left"
                — moves to the house toast, which lives OUTSIDE the card and crowds nothing. */
-            function hot(core,b){ var ns=core.querySelectorAll('.eqz-n'); for(var i=0;i<ns.length;i++){ var on=+ns[i].getAttribute('data-b')===b; ns[i].classList.toggle('hot',on); ns[i].setAttribute('r',on?'3.2':'2.4'); } core.classList.toggle('eqz-over',b>=0); }
+            function hot(core,b){ try{ var bc2=core.querySelectorAll('.eqz-bc'); for(var j2=0;j2<bc2.length;j2++) bc2[j2].setAttribute('opacity',(+bc2[j2].getAttribute('data-b')===b)?'0.6':'0.22'); }catch(e2){}   /* tp44 — the hot band's own curve comes forward */
+              var ns=core.querySelectorAll('.eqz-n'); for(var i=0;i<ns.length;i++){ var on=+ns[i].getAttribute('data-b')===b; ns[i].classList.toggle('hot',on); ns[i].setAttribute('r',on?'3.2':'2.4'); } core.classList.toggle('eqz-over',b>=0); }
             function liveHz(d,b){ var z=d.__vz; if(z&&z.hz&&z.hz.length>b&&isFinite(z.hz[b])) return z.hz[b]; var t=hzGet(d,b)/100; return freeLo(b)*Math.pow(freeHi(b)/freeLo(b),t); }
             function liveQ(d,b){ var z=d.__vz; return (z&&z.q&&z.q.length>b&&isFinite(z.q[b])&&z.q[b]>0)?z.q[b]:qMul(qGet(d,b)); }
             function resetBand(core,d,b){
@@ -11841,15 +11860,17 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               var t2=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core==='eqz'){ t2=DEV_TEMPLATES[i]; break; } if(!t2) return;
               hzSet(d,b,t2.back.knobs[2*b][1]); gainRef(d,b).set(b<3?t2.back.knobs[2*b+1][1]:t2.knobs[1].v); qSet(d,b,50); window.__fxRedrawKnobs(d);
             }
-            function addBand(core,d,u){
-              if(!d.xb||!d.xp) return; var k=-1; for(var q=0;q<4;q++) if(!d.xb[q][2]){ k=q; break; }
-              if(k<0){ try{ if(window.__tiToast) window.__tiToast('8 bands max — right-click one to delete'); }catch(err){} return; }
-              var hz=fx4XHz(u.x), t=Math.log(hz/20)/Math.log(1000); d.xb[k][0]=Math.max(0,Math.min(100,t*100)); d.xb[k][1]=50;   // 0 dB: adding never changes the sound
+            function addBand(core,d,u){ return addBandHz(core,d,fx4XHz(u.x)); }
+            function addBandHz(core,d,hz){   /* tp44 — by Hz, so a menu can add one at a role band's corner; returns the free slot or -1 */
+              if(!d.xb||!d.xp) return -1; var k=-1; for(var q=0;q<4;q++) if(!d.xb[q][2]){ k=q; break; }
+              if(k<0){ try{ if(window.__tiToast) window.__tiToast('8 bands max — right-click one to delete'); }catch(err){} return -1; }
+              var t=Math.log(hz/20)/Math.log(1000); d.xb[k][0]=Math.max(0,Math.min(100,t*100)); d.xb[k][1]=50;   // 0 dB: adding never changes the sound
               /* fb473 — a NEW band is a BELL. The four free slots are recycled, so without this an
                  added band inherited whatever shape the last occupant of that slot had — delete a
                  Low Cut, add a band, and you got a Low Cut you never asked for. */
               try{ window.__setSynParam(d.xp[k][0],d.xb[k][0]/100); window.__setSynParam(d.xp[k][1],0.5); }catch(err){} qSet(d,4+k,50); shSet(d,4+k,0); setOn(d,k,true);
               var st=d.__st; if(st){ st['hz'+(4+k)]=hz; }
+              return k;
             }
             function bandMenu(core,d,b,x,y){
               var rows=[{isHeader:true,label:NAMES[b]+(b>=4?('  ·  '+EQZ_SHAPES[shGet(d,b)]):'')
@@ -11865,6 +11886,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                              onPick:function(){ shSet(d,b,ix); window.__fxRedrawKnobs(d); }});
                 })(si);
               }
+              /* tp44 — Max: "I can't even do a full low cut... whether we have to right click it and turn it into a low cut or a high cut".
+                 The role bands are the device's voicing (their kinds come from the Type), so the cut is a FREE band born at this one's corner. */
+              if(b===0||b===3) rows.push({label:(b===0?'Add a Low Cut here':'Add a High Cut here'),onPick:function(){ var k=addBandHz(core,d,liveHz(d,b)); if(k>=0){ shSet(d,4+k,b===0?1:2); window.__fxRedrawKnobs(d); hot(core,4+k); } }});
               if(b>=4) rows.push({label:'Delete band',onPick:function(){ setOn(d,b-4,false); hot(core,-1); }});
               else     rows.push({label:'Delete band',isDisabled:true,badge:'fixed'});   // the four roles ARE the device
               rows.push({label:'Reset band',onPick:function(){ resetBand(core,d,b); }});
@@ -12227,6 +12251,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              the rank/route/active parameters are written exactly as the rack itself writes them. */
           window.__fxrAdd=function(core){ try{ fxAdd(core,0,null); return DEVS.length-1; }catch(e){ return -1; } };
           window.__fxrRemove=function(idx){ try{ fxRemove(idx|0); return true; }catch(e){ return false; } };
+          /* tp44 — ONE render for the whole rack. The dice removed every card one by one and each removal re-rendered every card
+             still standing: at 100 nodes (96 cards) that was 1.3 s on the main thread, measured with the CPU profiler. */
+          window.__fxrClear=function(){ try{ var n=DEVS.length; for(var i=n-1;i>=0;i--){ var d=DEVS[i]; if(!d) continue;
+              try{ window.__setSynParam(d.actP,0); }catch(e){} try{ if(d.pwrP) window.__setSynParam(d.pwrP,0); }catch(e){}
+              try{ var lo=fxModDest(d.core,d.inst,0); if(lo!=null&&window.__tiPruneFxRoutes) window.__tiPruneFxRoutes(lo,lo+FXMOD_KNOBS); }catch(e){} }
+            DEVS.length=0; fxPushRanks(); render(); return n; }catch(e){ return -1; } };
           /* ══ tp14 — RANDOMIZE CHAIN (Max: "a randomized effect chain … purely effects") ══════════════════════════
              PURELY EFFECTS: it builds the rack — which devices, their types, their front knobs, their back panels,
              their per-oscillator routes and the order — and touches NOTHING else. No oscillator, no filter, no
@@ -12252,7 +12282,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               for(var i=0;i<sel.options.length;i++){ if(sel.options[i].textContent.trim()===type||sel.options[i].value===type){ sel.selectedIndex=i; sel.dispatchEvent(new Event('change',{bubbles:true})); return; } } }catch(e){} }
             function roll(){
               var big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy'), hi=lvl==='crazy'?1:lvl==='wild'?.95:lvl==='heavy'?.85:lvl==='medium'?.7:.55, lo=lvl==='light'?.25:.08;
-              for(var i=DEVS.length-1;i>=0;i--) window.__fxrRemove(i);
+              if(window.__fxrClear) window.__fxrClear(); else for(var i=DEVS.length-1;i>=0;i--) window.__fxrRemove(i);   /* tp44 — one render */
               var pool=(POOL[lvl]||POOL.medium).slice(), n=Math.round(bt(CNT[lvl][0],CNT[lvl][1])), picked=[];
               while(picked.length<n&&pool.length){ var c=pick(pool); pool.splice(pool.indexOf(c),1); picked.push(c); }
               picked.push('cmp');   /* the chain ends in a compressor, at its defaults, untouched (Max) */
@@ -12262,7 +12292,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 var d=DEVS[ri]; if(!d||last) return;
                 if(d.types&&d.types.length>1&&rnd()<(big?.9:.55)){ var ty=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(ty.length) setType(ri,pick(ty)); d=DEVS[ri]||d; }
                 var hot=HOTC.test(core);
-                if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) setP(kp, bt(lo, (core==='delay'&&k===1)?Math.min(hi,.20):(hot?Math.min(hi,.6):hi))); }   /* tp23 — Max: delay feedback never past 20 */
+                if(d.knobs){ for(var k=0;k<3&&k<d.knobs.length;k++){ var kp=d.knobs[k].p; if(kp) setP(kp, bt(lo, (core==='delay'&&k===1)?Math.min(hi,.20):((core==='flt'&&k===1)?Math.min(hi,.3):(hot?Math.min(hi,.6):hi))));   /* tp44 — Res ≤ 30 % */ }   /* tp23 — Max: delay feedback never past 20 */
                   var mk=d.knobs[3], mr=MIXR[core]||[.25,.5]; if(mk&&mk.p) setP(mk.p, Math.min(.95, bt(mr[0],mr[1]))); }
                 if(d.back&&rnd()<(big?.9:.55)){ ['d1','d2'].forEach(function(bk){ var b=d.back[bk]; if(b&&b.p&&b.opts&&b.opts.length>1) setP(b.p, norm(b.p, Math.floor(rnd()*b.opts.length), b.opts.length)); });
                   (d.back.knobs||[]).forEach(function(kn){ if(kn&&kn[2]&&rnd()<(big?.85:.5)) setP(kn[2], bt(lo, hot?.6:hi)); }); }
@@ -12288,8 +12318,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var OSCSFX=['WT_FRAME','WARP_AMOUNT','WARP2_AMT','FOLD_AMT','SPECTRAL_AMT','SPECTRAL_LO','SPECTRAL_HI','WVAR','W2VAR','PAN','LEVEL','UWIDTH','UBLEND','SUB_WEIGHT','SUB_HEAT','SAMPLE_SCAN','SAMPLE_FORMANT','SAMPLE_STRETCH','SAMPLE_SPRAY','SAMPLE_WARP','SAMPLE_START','SAMPLE_AIR','WSLOT1_DEPTH','WSLOT2_DEPTH','WSLOT3_DEPTH','WSLOT4_DEPTH','FM_DEPTH1','FM_DEPTH2','FM_FB','HARM_COUNT','HARM_SHINE','MODAL_MATERIAL','MODAL_DECAY','MODAL_BODY'];   /* no COARSE/OCT/SEMI/CENT/URANGE/UDETUNE/PHASE: pitch, detune and the 180 stay out of it */
             function mdests(){ var out=[];
               ['A','B','C','D'].forEach(function(o){ OSCSFX.forEach(function(k){ var d=window.__knobDest?window.__knobDest('SYN_OSC_'+o+'_'+k):null; if(d!=null) out.push(d); }); });
-              [0,1,54,55,56,57,58,59,60,61,62,63,340,341,342,343,344,345].forEach(function(d){ out.push(d); });   /* both filter slots, front and back */
-              (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d){ if(!d||d.core==='cmp') return; for(var k=0;k<12;k++){ var dd=window.__fxModDest?window.__fxModDest(d.core,d.inst,k):null; if(dd!=null) out.push(dd); } });
+              [0,1,56,57,58,59,60,61,62,63,340,341,342,343,344,345].forEach(function(d){ out.push(d); });   /* both filter slots, front and back · tp44 — never the two resonances (54/55) */
+              (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d){ if(!d||d.core==='cmp'||d.core==='eqz') return; for(var k=0;k<12;k++){ if(d.core==='flt'&&k===1) continue; var dd=window.__fxModDest?window.__fxModDest(d.core,d.inst,k):null; if(dd!=null) out.push(dd); } });   /* tp44 — no random modulation on the Equalizer, none on a filter card's Res (Max) */
               [1887,1888,1889].forEach(function(d){ out.push(d); });   /* the tape machine's three knobs */
               for(var n=0;n<10;n++){ out.push(12+n); out.push(673+n); out.push(683+n); }   /* an LFO's own amount, rate and phase */
               for(var e=1;e<=5;e++) for(var q=0;q<6;q++) out.push(481+(e-1)*6+q);   /* every envelope's Dly/Atk/Hld/Dec/Sus/Rel */
@@ -27443,6 +27473,9 @@ function animate(timestamp) {
     // strokes, per-vertex radial gradients, meter DOM thrash and 3 canvas reallocs per frame
     // were painting pixels nobody can see. Keep rescheduling so closing the panel resumes.
     _prevAnimTime = 0;
+    /* tp44 — the MOD page's three waveform boxes were NEVER painted: this return sits above updateModulation (their only painter,
+       fb487) — measured blank on every open, at rest and while playing. Three small canvases, only while that page shows. */
+    if (currentActivePanel === 'mod') { try { if (typeof modState !== 'undefined' && modState.panelOpen) for (let li = 0; li < 3; li++) drawLFOWaveform (li); } catch (e) {} }
     return;   /* fb511 -- __tiFrame re-calls; closing the panel still resumes */
   }
   const time = timestamp * 0.001;
@@ -40392,7 +40425,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         al: 0.5 + 0.5 * Math.random (), sz: 0.7 + 0.7 * Math.random () });
       P.forEach (function (q) { q.dxp0 = q.dxp; q.dyp0 = q.dyp; q.wp0 = q.wp; });   /* fb636 h2 — each particle's home phases */
       var breathPh = 0;
-      function resize () { var r = cv.parentElement.getBoundingClientRect (); var dpr = window.DPR || window.devicePixelRatio || 1;
+      function resize () { var r = (window.__tpRect ? window.__tpRect (cv.parentElement) : cv.parentElement.getBoundingClientRect ()); var dpr = (window.DPR || window.devicePixelRatio || 1) * (window.__tpZoomUp ? window.__tpZoomUp (cv) : 1);   /* tp44 — layout px in the Patcher's scaled world, a bitmap for its zoom */
         var w = Math.max (1, Math.round (r.width)), h = Math.max (1, Math.round (r.height));
         cv.width = Math.round (w * dpr); cv.height = Math.round (h * dpr); cv.style.width = w + 'px'; cv.style.height = h + 'px';
         cv._dpr = dpr; cv._w = w; cv._h = h; }
@@ -40419,6 +40452,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         if (__rest) { act = 0; breathPh = 0; for (var ri = 0; ri < P.length; ri++) { var q = P[ri]; q.dxp = q.dxp0; q.dyp = q.dyp0; q.wp = q.wp0; } }
         var actD = act * __me;
         if (! cv._w || cv._w < 2) resize ();
+        else if ((frame & 15) === 0) { try { var rr = (window.__tpRect ? window.__tpRect (cv.parentElement) : cv.parentElement.getBoundingClientRect ()); if (Math.abs (rr.width - cv._w) > 1 || Math.abs (rr.height - cv._h) > 1) resize (); } catch (e) {} }   /* tp44 — adopted by the Patcher (a wider box) or handed back: never a stretched bitmap */
         var w = cv._w, h = cv._h, dpr = cv._dpr;
         ctx.setTransform (dpr, 0, 0, dpr, 0, 0); ctx.clearRect (0, 0, w, h);
         var typ = cur, jag = 0.92, step = 2;
@@ -40449,10 +40483,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           var al = (0.18 + 0.55 * actD) * breath;           // brightness: grows with activity, breathes
           var drift = base * (0.10 + 0.16 * actD) * __me;   // how far particles free-float from their base spot (home: on it)
           var dspd = (0.006 + 0.016 * actD) * __me;         // drift SPEED — slow at rest, a touch livelier when playing (fb636: x the motion envelope)
+          var sxx = 1; try { if (w > h * 1.3 && cv.closest && cv.closest ('#tp-page')) sxx = Math.min (2.1, (w / h) * 0.72); } catch (e) {}   /* tp44 — on the canvas the cloud spreads to fill a wide module (Max: "extend it in length") */
+          if (sxx > 1) { R *= 1.3; drift *= 1.3; }   /* and it is a third bigger there: the box is, and the rest pose read as a speck (measured 15 px in a 204x86 box) */
           for (var i = 0; i < P.length; i++) { var p = P[i];
             p.dxp += dspd * p.dxs; p.dyp += dspd * p.dys; p.wp += dspd * p.ws;   // advance each particle's own slow phases
             var rad = R * p.r + Math.sin (p.wp) * base * 0.09 * e * __me;        // smooth radial wobble (home: none)
-            var px = cx + Math.cos (p.a) * rad + Math.cos (p.dxp) * drift;       // smooth free-form drift (no random)
+            var px = cx + (Math.cos (p.a) * rad + Math.cos (p.dxp) * drift) * sxx;       // smooth free-form drift (no random)
             var py = cy + Math.sin (p.a) * rad * 0.82 + Math.sin (p.dyp) * drift * 0.82;
             var tw = 0.8 + (0.4 * Math.sin (p.wp * 1.3 + p.dxp) - 0.2) * __me;   // smooth twinkle (no flicker; home: .8)
             var s = (0.7 + 1.0 * actD) * p.sz;
@@ -42473,6 +42509,18 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-node > .tp-body > .fxr-dev .fxr-rightcol { justify-content: center; }   /* tp10 — the route pills are gone here: the card's pills sit in the middle, stacked and wide (the Splitter's inner cards) */
 #tp-page .tp-node > .tp-body > .fxr-dev .fxr-pills { flex-direction: column; gap: 5px; }
 #tp-page .tp-node > .tp-body > .fxr-dev .fxr-pill { flex: none; width: 100%; }
+/* tp44 — THE BOTTOM ROW ON THE CANVAS (Max: "the separator not being long enough... a lot of dead space at the bottom... a weird
+   delta button with the separator a quarter away"). Without the route row the pills column was bottom-aligned to the knob block, so
+   one pill sat at the labels and two climbed to the dials — inconsistent card to card. Here the row centres: the pills centre on the
+   whole knob block and the divider spans it. Only inside #tp-page; the synth page keeps its row. */
+#tp-page .tp-node > .tp-body > .fxr-dev .fxr-ctrls { align-items: center; padding-bottom: 6px; }
+#tp-page .tp-node > .tp-body > .fxr-dev .fxr-divider { height: auto; align-self: stretch; margin: 1px 0; }
+/* tp44 — THE NOISE MODULE: no power dot on the canvas (a module here is on; remove it to switch it off), the name centred, the cloud
+   fills the module (see the painter: an elliptical cloud when its box is wide). */
+#tp-page .tp-node[data-kind="noise"] .noise-pow { display: none; }
+#tp-page .tp-node[data-kind="noise"] .noise-head { justify-content: center; }
+#tp-page .tp-node[data-kind="noise"] > .tp-body > .noise { height: 100%; box-sizing: border-box; }   /* the strip fills its module, so the cloud (flex:1) gets the height the module has — without this the box measured 204x0 */
+#tp-page .tp-node[data-kind="noise"] .noise-viz { min-height: 0; }
 #tp-page .tp-node[data-core="tape"] > .tp-body > .fxr-dev .fxr-head { position: relative; }
 #tp-page .tp-node[data-core="tape"] > .tp-body > .fxr-dev .fxr-head .fxr-preset { position: absolute; left: 50%; transform: translateX(-50%); }
 #tp-page .tp-node.off > .tp-body > .fxr-dev .fxr-pwr { display: inline-block; }   /* a bypassed card shows its power so it can come back */
@@ -42699,7 +42747,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var page=null, world=null, cg=null, drawg=null, nodesEl=null, addM=null, nMenu=null, toastEl=null, miniEl=null, modesEl=null, modesHome=null, tileHome={}, tileOrder=[];
   var isOpen=false, built=false, view={x:0,y:0,z:0.6}, nodes=[], cables=[], sel=null, drag=null, raf=0, shims={}, addCtx=null, addCat='All', suppressClick=false, syncT=0, applying=false, prevTapeTab=null, zTop=1;
   var layout={v:6,pos:{},ext:{},view:null,aim:'anything',dlevel:'medium',rlevel:'medium',rlinks:[],viz:false,nodes:[],finl:{}};   /* tp41 — finl: an inline flow card's anchor, the rack device it sits after */
-  var SIZES={osc:[332,140],noise:[220,140],voiceCanvas:[300,236],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
+  var SIZES={osc:[332,140],noise:[220,160],voiceCanvas:[300,236],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
   /* tp11 — Max: "extend the bottom … then the top … evenly": a module with dots under its knobs gets 7 px of air on top and 17 at the bottom, so a dot never lands on a knob's LFO streak */
   var PADK={osc:1,filter:1,fx:1,tape:1,noise:1}, PADT=7, PADB=17;
   function padOf(kind){ return PADK[kind]?[PADT,PADB]:[0,0]; }
@@ -42850,7 +42898,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* every module kind at the size the synth page gives it right now (the page is display:none while the Patcher is up: un-hide it for one synchronous read, nothing paints in between) */
   function measureHome(){ try{ var body=document.body, was=body.classList.contains('tp-open'); if(was) body.classList.remove('tp-open');
       var sz=function(el){ return (el&&el.offsetWidth>20&&el.offsetHeight>20)?[el.offsetWidth,el.offsetHeight]:null; };
-      var o=null; oscList().forEach(function(x){ o=o||sz(q('#osc-'+x+'-device')); }); if(o) SIZES.osc=o; var nz=sz(q('#noise-mod')); if(nz) SIZES.noise=[Math.max(200,nz[0]),nz[1]];   /* tp42 */
+      var o=null; oscList().forEach(function(x){ o=o||sz(q('#osc-'+x+'-device')); }); if(o) SIZES.osc=o; var nz=sz(q('#noise-mod')); if(nz) SIZES.noise=[Math.max(220,nz[0]),nz[1]+20];   /* tp42 · tp44 — a wider, taller module on the canvas: the cloud fills it (Max) */
       var f=sz(q('#filter-device')); if(f) SIZES.filter=f; var e=sz(q('#syn-panel .device.envs')); if(e) SIZES.env=e; var l=sz(q('#syn-panel .device.mod')); if(l) SIZES.lfo=l;
       var v=sz(q('#syn-panel .voice-meta')); if(v) SIZES.voice=v; var c=sz(q('#fxr-rack .fxr-dev')); if(c) SIZES.fx=c; var r=sz(q('#flow-device .flow-vis')); if(r) SIZES.rnd=[Math.max(180,r[0]),Math.max(130,r[1])];
       if(was) body.classList.add('tp-open'); }catch(e){} }
@@ -43311,7 +43359,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      normalised cap IS the percentage. It is also struck off the modulation target pool below — a capped value an LFO
      can still drive to 1.0 is not capped. */
   var DLY_FB_MAX=.20;
-  function knobTop(core,k,top){ return (core==='delay'&&k===1)?Math.min(top,DLY_FB_MAX):top; }   /* tp16 — Max: "how come the other menu gets crazy" — ONE reach, and it goes all the way */
+  function knobTop(core,k,top){ return (core==='delay'&&k===1)?Math.min(top,DLY_FB_MAX):((core==='flt'&&k===1)?Math.min(top,.3):top); }   /* tp44 — a filter card's Res: 30 % at most */   /* tp16 — Max: "how come the other menu gets crazy" — ONE reach, and it goes all the way */
   var ENV={keys:[.05,.45,.6,.35],pads:[.45,.55,.85,.65],bass:[.02,.35,.7,.2],leads:[.06,.35,.85,.3],plucks:[.0,.3,.0,.25],textures:[.55,.6,.9,.8],drums:[.0,.3,.0,.2]};   /* tp39 — drums: a percussive envelope */
   /* the REACH — how far every section goes. uni = unison VOICES (never above 7, Max: "anything above is a CPU eater"); lfo/env/fx = how many;
      types = chance a card leaves its default type; back = chance its back panel rolls; fxMod = share of LFOs aimed at effect knobs;
@@ -43651,10 +43699,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); rollInfo._mono=(aim==='bass'||aim==='leads'); },
       function(){ if(!B.flt) return; toast('Shaping the filters…'); f2On=(on.length>1)&&rnd()<R.f2;   /* tp13 — Max: "why isn't the second filter active on anything" */
           P('SYN_FILTER1_TYPE',ftypeR()); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65]}[aim]||[.4,.75];
-          P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',span(R.res)); P('SYN_FILTER1_DRV',span(R.drv)); P('SYN_FILTER1_KEYTRACK',0); P('SYN_FILTER1_VEL',0);
+          P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',Math.min(.3,span(R.res)));   /* tp44 — Max: resonance never past 30 % from the dice */ P('SYN_FILTER1_DRV',span(R.drv)); P('SYN_FILTER1_KEYTRACK',0); P('SYN_FILTER1_VEL',0);
           P('SYN_FILTER1_MIX',1); P('SYN_FILTER1_POLES',rnd()<.5?1:between(.3,1)); P('SYN_FILTER1_SPREAD',rnd()<(R.wide||.3)?between(.1,.6):0);
           P('SYN_FILTER1_DRIVETYPE',choiceNorm('SYN_FILTER1_DRIVETYPE',Math.floor(rnd()*6),6)); P('SYN_FILTER1_PDRV',span(R.drv));
-          if(f2On){ P('SYN_FILTER2_TYPE',ftypeR()); P('SYN_FILTER2_CUT',between(.3,.8)); P('SYN_FILTER2_RES',span(R.res)); P('SYN_FILTER2_DRV',span(R.drv)); P('SYN_FILTER2_KEYTRACK',0); P('SYN_FILTER2_VEL',0);
+          if(f2On){ P('SYN_FILTER2_TYPE',ftypeR()); P('SYN_FILTER2_CUT',between(.3,.8)); P('SYN_FILTER2_RES',Math.min(.3,span(R.res))); P('SYN_FILTER2_DRV',span(R.drv)); P('SYN_FILTER2_KEYTRACK',0); P('SYN_FILTER2_VEL',0);
                     P('SYN_FILTER2_MIX',1); P('SYN_FILTER2_POLES',rnd()<.5?1:between(.3,1)); P('SYN_FILTER2_SPREAD',rnd()<(R.wide||.3)?between(.1,.6):0);
                     P('SYN_FILTER2_DRIVETYPE',choiceNorm('SYN_FILTER2_DRIVETYPE',Math.floor(rnd()*6),6)); P('SYN_FILTER2_PDRV',span(R.drv)); P('SYN_FILTER_ROUTING',rnd()<.5?0:1); }
           else P('SYN_FILTER2_TYPE',choiceNorm('SYN_FILTER2_TYPE',27,NF1));   /* tp13 — OFF means NONE, not a stale type from the last roll */
@@ -43669,7 +43717,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           ['M1','M2'].forEach(function(m){ P('SYN_ENV_'+m+'_A',between(0,big?.7:.4)); P('SYN_ENV_'+m+'_D',between(.1,.8)); P('SYN_ENV_'+m+'_S',between(0,1)); P('SYN_ENV_'+m+'_R',between(.1,.7));
             P('SYN_ENV_'+m+'_CA',between(-.8,.8)); P('SYN_ENV_'+m+'_CD',between(-.8,.8)); P('SYN_ENV_'+m+'_LOOP',((lvl==='wild'||lvl==='crazy')&&rnd()<.4)?1:0); }); },
       function(){ if(!B.fx) return; toast('Building the effects…');
- var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i);
+ if(window.__fxrClear) window.__fxrClear(); else { var devs=window.__fxrDevs?window.__fxrDevs():[]; for(var i=devs.length-1;i>=0;i--) window.__fxrRemove&&window.__fxrRemove(i); }   /* tp44 — one render, not one per card */
           var fp=diceableFx((FXPOOL[aim]||FXPOOL.pads).slice()); if(big) diceableFx(FXMORE).forEach(function(k){ if(fp.indexOf(k)<0) fp.push(k); });
           var count=ispan(R.fx), picked=[]; if((aim==='pads'||aim==='keys'||aim==='textures')&&rnd()<.7){ picked.push('reverb'); }
           shuffle(fp).forEach(function(k){ if(picked.length<count&&picked.indexOf(k)<0) picked.push(k); });
@@ -43746,9 +43794,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
              returns null for anything this build does not carry, so the list can name more than it finds. */
           on.forEach(function(o){ var X=OX(o); ['WT_FRAME','WARP_AMOUNT','FOLD_AMT','SPECTRAL_AMT','WARP2_AMT','PAN','LEVEL','SAMPLE_SCAN','SAMPLE_FORMANT','SAMPLE_STRETCH','SAMPLE_SPRAY','SAMPLE_WARP','SAMPLE_START','SAMPLE_AIR','WSLOT1_DEPTH','WSLOT2_DEPTH','WSLOT3_DEPTH','WSLOT4_DEPTH','SPECTRAL_LO','SPECTRAL_HI','WVAR','W2VAR','UWIDTH','UBLEND','SUB_WEIGHT','SUB_HEAT','FM_DEPTH1','FM_DEPTH2','FM_FB','HARM_COUNT','HARM_SHINE','MODAL_MATERIAL','MODAL_DECAY','MODAL_BODY']
               .forEach(function(k){ var d=knobDest(X+k); if(d!=null) dpool.push({d:d,k:(k==='WT_FRAME'?'wt':(k==='LEVEL'?'lvl':'osc'))}); }); });
-          dpool.push({d:0,k:'cut'}); dpool.push({d:54,k:'res'}); [58,60,62,340,342,344].forEach(function(d){ dpool.push({d:d,k:'fltback'}); });   /* drive · back drive · mix · vel · track · spread */
-          if(f2On){ dpool.push({d:1,k:'cut'}); dpool.push({d:55,k:'res'}); [59,61,63,341,343,345].forEach(function(d){ dpool.push({d:d,k:'fltback'}); }); }
-          fxAdded.forEach(function(f){ if(f.core==='cmp') return; for(var kk=0;kk<12;kk++){   /* tp12 — nothing on the compressor · tp13 — 0-3 are the front dials, 4-11 the BACK PANEL: all of them are targets */
+          dpool.push({d:0,k:'cut'}); [58,60,62,340,342,344]   /* tp44 — resonance is never a random modulation target (Max: "the resonance has blown some of my ears out") */.forEach(function(d){ dpool.push({d:d,k:'fltback'}); });   /* drive · back drive · mix · vel · track · spread */
+          if(f2On){ dpool.push({d:1,k:'cut'}); [59,61,63,341,343,345].forEach(function(d){ dpool.push({d:d,k:'fltback'}); }); }
+          fxAdded.forEach(function(f){ if(f.core==='cmp'||f.core==='eqz') return; for(var kk=0;kk<12;kk++){   /* tp44 — the Equalizer is never randomly modulated (Max: "it's just gonna piss people off") */   /* tp12 — nothing on the compressor · tp13 — 0-3 are the front dials, 4-11 the BACK PANEL: all of them are targets */
+            if(f.core==='flt'&&kk===1) continue;     /* tp44 — nor a filter card's resonance */
             if(f.core==='delay'&&kk===1) continue;   /* tp23 — NEVER modulate delay feedback: a value capped at 20 that an LFO can still drive to 1.0 is not capped */
             if((f.core==='reverb'||f.core==='delay')&&fxNoMod((window.__fxrDevs?window.__fxrDevs():[]).filter(function(x){ return x.core===f.core&&x.inst===f.inst; })[0],kk)) continue;   /* tp39e — the reverb/delay mod rate + depth are never LFO targets */
             var d=window.__fxrDevs?(window.__fxModDest?window.__fxModDest(f.core,f.inst,kk):null):null; if(d!=null) dpool.push({d:d,k:(kk<4?'fx':'fxback')}); } });
