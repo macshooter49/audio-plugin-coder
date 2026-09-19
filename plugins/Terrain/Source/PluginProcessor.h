@@ -1854,6 +1854,8 @@ public:
     //  preference, kept as a marker file (~/Library/Caches/Terrain/capture-off) so a fresh instance never
     //  arms the ~202 MB ring in the first place. Off = the ring is released and processBlock skips the write.
     std::atomic<bool>   captureEnabled_ { true };
+    std::atomic<float>* tiArmedP_ = nullptr;   // tp49 — TI_ARMED: the Chop page owns the keys
+    juce::MidiBuffer    armedMidi_;            // tp49 — the synth's MIDI with every note-on removed while armed
     static juce::File   captureOffMarker();
     bool getCaptureEnabled() const noexcept { return captureEnabled_.load (std::memory_order_acquire); }
     void setCaptureEnabled (bool on);   // message thread

@@ -6914,7 +6914,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     </div>
     <div class="header-right">
       <button class="mod-btn" id="syn-btn" title="Synth Page">SYN</button>
-      <button class="mod-btn" id="mix-btn" title="Mixer Page (coming soon)">MIX</button>
+      <button class="mod-btn" id="mix-btn" title="Chop — the sampler page">CHOP</button>
       <button class="mod-btn eq-btn" id="delay-btn" title="Delay Panel">DLY</button>
       <button class="mod-btn eq-btn" id="eq-btn" title="EQ Panel">EQ</button>
       <button class="mod-btn" id="mod-btn" title="Modulation Panel">
@@ -44178,7 +44178,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var CATS=['All','Oscillators','Filters','Flow','Tape','Effects','Utility'];   /* tp43 — Utility: the voice column */
   function catalog(){ var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');
     oscList().forEach(function(o){ var on=!!nodeByKey('osc-'+o); it.push({k:'osc:'+o,n:'Oscillator '+oscLetter(o),cat:'Oscillators',dis:on,note:on?'Already on the canvas':null}); });
-    [1,2].forEach(function(i){ var on=!!nodeByKey(noiseKey(i)); it.push({k:'noise:'+i,n:i===2?'Noise 2':'Noise',cat:'Oscillators',dis:on,note:on?'Already on the canvas':null}); });   /* tp42 — the noise modules */
+    { var n1=!!nodeByKey(noiseKey(1)), n2=!!nodeByKey(noiseKey(2)); it.push(n1&&n2?{k:'noise:2',n:'Noise',cat:'Oscillators',dis:true,note:'Both noises are on the canvas'}:{k:n1?'noise:2':'noise:1',n:'Noise',cat:'Oscillators',dis:false,note:n1?'A second noise (Noise 2)':null}); }   /* tp49 — ONE entry (Max: "why put Noise 2 when we can just duplicate the same Noise"): the first add is Noise, the next is Noise 2 on the canvas */   /* tp42 — the noise modules */
     it.push({k:'flt',n:'Filter',cat:'Filters'});   /* tp9 — another filter = the rack's Filter card (the whole roster), as many as its pool holds */
     { var vOn=!!nodeByKey('voice'); it.push({k:'voice',n:'Voices',cat:'Utility',dis:vOn,note:vOn?'Already on the canvas':null}); }   /* tp43 — Max: "add the voice menu back … there's a couple of things we can drag from there" */
     FLOWS.forEach(function(m){ var mx=FLOW_INST_MAX[m]||1, free=null; for(var n=1;n<=mx;n++){ var key=n>1?m+n:m; if(!nodeByKey('flow-'+key)){ free=key; break; } }

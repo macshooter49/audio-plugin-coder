@@ -7331,6 +7331,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             for (const char* sfx : kDs)
                 layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { juce::String ("SYN_DCK_") + sfx, 1 }, juce::String ("Deck ") + sfx, false));
             layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "SYN_DCK_POWER", 1 }, "Deck Power", true));
+            layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "TI_ARMED", 1 }, "Chop Armed", false));   // tp49 — the Chop page owns the keys while armed (Max)
             layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "SYN_DCK_ACTIVE", 1 }, "Deck In Chain", false));
             layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "SYN_DCK_RANK", 1 }, "Deck Chain Rank", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
             I ("SYN_DCK_TAPS", "Deck Direct Taps");
@@ -8332,6 +8333,7 @@ void TerrainAudioProcessor::cacheDeckParams()   // tp43
     auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
     static const char* const sfx [6] = { "SRC_A", "SRC_B", "SRC_C", "SRC_D", "SRC_SUB", "SRC_NOISE" };
     dckRefs_.active = R ("SYN_DCK_ACTIVE"); dckRefs_.rank = R ("SYN_DCK_RANK"); dckRefs_.power = R ("SYN_DCK_POWER");
+    tiArmedP_ = R ("TI_ARMED");   // tp49
     for (int k = 0; k < 6; ++k) dckRefs_.src [k] = R (juce::String ("SYN_DCK_") + sfx[k]);
     for (int k = 0; k < 4; ++k) dckRefs_.srcB[k] = R (juce::String ("SYN_DCK_") + kSrcBSfx[k]);
 }
@@ -9300,6 +9302,7 @@ void TerrainAudioProcessor::rebuildChainOrder() noexcept
 
 void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    armedMidi_.ensureSize (8192);   // tp49 — the armed-chop MIDI filter never allocates on the audio thread
     {   // fb575 — the macro base's smoother starts where the knob stands (no glide on transport start), and the
         //  macro parameters' indices are known before the first CC can arrive
         static const char* const ids[wc::kNumMacros] = { ParameterIDs::SYN_MACRO_1, ParameterIDs::SYN_MACRO_2, ParameterIDs::SYN_MACRO_3, ParameterIDs::SYN_MACRO_4,
@@ -13342,7 +13345,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
     {
-        const juce::MidiBuffer& toSynth = useMixed ? mixed : *midiIn;
+        const juce::MidiBuffer* toSynthP = useMixed ? &mixed : midiIn;
+        if (tiArmedP_ != nullptr && tiArmedP_->load (std::memory_order_relaxed) > 0.5f)
+        {   // tp49 — CHOP ARMED (Max: "it stops ANY SYNTH PLAYING and switches to the CHOP MODE PLAYING"): the sampler owns the
+            //  keys; the synth hears releases and controllers only, never a note-on, so what it was playing ends naturally.
+            armedMidi_.clear();
+            for (const auto meta : *toSynthP) { const auto msg = meta.getMessage(); if (! msg.isNoteOn()) armedMidi_.addEvent (msg, meta.samplePosition); }
+            toSynthP = &armedMidi_;
+        }
+        const juce::MidiBuffer& toSynth = *toSynthP;
         TI_PROF ("synth:params");
         synthEngine.renderNextBlock (synthScratch, toSynth, 0, numSamples);
         if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, toSynth, 0, numSamples);   // tp20 — bank 1, same MIDI, same scratch

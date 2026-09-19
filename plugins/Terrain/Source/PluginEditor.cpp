@@ -2452,6 +2452,25 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 audioProcessor.exportCapture(dur);
                 complete({});
             })
+            .withNativeFunction("setTiArmed", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // tp49 — the Chop page's ARM: while on, the sampler owns the keys (PluginProcessor gates the synth's note-ons)
+                if (args.size() > 0)
+                    if (auto* prm = audioProcessor.getAPVTS().getParameter ("TI_ARMED"))
+                    { prm->beginChangeGesture(); prm->setValueNotifyingHost ((float) args[0] > 0.5f ? 1.0f : 0.0f); prm->endChangeGesture(); }
+                complete ({});
+            })
+            .withNativeFunction("getTiArmed", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                auto* prm = audioProcessor.getAPVTS().getParameter ("TI_ARMED");
+                complete (juce::var ((prm != nullptr && prm->getValue() > 0.5f) ? 1 : 0));
+            })
+            .withNativeFunction("getHostBpm", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // tp49 — the Chop page's BPM is the DAW's (Max: "bpm should also match our DAW by default")
+                complete (juce::var ((double) audioProcessor.currentBPM.load()));
+            })
             .withNativeFunction("setCaptureEnabled", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {   // tp43 — Settings: DAW capture on/off (the ~202 MB rolling ring)
@@ -7874,7 +7893,13 @@ void TerrainUiCore::CaptureDragStrip::paint (juce::Graphics& g)
     {
         int mins = static_cast<int>(avail) / 60;
         int secs = static_cast<int>(avail) % 60;
-        if (avail < 1.0f)
+        if (! processor.getCaptureEnabled())   // tp49 — Max: "when the capture is OFF make the text say Capture - Off"
+        {
+            g.setColour(dark ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
+            g.setFont(juce::FontOptions(fs));
+            g.drawText("CAPTURE - OFF", b, juce::Justification::centred);
+        }
+        else if (avail < 1.0f)
         {
             g.setColour(dark ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
             g.setFont(juce::FontOptions(fs));
@@ -14224,6 +14249,120 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       init();
     }
   })();
+})();
+</script>
+)TIHX") + juce::String (R"TIHX(
+<style id="ti-chop-skin">
+/* tp49 — THE CHOP PAGE WEARS THE HOUSE. Max: "header, middle and footer match the patcher and synth background; the buttons are the
+   same code as the 4 MODES — selected: purple outline, white inside; key box and BPM transparent; SEQ, SYNC, the play button, the dice
+   and the XY tracker gone; the mixers, LAYER / RR / RANDOM / KEYTRK / VEL and export in our font." Overrides only; the page's logic stands. */
+body.chop-open #hero .scope-controls-left, body.chop-open #hero .scope-controls-right, body.chop-open #hero .crosshair-h,
+body.chop-open #hero .crosshair-v, body.chop-open #hero .xy-readout { display: none !important; }
+body.chop-open #hero { background: #12121F !important; }
+[data-theme="light"] body.chop-open #hero { background: #F3F1F8 !important; }
+#ti-top-right-cluster .ti-seq-play, #ti-top-right-cluster .ti-seq-sync, #ti-seq-pill, #ti-bpm-lock { display: none !important; }
+#mix-panel, #ti-bottom-pills, #ti-root-picker, #ti-layer-pads, #ti-top-right-cluster, #ti-bottom-right-cluster, #ti-chop-panel {
+  font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif !important; }
+#mix-panel { background: #1A1A2E !important; border-top: 1px solid rgba(255,255,255,0.08) !important; }
+[data-theme="light"] #mix-panel { background: #F3F1F8 !important; }
+#mix-panel .mix-strip, #mix-panel #mix-trigger-area, #mix-panel #mix-stem-area {
+  background: rgb(24,22,37) !important; border: 1px solid rgba(255,255,255,0.11) !important; border-radius: 13px !important;
+  box-shadow: 0 12px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06) !important; }
+[data-theme="light"] #mix-panel .mix-strip, [data-theme="light"] #mix-panel #mix-trigger-area, [data-theme="light"] #mix-panel #mix-stem-area {
+  background: #FFFFFF !important; border-color: rgba(0,0,0,0.08) !important; box-shadow: 0 6px 18px rgba(0,0,0,.08) !important; }
+/* THE PILL = THE FLOW TILE: white outline, dim word; selected: purple outline, white word; nothing filled */
+.ti-mode-pill, .ti-play-pill, .ti-layer-pad, #ti-arm, #ti-lib .ti-lib-nav,
+#mix-panel .trigger-pill, #mix-panel .trigger-btn, #mix-panel .trigger-toggle, #mix-panel .mix-strip-btn, #mix-panel button {
+  background: transparent !important; border: 1px solid rgba(255,255,255,0.45) !important; color: var(--text-secondary) !important;
+  border-radius: 9px !important; font-family: inherit !important; font-weight: 500 !important; font-size: 9.5px !important;
+  letter-spacing: .03em !important; text-transform: none !important; box-shadow: none !important; text-shadow: none !important;
+  transition: color .2s ease, border-color .2s ease !important; }
+.ti-mode-pill:hover, .ti-play-pill:hover, .ti-layer-pad:hover, #ti-arm:hover, #ti-lib .ti-lib-nav:hover,
+#mix-panel .trigger-pill:hover, #mix-panel .trigger-btn:hover, #mix-panel .trigger-toggle:hover, #mix-panel .mix-strip-btn:hover, #mix-panel button:hover { color: var(--text-primary) !important; }
+.ti-mode-pill.active, .ti-play-pill.active, .ti-layer-pad.active, #ti-arm.on,
+#mix-panel .trigger-pill.active, #mix-panel .trigger-btn.active, #mix-panel .trigger-toggle.active, #mix-panel .trigger-toggle.on,
+#mix-panel .mix-strip-btn.active, #mix-panel button.active, #mix-panel button.on, #mix-panel button.selected {
+  border-color: var(--purple-400) !important; color: #fff !important; background: transparent !important; }
+.ti-layer-pad.placeholder { opacity: .55; }
+.ti-layer-pad.playing, .ti-layer-pad.active.playing { box-shadow: 0 0 8px rgba(183,148,255,.45) !important; }
+#mix-panel .mix-strip-header { font-weight: 500 !important; font-size: 11px !important; letter-spacing: .04em !important; color: var(--text-primary) !important; }
+#mix-panel .mix-strip-knob-label, #mix-panel .trigger-hint, #mix-panel #mix-stem-area > div:first-child {
+  font-size: 8.5px !important; letter-spacing: .04em !important; text-transform: none !important; color: var(--text-secondary) !important; }
+#mix-panel .mix-strip-knob { background: conic-gradient(from 225deg, var(--purple-400) 0deg, var(--purple-400) calc(var(--val,0.5) * 270deg), rgba(255,255,255,0.14) calc(var(--val,0.5) * 270deg), rgba(255,255,255,0.14) 270deg, transparent 270deg) !important; }
+#mix-panel .mix-strip-fader { background: rgba(255,255,255,0.14) !important; }
+#mix-panel .mix-strip-fader-fill { background: var(--purple-400) !important; }
+#mix-panel .mix-strip-fader-handle { background: rgb(24,22,37) !important; border: 1.5px solid var(--purple-400) !important; box-shadow: none !important; }
+#mix-panel .mix-strip-meter { background: rgba(255,255,255,0.10) !important; }
+#mix-panel .mix-strip-meter-fill { background: rgba(255,255,255,0.85) !important; box-shadow: none !important; }
+#mix-panel .morph-track, #mix-panel .prob-slider, #mix-panel .kt-range { background: rgba(255,255,255,0.14) !important; }
+#mix-panel .morph-fill, #mix-panel .prob-fill { background: var(--purple-400) !important; }
+#mix-panel .morph-handle, #mix-panel .kt-handle, #mix-panel .vel-handle { background: rgb(24,22,37) !important; border: 1.5px solid var(--purple-400) !important; box-shadow: none !important; }
+#ti-root-picker { background: transparent !important; border: none !important; box-shadow: none !important; }
+#ti-root-picker .ti-root-value { color: var(--text-primary) !important; font-family: inherit !important; font-weight: 500 !important; letter-spacing: .04em !important; }
+.ti-bpm-display { background: transparent !important; border: none !important; box-shadow: none !important; display: inline-flex !important; align-items: baseline !important; justify-content: center !important; gap: 5px !important; padding: 0 6px !important; min-width: 74px !important; }
+.ti-bpm-value, .ti-bpm-label { font-family: inherit !important; letter-spacing: .04em !important; color: var(--text-primary) !important; }
+.ti-bpm-label { color: var(--text-secondary) !important; font-size: 8.5px !important; }
+#ti-bottom-right-cluster { display: flex !important; align-items: center !important; gap: 8px !important; }
+#ti-lib { display: inline-flex; align-items: center; gap: 6px; height: 24px; }
+#ti-lib .ti-lib-nav { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 12px !important; line-height: 1; padding: 0; }
+#ti-lib #ti-lib-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; letter-spacing: .03em; color: var(--text-primary); cursor: pointer; }
+#ti-lib #ti-lib-name:hover { color: #fff; }
+#ti-arm { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 11px; cursor: pointer; user-select: none; }
+#ti-arm .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.25); }
+#ti-arm.on .dot { background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.8); }
+/* the chop's right-click panel: the house glass */
+#ti-chop-panel { background: rgba(24,24,38,0.92) !important; -webkit-backdrop-filter: blur(14px) saturate(1.3) !important; backdrop-filter: blur(14px) saturate(1.3) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important; border-radius: 10px !important; box-shadow: 0 12px 34px rgba(0,0,0,.5) !important; }
+#ti-chop-panel::before, #ti-chop-panel::after { display: none !important; }
+#ti-root-picker::before, #ti-root-picker::after, .ti-bpm-display::before, .ti-bpm-display::after, #ti-bottom-right-cluster::before, #ti-bottom-right-cluster::after,
+#ti-layer-pads::before, #ti-layer-pads::after, #ti-bottom-pills::before, #ti-bottom-pills::after, #ti-mode-toggle::before, #ti-play-mode-toggle::before { display: none !important; }
+#ti-root-picker, #ti-layer-pads, #ti-bottom-pills, #ti-mode-toggle, #ti-play-mode-toggle, #ti-bottom-right-cluster, .ti-bpm-display, #ti-lib { background: transparent !important; box-shadow: none !important; border: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }   /* a blur with no fill still reads as a dark box over the mesh */
+#mix-panel .layer-status-dot { background: transparent !important; border: 1px solid rgba(255,255,255,0.45) !important; color: var(--text-secondary) !important; border-radius: 9px !important; box-shadow: none !important; font-family: inherit !important; font-weight: 500 !important; font-size: 9.5px !important; letter-spacing: .03em !important; }
+#mix-panel .layer-status-dot.lit { border-color: var(--purple-400) !important; color: #fff !important; }
+#ti-chop-panel button, #ti-chop-panel .ti-pill, #ti-chop-panel [class*="pill"] { background: transparent !important; border: 1px solid rgba(255,255,255,0.45) !important; color: var(--text-secondary) !important; border-radius: 9px !important; font-family: inherit !important; font-size: 9.5px !important; letter-spacing: .03em !important; text-transform: none !important; }
+#ti-chop-panel button.active, #ti-chop-panel .active { border-color: var(--purple-400) !important; color: #fff !important; }
+</style>)TIHX")
+       + juce::String (R"TIHX(
+<script>
+(function(){
+  /* tp49 — THE CHOP PAGE'S HANDS: seamless switching, the ARM, the sample library, the DAW's BPM, the house words. */
+  var WORDS={'LAYER':'Layer','RR':'RR','RANDOM':'Random','KEYTRK':'Keytrack','VEL':'Velocity','RESET TO A':'Reset to A','STEMS':'Stems',
+    'EXPORT ALL 4':'Export All 4','REVEAL FOLDER':'Reveal Folder','DRY':'Dry','WET':'Wet','CLEAR':'Clear','PAN':'Pan','JIT':'Jitter',
+    'PITCH':'Pitch','SLICE':'Slice','1-SHOT':'One-Shot','LOOP':'Loop','MUTE':'Mute','SOLO':'Solo','SYNC':'Sync','SHUFFLE':'Shuffle','RESET':'Reset'};
+  function retitle(root){ try{ var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null); var t; var list=[]; while((t=w.nextNode())) list.push(t);
+      list.forEach(function(n){ var k=n.nodeValue.trim(); if(WORDS.hasOwnProperty(k)) n.nodeValue=n.nodeValue.replace(k,WORDS[k]); }); }catch(e){} }
+  function nf(n){ try{ return window.Juce&&window.Juce.getNativeFunction?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+  var lib=null, libIdx=-1;
+  function libList(cb){ if(lib) return cb(lib); var f=nf('scanSampleFactory'); if(!f) return cb(lib=[]); try{ Promise.resolve(f()).then(function(js){ var o=null; try{ o=JSON.parse(js||'null'); }catch(e){} lib=[]; if(o&&o.cats){ Object.keys(o.cats).forEach(function(c){ (o.cats[c]||[]).forEach(function(file){ lib.push({cat:c,file:file,name:String(file).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '),path:(o.path||'')+'/'+c+'/'+file}); }); }); } cb(lib); }).catch(function(){ cb(lib=[]); }); }catch(e){ cb(lib=[]); } }
+  function libLoad(i){ if(!lib||!lib.length) return; libIdx=((i%lib.length)+lib.length)%lib.length; var it=lib[libIdx]; var nm=document.getElementById('ti-lib-name'); if(nm) nm.textContent=it.name; var f=nf('loadSampleFromPath'); if(f){ try{ f(it.path); }catch(e){} } }
+  function libMenu(x,y){ libList(function(L){ if(!window.__synShowMenu) return; var cats={}; L.forEach(function(it){ (cats[it.cat]=cats[it.cat]||[]).push(it); });
+      var rows=[{isHeader:true,label:'Sample Library'}]; Object.keys(cats).forEach(function(c){ rows.push({label:c,badge:String(cats[c].length),onPick:function(){ var r2=[{isHeader:true,label:c}]; cats[c].forEach(function(it){ r2.push({label:it.name,isChecked:lib.indexOf(it)===libIdx,onPick:function(){ libLoad(lib.indexOf(it)); }}); }); window.__synShowMenu('',r2,x,y); }}); });
+      if(!Object.keys(cats).length) rows.push({label:'No factory samples found',isDisabled:true}); window.__synShowMenu('',rows,x,y); }); }
+  function bpmTick(){ if(!document.body.classList.contains('chop-open')) return; var f=nf('getHostBpm'); if(!f) return; try{ Promise.resolve(f()).then(function(v){ v=parseFloat(v); if(!isFinite(v)||v<=0) return; var el=document.querySelector('.ti-bpm-value'); if(el){ var t=(Math.round(v*10)/10).toString(); if(el.textContent!==t) el.textContent=t; } }).catch(function(){}); }catch(e){} }
+  var armed=false;
+  function paintArm(){ var a=document.getElementById('ti-arm'); if(!a) return; a.classList.toggle('on',armed); a.querySelector('.t').textContent=armed?'Armed':'Arm'; a.title=armed?'Armed — the keys play the chop; click to let the synth play too':'Arm — the keys play the chop and the synth stops'; }
+  function setArmed(v){ armed=!!v; paintArm(); var f=nf('setTiArmed'); if(f){ try{ f(armed?1:0); }catch(e){} } }
+  function dressHero(){
+    var tr=document.getElementById('ti-top-right-cluster'); if(tr&&!document.getElementById('ti-arm')){ var a=document.createElement('div'); a.id='ti-arm'; a.innerHTML='<span class="dot"></span><span class="t">Arm</span>'; a.addEventListener('mousedown',function(e){ e.stopPropagation(); }); a.addEventListener('click',function(e){ e.stopPropagation(); setArmed(!armed); }); tr.appendChild(a);
+      var g=nf('getTiArmed'); if(g){ try{ Promise.resolve(g()).then(function(v){ armed=(+v)>0.5; paintArm(); }).catch(function(){}); }catch(e){} } paintArm(); }
+    var br=document.getElementById('ti-bottom-right-cluster'); if(br&&!document.getElementById('ti-lib')){ var l=document.createElement('div'); l.id='ti-lib'; l.innerHTML='<span class="ti-lib-nav" data-d="-1" title="Previous sample">&#8249;</span><span id="ti-lib-name" title="Sample library">Sample Library</span><span class="ti-lib-nav" data-d="1" title="Next sample">&#8250;</span>';
+      l.addEventListener('mousedown',function(e){ e.stopPropagation(); }); l.addEventListener('click',function(e){ e.stopPropagation(); var nav=e.target.closest('.ti-lib-nav'); if(nav){ libList(function(){ libLoad(libIdx+(+nav.dataset.d)); }); return; } if(e.target.id==='ti-lib-name') libMenu(e.clientX,e.clientY); }); br.insertBefore(l,br.firstChild); }
+    var bd=document.getElementById('ti-bpm-display'); if(bd) bd.title='Tempo — the DAW\'s';
+    retitle(document.getElementById('ti-bottom-pills')||document.body);
+  }
+  function wire(){
+    var mixBtn=document.getElementById('mix-btn'), panel=document.getElementById('mix-panel'); if(!mixBtn||!panel) return false;
+    function sync(){ var open=panel.classList.contains('open'); document.body.classList.toggle('chop-open',open); mixBtn.classList.toggle('active',open); if(open){ retitle(panel); dressHero(); bpmTick(); } }
+    function close(){ if(!panel.classList.contains('open')) return; panel.classList.remove('open'); mixBtn.classList.remove('active'); var c=document.getElementById('controls'); if(c) c.style.display=''; sync(); }
+    mixBtn.addEventListener('click',function(){ setTimeout(sync,0); });
+    /* Max: "getting out of the mix menu is BROKEN — it leaves traces of itself behind": any other page opening closes this one, like SYNTH → PATCHER */
+    window.addEventListener('tipanelchange',function(e){ var w=e&&e.detail?e.detail.panel:null; if(w) close(); });
+    new MutationObserver(function(){ if(panel.classList.contains('open')) retitle(panel); }).observe(panel,{childList:true,subtree:true});
+    setInterval(bpmTick,1000); sync(); return true;
+  }
+  function boot(){ if(wire()) { dressHero(); return; } var n=0; var iv=setInterval(function(){ if(wire()||++n>40){ clearInterval(iv); dressHero(); } },250); }
+  if(document.readyState==='complete') boot(); else window.addEventListener('load',boot);
+  window.__tiChopArm=function(v){ if(v===undefined) return armed; setArmed(v); return armed; };   /* the gate's hand */
 })();
 </script>
 )TIHX");
