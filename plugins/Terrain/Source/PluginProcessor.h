@@ -3402,6 +3402,13 @@ private:
     float dstDryT_ = 1.0f, dstWetT_ = 0.0f;
     float dstBloomEnv_ = 0.0f;
     std::atomic<float> dstBloomViz_ { 0.0f };        // audio-reactive core (fb311 law: viz must be DRAMATIC)
+    // ── tp57 — THE SAME BLOOM, PER POOLED DISTORTION ────────────────────────────────────────────
+    //  Max: "every time I load a second distortion the shaper is gone."  The curve feed only ever
+    //  described instance 1 (fb355 says so in as many words), so distortion 2's card drew
+    //  <path d=""> forever. Every instance now publishes its own curve, and its own glow with it —
+    //  sharing instance 1's bloom would make card 2 flash to card 1's audio.
+    std::array<std::atomic<float>, (size_t) kFxExtra> poolDstBloomViz_ {};
+    std::array<float, (size_t) kFxExtra> poolDstBloomEnv_ {};
 
     // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
     // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)

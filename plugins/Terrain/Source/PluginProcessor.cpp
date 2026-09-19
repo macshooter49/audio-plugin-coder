@@ -14017,6 +14017,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // sharing instance 1's scalar made delay 2's taps flash to delay 1's audio, which reads as
     // "they're linked" even when the DSP is fully independent.
     float poolDlyPk[(size_t) kFxExtra] = { 0.0f };
+    float poolDstPk[(size_t) kFxExtra] = { 0.0f };   // tp57 — per-instance distortion excursion glow
     float poolRvbPk[(size_t) kFxExtra] = { 0.0f };   // fb352 — same, per pooled REVERB
     grnBlockPk_.fill (0.0f);                         // fb362 — per-instance granular wet peak
     float dstBlockWetPk = 0.0f;                                  // fb315 — peak wet this block → distortion core viz
@@ -14575,11 +14576,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         auto& R = dstRefs_[(size_t) e];
         if (R.power == nullptr) return;
         // fb348 — NO GLOBAL SEND: unrouted ⇒ silent (never the whole mix).
-        const bool on = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) (kFxExtra + e)];
-        float& env = poolDstEnv_[(size_t) e];
-        if (! on && env <= 1.0e-4f) return;                  // unrouted / powered off ⇒ zero cost
+        // tp57 — CONFIGURED OFF POWER ALONE, EXACTLY LIKE INSTANCE 1. The card draws the engine's
+        // curve, and a card whose knobs the engine has never been told about draws the DEFAULT
+        // curve, not the one under the user's hand. Instance 1's setup is gated on `dstPower_` and
+        // nothing else (see the fb315 block), so this now matches it. These are parameter stores,
+        // not DSP: the unrouted early-out below is untouched and still costs nothing.
+        const bool pwr = (R.power->load() > 0.5f);
         auto& eng = distPool_[(size_t) e];
-        if (chI == 0)
+        const bool on = pwr && poolRouteAny_[(size_t) (kFxExtra + e)];
+        float& env = poolDstEnv_[(size_t) e];
+        if (chI == 0 && pwr)
         {
             const int ty = (int) R.type->load();
             if (ty != poolDstType_[(size_t) e]) { poolDstType_[(size_t) e] = ty; eng.setMode (ty); }
@@ -14594,6 +14600,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             eng.setMix       (M (R.mix));
             for (int k = 0; k < 8; ++k) eng.setP (k, M (R.p[k]));
         }
+        if (! on && env <= 1.0e-4f) return;                  // unrouted / powered off ⇒ zero DSP cost
         env += ((on ? 1.0f : 0.0f) - env) * hallSm_;
         // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
         float wl, wr; eng.processSample (sgL, sgR, wl, wr);
@@ -14601,6 +14608,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // so the insert is a crossfade from the untouched mix to the engine output. env 0 = exactly 0.
         outL = sgL + env * (wl - sgL);                       // fb351 — crossfade IN→engine, hand on
         outR = sgR + env * (wr - sgR);
+        // tp57 — its OWN excursion glow (fb350's pool law: a shared scalar makes card 2 flash to card 1)
+        { const float wmagD = 0.5f * (std::abs (wl) + std::abs (wr)) * env;
+          if (wmagD > poolDstPk[(size_t) e]) poolDstPk[(size_t) e] = wmagD; }
     };
 
 
@@ -15293,6 +15303,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (dstBlockWetPk > dstBloomEnv_)   dstBloomEnv_ = dstBlockWetPk;
             else                                dstBloomEnv_ += (dstBlockWetPk - dstBloomEnv_) * 0.05f;
             dstBloomViz_.store (juce::jlimit (0.0f, 1.5f, dstBloomEnv_), std::memory_order_relaxed);
+            // tp57 — the same shape for every pooled distortion
+            for (int e = 0; e < kFxExtra; ++e)
+            {
+                float& db = poolDstBloomEnv_[(size_t) e];
+                if (poolDstPk[(size_t) e] > db) db = poolDstPk[(size_t) e];
+                else                             db += (poolDstPk[(size_t) e] - db) * 0.05f;
+                poolDstBloomViz_[(size_t) e].store (juce::jlimit (0.0f, 1.5f, db), std::memory_order_relaxed);
+            }
         }
 
         // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked
@@ -16976,7 +16994,7 @@ juce::String TerrainAudioProcessor::getDistortionCurveVizJson()
     float cv[128], oc[48];
     distortionEngine.sampleCurve (cv, 128);
     distortionEngine.copyOcc (oc);
-    juce::String s; s.preallocateBytes (1600);
+    juce::String s; s.preallocateBytes (1600 + 1200 * (size_t) kFxExtra);   // tp57 — room for the pooled instances' curves
     /* fb614 — "x" IS THE AXIS THE CURVE WAS SAMPLED ON, and it was the missing half of the
        picture. sampleCurve sweeps v = (i/(n-1)*2 - 1) * occSpan(), and occSpan is PER FAMILY:
        4.5 for FOLD, 3.0 default, 1.6 for DIGITAL, 1/kShDom for SHAPER. The UI never knew that, so
@@ -16988,6 +17006,42 @@ juce::String TerrainAudioProcessor::getDistortionCurveVizJson()
     for (int i = 0; i < 128; ++i) { if (i) s << ','; s << juce::String (cv[i], 3); }
     s << "],\"o\":[";
     for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (oc[i], 3); }
+
+    // ══ tp57 — EVERY DISTORTION'S CURVE, NOT JUST INSTANCE 1'S ═══════════════════════════════════
+    //  Max: "every time I just loaded up a second distortion the shaper is gone — the distortion
+    //  curve HAS to be there."  He was right and fb355 had already written the reason down without
+    //  anyone acting on it: *"the feed only ever describes instance 1"*. The page then did
+    //  `rack.querySelector('.fxr-core[data-core="saturate"]')` — FIRST MATCH — so card 2 was left
+    //  with <path d=""> forever, which is exactly what a missing shaper looks like.
+    //
+    //  "e" carries one entry per pooled distortion THAT IS IN THE CHAIN, so a patch with one
+    //  distortion pays nothing: the array is empty and the payload is byte-for-byte what it was.
+    //  Each entry is self-contained — its own mode, its own axis span, its own curve, its own
+    //  occupancy and its own bloom — because fb350's pool law is that a shared scalar makes card 2
+    //  flash to card 1's audio.
+    s << ",\"e\":[";
+    {
+        bool firstE = true;
+        for (int e = 0; e < kFxExtra; ++e)
+        {
+            const auto& R = dstRefs_[(size_t) e];
+            if (R.active == nullptr || R.active->load() <= 0.5f) continue;
+            auto& eng = distPool_[(size_t) e];
+            float cv2[128], oc2[48];
+            eng.sampleCurve (cv2, 128);
+            eng.copyOcc (oc2);
+            if (! firstE) s << ',';
+            firstE = false;
+            s << "{\"i\":" << (e + 2)
+              << ",\"m\":" << (R.type != nullptr ? (int) R.type->load() : 0)
+              << ",\"b\":" << juce::String (poolDstBloomViz_[(size_t) e].load (std::memory_order_relaxed), 3)
+              << ",\"x\":" << juce::String (eng.vizSpan(), 3) << ",\"c\":[";
+            for (int i = 0; i < 128; ++i) { if (i) s << ','; s << juce::String (cv2[i], 3); }
+            s << "],\"o\":[";
+            for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (oc2[i], 3); }
+            s << "]}";
+        }
+    }
     s << "]}";
     return s;
 }

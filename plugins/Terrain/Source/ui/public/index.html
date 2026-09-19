@@ -3494,7 +3494,7 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
    stroke thins to 1.6, and the pair closes up by dropping the gear's own left margin when the dice
    precedes it (header-right's 6px gap is then all that separates them, half what it was). */
 .dice-btn { color: var(--text-secondary); }   /* tp45 — the gear's own ink (drawSettingsIcon strokes --text-secondary): Max: "the same color as the settings and everything else" */
-.dice-btn svg { width: 23px; height: 23px; display: block; }
+.dice-btn svg { width: 19.5px; height: 19.5px; display: block; }   /* tp57 — Max: "a little bit too big ... as small as the plus button" (was 23) */
 .dice-btn:hover { color: var(--text-secondary); }   /* tp45 — no light-up on hover (Max); .settings-btn:hover's opacity .8 is all it does, like the gear */
 .dice-btn.rolling { opacity: .45; pointer-events: none; }
 #dice-btn + .settings-btn { margin-left: 0; }
@@ -13734,6 +13734,11 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                  JUCE promise (the house law: it may NEVER settle) used to freeze the mini at
                  whatever frame it died on while the card kept moving. Geometry lives HERE;
                  the feed below only LIGHTS it (occupancy opacity + brightness). */
+              /* tp57 — the drawn-curve MIRROR had the same first-match bug. A SHAPER mode's geometry
+                 belongs to this pass, so a second distortion on a drawn mode never got its line at all.
+                 ⚠️ __crvDrawnCurve describes the CURVE CARD's drawing, which is instance 1's — so the
+                 mirror is applied to every saturate card that is ON a drawn mode, and the live feed
+                 below still owns every other card's geometry. */
               var coreM=rack.querySelector('.fxr-core[data-core="saturate"]');
               if(coreM&&window.__crvDrawnCurve){ var dcM=window.__crvDrawnCurve(97);
                 if(dcM){ var svgM=coreM.querySelector('svg'), pM=svgM?svgM.querySelector('.dst-curve'):null;
@@ -13787,8 +13792,18 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                       if(nsT){ window.__dstTfBusy=1; nsT.value=ddT.types[miT];
                         var evT=document.createEvent('HTMLEvents'); evT.initEvent('change',true,false); nsT.dispatchEvent(evT);
                         setTimeout(function(){ window.__dstTfBusy=0; },120); } } }
-                  var core=rack.querySelector('.fxr-core[data-core="saturate"]');
-                  if(core){                                        // guard, no early return — the rAF loop must never die
+                  /* ══ tp57 — EVERY DISTORTION CARD, NOT THE FIRST ONE ═══════════════════════════════
+                     Max: "every time I just loaded up a second distortion the shaper is gone ... the
+                     distortion curve HAS to be there."  This line was `rack.querySelector(...)` — FIRST
+                     MATCH — so distortion 2 was left with <path d=""> forever, which is exactly what a
+                     missing shaper looks like. fb350 had already fixed this same class of bug for the
+                     DELAY ("this driver used to grab rack.querySelector('.fxr-core[data-core=delay]')")
+                     and the lesson did not travel.
+                     The payload now carries `e`, one entry per pooled distortion that is in the chain,
+                     each with its OWN mode, axis span, curve, occupancy and bloom — card 2 drawing card
+                     1's curve would have been a worse bug than drawing nothing. */
+                  function dstPaint(core, o, isInst1){
+                    if(!core) return;                              // guard, no early return — the rAF loop must never die
                     var svg=core.querySelector('svg');
                     var path=svg?svg.querySelector('.dst-curve'):null, og=svg?svg.querySelector('.dst-occ'):null;
                     var N=o.c.length, X0=6.5, X1=219.5, CY=38, SY=27, i;   /* fb353 axis under the wordmark · fb357 right edge mirrors the left inset */
@@ -13796,7 +13811,11 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                     // pass above (probe: __crvDrawnCurve self-gates on the TYPE param — no o.m
                     // lag on Send transients). The feed draws the line ONLY on non-drawn modes,
                     // and on drawn modes contributes nothing but LIGHT.
-                    var dcP=window.__crvDrawnCurve?window.__crvDrawnCurve(2):null;
+                    /* tp57 — the drawn-curve authority is INSTANCE 1's. __crvDrawnCurve describes the
+                       CURVE CARD, which edits instance 1, so consulting it for a pooled card would hand
+                       geometry to a mirror pass that never touches that card — and the pooled line would
+                       be skipped forever. Every other instance draws its own feed, always. */
+                    var dcP=(isInst1&&window.__crvDrawnCurve)?window.__crvDrawnCurve(2):null;
                     var pk=0.001; for(i=0;i<N;i++) pk=Math.max(pk,Math.abs(o.c[i]));
                     var sc=(pk>1)?1/pk:1;                          // display-normalise hot curves
                     function px(k){ return X0+(X1-X0)*k/(N-1); }
@@ -13825,6 +13844,17 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                           el3.setAttribute('x1',px(i0).toFixed(1)); el3.setAttribute('y1',y1F);
                           el3.setAttribute('x2',px(i1).toFixed(1)); el3.setAttribute('y2',y2F); }
                         if(el3.getAttribute('opacity')!==opF) el3.setAttribute('opacity',opF); } }
+                  }
+                  /* instance 1 keeps the first card in the rack; every pooled instance finds its own
+                     card by walking DEVS, so the order of the rack cannot mis-assign a curve. */
+                  var dCores=rack.querySelectorAll('.fxr-core[data-core="saturate"]'), dcI=0;
+                  for(dcI=0;dcI<dCores.length;dcI++){
+                    var dvEl=dCores[dcI].closest('.fxr-dev'), dvIx=dvEl?+dvEl.getAttribute('data-dev'):-1;
+                    var dvD=(dvIx>=0)?DEVS[dvIx]:null, dvN=dvD?(dvD.inst|0):0;
+                    if(dvN<=1){ dstPaint(dCores[dcI], o, true); continue; }
+                    var ent=null, eArr=o.e||[];
+                    for(var eI=0;eI<eArr.length;eI++) if((eArr[eI].i|0)===dvN){ ent=eArr[eI]; break; }
+                    if(ent&&ent.c&&ent.c.length) dstPaint(dCores[dcI], ent, false);
                   }
                   if(window.__crvLiveTick) window.__crvLiveTick(o);   // the curve card rides the same feed
                 }catch(e){} }
@@ -15065,14 +15095,19 @@ function drawSettingsIcon() {
     var a2 = ((i + 0.35) / teeth) * Math.PI * 2 - Math.PI / 2;
     var a3 = ((i + 0.65) / teeth) * Math.PI * 2 - Math.PI / 2;
     var a4 = ((i + 1) / teeth) * Math.PI * 2 - Math.PI / 2;
-    var ro = 9, ri = 6.5;
+    // tp57 — Max: "the random dice and the settings button are a little too big ... make it as
+    // small as the plus button." The + is a 16px glyph in a 28px box; the gear drew 18px of ink
+    // and the dice 17.6, so both read heavier than everything around them. 0.84 takes the gear's
+    // outer ring to 15.2 and the dice's svg to 19.5 — the pair still matches itself, and now the
+    // three buttons in the header read at one weight.
+    var ro = 9 * 0.84, ri = 6.5 * 0.84;
     if (i === 0) ctx.moveTo(cx + Math.cos(a1) * ri, cy + Math.sin(a1) * ri);
     ctx.lineTo(cx + Math.cos(a2) * ro, cy + Math.sin(a2) * ro);
     ctx.lineTo(cx + Math.cos(a3) * ro, cy + Math.sin(a3) * ro);
     ctx.lineTo(cx + Math.cos(a4) * ri, cy + Math.sin(a4) * ri);
   }
   ctx.closePath(); ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 3 * 0.84, 0, Math.PI * 2); ctx.stroke();   // tp57 — scaled with the teeth
 }
 
 function saveSettings() {
@@ -42808,7 +42843,17 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-cables .drawg .core { fill: none; stroke: #ECE8F2; stroke-width: 1.3; opacity: .7; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 
 /* the chrome: the 13px glyph cluster — undo · redo · fit · tidy · eye · | dice */
-#tp-page .tp-tools { position: absolute; top: 10px; right: 14px; display: flex; align-items: center; gap: 13px; z-index: 12; }
+/* ── tp57 — THE TOOLBAR GOES UNDER THE MODULES, ALWAYS ────────────────────────────────────────
+      Max: "these emblem buttons [should] go under the modules at all times — we should only be
+      able to see them on the dotted background ... it does it with the header and the footer, but
+      it doesn't do it in the middle."  It was z-index 12 against a .tp-world of z-index AUTO, so
+      it out-ranked every module however high their own stack got. One rank below the world and one
+      above the dot grid is the whole rule: the buttons sit ON the background and a card sliding
+      over them covers them, exactly like the header already does. They stay clickable wherever
+      they are visible, which is the only place you would aim at one. */
+#tp-page .tp-tools { position: absolute; top: 10px; right: 14px; display: flex; align-items: center; gap: 13px; z-index: 1; }
+#tp-page .tp-world { z-index: 2; }
+#tp-page .tp-grid  { z-index: 0; }
 #tp-page .tp-tools .g { display: flex; align-items: center; justify-content: center; padding: 2px 1px; cursor: pointer; color: rgba(255,255,255,.5); transition: color .12s; }
 #tp-page .tp-tools .g:hover { color: #fff; }
 #tp-page .tp-tools .g.on { color: var(--purple-400); }
@@ -42818,6 +42863,8 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-mini { position: absolute; right: 14px; bottom: 10px; width: 118px; height: 72px; z-index: 12; border-radius: 9px; border: 1px solid rgba(255,255,255,0.11); background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06); overflow: hidden; cursor: pointer; }
 #tp-page .tp-mini.hidden { display: none; }
 #tp-page .tp-mini svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+#tp-page .tp-mini { cursor: grab; }
+#tp-page .tp-mini.drag { cursor: grabbing; }
 
 /* the glass menus — absolute inside the page (never body: #syn-panel scopes the CSS) */
 #tp-page .tp-menu { position: absolute; z-index: 310; display: none; min-width: 176px; max-width: 206px; background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
@@ -42830,6 +42877,11 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 /* tp45 — a hovered cable, or a hovered module's cables, come forward; the hover chip names the two ends and cuts */
 #tp-page .tp-cables .cable.lit .core { opacity: 1; stroke: #fff; stroke-width: 1.9; }
 #tp-page .tp-cables .cable.lit.m .core { stroke-width: 1.4; }
+#tp-ctip .go { cursor: pointer; border-bottom: 1px solid rgba(183,148,255,.45); transition: color .12s, border-color .12s; }
+#tp-ctip .go:hover { color: #fff; border-bottom-color: #B794FF; }
+#tp-ctip .ar { color: rgba(255,255,255,.45); }
+/* tp57 — the module you landed on says so, once */
+#tp-page .tp-node.found > .tp-box { box-shadow: 0 0 0 1px #B794FF, 0 0 22px rgba(183,148,255,.45); transition: box-shadow .2s; }
 #tp-ctip { position: absolute; z-index: 60; display: none; align-items: center; gap: 7px; padding: 4px 5px 4px 9px; border-radius: 9px; background: rgb(24,22,37); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 10px 26px rgba(0,0,0,.55); font-size: 9.5px; letter-spacing: .02em; color: rgba(255,255,255,.88); white-space: nowrap; pointer-events: auto; }
 #tp-ctip.on { display: flex; }
 #tp-ctip .x { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: rgba(255,255,255,.55); cursor: pointer; }
@@ -43413,10 +43465,38 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     ctip.addEventListener('mousedown',function(e){ e.stopPropagation(); });
     ctip.querySelector('.x').addEventListener('mousedown',function(e){ e.stopPropagation(); e.preventDefault(); var c=ctipC; ctipHide(true); if(c) cut(c); });
     return ctip; }
+  /* ══ tp57 — THE CHIP'S NAMES ARE DOORS ════════════════════════════════════════════════════════
+     Max: "as I'm hovering over my cables, I should be able to click oscillator C and Terrain moves
+     everything to oscillator C ... if we have a huge node and I want to see where oscillator C is,
+     boom, it moves the map over to it."  Each end of the hover chip is now a button that GLIDES the
+     canvas until that module is centred, and flashes it so you can see which one you landed on. */
+  var glT=0;
+  function centerOn(n,quiet){ if(!n||!page) return; clearInterval(glT);
+    var W=page.clientWidth, H=page.clientHeight;
+    var tx=W/2-(n.x+n.w/2)*view.z, ty=H/2-(n.y+n.h/2)*view.z;
+    var x0=view.x, y0=view.y, t0=Date.now(), dur=340;
+    glT=setInterval(function(){ var t=Math.min(1,(Date.now()-t0)/dur), e=1-Math.pow(1-t,3);   /* the house ease */
+      view.x=x0+(tx-x0)*e; view.y=y0+(ty-y0)*e; applyView();
+      if(t>=1){ clearInterval(glT); glT=0; saveView(); } },16);
+    if(!quiet&&n.wrap){ n.wrap.classList.add('found'); setTimeout(function(){ try{ n.wrap.classList.remove('found'); }catch(e){} },900); } }
+  window.__tpCenterOn=function(key){ var n=nodeByKey(key); if(n){ centerOn(n); return true; } return false; };
   function cableLabel(c){ var a=nodeName(c.from), b=nodeName(c.to);
     if(c.t==='m'&&c.edit&&c.edit.dest!=null){ try{ var el=window.__tiElForDest?window.__tiElForDest(c.edit.dest):null; var lab=el?((el.closest&&el.closest('[data-mod-dest]'))||el):null; var kn=lab?lab.querySelector('.fxr-lab, .knob-label, .lab, label'):null; var tx=kn?kn.textContent.trim():''; if(tx) b+=' · '+tx; }catch(e){} }
     return a+' \u2192 '+b; }
-  function ctipShow(c,e){ var t=ctipEl(); clearTimeout(ctipT); if(ctipC&&ctipC!==c&&ctipC.el) ctipC.el.classList.remove('lit'); ctipC=c; t.querySelector('.t').textContent=cableLabel(c); t.classList.toggle('nocut',!c.edit); t.classList.add('on');
+  function ctipShow(c,e){ var t=ctipEl(); clearTimeout(ctipT); if(ctipC&&ctipC!==c&&ctipC.el) ctipC.el.classList.remove('lit'); ctipC=c;
+    /* tp57 — the label is built from two NAMED halves so each can be clicked; a mod cable's own
+       label (the knob it lands on) keeps its single-string form and is not a door. */
+    var tEl=t.querySelector('.t'), lab=cableLabel(c);
+    var twoWay=(c.t!=='m')&&c.from&&c.to&&lab.indexOf(' \u2192 ')>0;
+    if(twoWay){ tEl.innerHTML='';
+      var mk=function(node){ var sp=document.createElement('span'); sp.className='go'; sp.textContent=nodeName(node);
+        sp.title='Go to '+nodeName(node);
+        sp.addEventListener('mousedown',function(ev){ ev.stopPropagation(); ev.preventDefault(); ctipHide(true); centerOn(node); });
+        return sp; };
+      tEl.appendChild(mk(c.from));
+      var arrow=document.createElement('span'); arrow.className='ar'; arrow.textContent=' \u2192 '; tEl.appendChild(arrow);
+      tEl.appendChild(mk(c.to));
+    } else tEl.textContent=lab; t.classList.toggle('nocut',!c.edit); t.classList.add('on');
     var r=page.getBoundingClientRect(), x=e.clientX-r.left+12, y=e.clientY-r.top-32; x=Math.max(4,Math.min(x,r.width-t.offsetWidth-4)); y=Math.max(4,Math.min(y,r.height-t.offsetHeight-4)); t.style.left=x+'px'; t.style.top=y+'px'; if(c.el) c.el.classList.add('lit'); }
   function ctipHide(now){ clearTimeout(ctipT); var f=function(){ if(ctip) ctip.classList.remove('on'); if(ctipC&&ctipC.el) ctipC.el.classList.remove('lit'); ctipC=null; }; if(now) f(); else ctipT=setTimeout(f,260); }
   function litFor(n,on){ cables.forEach(function(c){ if(c.from===n||c.to===n){ if(c.el) c.el.classList.toggle('lit',!!on); } }); }
@@ -44283,7 +44363,16 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       if(n.kind==='flow'&&!n.ext){ e.preventDefault(); e.stopPropagation(); closeMenus(); setFlowExt(n,true); commit(); return; }   /* the tile opens IN PLACE (its own right-click would float a card) */
       closeMenus(); sel={node:n.key}; paintSel(); },true);   /* tp10 — CAPTURE; no "Part of the synth", no "Extend / Remove" (Max: delete = ⌫) — the module's own right-click runs */
     page.querySelector('.tp-tools').addEventListener('mousedown',function(e){ e.stopPropagation(); var g=e.target.closest('.g'); if(!g||e.button!==0) return; var t=g.dataset.t; if(t==='fit') fit(); if(t==='tidy') glideTidy(); if(t==='undo') undo(); if(t==='redo') redo(); if(t==='viz') setViz(!layout.viz);  });
-    miniEl.addEventListener('mousedown',function(e){ e.stopPropagation(); var m=miniEl._map; if(!m) return; var r=miniEl.getBoundingClientRect(); var wx=(e.clientX-r.left-m.ox)/m.k+m.x0, wy=(e.clientY-r.top-m.oy)/m.k+m.y0; view.x=-(wx-m.W/2)*view.z; view.y=-(wy-m.H/2)*view.z; applyView(); saveView(); });
+    /* tp57 — HOLD AND DRAG. The map follows the pointer for as long as the button is down, and
+       keeps following it outside the map's own box, the way dragging a scrollbar does. */
+    miniEl.addEventListener('mousedown',function(e){ e.preventDefault(); e.stopPropagation();
+      var m=miniEl._map; if(!m) return;
+      function go(ev){ var mm=miniEl._map; if(!mm) return; var r=miniEl.getBoundingClientRect();
+        var wx=(ev.clientX-r.left-mm.ox)/mm.k+mm.x0, wy=(ev.clientY-r.top-mm.oy)/mm.k+mm.y0;
+        view.x=-(wx-mm.W/2)*view.z; view.y=-(wy-mm.H/2)*view.z; applyView(); }
+      go(e); miniEl.classList.add('drag');
+      function onUp(){ document.removeEventListener('mousemove',go); document.removeEventListener('mouseup',onUp); miniEl.classList.remove('drag'); saveView(); }
+      document.addEventListener('mousemove',go); document.addEventListener('mouseup',onUp); });
     addM.addEventListener('mousedown',function(e){ e.stopPropagation(); var c=e.target.closest('.cats .row'); if(c){ addCat=c.dataset.c; renderAdd(); return; } if(e.target.closest('.x')){ closeMenus(); return; } var r=e.target.closest('.items .row'); if(!r||r.classList.contains('dis')){ if(r&&r.dataset.note) toast(r.dataset.note); return; } addFromList(r.dataset.k,+addM.dataset.wx,+addM.dataset.wy); });
     addM.querySelector('input').addEventListener('input',renderAdd);
     nMenu.addEventListener('mousedown',function(e){ e.stopPropagation(); });
@@ -44437,13 +44526,50 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     saveLayout(); closeMenus(); commit(); soon(); }
   function tidy(){ nodes.forEach(function(n){ var d=defaultPos(n); n.x=d[0]; n.y=d[1]; place(n); layout.pos[n.key]=[n.x,n.y]; }); cables.forEach(layoutCable); saveLayout(); commit(); fit(); }
   function glideTidy(){ nodesEl.classList.add('glide'); tidy(); var t0=0; (function step(){ cables.forEach(layoutCable); if((t0+=16)<520) requestAnimationFrame(step); else nodesEl.classList.remove('glide'); })(); }   /* the nodes glide to their places, the cables follow */
-  function drawMini(){ if(!miniEl) return; var s=miniEl.querySelector('svg'); if(!nodes.length){ s.innerHTML=''; return; }
+  /* ══ tp57 — THE MAP MOVES LIKE A MAP ══════════════════════════════════════════════════════════
+     Max: "the map is very laggy, it doesn't work like a real map ... every time I move the map it
+     should be very smooth."  TWO separate faults, and both had to go:
+
+     1. IT REBUILT ITSELF EVERY FRAME. drawMini ran on every applyView and threw away the whole SVG
+        subtree — every cable, every node rect — to write one moving rectangle. At twenty modules
+        and thirty cables that is a full parse-and-layout of the map per pan frame. The static ink
+        now lives in its own <g> and is rebuilt ONLY when its signature changes (the mapping, the
+        node boxes, the cable ends); a pan inside the content changes none of them, so the cost of
+        a drag frame is four attribute writes on one rectangle.
+     2. THERE WAS NO DRAG. It listened for `mousedown` and nothing else, so holding and moving did
+        nothing at all until you let go and clicked again — which is exactly what "laggy" feels
+        like from the outside. It tracks the pointer now, and keeps tracking outside the map. */
+  var miniSig='';
+  function drawMini(){ if(!miniEl) return; var s=miniEl.querySelector('svg'); if(!nodes.length){ s.innerHTML=''; miniSig=''; return; }
     var b=bounds(), W=page.clientWidth/view.z, H=page.clientHeight/view.z, vx=-view.x/view.z, vy=-view.y/view.z;
     var x0=Math.min(b.x,vx)-40, y0=Math.min(b.y,vy)-40, x1=Math.max(b.x+b.w,vx+W)+40, y1=Math.max(b.y+b.h,vy+H)+40;
-    var k=Math.min(118/(x1-x0),72/(y1-y0)), ox=(118-(x1-x0)*k)/2, oy=(72-(y1-y0)*k)/2, M=function(x,y){ return [ox+(x-x0)*k, oy+(y-y0)*k]; }, h='';
-    cables.forEach(function(c){ var a=portPos(c.from,c.fk,c.fi), d=portPos(c.to,c.tk,c.ti), A=M(a.x,a.y), D=M(d.x,d.y); h+='<path d="M'+A[0]+' '+A[1]+'L'+D[0]+' '+D[1]+'" stroke="rgba(183,148,255,.35)" stroke-width=".8" fill="none"/>'; });
-    nodes.forEach(function(n){ var P=M(n.x,n.y); h+='<rect x="'+P[0]+'" y="'+P[1]+'" width="'+(n.w*k)+'" height="'+(n.h*k)+'" rx="1.5" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.38)" stroke-width=".8"/>'; });
-    var V=M(vx,vy); h+='<rect x="'+V[0]+'" y="'+V[1]+'" width="'+(W*k)+'" height="'+(H*k)+'" rx="2" fill="none" stroke="#B794FF" stroke-width="1"/>'; s.innerHTML=h; miniEl._map={x0:x0,y0:y0,k:k,ox:ox,oy:oy,W:W,H:H}; }
+    var k=Math.min(118/(x1-x0),72/(y1-y0)), ox=(118-(x1-x0)*k)/2, oy=(72-(y1-y0)*k)/2;
+    var gStatic=s.querySelector('g.ms'), vRect=s.querySelector('rect.mv');
+    if(!gStatic||!vRect){
+      s.innerHTML='<g class="ms"></g><rect class="mv" rx="2" fill="none" stroke="#B794FF" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+      gStatic=s.querySelector('g.ms'); vRect=s.querySelector('rect.mv'); miniSig='';
+    }
+    /* 🚨 THE STATIC INK IS DRAWN IN WORLD UNITS AND *TRANSFORMED*, NEVER RE-EMITTED.
+       The first cut of this cached on a signature that included the MAPPING — and the mapping moves
+       with the viewport, so every pan frame missed the cache and rebuilt anyway. Drawing the cables
+       and the module boxes at their real world coordinates makes the map's fit a single transform:
+       a pan writes ONE attribute here and four on the viewport rect. The signature is now only what
+       the ink is made of — where the modules are and which cables exist. */
+    var sig=nodes.length+'|'+cables.length;
+    nodes.forEach(function(n){ sig+=';'+n.x+','+n.y+','+n.w+','+n.h; });
+    cables.forEach(function(c){ sig+='#'+c.id; });
+    if(sig!==miniSig){ miniSig=sig; var h='';
+      cables.forEach(function(c){ var a=portPos(c.from,c.fk,c.fi), d=portPos(c.to,c.tk,c.ti);
+        h+='<path d="M'+a.x.toFixed(1)+' '+a.y.toFixed(1)+'L'+d.x.toFixed(1)+' '+d.y.toFixed(1)+'" stroke="rgba(183,148,255,.35)" stroke-width=".8" fill="none" vector-effect="non-scaling-stroke"/>'; });
+      nodes.forEach(function(n){
+        h+='<rect x="'+n.x+'" y="'+n.y+'" width="'+n.w+'" height="'+n.h+'" rx="1.5" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.38)" stroke-width=".8" vector-effect="non-scaling-stroke"/>'; });
+      gStatic.innerHTML=h; }
+    var tf='translate('+(ox-x0*k).toFixed(3)+','+(oy-y0*k).toFixed(3)+') scale('+k.toFixed(6)+')';
+    if(gStatic.getAttribute('transform')!==tf) gStatic.setAttribute('transform',tf);
+    var aV=[(ox+(vx-x0)*k).toFixed(2),(oy+(vy-y0)*k).toFixed(2),(W*k).toFixed(2),(H*k).toFixed(2)];
+    if(vRect.getAttribute('x')!==aV[0]||vRect.getAttribute('y')!==aV[1]||vRect.getAttribute('width')!==aV[2]){
+      vRect.setAttribute('x',aV[0]); vRect.setAttribute('y',aV[1]); vRect.setAttribute('width',aV[2]); vRect.setAttribute('height',aV[3]); }
+    miniEl._map={x0:x0,y0:y0,k:k,ox:ox,oy:oy,W:W,H:H}; }
 
   /* ── open / close ── */
   function openPage(){ build(); if(!page||isOpen) return; isOpen=true;
