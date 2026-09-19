@@ -16,6 +16,7 @@
                               // one copy for the oscillator path AND the FX-rack Distortion FOLD family.
 #include "TerrainEnvelope.h"
 #include "SynthModConfig.h"   // Batch 1 — per-voice LFOs + mod routing (namespace wc)
+#include "CrossBlendBus.h"    // tp53 — the cross-bank modulator taps (A–D <-> E–H blend sources)
 #include "FlowRobin.h"        // fb122 — the ROBIN Wheel rotation brain (no-JUCE)
 #include "SampleEngine.h"          // SAMPLE-ENGINE-VOICE — per-OSC sample playback core
 #include "SampleBuffer.h"          // SAMPLE-ENGINE-VOICE — shared lock-free buffer
@@ -1572,6 +1573,10 @@ class SynthVoice : public juce::SynthesiserVoice
         //  the current one.
         void setModCurves (const std::atomic<const wc::ModCurveSet*>* a) noexcept { modCurves_ = a; }
         void setGlobalSources (wc::GlobalModSources* g) noexcept { gsrc_ = g; }
+        /*  tp53 — which bank this voice belongs to, and the shared board its modulator taps are
+            published on. Bank 0 = oscillators A–D, bank 1 = E–H. Never null-checked at the call
+            sites: a voice built before the bus exists simply has no cross sources. */
+        void setCrossBlendBus (tw::CrossBlendBus* bus, int bank) noexcept { xbus_ = bus; xbank_ = (bank != 0) ? 1 : 0; }
         // fb636 — TEST-ONLY (TerrainDeterminism.h). Set once at construction. In a real session it only records
         //  the index; with TERRAIN_DETERMINISTIC set, the clock- and address-seeded streams restart from it.
         void setDeterministicIndex (int i) noexcept
@@ -3490,6 +3495,26 @@ class SynthVoice : public juce::SynthesiserVoice
                 }
             }
 
+            /*  ═══ tp53 — THE CROSS-BANK TAPS, resolved for this segment ═══════════════════════════
+                `startSample` is final here (ROBIN's late start has already moved it), and it is the
+                ABSOLUTE position in the block — the same coordinate the other bank's voice writes at,
+                which is the whole reason the two line up without a handshake.
+                CLAIM publishes; READ subscribes. A voice claims even when nothing is listening: the
+                cost is one row-clear per block and it is what lets the other bank arm a cross source
+                mid-note without a gap.  */
+            xWrite_ = nullptr; xRead_ = nullptr; xReadLen_ = 0; xStride_ = 0;
+            if (xbus_ != nullptr && xbus_->isLive())
+            {
+                const int note = getCurrentlyPlayingNote();
+                xStride_ = xbus_->laneStride();
+                //  PUBLISH ONLY WHEN SOMEONE IS LISTENING. `anyWanted` is one comparison; without it
+                //  every voice would clear and fill four lanes a block for a feature the patch is not
+                //  using. The first block after a cross slot is armed has no row yet — that is the
+                //  same one-block warm-up requestSource() already documents.
+                if (xbus_->anyWanted (xbank_)) xWrite_ = xbus_->claim (xbank_, note);
+                xRead_ = xbus_->read (xbank_ ^ 1, note, xReadLen_);
+            }
+
             // Phase 9: stereo scratch (OSC A + OSC B each pan independently).
             if (scratch_.getNumChannels() < 2 || scratch_.getNumSamples() < numSamples)
                 scratch_.setSize (2, numSamples, false, true, true);
@@ -4389,9 +4414,19 @@ class SynthVoice : public juce::SynthesiserVoice
                         if      (b.src < 4)  modSrcForce_[b.src] = true;                  // Osc A..D as source
                         else if (b.src == 5) noiseForce_         = true;                  // Noise as source (fb64)
                         else if (b.src == 6) modSrcForce_[c]     = true;                  // Self
+                        // tp53 — the OTHER bank's lane: it lives in a different voice object, so the
+                        //  force has to travel. Same law as the line above it, one block later.
+                        else if (b.src >= 17 && b.src <= 20 && xbus_ != nullptr)
+                            xbus_->requestSource (xbank_ ^ 1, b.src - 17);
                         // b.src == 4 (Sub) is handled earlier — it has to be known before
                         // prepareSubBlock() runs. See the subForce_ scan there.
                     }
+                /*  tp53 — and the same for a carrier in the OTHER bank: it asked last block, this lane
+                    renders now. Placed ABOVE the transitive pass so a cross-forced lane's own in-bank
+                    sources are forced too — a chain E -> A -> B has to hold all the way down. */
+                if (xbus_ != nullptr)
+                    for (int o = 0; o < 4; ++o)
+                        if (xbus_->sourceWanted (xbank_, o)) modSrcForce_[o] = true;
                 /* tp36b — transitive: a source forced alive by a live carrier is itself a carrier for its own sources */
                 for (int pass = 0; pass < 3; ++pass)
                     for (int c = 0; c < 4; ++c)
@@ -4610,7 +4645,18 @@ class SynthVoice : public juce::SynthesiserVoice
                             const float d = blendDepthSm_[c][s];
                             if (b.mode == 0 || d < 1.0e-6f) continue;   // Off / silent — fb523: 1e-4 -> 1e-6. Under the Hz law d = 1e-4 is Δf = 9.6 Hz = β 0.29 at C1 (a −17 dBc sideband), i.e. the old gate became an AUDIBLE dead zone in the bottom 0.6 % of the FM knob. At 1e-6 it is Δf = 0.096 Hz = β 0.0029 = −51 dBc, and the dead travel is 0.006 % of the knob.
                             float mod;
-                            if      (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
+                            /*  tp53 — 17..20 = THE OTHER BANK'S FOUR (Max: "EFGH cannot cross-blend
+                                with ABCD"). The index is bank-RELATIVE — from A–D it reads E–H, from
+                                E–H it reads A–D — which is why the choice is named "Osc A/E" and why
+                                one list serves both banks. A note the other bank is not playing has
+                                no row: the source is SILENT, never someone else's note. */
+                            if      (b.src >= 17 && b.src <= 20)
+                            {
+                                const int xi = startSample + i;
+                                mod = (xRead_ != nullptr && xi >= 0 && xi < xReadLen_)
+                                        ? xRead_[(size_t) (b.src - 17) * (size_t) xStride_ + (size_t) xi] : 0.0f;
+                            }
+                            else if (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
                             else if (b.src == 5) mod = noiseModTap_;      // Noise (fb64) — FM/PD/AM/RM an osc WITH the noise
                             else if (b.src == 6) mod = modPrev_[c];       // Self (feedback)
                             else if (b.src >= 7 && b.src <= 16)           // fb224/fb225 — WARP x LFO: the LIVE LFO value (the one the pane's dot rides) sweeps the warp. peek() steps once per BLOCK, so a per-sample 2.5ms glide (lvlSmCoef_, the same coefficient the warp knobs ride) melts the staircase — motion kept, static gone. Osc/noise taps stay raw (audio-rate must never be low-passed).
@@ -6428,6 +6474,18 @@ class SynthVoice : public juce::SynthesiserVoice
                 modPrev_[2] = (mcOnC ? monoTapCorr_[2] : 1.0f) * 0.5f * (sC_L + sC_R);
                 modPrev_[3] = (mcOnD ? monoTapCorr_[3] : 1.0f) * 0.5f * (sD_L + sD_R);
                 for (int mc = 0; mc < 4; ++mc) modPrev_[mc] = juce::jlimit (-4.f, 4.f, modPrev_[mc]);
+                /*  tp53 — PUBLISH the four taps for the other bank. These are the SAME numbers an
+                    in-bank slot reads one line below, already clamped to the same ±4, so a cross
+                    source and a local one are the identical signal by construction — there is no
+                    second tap to keep in step. One predictable branch and four stores per sample;
+                    the row is the voice's own, so no two voices of a bank touch the same memory
+                    unless they are on the same note (see CrossBlendBus.h). */
+                if (xWrite_ != nullptr)
+                {
+                    const int xi = startSample + i;
+                    if (xi >= 0 && xi < xStride_)
+                        for (int mc = 0; mc < 4; ++mc) xWrite_[(size_t) mc * (size_t) xStride_ + (size_t) xi] = modPrev_[mc];
+                }
                 // fb552 — THE FOLLOWERS, on the taps that were just written. Instant attack, one-pole
                 //  release: see kFollowReleaseMs for why it is a peak detector and not a mean one.
                 if (anyFollowArmed_)
@@ -7751,6 +7809,18 @@ class SynthVoice : public juce::SynthesiserVoice
         float blendDepthSm_[4][4] = {};   // per-sample de-zippered depth
         float blendLfoSm_[4][4]   = {};   // fb225 — per-sample glide over the BLOCK-STEPPED LFO value (peek updates once per block; consumed per sample = a ~344Hz staircase = Max's 'heavy static'. The COMB-CLICK law applied at the consumption site.)
         float modPrev_[4] = { 0.f, 0.f, 0.f, 0.f };   // prev-sample pre-gain osc outputs = the modulator taps
+        /*  tp53 — THE CROSS-BANK TAPS. `xWrite_` is this voice's own row on the shared board (four
+            lanes of `xStride_` samples, indexed by the ABSOLUTE position in the block, so a ROBIN
+            late start lines up with the other bank's voice by construction). `xRead_` is the other
+            bank's row for this same note — null whenever that note is not sounding over there, which
+            is what makes a cross source silent rather than wrong. Both are re-resolved per render
+            segment; neither outlives renderNextBlock. */
+        tw::CrossBlendBus* xbus_ = nullptr;
+        int          xbank_   = 0;
+        float*       xWrite_  = nullptr;
+        const float* xRead_   = nullptr;
+        int          xReadLen_ = 0;
+        int          xStride_  = 0;
         float noiseModTap_ = 0.0f;                    // fb64 — the NOISE modulator tap (src=5), pre-gain, 1-sample delayed
         float subModTap_[4] = { 0.f, 0.f, 0.f, 0.f }; // fb522 — the SUB modulator tap (src=4), PER CARRIER, pre-weight, 1-sample delayed
         bool  subForce_[4]  = { false, false, false, false };   // fb522 — a blend slot names Sub → keep the lane ticking at Sub Mix 0

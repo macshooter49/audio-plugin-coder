@@ -26,6 +26,7 @@
 #include "DelayEngine.h"       // fb296 — synth FX-rack Delay (one shared fractional line: Digital/Tape/BBD/Diffuse + ping-pong + HQ interp)
 #include "FxChainTopology.h"   // fb351 — who taps which osc + whose output feeds whom (the SERIAL rack)
 #include "FxModValue.h"        // fb453 — the rack's per-block modulation math (JUCE-free; the cert calls it too)
+#include "CrossBlendBus.h"     // tp53 — the cross-bank modulator taps (JUCE-free; the cert calls it too)
 #include "DistortionEngine.h"  // fb315 — synth FX-rack Distortion (the 3rd device; 23 modes / 6 families, one shared shell)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
@@ -1239,6 +1240,12 @@ public:
     //  per-note ones (random 1-4 · alt) are published from the most-active voice for the global
     //  half, exactly like velVis_ — and for the same reason, UNGATED (the audio path reads them).
     wc::GlobalModSources globalSrc_;
+    /*  tp53 — THE CROSS-BANK MODULATOR BOARD. Oscillators E–H are a second voice bank with its own
+        SynthVoice objects, so a blend slot on E had no A to reach for. Every voice in both banks
+        publishes its four modulator taps here and reads the other bank's; prepareToPlay is the only
+        thing that allocates, processBlock stamps it, and the voices do the rest. See CrossBlendBus.h
+        for why the two directions differ by exactly one block. */
+    tw::CrossBlendBus  crossBus_;
     std::atomic<float> macroBaseVis_[wc::kNumMacros] {};   // fb565 — the macro KNOB's own value (the parameter) for the Macros view's face; globalSrc_.macro is the MODULATED one
     float              tapeSlotEff_[3] {};     // tp11 — audio thread only: the tape machine's knobs after their routes (raw units)
     bool               tapeSlotRouted_[3] {};  // tp11 — a route reaches that slot (else the knob's own value rides)

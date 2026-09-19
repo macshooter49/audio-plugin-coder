@@ -20879,7 +20879,10 @@ setTimeout(function wireSynControls () {
         var PILL  = ['B','FM','PD','AM','RM','Sync','WP','Dist','Filt','FE','FC'];   /* fb553 — mode 6 went live; 'Warp' does not fit a 35px pill, 'WP' does */
         var P1ON  = { FM: 1, PD: 1, AM: 1, RM: 1, 'FM Exp': 1, 'FM Clamp': 1, Warp: 1 };  // active families; Sync/Dist/Filter stay 'soon'. fb553 — Warp went live, and it IS Dist and Filter: it drives whatever the osc's warp slots are already set to.
         function famMode (m) { return (m >= 1 && m <= 4) || m === 6 || m === 9 || m === 10; }   // fb553 — 6 = audio-rate Warp · fb551 — takes a SOURCE. Mirrors blendIsLive() in SynthVoice.h; fb470's law lives on this side of the wall too.
-        var NSRC  = 17;                                                          // SRC choices: Osc A..D / Sub / Noise / Self / LFO 1-10 (fb223 — MUST equal the C++ srcs StringArray count)
+        /*  tp53 — 21, not 17: the C++ srcs StringArray grew four (17..20 = "Osc A/E".."Osc D/H", the
+            OTHER bank's four). MUST equal that count — fb373's law is exactly this mismatch, and it
+            bites twice here because NSRC both WRITES (v / (NSRC-1)) and READS BACK (× (NSRC-1)). */
+        var NSRC  = 21;                                                          // Osc A..D / Sub / Noise / Self / LFO 1-10 / the other bank's four
         var bstate = {};                                                         // "a1" -> {mode,src,depth}  (display source of truth)
         function st  (o, s) { var k = o + s; return bstate[k] || (bstate[k] = { mode: 0, src: (window.__oscBankIndex(o) + 1) % 4, depth: 0 }); }
         function pid (o, s, p) { return 'SYN_OSC_' + o.toUpperCase() + '_WSLOT' + s + '_' + p; }
@@ -20889,16 +20892,25 @@ setTimeout(function wireSynControls () {
 
         var MENU_FAM = ['Off','FM','FM Exp','FM Clamp','PD','AM','RM','Warp'];   // FINAL blend arsenal — Sync/Warp/Dist removed (redundant with the front/back warp modes; Max 2026-07-12). Enum in C++ keeps them (frozen), just not shown. fb551 — the three FM curves sit together.
         var pillOf = {};                                                   // "a1" -> pill element (for reopen refresh)
-        function srcLtr (v) { return (v < 4) ? 'ABCD'.charAt(v) : (v === 5 ? 'N' : (v === 6 ? 'S' : (v >= 7 && v <= 16 ? 'L' + (v - 6) : '?'))); }   // N = Noise (fb64), S = Self (PD only), L1-L10 = LFO shapes (fb223)
+        /*  tp53 — THE SOURCE INDEX IS BANK-RELATIVE. 0..3 are this oscillator's OWN bank-mates and
+            17..20 are the other bank's four, so from A the pair 17 reads E and from E it reads A —
+            one index space, one parameter list, both banks. `crossBank` is the other bank's letters;
+            `srcIndexOf` is the only place that decides which half a letter falls in. */
+        function bankLettersOf (o) { return window.__oscBank(o) ? ['e','f','g','h'] : ['a','b','c','d']; }
+        function crossBankOf   (o) { return window.__oscBank(o) ? ['a','b','c','d'] : ['e','f','g','h']; }
+        function srcIndexOf (o, L) { var i = window.__oscBankIndex(L); return (window.__oscBank(L) === window.__oscBank(o)) ? i : (17 + i); }
+        function srcLtr (v, o) { if (v >= 17 && v <= 20) return String(crossBankOf(o)[v - 17] || '?').toUpperCase();
+          return (v < 4) ? String(bankLettersOf(o)[v] || 'ABCD'.charAt(v)).toUpperCase() : (v === 5 ? 'N' : (v === 6 ? 'S' : (v >= 7 && v <= 16 ? 'L' + (v - 6) : '?'))); }   // N = Noise (fb64), S = Self (PD only), L1-L10 = LFO shapes (fb223)
 
         // Default view = "FM(D)" (mode + source, same style). Hover or drag → the big % value.
         function paintLabel (pill, o, s) {
           var b = st(o, s);
           if (b.mode === 0) { pill.innerHTML = '<span class="bp-txt">B' + s + '</span>'; pill.classList.remove('act');
             pill.title = 'Blend slot ' + s + ' — right-click to warp this oscillator with FM / PD / AM / RM from another oscillator.'; return; }
-          pill.innerHTML = '<span class="bp-txt">' + (PILL[b.mode] || MODES[b.mode]) + '<span class="bp-par">(</span>' + srcLtr(b.src) + '<span class="bp-par">)</span></span>';
+          pill.innerHTML = '<span class="bp-txt">' + (PILL[b.mode] || MODES[b.mode]) + '<span class="bp-par">(</span>' + srcLtr(b.src, o) + '<span class="bp-par">)</span></span>';
           pill.classList.add('act');
-          var _sn = (b.src >= 7 && b.src <= 16) ? 'the LFO ' + (b.src - 6) + ' shape (drawn curve as the warp)' : (b.src === 5) ? 'the Noise' : (b.src === 6) ? 'itself (feedback)' : 'Osc ' + String(srcLtr(b.src)).toUpperCase();
+          var _sn = (b.src >= 7 && b.src <= 16) ? 'the LFO ' + (b.src - 6) + ' shape (drawn curve as the warp)' : (b.src === 5) ? 'the Noise' : (b.src === 6) ? 'itself (feedback)'
+                  : (b.src >= 17 && b.src <= 20) ? ('Osc ' + String(srcLtr(b.src, o)).toUpperCase() + ' (the other bank)') : 'Osc ' + String(srcLtr(b.src, o)).toUpperCase();
           var _mn = { 6: 'Warp — this source drives BOTH of this oscillator\'s warp slots at AUDIO RATE. Whatever the warp is set to is what gets modulated: a shaper becomes audio-rate distortion, the filter modes become per-oscillator filter FM, and a drawn curve gets swept thousands of times a second. Wavetable and FM engines only.',
                       9: 'FM Exp — the modulator moves this oscillator\'s pitch in OCTAVES, so a small change in it is a huge change in the sound. Screams where plain FM growls.',
                       10: 'FM Clamp — linear FM that never reverses the carrier: it stalls at zero instead of running backwards, which splits the carrier in two.' }[b.mode];
@@ -20921,10 +20933,34 @@ setTimeout(function wireSynControls () {
                 paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
           });
           if (famMode(b.mode)) {   // fb551 — FM / PD / AM / RM + FM Exp / FM Clamp all take a source. Without this the two new modes would show in the menu, store in the patch, and offer NO WAY to pick what modulates them.
+            /*  ═══ tp53 — A THROUGH H, IN THE LFO LIST'S OWN SCROLL WINDOW ═══════════════════════
+                Max: "EFGH cannot cross-blend with ABCD — wanted: the LFO blend menu's scroll list,
+                A through H." Before this the sources were `__oscBankLetters(o)`, i.e. the carrier's
+                own four: from E you could only reach F, G and H, and the reason was the engine (E–H
+                are a second voice bank with no A inside them — see CrossBlendBus.h). The DSP reaches
+                across now, so the list is all eight, in the SAME contained scroll window the LFO
+                shapes have used since fb226 — three rows visible, wheel for the rest, canonical
+                `syn-ctx-item` rows so the check dot and the hover are the menu's own.
+                The carrier itself is skipped: modulating yourself is the Self row below.  */
             items.push({ isHeader: true, label: 'Source' });
-            window.__oscBankLetters(o).forEach(function (so) { if (so === o) return; var si = window.__oscBankIndex(so);   /* tp20 — a source is a bank-mate */
-              items.push({ label: 'Osc ' + so.toUpperCase(), isChecked: (b.src === si), keepOpen: true,
-                onPick: function () { wSrc(o, s, si); paintLabel(pill, o, s); menu(pill, o, s, x, y); } }); });
+            items.push({ node: (function () {
+              var wrap = document.createElement('div');
+              wrap.className = 'bp-lfo-scroll';
+              wrap.style.cssText = 'max-height:68px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;';
+              window.__oscPool.forEach(function (so) {
+                if (so === o) return;                                   // that is Self, not a source
+                var si = srcIndexOf(o, so), cross = (si >= 17);
+                var row = document.createElement('div');
+                row.className = 'syn-ctx-item' + ((b.src === si) ? ' checked' : '');
+                row.textContent = 'Osc ' + so.toUpperCase();
+                row.title = cross ? ('Osc ' + so.toUpperCase() + ' — the other voice bank. Its own oscillator is the modulator; it keeps rendering even at Level 0.')
+                                  : ('Osc ' + so.toUpperCase());
+                row.addEventListener('click', function (ev) { ev.stopPropagation(); wSrc(o, s, si); paintLabel(pill, o, s); menu(pill, o, s, x, y); });
+                wrap.appendChild(row);
+              });
+              wrap.addEventListener('wheel', function (ev) { wrap.scrollTop += ev.deltaY; ev.preventDefault(); ev.stopPropagation(); });   // the WKWebView wheel-swallow belt, same as the LFO list's
+              return wrap;
+            })() });
             items.push({ label: 'Noise', isChecked: (b.src === 5), keepOpen: true,   // fb64 — blend an osc WITH the noise (any mode)
               onPick: function () { wSrc(o, s, 5); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
             if (b.mode === 2) items.push({ label: 'Self (feedback)', isChecked: (b.src === 6), keepOpen: true,   // self = PD only
@@ -43666,7 +43702,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function rollBlend(o,X,lvl,P){ var peers=(blendPeers||oscList().filter(oscOn)).filter(function(q){ return q!==o&&OSC.indexOf(q)>=0; }), n=0,   /* tp40 — the blend source list is A-D/Sub/Noise/Self/LFO: an E-H peer used to index -1 → 'Osc A' */ pr=BLENDR[lvl]||.35, mx=lvl==='wild'?3:lvl==='heavy'?2:1;
     for(var sl=1;sl<=4;sl++){ var W=X+'WSLOT'+sl+'_';
       if(n<mx&&rnd()<pr){ n++; var md=pick([1,1,2,2,3,4,9,10]); var src=(md===2&&rnd()<.3)?6:(peers.length&&rnd()<.75)?OSC.indexOf(pick(peers)):(rnd()<.5?4:7+Math.floor(rnd()*3));
-        P(W+'MODE', choiceNorm(W+'MODE', md, 11)); P(W+'SRC', choiceNorm(W+'SRC', src, 17)); P(W+'DEPTH', between(.08, lvl==='wild'?.8:lvl==='heavy'?.55:.3)); }
+        P(W+'MODE', choiceNorm(W+'MODE', md, 11)); P(W+'SRC', choiceNorm(W+'SRC', src, 21));   /* tp53 — the list grew to 21 (the other bank's four); choiceNorm prefers the live cardinality, this is only the fallback */ P(W+'DEPTH', between(.08, lvl==='wild'?.8:lvl==='heavy'?.55:.3)); }
       else P(W+'MODE', 0); } }
   /* the tape machine, when the dice turns it on: every machine's three knobs UP (Max: "why are they all at zero") */
   function rollTape(lvl,P){ var top=lvl==='wild'?.95:lvl==='heavy'?.85:lvl==='medium'?.7:.55;

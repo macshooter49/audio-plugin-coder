@@ -433,6 +433,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
         auto* v = new tw::SynthVoice();
         v->setModCurves (&modCurvesLive_);    // fb554 — set ONCE; the SET it points at is republished later · fb573 — the audio thread's own copy
         v->setGlobalSources (&globalSrc_); // fb563 — set ONCE; the VALUES inside change every block
+        v->setCrossBlendBus (&crossBus_, 0);   // tp53 — bank 0 = oscillators A–D; the board its taps are published on
         v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
                                           // so no per-block push is needed for drawn curves
         synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
@@ -3081,6 +3082,7 @@ void TerrainAudioProcessor::ensureBankB()
         auto* v = new tw::SynthVoice();
         v->setModCurves (&modCurvesLive_);
         v->setGlobalSources (&globalSrc_);
+        v->setCrossBlendBus (&crossBus_, 1);   // tp53 — bank 1 = oscillators E–H
         v->setDrawTable (drawTable_ + 2 * ParameterIDs::kOscPerBank);   // bank 1's eight draw slots
         synthVoicesB_[(size_t) i] = v;
         v->setDeterministicIndex (kSynthVoiceCount + i);
@@ -5605,8 +5607,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             //  sides normalise with (length - 1) and fb373's law is exactly this mismatch.
             const juce::StringArray modes { "Off", "FM", "PD", "AM", "RM", "Sync", "Warp", "Dist", "Filter",
                                             "FM Exp", "FM Clamp" };
+            /*  tp53 — 17..20 APPENDED: THE OTHER BANK'S FOUR. Max: "EFGH cannot cross-blend with ABCD."
+                The index is bank-RELATIVE, and it has to be: E–H's own WSLOT parameters are CLONES of
+                oscillator B's (see the pool block at the end of this function), so both banks share
+                this one StringArray and a name like "Osc E" would be a lie on half of them. 17 is the
+                A/E pair, 18 B/F, 19 C/G, 20 D/H — read from A it means E, read from E it means A, which
+                is exactly what the DSP does with it (SynthVoice: src-17 indexes the other bank's lane).
+                APPEND-ONLY, and safe: APVTS stores the DENORMALISED index, so no saved patch moves. */
             const juce::StringArray srcs  { "Osc A", "Osc B", "Osc C", "Osc D", "Sub", "Noise", "Self",
-                                            "LFO 1", "LFO 2", "LFO 3", "LFO 4", "LFO 5", "LFO 6", "LFO 7", "LFO 8", "LFO 9", "LFO 10" };   // fb223 — WARP x LFO: drawn shapes as blend sources (APPEND-ONLY; JS NSRC must equal this count)
+                                            "LFO 1", "LFO 2", "LFO 3", "LFO 4", "LFO 5", "LFO 6", "LFO 7", "LFO 8", "LFO 9", "LFO 10",   // fb223 — WARP x LFO: drawn shapes as blend sources (APPEND-ONLY; JS NSRC must equal this count)
+                                            "Osc A/E", "Osc B/F", "Osc C/G", "Osc D/H" };
             for (int s = 0; s < 4; ++s)
             {
                 const juce::String n = "Synth OSC " + osc + " Blend " + juce::String (s + 1) + " ";
@@ -9303,6 +9313,7 @@ void TerrainAudioProcessor::rebuildChainOrder() noexcept
 void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     armedMidi_.ensureSize (8192);   // tp49 — the armed-chop MIDI filter never allocates on the audio thread
+    crossBus_.prepare (samplesPerBlock);   // tp53 — the cross-bank modulator board: the ONLY place it allocates
     {   // fb575 — the macro base's smoother starts where the knob stands (no glide on transport start), and the
         //  macro parameters' indices are known before the first CC can arrive
         static const char* const ids[wc::kNumMacros] = { ParameterIDs::SYN_MACRO_1, ParameterIDs::SYN_MACRO_2, ParameterIDs::SYN_MACRO_3, ParameterIDs::SYN_MACRO_4,
@@ -13355,6 +13366,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         const juce::MidiBuffer& toSynth = *toSynthP;
         TI_PROF ("synth:params");
+        /*  tp53 — open the cross-bank board for this block BEFORE either bank renders. The order
+            below is load-bearing and unchanged: bank 0 writes its taps, then bank 1 reads them in
+            the SAME block (E–H <- A–D is exact), while bank 0 read bank 1's row a moment ago, when
+            it still held last block's samples (A–D <- E–H is a clean one-block delay line). See
+            CrossBlendBus.h. With no cross source armed nothing reads a row and the sum is
+            bit-identical to tp52. */
+        crossBus_.startBlock (numSamples);
         synthEngine.renderNextBlock (synthScratch, toSynth, 0, numSamples);
         if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, toSynth, 0, numSamples);   // tp20 — bank 1, same MIDI, same scratch
     }
