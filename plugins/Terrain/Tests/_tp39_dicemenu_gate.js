@@ -125,17 +125,17 @@ const stub = () => {
   const flowOff = await p.evaluate(() => window.__n);
   await p.evaluate(() => { window.__n = { setChain: 0, rmRoute: 0 }; window.__tpDiceBlocks({ osc: 1, flt: 1, env: 1, fx: 1, mod: 0, flow: 1 }); window.__tiAddRoute(0, 1, 0); window.__tpDice(); }); await sleep(600);
   const modOff = await p.evaluate(() => ({ n: window.__n, routes: (window.__tiRoutes ? window.__tiRoutes() : []).length }));
-  ok(flowOff.setChain === 0 && modOff.n.setChain === 1, '[10] Flow cards unticked: the chain is not dealt; Modulation unticked: it still is', JSON.stringify({ flowOff, modOff }));
+  ok(flowOff.setChain === 0 && modOff.n.setChain === 0, '[10] tp48 — the roll never deals the flow chain, ticked or not (Max: "remove the flow cards out of the global randomization")', JSON.stringify({ flowOff, modOff }));
   ok(modOff.n.rmRoute === 0 && modOff.routes >= 1, '[10] Modulation unticked: no route is removed (the one added before the roll survives)', JSON.stringify(modOff));
   const chips6 = await p.evaluate(() => { const d = document.getElementById('dice-btn'); d.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })); const c = [...document.querySelectorAll('#dc-blk .tp-chip')].map(b => b.textContent); window.__tpCloseSheet(); return c; });
-  ok(chips6.length === 6 && chips6.includes('Flow cards') && chips6.includes('Modulation'), '[10] the Roll row has six chips, Modulation and Flow cards apart', chips6.join(','));
+  ok(chips6.length === 5 && !chips6.includes('Flow cards') && chips6.includes('Modulation'), '[10] tp48 — the Roll row has five chips and no Flow cards', chips6.join(','));
   // [11] tp39d — Max: "keys n pads = everything including FX and modulation; on effects = only FX; FX + modulation = new fx + mod"
   const wrapCounts = () => p.evaluate(() => { window.__n = { setChain: 0, rmRoute: 0, fxAdd: 0 }; if (!window.__wrapped) { window.__wrapped = 1; const os = window.__flowSetChain, orr = window.__tiRemoveRoute, oa = window.__fxrAdd;
     window.__flowSetChain = function(){ window.__n.setChain++; return os ? os.apply(this, arguments) : undefined; }; window.__tiRemoveRoute = function(){ window.__n.rmRoute++; return orr ? orr.apply(this, arguments) : undefined; }; window.__fxrAdd = function(){ window.__n.fxAdd++; return oa ? oa.apply(this, arguments) : undefined; }; } });
   const rollWith = async (aims, blocks) => { await wrapCounts(); await p.evaluate((aims, blocks) => { window.__tpDiceAims(aims); window.__tpDiceBlocks(blocks); window.__tiAddRoute(0, 1, 0); window.__envBefore = window.__P('SYN_ENV_FLT_D'); window.__enBefore = 'abcdefgh'.split('').map(o => window.__P('SYN_OSC_' + o.toUpperCase() + '_ENABLE')).join(); window.__tpDice(); }, aims, blocks); await sleep(700);
     return p.evaluate(() => Object.assign({}, window.__n, { envMoved: window.__P('SYN_ENV_FLT_D') !== window.__envBefore, enMoved: 'abcdefgh'.split('').map(o => window.__P('SYN_OSC_' + o.toUpperCase() + '_ENABLE')).join() !== window.__enBefore, aim: window.__tpDiceLastAim })); };
   let whole = null; for (let k = 0; k < 4 && !(whole && whole.enMoved); k++) whole = await rollWith(['keys', 'pads'], {});
-  ok(whole.fxAdd > 0 && whole.setChain >= 1 && whole.rmRoute > 0 && whole.envMoved && whole.enMoved && (whole.aim === 'keys' || whole.aim === 'pads'), '[11] Keys + Pads with nothing in Only: the WHOLE preset (oscillators, envelopes, effects, modulation, flow) in that style', JSON.stringify(whole));
+  ok(whole.fxAdd > 0 && whole.setChain === 0 && whole.rmRoute > 0 && whole.envMoved && whole.enMoved && (whole.aim === 'keys' || whole.aim === 'pads'), '[11] Keys + Pads with nothing in Only: the WHOLE preset (oscillators, envelopes, effects, modulation) in that style — and never the flow chain (tp48)', JSON.stringify(whole));
   const fxOnly = await rollWith(['keys', 'pads'], { fx: 1 });
   ok(fxOnly.fxAdd > 0 && fxOnly.setChain === 0 && fxOnly.rmRoute === 0 && !fxOnly.envMoved && !fxOnly.enMoved, '[11] Only: Effects → just the effects (no oscillator, envelope, route or flow change)', JSON.stringify(fxOnly));
   const fxMod = await rollWith(['keys', 'pads'], { fx: 1, mod: 1 });
@@ -160,16 +160,17 @@ const stub = () => {
   const latch = await p.evaluate(async () => { try { window.Juce.getSliderState('FLOW_ARP_LATCH').setNormalisedValue(1); } catch (e) {} window.__tiDiceMode('arp', true); await new Promise(r => setTimeout(r, 200)); return { latch: window.__P('FLOW_ARP_LATCH'), hasLanes: !!(window.__tiArpLanes && window.__tiArpLanes[0]) }; });
   ok(latch.latch === 0 && latch.hasLanes, '[13] the card dice forces Arp Latch OFF and the arp exposes its lanes', JSON.stringify(latch));
   // [13] the dots are drawn: a whole crazy roll whose chain holds an arp leaves a non-flat pitch lane
-  let lanes = null; for (let k = 0; k < 10 && !(lanes && lanes.hasArp); k++) { await p.evaluate(() => { window.__tpDiceAims(['plucks']); window.__tpDiceBlocks({}); window.__tpDiceLevelSet('crazy'); window.__tiArpLanes[0].set({ pitch: [3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3] }); window.__tpDice(); }); await sleep(700);
+  // tp48 — the global roll no longer touches the arp: with an arp in the chain, a crazy whole roll leaves its dots exactly as they were
+  let lanes = null; { await p.evaluate(() => { window.__flowSetChain(['arp']); window.__tpDiceAims(['plucks']); window.__tpDiceBlocks({}); window.__tpDiceLevelSet('crazy'); window.__tiArpLanes[0].set({ pitch: [3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3] }); window.__tpDice(); }); await sleep(700);
     lanes = await p.evaluate(() => { const ch = window.__flowChain ? window.__flowChain() : []; const L = window.__tiArpLanes[0].get(); return { hasArp: ch.some(m => /^arp/.test(m)), chain: ch, flat: L.pitch.every(v => v === 3), gateVar: new Set(L.gate.map(v => v.toFixed(2))).size }; }); }
-  ok(lanes && lanes.hasArp && !lanes.flat && lanes.gateVar > 1, '[13] a crazy roll with an arp in the chain draws its dots (pitch not flat, gates vary)', JSON.stringify(lanes));
+  ok(lanes && lanes.hasArp && lanes.flat, '[13] tp48 — a crazy whole roll with an arp in the chain leaves the arp\'s dots alone (still flat) and the arp in the chain', JSON.stringify(lanes));
   // [14] tp39f — every flow card in the chain gets an LFO of its own, Round Robin included
   const perCard = await p.evaluate(async () => { window.__flowSetChain(['arp', 'glitch', 'drift']); window.__tpDiceAims(['keys']); window.__tpDiceBlocks({ mod: 1 }); window.__tpDice(); await new Promise(r => setTimeout(r, 700));
     const routes = window.__tiRoutes ? window.__tiRoutes() : []; const kd = (n) => window.__tpKnobDest(n);
     const sets = { arp: ['BLEND','GATE','GLIDE','MORPH'].map(k => kd('FLOW_ARP_' + k)), glitch: ['BLEND','DECAY','DEJAVU','BURST'].map(k => kd('FLOW_GLI_' + k)), drift: ['VARY','DRIFT','WOBBLE','GLIDE'].map(k => kd('FLOW_RBN_' + k)) };
     const hits = {}; Object.keys(sets).forEach(c => { hits[c] = routes.filter(r => sets[c].indexOf(r.d) >= 0).length; }); const latchD = kd('FLOW_ARP_LATCH');
     return { chain: window.__flowChain(), hits, routes: routes.length, latchRouted: latchD != null && routes.some(r => r.d === latchD) }; });
-  ok(perCard.hits.arp >= 1 && perCard.hits.glitch >= 1 && perCard.hits.drift >= 1 && !perCard.latchRouted, '[14] Only: Modulation with arp + glitch + Robin in the chain: each card gets at least one route, Latch never', JSON.stringify(perCard));
+  ok(perCard.hits.arp === 0 && perCard.hits.glitch === 0 && perCard.hits.drift === 0 && !perCard.latchRouted && perCard.routes > 0 && perCard.chain.length === 3, '[14] tp48 — Only: Modulation with arp + glitch + Robin in the chain: the chain stays and NO route lands on a flow card (Max: "let me do the flow cards")', JSON.stringify(perCard));
   // [15] tp39f — the chop card's TIME never rolls a bar-long grid (index < 5 = 1/1 … 1/2T) nor the 1/128-1/256 buzz
   const chopTimes = await p.evaluate(() => { const out = []; for (let k = 0; k < 40; k++) { window.__tiDiceMode('chop', true); const d = window.__tiDice && window.__tiDice.chop; out.push(d ? d.S.v.time : -1); } return out; });
   ok(chopTimes.every(v => v >= 5 && v <= 16), '[15] 40 chop card rolls: TIME stays within 1/4 … 1/64', JSON.stringify(chopTimes));

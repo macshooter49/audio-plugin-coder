@@ -43776,6 +43776,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function generate(){ var aim=pickAim(); window.__tpDiceLastAim=aim; window.__diceLastOneShot={}; window.__diceLastBlend={};   /* tp39 — the pick records are THIS roll's (a stale blend from the last roll is not a blend) */ var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
     var B=Object.assign({osc:0,flt:0,env:0,fx:0,mod:0,flow:0},layout.blocks||{});   /* tp39d — ONLY: ticked = only those blocks are re-rolled (in the aim's style); nothing ticked = the whole preset */
     var whole=!Object.keys(B).some(function(k){ return B[k]; }); if(whole) B={osc:1,flt:1,env:1,fx:1,mod:1,flow:1};
+     /* tp48 — THE FLOW CARDS ARE OUT OF THE GLOBAL DICE, FOR GOOD. Max: "remove the flow cards out of the global randomization... from now
+        on let me do the flow cards... just keep it oscillators, effects and modulation". The chain that is there stays, its cards are never
+        re-dealt or re-rolled, and no LFO is aimed at a flow-card knob by the roll. Each card's OWN dice (the four modes) is untouched. */
+     B.flow=0;
     /* tp39e — Max: "stop randomizing the delay and reverb mod rate and mod depth, it makes it sound very wobbly and bad". Those
        knobs (and the reverb's Mod Mode / Voicing / Motion dropdown) are PINNED to the device's defaults on every roll, and they
        are never LFO targets (see the dpool below). Matched by label AND by param id, so a type's relabel cannot slip one through. */
@@ -43800,13 +43804,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     /* tp13 — Max: "you're going easy on the filter types, we have like 100, 200 filters." The musical shortlist is now the
        exception, not the rule: light keeps it 3 times in 4, medium 1 in 3, heavy/wild almost never — the rest is all 118. */
     function ftype(musical){ var ti=musical?pick(aim==='bass'||aim==='leads'?[0,0,4,5]:[0,5,0,1]):Math.floor(rnd()*NF1); return Ro&&Ro.norm?Ro.norm(ti):ti/(NF1-1); }
-    function ftypeR(){ var musicalOdds=lvl==='light'?.75:lvl==='medium'?.35:lvl==='crazy'?.02:.08; return ftype(rnd()<musicalOdds); }
+    function ftypeR(){ var musicalOdds=lvl==='light'?.6:lvl==='medium'?.22:lvl==='crazy'?.02:.06; return ftype(rnd()<musicalOdds); }   /* tp48 — Max: "lean heavy on the creative uses of each filter": the shortlist is rarer at every reach */
     var step=0, steps=[
       function(){ if(!B.osc) return; toast('Sculpting the oscillators…'); blendPeers=on.slice(); pool.forEach(function(o,i){ var X=OX(o), isOn=on.indexOf(o)>=0; P(X+'ENABLE',isOn?1:0); phase180(X,P); if(!isOn) return;   /* tp12b — 180° on ALL of them, on or off */ rollOsc(o,i,aim,lvl,R,P); P(X+'OCT', aim==='bass'?2/6:3/6); });   /* OCT int -3..+3 */
           blendPeers=null; P('SYN_MONO',(aim==='bass'||aim==='leads')?1:0); rollInfo._mono=(aim==='bass'||aim==='leads'); },
-      function(){ if(!B.flt) return; toast('Shaping the filters…'); f2On=(on.length>1)&&rnd()<R.f2;   /* tp13 — Max: "why isn't the second filter active on anything" */
+      function(){ if(!B.flt) return; toast('Shaping the filters…'); f2On=(on.length>1)&&rnd()<Math.min(.8,(R.f2||.15)*1.6+.1);   /* tp13 — Max: "why isn't the second filter active on anything" · tp48 — more often still */
           P('SYN_FILTER1_TYPE',ftypeR()); var cut={keys:[.45,.75],pads:[.35,.6],bass:[.3,.5],leads:[.5,.8],plucks:[.45,.7],textures:[.35,.65]}[aim]||[.4,.75];
-          P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',Math.min(.3,span(R.res)));   /* tp44 — Max: resonance never past 30 % from the dice */ P('SYN_FILTER1_DRV',span(R.drv)); P('SYN_FILTER1_KEYTRACK',0); P('SYN_FILTER1_VEL',0);
+          P('SYN_FILTER1_CUT',between(cut[0],cut[1])); P('SYN_FILTER1_RES',Math.min(.3,span(R.res)));   /* tp44 — Max: resonance never past 30 % from the dice */ P('SYN_FILTER1_DRV',span(R.drv)); P('SYN_FILTER1_KEYTRACK',rnd()<.35?between(.2,.7):0); P('SYN_FILTER1_VEL',rnd()<.3?between(.2,.6):0);   /* tp48 — the filter follows the key and the hand a third of the time */
           P('SYN_FILTER1_MIX',1); P('SYN_FILTER1_POLES',rnd()<.5?1:between(.3,1)); P('SYN_FILTER1_SPREAD',rnd()<(R.wide||.3)?between(.1,.6):0);
           P('SYN_FILTER1_DRIVETYPE',choiceNorm('SYN_FILTER1_DRIVETYPE',Math.floor(rnd()*6),6)); P('SYN_FILTER1_PDRV',span(R.drv));
           if(f2On){ P('SYN_FILTER2_TYPE',ftypeR()); P('SYN_FILTER2_CUT',between(.3,.8)); P('SYN_FILTER2_RES',Math.min(.3,span(R.res))); P('SYN_FILTER2_DRV',span(R.drv)); P('SYN_FILTER2_KEYTRACK',0); P('SYN_FILTER2_VEL',0);
@@ -43888,11 +43892,11 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
              anything this build does not carry — so naming more than exists stays safe (the tp13 rule). */
           var FLOWPFX={arp:'FLOW_ARP',chop:'FLOW_CHOP',glitch:'FLOW_GLI',drift:'FLOW_RBN'};   /* tp39f — Round Robin too (Max: "Glitch, Chop, Arpeggiator, Round Robin") */
           var FLOWKNOB={arp:['GATE','GLIDE','MORPH'],chop:['GRIT','FILTER','DETUNE'],glitch:['DECAY','DEJAVU','BURST'],drift:['VARY','DRIFT','WOBBLE','GLIDE']};   /* never LATCH · tp43 — never the MIX (BLEND): Max: "the mix does not get modulated, that stuff is practical" */
-          chain.forEach(function(m){ var fk2=fKind(m), fn2=fInst(m), pfx=FLOWPFX[fk2]; if(!pfx) return;
+          [].forEach(function(m){ var fk2=fKind(m), fn2=fInst(m), pfx=FLOWPFX[fk2]; if(!pfx) return;   /* tp48 — was chain.forEach: the flow cards' knobs are not targets of the global roll */
             var head=pfx+(fn2>1?fn2:'')+'_';
             (FLOWKNOB[fk2]||[]).forEach(function(kn){ var d=knobDest(head+kn); if(d!=null) dpool.push({d:d,k:'flow',card:m}); }); });
           /* tp39f — EVERY flow card in the chain gets an LFO of its own on every roll (Max: "you can put modulation on those every time I randomize") */
-          var flowLeft=chain.filter(function(m){ return dpool.some(function(p){ return p.k==='flow'&&p.card===m; }); });
+          var flowLeft=[];   /* tp48 — no flow-card LFOs from the global roll */
           function takeFlowOf(m){ var c=dpool.filter(function(p){ return !used[p.d]&&p.k==='flow'&&p.card===m; }); if(!c.length) return null; var p=pick(c); used[p.d]=1; return p; }
 
           var tapeOn=rnd()<Math.max(R.tape,big?.45:0)&&(aim==='pads'||aim==='keys'||aim==='textures'||aim==='bass'||big), tapeMach=Math.floor(rnd()*3);   /* tp12 — decided first: its knobs come up and join the targets */
@@ -43912,7 +43916,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           function route(tag,addFn,dest,depth){ if(dest==null) return; addFn(dest); if(window.__tiSetDepth) window.__tiSetDepth(tag,dest,Math.max(-1,Math.min(1,depth))); }
           function dep(){ return between(R.depth[0],R.depth[1])*(rnd()<.25?-1:1); }
           var nL=Math.min(10,Math.max(ispan(R.lfo),1+flowLeft.length)), lfoN=0;   /* tp39f — room for one LFO per flow card */
-          for(var n=1;n<=nL;n++){ var tgt=(n===1)?take('wt'):flowLeft.length?takeFlowOf(flowLeft.shift()):(chain.length&&rnd()<.3)?take('flow'):(rnd()<R.fxMod)?(rnd()<.5?take('fxback'):take('fx')):(rnd()<.35?take('fltback'):take(null)); if(!tgt) break; lfoN=n;   /* tp23 — the flow instances take their share */   /* tp13 — the back panels get their share */
+          for(var n=1;n<=nL;n++){ var tgt=(n===1)?take('wt'):flowLeft.length?takeFlowOf(flowLeft.shift()):(chain.length&&rnd()<.3)?take('flow'):(rnd()<R.fxMod)?(rnd()<.5?take('fxback'):take('fx')):(n===2&&rnd()<.6?take('cut'):rnd()<.4?take('fltback'):take(null)); if(!tgt) break; lfoN=n;   /* tp48 — the second LFO leans on the cutoff (Max: lean on the filters) */   /* tp23 — the flow instances take their share */   /* tp13 — the back panels get their share */
             var shape=rnd()<R.wideLfo?Math.floor(rnd()*11):pick([0,0,1,2]);
             /* tp39 — THE DICE DRAWS ITS LFOs (Max: "I want the craziest drawings, the craziest chaos patterns"). From heavy up a share of the
                LFOs are CUSTOM shapes drawn by the card's own Random flat / curve / both with the grid turned up — crazy = 'both' on a
@@ -44121,7 +44125,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      I'd like to randomize in terms of blocks ... multiple aims ... CPU cap at the bottom"). The browser's own sheet with
      chip rows: Aim (several — one is drawn per roll; none = anything), Roll (the blocks; an unticked block keeps what is
      there), Reach, CPU cap. Roll = save + roll; the header dice's left click rolls with what was saved. */
-  var AIMLBL={keys:'Keys',pads:'Pads',bass:'Bass',leads:'Leads',plucks:'Plucks',textures:'Textures',drums:'Drums'}, BLKLBL={osc:'Oscillators',flt:'Filters',env:'Envelopes',fx:'Effects',mod:'Modulation',flow:'Flow cards'};   /* tp39c — Max: flow cards separate from modulation */
+  var AIMLBL={keys:'Keys',pads:'Pads',bass:'Bass',leads:'Leads',plucks:'Plucks',textures:'Textures',drums:'Drums'}, BLKLBL={osc:'Oscillators',flt:'Filters',env:'Envelopes',fx:'Effects',mod:'Modulation'};   /* tp39c — Max: flow cards separate from modulation · tp48 — and out of the global dice entirely (their own dice stays) */
   function openDiceSheet(){ if(!window.__tpSheet) return false;
     var aims=(layout.aims||[]).slice(), blocks=Object.assign({osc:0,flt:0,env:0,fx:0,mod:0,flow:0},layout.blocks||{}), lvl=layout.dlevel||'medium', capV=layout.cpuCap||'auto';
     function chip(cls,attr,val,on,txt){ return '<button class="tp-chip'+(on?' active':'')+'" data-'+attr+'="'+val+'">'+txt+'</button>'; }

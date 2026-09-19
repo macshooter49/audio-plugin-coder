@@ -172,12 +172,11 @@ for (const lvl of LEVELS)
       if (Object.values(kinds).some(v => v >= 2)) sawTwoOfKind = true;
       if (new Set(c).size !== c.length) overCeiling = 'duplicate instance key in ' + c.join(',');
     }
-chk(sawMulti, '[6] the dice puts MORE THAN ONE flow card in the chain');
-chk(sawTwoOfKind, '[6] and two of the same kind (two arps, two glitches) really happen');
-chk(overCeiling === null, "[6] no kind ever exceeds its instance ceiling", overCeiling || '');
-chk(maxLen <= 8, '[6] the chain stays sane', `longest: ${maxLen}`);
-chk(/__tiDiceMode\)\s*window\.__tiDiceMode\(cardPidOf\(m\),big\)/.test(SRC),
-    '[6] every instance is diced on ITS OWN card (glitch 2 is not glitch 1 again)');
+chk(/B\.flow=0;/.test(SRC), '[6] tp48 — the global dice never deals flow cards (B.flow is forced off; Max: "from now on let me do the flow cards")');
+chk(!/flow:'Flow cards'/.test(SRC), '[6] tp48 — the Roll sheet has no Flow cards chip');
+chk(/var flowLeft=\[\];/.test(SRC), '[6] tp48 — no LFO is aimed at a flow-card knob by the roll');
+chk(/\[\]\.forEach\(function\(m\)\{ var fk2=fKind\(m\)/.test(SRC), '[6] tp48 — the flow knob pool is never filled');
+chk(sawMulti && overCeiling === null && maxLen <= 8, '[6] (the retired dealer still obeys its ceilings — kept only so the per-card dice keeps the instance law)', overCeiling || ('longest ' + maxLen));
 chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — routed to something of their own');
 
 
