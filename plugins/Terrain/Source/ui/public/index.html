@@ -33307,8 +33307,11 @@ restoreThemeFromBackend();
            lineBox+0.5..+2.0: ≥ 1.0 px of air on BOTH sides on the tightest card in the plugin.
            The 7 px grab strip is deliberately NOT moved — the hit area is unchanged. ═══════════ */
     '.sm-ul{position:fixed;z-index:2147483644;height:7px;background:transparent;cursor:ns-resize;}'+   /* fb189 — 7px hit strip; visuals are children */
-    '.smu-rail{position:absolute;left:0;right:0;top:1.5px;height:1.5px;background:rgba(255,255,255,0.16);}'+
-    '.smu-span{position:absolute;top:1.5px;height:1.5px;background:rgba(255,255,255,0.40);}'+   /* the depth's TERRITORY, anchored at (1−d)·knob */
+    /* tp47 — THE MARK MUST READ AT REST (Max: "I see NO ATTENUATION LINE... we need to ALWAYS see mod sources"). The rail was 16 %
+       white and the territory 40 % white: an 11 % Env 2 on the filter's cutoff was an 8 px grey hair under a dark card. The rail is
+       a visible purple hair now, the territory is the house purple, and it is never thinner than 6 px. The comet is unchanged. */
+    '.smu-rail{position:absolute;left:0;right:0;top:1.5px;height:1.5px;background:rgba(183,148,255,0.30);}'+
+    '.smu-span{position:absolute;top:1.5px;height:1.5px;min-width:6px;background:rgba(183,148,255,0.90);box-shadow:0 0 3px rgba(183,148,255,0.45);}'+   /* the depth's TERRITORY, anchored at (1−d)·knob */
     '.sm-ul.sel .smu-span{background:#B794FF;}'+
     '.sm-ul.byp .smu-span{opacity:.3;}.sm-ul.byp .smu-comet{display:none!important;}'+   /* fb563 (3) — bypassed: the territory stays, dimmed; no comet */
     '.smu-comet{position:absolute;top:0.75px;height:3px;pointer-events:none;background:linear-gradient(90deg,rgba(231,222,255,0),rgba(231,222,255,0.95));box-shadow:0 0 4px rgba(167,139,250,0.55);}'+   /* fb189 — F3 THE COMET (Max's pick) */
@@ -42688,6 +42691,7 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page.viz .tp-node > .tp-body { visibility: hidden; pointer-events: none; }
 #tp-page.viz .tp-node > .tp-body .tp-viz { visibility: visible; transform: var(--vz, none); transform-origin: 0 0; }
 #tp-page.viz .tp-node > .tp-body .tp-viz * { visibility: visible; }
+#tp-page.viz svg.tp-eye-lfo * { vector-effect: non-scaling-stroke; }   /* tp47 — the wave fills the module; its strokes keep their weight */
 #tp-page.viz .tp-viz text, #tp-page.viz .tp-viz .env-read-hud, #tp-page.viz .tp-viz .samp-drop, #tp-page.viz .tp-viz .samp-exp, #tp-page.viz .tp-viz .env-hud-row, #tp-page.viz .tp-viz .fxr-lab,
 #tp-page.viz .tp-viz .env-read-hud *, #tp-page.viz .tp-viz .samp-drop *, #tp-page.viz .tp-viz .env-hud-row *, #tp-page.viz .tp-viz .fxr-lab * { visibility: hidden !important; }
 #tp-page.viz .tp-vglyph { display: flex; }
@@ -43270,7 +43274,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       if(n.kind==='tapeloop'){ H=Math.min(H,Math.round(W*0.42)); reelSize(W,H); }
       else if(n.kind==='tape'){ var AW=360, AH=230, sc=Math.min(W/AW,H/AH); v.style.width=AW+'px'; v.style.height=AH+'px'; window.__tpTapeSize=[AW,AH];
         var ot=layoutIn(v,n.wrap); v.style.setProperty('--vz','translate('+(pad+(W-AW*sc)/2-ot.x).toFixed(1)+'px,'+(pad+(H-AH*sc)/2-ot.y).toFixed(1)+'px) scale('+sc.toFixed(3)+')'); try{ if(window._fxSizeFn) window._fxSizeFn(); }catch(e){} return; }   /* tp11 — sized AFTER the scale is known: its bitmap covers the scale, never stretched */   /* the cabinet art is drawn at its full size (the cassette wants 360 wide) and scaled to the glass */
-      else if(n.kind==='env'||n.kind==='filter'||n.kind==='lfo'||n.kind==='fx'){   /* tp46 — EDGE TO EDGE (Max: "the bottom and the sides, like the noise module"): width-fit, bottom-aligned, one scale, never stretched; the top breathes */
+      else if(n.kind==='env'||n.kind==='filter'||n.kind==='lfo'){   /* tp46 — EDGE TO EDGE (tp47: the cards keep their centred fit — Max: "everything else looks fucked up") (Max: "the bottom and the sides, like the noise module"): width-fit, bottom-aligned, one scale, never stretched; the top breathes */
+        if(n.kind==='lfo') lfoEyeBox(v,true);   /* tp47 — the wave fills the module: the SVG's viewBox becomes the wave's own box */
         var oE=layoutIn(v,n.wrap); if(oE.w<2||oE.h<2) return; var padT=(n.kind==='lfo')?0:8, sE=n.w/oE.w;   /* the LFO is the whole module (Max) */ if(oE.h*sE>n.h-padT) sE=(n.h-padT)/oE.h;
         var txE=(n.w-oE.w*sE)/2-oE.x, tyE=n.h-oE.h*sE-oE.y;
         v.style.setProperty('--vz','translate('+txE.toFixed(1)+'px,'+tyE.toFixed(1)+'px) scale('+sE.toFixed(4)+')'); return; }
@@ -43278,7 +43283,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         v.style.setProperty('--vz','translate('+txN.toFixed(1)+'px,'+tyN.toFixed(1)+'px) scale('+sN.toFixed(4)+')'); return; }   /* tp10 — one scale, both axes, nothing resized */   /* tp9 — one scale for both axes: the rack card's own shape, just bigger (Max: "fit and fill, not stretched") */
       var o=layoutIn(v,n.wrap); var tx=pad+(W-o.w)/2-o.x, ty=pad+(H-o.h)/2-o.y;
       v.style.setProperty('--vz','translate('+tx.toFixed(1)+'px,'+ty.toFixed(1)+'px)'); }catch(e){} }
-  function vizUnfit(n){ n.vizNat=null; reclip(n); if(!n.viz) return; clearVizStyle(n.viz); if(n.kind==='tape'){ window.__tpTapeSize=TAPE_VIZ.slice(); try{ if(window._fxSizeFn) window._fxSizeFn(); }catch(e){} } if(n.kind==='tapeloop') reelSize(270,88); }
+  /* tp47 — THE LFO IN THE EYE. Its SVG (viewBox 0 0 456 96) keeps a 27-unit strip under the wave for the control row the eye hides, so
+     the picture stopped a third short of the module's bottom (Max: "the LFO is STILL not touching the bottom"). In the eye the viewBox is
+     the wave's own box (the grid's bbox), stretched to the module with non-scaling strokes — a vector wave drawn taller is not a
+     stretched bitmap; every path is rewritten in the same units each frame. Leaving the eye restores the SVG exactly. */
+  function lfoEyeBox(v,on){ try{ var svg=v.querySelector('svg'); if(!svg) return; if(on){ if(svg.__vb0==null){ svg.__vb0=svg.getAttribute('viewBox')||''; svg.__par0=svg.getAttribute('preserveAspectRatio')||''; }
+        var g=svg.querySelector('.sh-grid')||svg.querySelector('.mv-fill'); var bb=g?g.getBBox():null; if(!bb||bb.height<4) return; var vb=(svg.__vb0||'0 0 456 96').split(/\s+/).map(Number);
+        svg.setAttribute('viewBox',vb[0]+' '+(bb.y-1).toFixed(1)+' '+vb[2]+' '+(bb.height+2).toFixed(1)); svg.setAttribute('preserveAspectRatio','none'); svg.classList.add('tp-eye-lfo'); }
+      else if(svg.__vb0!=null){ svg.setAttribute('viewBox',svg.__vb0); if(svg.__par0) svg.setAttribute('preserveAspectRatio',svg.__par0); else svg.removeAttribute('preserveAspectRatio'); svg.classList.remove('tp-eye-lfo'); svg.__vb0=null; } }catch(e){} }
+  function vizUnfit(n){ n.vizNat=null; reclip(n); if(!n.viz) return; if(n.kind==='lfo') lfoEyeBox(n.viz,false); clearVizStyle(n.viz); if(n.kind==='tape'){ window.__tpTapeSize=TAPE_VIZ.slice(); try{ if(window._fxSizeFn) window._fxSizeFn(); }catch(e){} } if(n.kind==='tapeloop') reelSize(270,88); }
   function vizFitAll(){ nodes.forEach(vizFit); }
   var vfT=0;
   function setViz(on,silent){ var was=!!layout.viz; on=!!on;
@@ -43978,7 +43991,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   }   /* tp9 — no self re-arm: window.__tiFrame drives it (see openPage) */
 
   /* ── interaction ── */
-  var CONTROL='input, select, button, textarea, .vel-src, [data-drag-vel], [data-drag-note], .wt-nav, .noise-pow, .noise-nav, .noise-name, .noise-viz, .knob, .knob-ring, .fk-em, .fxr-dial, .fxr-knob, .fxr-pill, .fxr-r, .fxr-type, .fxr-preset, .fxr-swap, .fxr-x, .fxr-snd, .swap-btn, .osc-letter, .engine-wrap, .preset-wrap, .samp-sel, .uni-voices, .uni-stack, .uni-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .gk-arrow, .bl-arrow, .set-prev, .sel, .blend-pill, .ft-pill, .filt-exp, .flt-nav, .dd-trigger, .mv-c, .mv-seg, .mv-tabs, .mv-dep, .env-shelf, .env-sel, .reso-menu, .samp-h, .fade-sq, .fade-cv, .samp-drop, .samp-exp, .tp-port, .device-label, .knob-canvas-wrap, .fx-knob-wrap, .fx-knob-group, .tp-min, .ti-card .b, .ti-card .mix, .ti-card .pset';   /* tp9 — displays (filter curve, envelope grid, LFO scope, FX pictures, osc display) DRAG the node; play them on the synth page (Max) */
+  var CONTROL='input, select, button, textarea, .fxy, .vel-src, [data-drag-vel], [data-drag-note], .wt-nav, .noise-pow, .noise-nav, .noise-name, .noise-viz, .knob, .knob-ring, .fk-em, .fxr-dial, .fxr-knob, .fxr-pill, .fxr-r, .fxr-type, .fxr-preset, .fxr-swap, .fxr-x, .fxr-snd, .swap-btn, .osc-letter, .engine-wrap, .preset-wrap, .samp-sel, .uni-voices, .uni-stack, .uni-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .gk-arrow, .bl-arrow, .set-prev, .sel, .blend-pill, .ft-pill, .filt-exp, .flt-nav, .dd-trigger, .mv-c, .mv-seg, .mv-tabs, .mv-dep, .env-shelf, .env-sel, .reso-menu, .samp-h, .fade-sq, .fade-cv, .samp-drop, .samp-exp, .tp-port, .device-label, .knob-canvas-wrap, .fx-knob-wrap, .fx-knob-group, .tp-min, .ti-card .b, .ti-card .mix, .ti-card .pset';   /* tp9 — displays (filter curve, envelope grid, LFO scope, FX pictures, osc display) DRAG the node; play them on the synth page (Max) */
   var FXCTL=CONTROL+', .fxr-pwr, .fxr-bk-sel, .fxr-bk-knob, .fxr-bk-v, .spl-add, [data-act], a, .fxr-core[data-core="eqz"], .fxr-core[data-core="ott"], .fxr-core[data-core="bod"], .fxr-core[data-core="spl"], .fxr-core[data-core="flt"]';
   var EDGE_ALL=9; function nearEdge(n,e){ if(!e||e.clientX==null) return false; try{ var r=n.wrap.getBoundingClientRect(), z=view.z||1, x=(e.clientX-r.left)/z, y=(e.clientY-r.top)/z; return x<EDGE_ALL||y<EDGE_ALL||x>n.w-EDGE_ALL||y>n.h-EDGE_ALL; }catch(x){ return false; } }
   function isCtl(n,tgt,e){ if(!tgt||!tgt.closest) return false; if(tgt.closest('.tp-port')) return true; if(e&&e.altKey) return false;
