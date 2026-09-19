@@ -3197,23 +3197,42 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                   : audioProcessor.editingLayer.load();
                 complete ((double) audioProcessor.layers[(size_t) li].pan.load());
             })
-            .withNativeFunction("setLayerPitchJitter", [this](const juce::Array<juce::var>& args,
+            // ── tp55 — VIBRATO (was JITTER). Depth in cents, rate in Hz. ──────────
+            .withNativeFunction("setLayerVibratoDepth", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 if (args.size() >= 2)
                 {
                     const int   li = juce::jlimit (0, 3, (int) args[0]);
                     const float c  = juce::jlimit (0.0f, 100.0f, (float) (double) args[1]);
-                    audioProcessor.layers[(size_t) li].pitchJitterCents.store (c);
+                    audioProcessor.layers[(size_t) li].vibratoDepthCents.store (c);
                 }
                 complete ({});
             })
-            .withNativeFunction("getLayerPitchJitter", [this](const juce::Array<juce::var>& args,
+            .withNativeFunction("getLayerVibratoDepth", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
                                                   : audioProcessor.editingLayer.load();
-                complete ((double) audioProcessor.layers[(size_t) li].pitchJitterCents.load());
+                complete ((double) audioProcessor.layers[(size_t) li].vibratoDepthCents.load());
+            })
+            .withNativeFunction("setLayerVibratoRate", [this](const juce::Array<juce::var>& args,
+                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    const int   li = juce::jlimit (0, 3, (int) args[0]);
+                    const float r  = juce::jlimit (0.05f, 12.0f, (float) (double) args[1]);
+                    audioProcessor.layers[(size_t) li].vibratoRateHz.store (r);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getLayerVibratoRate", [this](const juce::Array<juce::var>& args,
+                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                  : audioProcessor.editingLayer.load();
+                complete ((double) audioProcessor.layers[(size_t) li].vibratoRateHz.load());
             })
             .withNativeFunction("setLayerProbabilityWeight", [this](const juce::Array<juce::var>& args,
                                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -12841,7 +12860,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         +     'transparent 270deg);'
         +   '-webkit-mask:radial-gradient(closest-side,transparent 66%,#000 67%);'
         +   'mask:radial-gradient(closest-side,transparent 66%,#000 67%);}'
-        + '.mix-strip-knob[data-fn="jitter"]{width:21px;height:21px;}'
+        /* tp55 — the vibrato pair sits in one row; the cells keep knob + label together. */
+        + '.mix-strip-krow{display:flex;flex-direction:row;gap:8px;align-items:flex-start;justify-content:center;}'
+        + '.mix-strip-kcell{display:flex;flex-direction:column;align-items:center;gap:0;}'
         + '.mix-strip-knob-label{font-size:7.5px;letter-spacing:0.8px;'
         +   'color:var(--text-muted);text-transform:uppercase;margin-top:-3px;}'
         + '.mix-strip-fader-meter{flex:1;display:flex;flex-direction:row;'
@@ -12900,7 +12921,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       document.head.appendChild(style);
     }
 
-    function buildMixPanel () {
+)TIHX") + juce::String (R"TIHX(    function buildMixPanel () {
       if (document.getElementById('mix-panel')) return;
       var panel = document.createElement('div');
       panel.id = 'mix-panel';
@@ -12924,8 +12945,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           +   '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" data-channel="l" style="height:0%"></div></div>'
           +   '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" data-channel="r" style="height:0%"></div></div>'
           + '</div>'
-          + '<div class="mix-strip-knob" data-fn="jitter" title="Pitch Jitter ' + letter + ' - drag, dbl-click resets"></div>'
-          + '<div class="mix-strip-knob-label">JIT</div>'
+          /* tp55 — VIBRATO takes jitter's place: DEPTH (cents) and RATE (Hz), side by side
+             in one row so the strip's height is unchanged. */
+          + '<div class="mix-strip-krow">'
+          +   '<div class="mix-strip-kcell">'
+          +     '<div class="mix-strip-knob" data-fn="vib" title="Vibrato depth ' + letter + ' — drag, dbl-click resets"></div>'
+          +     '<div class="mix-strip-knob-label">VIB</div>'
+          +   '</div>'
+          +   '<div class="mix-strip-kcell">'
+          +     '<div class="mix-strip-knob" data-fn="vibrate" title="Vibrato rate ' + letter + ' — drag, dbl-click resets to 5 Hz"></div>'
+          +     '<div class="mix-strip-knob-label">RATE</div>'
+          +   '</div>'
+          + '</div>'
           + '<div class="mix-strip-buttons">'
           +   '<button class="mix-strip-btn" data-fn="mute">M</button>'
           +   '<button class="mix-strip-btn" data-fn="solo">S</button>'
@@ -12954,7 +12985,19 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
 
     // Arc knobs use --val (0..1) sweeping the conic-gradient ring.
     function setPanVisual (knob, p)     { knob.style.setProperty('--val', String((p + 1) / 2)); }   // -1..1 -> 0..1
-    function setJitterVisual (knob, c)  { knob.style.setProperty('--val', String(c / 100)); }        // 0..100 -> 0..1
+    function setVibDepthVisual (knob, c) { knob.style.setProperty('--val', String(c / 100)); }       // 0..100 cents -> 0..1
+    /* Rate reads 0.05..12 Hz. A LOG sweep so the musical 4-7 Hz sits mid-dial instead of
+       squashed into the first half-inch of a linear 12 Hz travel. */
+    var VIB_RATE_MIN = 0.05, VIB_RATE_MAX = 12.0;
+    function vibRateToNorm (hz) {
+      var v = Math.max(VIB_RATE_MIN, Math.min(VIB_RATE_MAX, hz || VIB_RATE_MIN));
+      return Math.log(v / VIB_RATE_MIN) / Math.log(VIB_RATE_MAX / VIB_RATE_MIN);
+    }
+    function vibNormToRate (n) {
+      var t = Math.max(0, Math.min(1, n));
+      return VIB_RATE_MIN * Math.pow(VIB_RATE_MAX / VIB_RATE_MIN, t);
+    }
+    function setVibRateVisual (knob, hz) { knob.style.setProperty('--val', String(vibRateToNorm(hz))); }
     // Fader: vol 0..2 -> 0..100% of travel. Sets fill height + handle bottom.
     function setFaderVisual (fader, vol) {
       var pct = (vol / 2.0) * 100;
@@ -13026,34 +13069,43 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           document.addEventListener('mouseup', onUp);
         });
 
-        // ── Pitch jitter knob (vertical drag → 0..100 cents) ──
-        var jitterKnob = strip.querySelector('.mix-strip-knob[data-fn="jitter"]');
-        var jitterState = { v: 0 };
-        jitterKnob.addEventListener('dblclick', function (ev) {
-          ev.preventDefault();
-          jitterState.v = 0;
-          setJitterVisual(jitterKnob, 0);
-          var fn = getNativeFn('setLayerPitchJitter');
-          if (fn) { try { fn(idx, 0); } catch (_) {} }
-        });
-        jitterKnob.addEventListener('mousedown', function (ev) {
-          ev.preventDefault();
-          var startY = ev.clientY;
-          var startV = jitterState.v;
-          function onMove (e) {
-            var v = Math.max(0, Math.min(100, startV + (startY - e.clientY) / 2));
-            jitterState.v = v;
-            setJitterVisual(jitterKnob, v);
-            var fn = getNativeFn('setLayerPitchJitter');
-            if (fn) { try { fn(idx, v); } catch (_) {} }
-          }
-          function onUp () {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-          }
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        });
+        // ── tp55 — VIBRATO: depth (0..100 cents) + rate (0.05..12 Hz), both vertical drags ──
+        //    ⚠️ The listeners go on BEFORE anything can throw (tp54's lesson: the drag was
+        //    dead because the opening write sat above the move/up hookup).
+        function wireVibKnob (fnName, sel, fromDrag, resetTo, paint) {
+          var knob = strip.querySelector('.mix-strip-knob[data-fn="' + sel + '"]');
+          if (! knob) return;
+          var st = { v: resetTo };
+          function push (v) { var f = getNativeFn(fnName); if (f) { try { f(idx, v); } catch (_) {} } }
+          knob.addEventListener('mousedown', function (ev) {
+            ev.preventDefault();
+            var startY = ev.clientY, startV = st.v;
+            function onMove (e) {
+              var v = fromDrag(startV, startY - e.clientY);
+              st.v = v; paint(knob, v); push(v);
+            }
+            function onUp () {
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          });
+          knob.addEventListener('dblclick', function (ev) {
+            ev.preventDefault();
+            st.v = resetTo; paint(knob, resetTo); push(resetTo);
+          });
+          strip['__vib_' + sel] = st;   // restoreStripsFromCpp seeds the drag origin through this
+          paint(knob, st.v);
+        }
+        wireVibKnob('setLayerVibratoDepth', 'vib',
+                    function (v0, dy) { return Math.max(0, Math.min(100, v0 + dy / 2)); },
+                    0, setVibDepthVisual);
+        wireVibKnob('setLayerVibratoRate', 'vibrate',
+                    /* 260 px of travel for the whole log range — the musical 4-7 Hz band is a
+                       short arc near the top of a 0.05..12 dial, so a coarse knob would step over it */
+                    function (v0, dy) { return vibNormToRate(vibRateToNorm(v0) + dy / 260); },
+                    5.0, setVibRateVisual);
 
         // ── M / S buttons ──
         strip.querySelector('[data-fn="mute"]').addEventListener('click', function (ev) {
@@ -13078,7 +13130,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         var idx = parseInt(strip.getAttribute('data-layer'), 10);
         var fader      = strip.querySelector('.mix-strip-fader');
         var panKnob    = strip.querySelector('.mix-strip-knob[data-fn="pan"]');
-        var jitterKnob = strip.querySelector('.mix-strip-knob[data-fn="jitter"]');
+        var vibKnob    = strip.querySelector('.mix-strip-knob[data-fn="vib"]');
+        var vibRateKnob= strip.querySelector('.mix-strip-knob[data-fn="vibrate"]');
         var muteBtn    = strip.querySelector('[data-fn="mute"]');
         var soloBtn    = strip.querySelector('[data-fn="solo"]');
 
@@ -13090,8 +13143,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         if (volFn) { try { unwrap(volFn(idx), function (v) { setFaderVisual(fader, (typeof v === 'number' ? v : 1.0)); }); } catch (_) {} }
         var panFn = getNativeFn('getLayerPan');
         if (panFn) { try { unwrap(panFn(idx), function (v) { setPanVisual(panKnob, (typeof v === 'number' ? v : 0)); }); } catch (_) {} }
-        var jFn = getNativeFn('getLayerPitchJitter');
-        if (jFn)  { try { unwrap(jFn(idx),   function (v) { setJitterVisual(jitterKnob, (typeof v === 'number' ? v : 0)); }); } catch (_) {} }
+        var jFn = getNativeFn('getLayerVibratoDepth');
+        if (jFn && vibKnob) { try { unwrap(jFn(idx), function (v) {
+          var c = (typeof v === 'number' ? v : 0);
+          setVibDepthVisual(vibKnob, c);
+          if (strip.__vib_vib) strip.__vib_vib.v = c;     /* so the next drag starts where the knob IS */
+        }); } catch (_) {} }
+        var rFn = getNativeFn('getLayerVibratoRate');
+        if (rFn && vibRateKnob) { try { unwrap(rFn(idx), function (v) {
+          var hz = (typeof v === 'number' && v > 0 ? v : 5.0);
+          setVibRateVisual(vibRateKnob, hz);
+          if (strip.__vib_vibrate) strip.__vib_vibrate.v = hz;
+        }); } catch (_) {} }
         var mFn = getNativeFn('getLayerMute');
         if (mFn)  { try { unwrap(mFn(idx),   function (m) { muteBtn.classList.toggle('active', !!m); }); } catch (_) {} }
         var sFn = getNativeFn('getLayerSolo');
@@ -14131,7 +14194,7 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
 (function(){
   /* tp49 — THE CHOP PAGE'S HANDS: seamless switching, the ARM, the sample library, the DAW's BPM, the house words. */
   var WORDS={'LAYER':'Layer','RR':'RR','RANDOM':'Random','KEYTRK':'Keytrack','VEL':'Velocity','RESET TO A':'Reset to A','STEMS':'Stems',
-    'EXPORT ALL 4':'Export All 4','REVEAL FOLDER':'Reveal Folder','DRY':'Dry','WET':'Wet','CLEAR':'Clear','PAN':'Pan','JIT':'Jitter',
+    'EXPORT ALL 4':'Export All 4','REVEAL FOLDER':'Reveal Folder','DRY':'Dry','WET':'Wet','CLEAR':'Clear','PAN':'Pan','VIB':'Vib','RATE':'Rate',
     'PITCH':'Pitch','SLICE':'Slice','1-SHOT':'One-Shot','LOOP':'Loop','MUTE':'Mute','SOLO':'Solo','SYNC':'Sync','SHUFFLE':'Shuffle','RESET':'Reset'};
   function retitle(root){ try{ var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null); var t; var list=[]; while((t=w.nextNode())) list.push(t);
       list.forEach(function(n){ var k=n.nodeValue.trim(); if(WORDS.hasOwnProperty(k)) n.nodeValue=n.nodeValue.replace(k,WORDS[k]); }); }catch(e){} }
@@ -14394,7 +14457,7 @@ body.chop-open #mix-panel { height: 288px !important; }
       same exact slider."  MEASURED: #syn-panel .knob-ring draws a 2 px SVG arc on a 24 px ring; this
       one is a conic gradient masked at 66 %, i.e. a 4.25 px band on a 25 px circle — more than
       double. Same 24 px ring, same 2 px band, and the house's WHITE value against a faint track. */
-#mix-panel .mix-strip-knob, #mix-panel .mix-strip-knob[data-fn="jitter"] {
+#mix-panel .mix-strip-knob {
   width: 24px !important; height: 24px !important;
   -webkit-mask: radial-gradient(closest-side, transparent 83%, #000 84%) !important;
   mask: radial-gradient(closest-side, transparent 83%, #000 84%) !important;

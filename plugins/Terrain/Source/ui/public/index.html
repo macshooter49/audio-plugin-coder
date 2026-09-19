@@ -42713,6 +42713,19 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-node > .tp-body > .flow-mode.flow-inst { display: flex; }
 #tp-page .tp-node > .tp-body > .flow-mode .emb { width: 52px; height: 52px; }
 #tp-page .tp-node[data-kind="flow"].ext > .tp-body > .flow-mode { display: none; }
+/* tp55 — …BUT NOT IN THE EYE. Max asked for the "plain white ANIMATED emblem" on an extended
+   card, and tp54b gave him a CLONE of the emblem made once at adopt time — it can never move,
+   because the frame dispatcher (flowTiles) paints the LIVE tile's own child elements, which it
+   finds through `#syn-panel .flow-mode`. So in eye mode the extended card shows that very tile
+   again. The rule above still hides it everywhere else, which is the reason it existed: on the
+   canvas an extended node shows its CARD, and the tile must not sit behind it. */
+/*  🚨 AND IT IS TAKEN OUT OF FLOW TO DO IT. The first cut just un-hid the tile, and tp33's probe
+    caught it at once: `.tp-body` is a flex COLUMN and the extended CARD is its sibling, so a tile
+    claiming 100% x 100% shoved the card 348 px out of the node — exactly the spill tp33 exists to
+    forbid ("the actual UI pops out of the emblem mode ... it looks terrible"). Absolute + inset:0
+    is how `.tp-vglyph` has always covered the body, and it touches nobody's layout. */
+#tp-page.viz .tp-node[data-kind="flow"].ext > .tp-body > .flow-mode {
+  display: flex; position: absolute; inset: 0; width: auto; height: auto; }
 #tp-page .tp-node > .tp-body > .ti-card { position: relative !important; left: 0 !important; top: 0 !important; zoom: 1.2 !important; width: 316px; display: block !important; border: none; box-shadow: none; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 13px; }
 #tp-page .tp-node > .tp-body > .ti-card .h .g, #tp-page .tp-node > .tp-body > .ti-card .h .pop, #tp-page .tp-node > .tp-body > .ti-card .rsz { display: none; }
 #tp-page .tp-node > .tp-body > .ti-card .h { cursor: default; }
@@ -42998,8 +43011,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           So the card's own emblem is the picture again whether it is extended or not, and "not
           stretched" is already the law here: vizFit uses ONE scale on both axes for this branch. */
       if(n.viz){ reclip(n); n.viz.classList.remove('tp-viz'); clearVizStyle(n.viz); n.viz=null; }
-      n.glyph.classList.toggle('tp-viz',!!n.ext);
-      if(n.tile) n.tile.classList.toggle('tp-viz',!n.ext); return; }
+      /* tp55 — THE LIVE TILE IN BOTH STATES. The tile is already stripped to a bare emblem
+         inside a node (see `#tp-page .tp-node > .tp-body > .flow-mode`: no border, no ground,
+         100% x 100%), and its SVG keeps its own aspect ratio, so "not stretched" holds at any
+         card size. The glyph clone stays as the fallback for a node that somehow has no tile. */
+      if(n.tile){ n.tile.classList.add('tp-viz'); n.glyph.classList.remove('tp-viz'); }
+      else n.glyph.classList.add('tp-viz');
+      return; }
     if(n.kind==='rnd'&&n.el){ n.el.classList.add('tp-viz'); n.viz=n.el; return; }
     if(!s||!n.el||!n.el.querySelector) { if(n.kind==='voice'&&n.body&&!n.body.querySelector('.tp-vglyph')){ var g=document.createElement('div'); g.className='tp-vglyph tp-viz'; g.innerHTML=IC.voice; n.body.appendChild(g); } return; }
     var v=n.el.matches&&n.el.matches(s)?n.el:n.el.querySelector(s); if(v) setVizEl(n,v); }
@@ -43341,6 +43359,22 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         var oE=layoutIn(v,n.wrap); if(oE.w<2||oE.h<2) return; var padT=(n.kind==='lfo')?0:8, sE=n.w/oE.w;   /* the LFO is the whole module (Max) */ if(oE.h*sE>n.h-padT) sE=(n.h-padT)/oE.h;
         var txE=(n.w-oE.w*sE)/2-oE.x, tyE=n.h-oE.h*sE-oE.y;
         v.style.setProperty('--vz','translate('+txE.toFixed(1)+'px,'+tyE.toFixed(1)+'px) scale('+sE.toFixed(4)+')'); return; }
+      /* tp55 — THE SAMPLER'S PICTURE GOES EDGE TO EDGE (Max: "like noise's"). Everything else in
+         the eye is SCALED, and scaling is right when the picture has an aspect ratio to protect.
+         A WAVEFORM has none: `.samp-disp` holds canvases at inset:0 / 100% x 100% with their own
+         ResizeObserver, so the honest answer is to SIZE the box to the module and let the canvas
+         redraw at that size — a waveform drawn taller is not a stretched bitmap. MEASURED before:
+         a 235 x 51 strip floating in a 258 x 127 module with 25 px over it and 52 px under.
+         The wavetable's .osc-display keeps its centred fit — tp47 settled that one ("everything
+         else looks fucked up"). */
+      else if(n.kind==='osc'&&v.classList&&v.classList.contains('samp-disp')){
+        var zS=zoomIn(v,n.wrap); if(!(zS>0)) zS=1;
+        v.style.flex='0 0 auto'; v.style.minHeight='0px'; v.style.maxHeight='none';
+        v.style.width=(n.w/zS).toFixed(1)+'px'; v.style.height=(n.h/zS).toFixed(1)+'px';
+        var oS=layoutIn(v,n.wrap);
+        v.style.setProperty('--vz','translate('+(-oS.x).toFixed(1)+'px,'+(-oS.y).toFixed(1)+'px)');
+        try{ if(window.__sampRedrawAll) window.__sampRedrawAll(); }catch(e){}
+        return; }
       else { var oN=layoutIn(v,n.wrap); if(oN.w<2||oN.h<2) return; var sN=Math.min(W/oN.w,H/oN.h), txN=pad+(W-oN.w*sN)/2-oN.x, tyN=pad+(H-oN.h*sN)/2-oN.y;
         v.style.setProperty('--vz','translate('+txN.toFixed(1)+'px,'+tyN.toFixed(1)+'px) scale('+sN.toFixed(4)+')'); return; }   /* tp10 — one scale, both axes, nothing resized */   /* tp9 — one scale for both axes: the rack card's own shape, just bigger (Max: "fit and fill, not stretched") */
       var o=layoutIn(v,n.wrap); var tx=pad+(W-o.w)/2-o.x, ty=pad+(H-o.h)/2-o.y;
@@ -43353,7 +43387,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         var g=svg.querySelector('.sh-grid')||svg.querySelector('.mv-fill'); var bb=g?g.getBBox():null; if(!bb||bb.height<4) return; var vb=(svg.__vb0||'0 0 456 96').split(/\s+/).map(Number);
         svg.setAttribute('viewBox',vb[0]+' '+(bb.y-1).toFixed(1)+' '+vb[2]+' '+(bb.height+2).toFixed(1)); svg.setAttribute('preserveAspectRatio','none'); svg.classList.add('tp-eye-lfo'); }
       else if(svg.__vb0!=null){ svg.setAttribute('viewBox',svg.__vb0); if(svg.__par0) svg.setAttribute('preserveAspectRatio',svg.__par0); else svg.removeAttribute('preserveAspectRatio'); svg.classList.remove('tp-eye-lfo'); svg.__vb0=null; } }catch(e){} }
-  function vizUnfit(n){ n.vizNat=null; reclip(n); if(!n.viz) return; if(n.kind==='lfo') lfoEyeBox(n.viz,false); clearVizStyle(n.viz); if(n.kind==='tape'){ window.__tpTapeSize=TAPE_VIZ.slice(); try{ if(window._fxSizeFn) window._fxSizeFn(); }catch(e){} } if(n.kind==='tapeloop') reelSize(270,88); }
+  function vizUnfit(n){ n.vizNat=null; reclip(n); if(!n.viz) return; if(n.kind==='lfo') lfoEyeBox(n.viz,false); clearVizStyle(n.viz);
+    /* tp55 — the sampler's box was SIZED, not scaled; clearVizStyle drops the width/height and the
+       canvas has to be told to redraw at whatever it went back to. */
+    if(n.kind==='osc'&&n.viz.classList&&n.viz.classList.contains('samp-disp')){ try{ if(window.__sampRedrawAll) window.__sampRedrawAll(); }catch(e){} } if(n.kind==='tape'){ window.__tpTapeSize=TAPE_VIZ.slice(); try{ if(window._fxSizeFn) window._fxSizeFn(); }catch(e){} } if(n.kind==='tapeloop') reelSize(270,88); }
   function vizFitAll(){ nodes.forEach(vizFit); }
   var vfT=0;
   function setViz(on,silent){ var was=!!layout.viz; on=!!on;

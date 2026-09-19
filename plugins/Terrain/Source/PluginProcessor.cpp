@@ -17828,7 +17828,12 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
         layerNode.setProperty ("solo",             (bool) L.solo.load(),        nullptr);
         // Mix page Phase 2: per-layer creative-routing + mixer fields.
         layerNode.setProperty ("pan",              (double) L.pan.load(),               nullptr);
-        layerNode.setProperty ("pitchJitterCents", (double) L.pitchJitterCents.load(),  nullptr);
+        // tp55 — the old JITTER field became VIBRATO DEPTH (same units, same range).
+        // Written under both names so a preset saved here still loads on a build that
+        // predates tp55, and read below with the old name as the fallback.
+        layerNode.setProperty ("vibratoDepthCents", (double) L.vibratoDepthCents.load(), nullptr);
+        layerNode.setProperty ("vibratoRateHz",     (double) L.vibratoRateHz.load(),     nullptr);
+        layerNode.setProperty ("pitchJitterCents",  (double) L.vibratoDepthCents.load(), nullptr);
         layerNode.setProperty ("probabilityWeight",(double) L.probabilityWeight.load(), nullptr);
         layerNode.setProperty ("keyZoneMin",       L.keyZoneMin.load(),                 nullptr);
         layerNode.setProperty ("keyZoneMax",       L.keyZoneMax.load(),                 nullptr);
@@ -19060,7 +19065,11 @@ void TerrainAudioProcessor::loadV2State (const juce::ValueTree& loaded)
         const int dvzMin = (idx == 0 ? 0  : idx == 1 ? 32 : idx == 2 ? 64 : 96);
         const int dvzMax = (idx == 0 ? 31 : idx == 1 ? 63 : idx == 2 ? 95 : 127);
         L.pan.store               ((float)(double) layerNode.getProperty ("pan",               0.0));
-        L.pitchJitterCents.store  ((float)(double) layerNode.getProperty ("pitchJitterCents",  0.0));
+        // tp55 — vibratoDepthCents, falling back to the pre-tp55 name.
+        L.vibratoDepthCents.store ((float)(double) layerNode.getProperty ("vibratoDepthCents",
+                                      layerNode.getProperty ("pitchJitterCents", 0.0)));
+        L.vibratoRateHz.store     (juce::jlimit (0.05f, 12.0f,
+                                      (float)(double) layerNode.getProperty ("vibratoRateHz", 5.0)));
         L.probabilityWeight.store ((float)(double) layerNode.getProperty ("probabilityWeight", 0.25));
         L.keyZoneMin.store        ((int)           layerNode.getProperty ("keyZoneMin",        dvzMin));
         L.keyZoneMax.store        ((int)           layerNode.getProperty ("keyZoneMax",        dvzMax));

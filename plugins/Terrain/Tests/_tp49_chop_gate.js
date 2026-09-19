@@ -25,7 +25,10 @@ let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('
       ground: ['#plugin', '#header', '#footer', '#mix-panel', '#hero'].map(s2 => getComputedStyle(q(s2)).backgroundColor) }; });
   ok(st.btn === 'CHOP' && st.chopOpen, '[1] the header says CHOP and opening it marks the page (body.chop-open)', JSON.stringify(st));
   ok(st.arm && st.lib && !st.seq && !st.sync && !st.play && !st.dice && !st.lock, '[2] the Arm and the sample library are there; SEQ, SYNC, the play button, the dice and the BPM lock are gone', JSON.stringify(st));
-  ok(st.words.indexOf('One-Shot') >= 0 && st.words.indexOf('Pitch') >= 0 && st.words.indexOf('Jitter') >= 0 && st.words.indexOf('1-SHOT') < 0 && st.words.indexOf('PAN') < 0, '[3] the words wear the house case (One-Shot, Pitch, Jitter)', st.words.join(','));
+  /* tp55 — "Jitter" is not a word on this page any more: the knob became a real VIBRATO (depth +
+     rate), because a one-shot random detune did nothing audible on a lone one-shot. The bar still
+     asks the same question — sentence case, not the old shouting — of the words that are there. */
+  ok(st.words.indexOf('One-Shot') >= 0 && st.words.indexOf('Pitch') >= 0 && st.words.indexOf('Vib') >= 0 && st.words.indexOf('Rate') >= 0 && st.words.indexOf('Jitter') < 0 && st.words.indexOf('1-SHOT') < 0 && st.words.indexOf('PAN') < 0, '[3] the words wear the house case (One-Shot, Pitch, Vib, Rate — and Jitter is gone)', st.words.join(','));
   ok(st.pillBg === 'rgba(0, 0, 0, 0)' && /183, 148, 255/.test(st.pillBorder) && st.rootBg === 'rgba(0, 0, 0, 0)', '[4] a selected pill is a purple outline with nothing filled, and the key box is transparent', JSON.stringify({ pillBg: st.pillBg, pillBorder: st.pillBorder, rootBg: st.rootBg }));
   // tp52 — ONE GROUND: #plugin carries the house tone and the header, the footer, the waveform and the panel all wear it (Max: "header & FOOTER ARE NOT the same color")
   ok(st.ground[0] === 'rgb(26, 26, 46)' && st.ground.slice(1).every(c => c === 'rgba(0, 0, 0, 0)'), '[4] header, footer, waveform and panel all wear ONE ground (#1A1A2E on #plugin, nothing painted over it)', JSON.stringify(st.ground));

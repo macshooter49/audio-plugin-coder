@@ -9,6 +9,7 @@
 #include "Warp/WarpRenderCache.h"
 #include "ModulationEngine.h"
 #include "FxMask.h"
+#include "Vibrato.h"   // tp55 — the per-voice pitch LFO (JUCE-free, gated by Tests/vibrato_cert.cpp)
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -82,7 +83,8 @@ namespace tw
                       ModulationEngine*   me = nullptr,
                       WarpRenderCache*    wc = nullptr,
                       std::atomic<float>* chopFadeRef = nullptr,
-                      std::atomic<float>* pitchJitterCentsRef = nullptr) noexcept
+                      std::atomic<float>* vibratoDepthCentsRef = nullptr,
+                      std::atomic<float>* vibratoRateHzRef     = nullptr) noexcept
             : sample (sb),
               attackMsParam (attackMsRef),
               releaseMsParam (releaseMsRef),
@@ -90,7 +92,8 @@ namespace tw
               modEngine (me),
               warpCache_ (wc),
               chopFadeMsParam_ (chopFadeRef),
-              pitchJitterCentsParam_ (pitchJitterCentsRef) {}
+              vibratoDepthCentsParam_ (vibratoDepthCentsRef),
+              vibratoRateHzParam_     (vibratoRateHzRef) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
@@ -185,21 +188,12 @@ namespace tw
             }
             isActive = true;
 
-            // Mix page Phase B: per-layer pitch jitter. Adds ±N cents random
-            // offset (where N = layer's pitchJitterCents) to the voice's
-            // semitone pitch — KILLS the phasing artifacts that happen when
-            // stacking identical layer copies. Sampled once at startNote so
-            // the offset is stable for the voice's lifetime; juce::Random's
-            // system instance is thread-local and realtime-safe.
-            if (pitchJitterCentsParam_ != nullptr)
-            {
-                const float jitterCents = pitchJitterCentsParam_->load();
-                if (jitterCents > 0.0f)
-                {
-                    const float r = juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
-                    activeConfig.pitchSemitones += (r * jitterCents) * 0.01f;  // cents → semitones
-                }
-            }
+            // tp55 — VIBRATO, reset for this note. Phase starts at ZERO, which is the
+            // sine's zero crossing: the note begins at its true pitch and swings from
+            // there, so arming vibrato can never put a step on a note-on. Starting at
+            // zero is also what keeps the render DETERMINISTIC — the old jitter pulled
+            // juce::Random here, and a null test cannot reproduce that.
+            vib_.reset();
 
             // Warp engine: select mode + reset state for this trigger. The
             // dispatcher lazily allocates the underlying spectral engine on
@@ -341,11 +335,26 @@ namespace tw
             // correctly across hosts.
             latestBlockSize = juce::jmax (1, numSamples);
 
+            // ── tp55 — VIBRATO. The math and the reasons live in Vibrato.h, which is
+            //    JUCE-free precisely so Tests/vibrato_cert.cpp can measure THE SHIPPED CODE
+            //    instead of a copy of it (a gate that drives a helper proves nothing — tp54).
+            const float vibDepth = (vibratoDepthCentsParam_ != nullptr)
+                                     ? vibratoDepthCentsParam_->load() : 0.0f;
+            const float vibRate  = (vibratoRateHzParam_ != nullptr)
+                                     ? vibratoRateHzParam_->load() : 5.0f;
+            const tw::Vibrato::Block& vib = vib_.advance (vibDepth, vibRate, sampleRateForEnv, numSamples);
+            const int vibShift = vib.segShift, vibMask = (1 << vib.segShift) - 1;
+
             // Warp branch — entire path lives in renderWarp(). NONE mode
             // (the vast majority of voices) falls through to the existing
             // per-sample loop below, behaviorally unchanged.
             if (activeConfig.warpMode != WarpMode::None)
             {
+                // tp55 — a warped voice cannot varispeed (the stretcher owns the read
+                // rate), so its vibrato goes in as a per-block PITCH offset instead.
+                // setPitchSemitones is a bounded store on all three engines, so this
+                // costs nothing; the block centre is the right sample of the ramp.
+                warp.setPitchSemitones (activeConfig.pitchSemitones + vib.semisMid);
                 renderWarp (outputBuffer, *buf, startSample, numSamples);
                 return;
             }
@@ -362,7 +371,9 @@ namespace tw
             const double endIdx   = static_cast<double> (bEndRaw - 1);  // last accessible sample for interpolation
             const double startIdx = static_cast<double> (bStart);
             const double sliceLen = endIdx - startIdx;
-            const double pitchInc = pitchRatio;  // always positive — direction is reversePlay
+            // tp55 — no longer const: the vibrato ramp rewrites it at the top of every
+            // loop iteration (see below). Still always positive — direction is reversePlay.
+            double pitchInc = pitchRatio;
 
             auto* outL = outputBuffer.getWritePointer (0, startSample);
             auto* outR = outputBuffer.getNumChannels() > 1
@@ -456,6 +467,15 @@ namespace tw
 
             for (int i = 0; i < numSamples; ++i)
             {
+                // tp55 — ride the block's vibrato ramp. Set at the TOP of the body and
+                // not at the bottom on purpose: this loop has `continue`s in it, and a
+                // bottom-of-body increment would be skipped by every one of them.
+                if (vib.active)
+                {
+                    const int sgi = i >> vibShift;
+                    pitchInc = pitchRatio * (vib.mul[sgi] + vib.step[sgi] * (double) (i & vibMask));
+                }
+
                 // ── Bounds + loop/wrap handling, direction-aware ────────────
                 // When scan is active, effective playback bounds are narrowed
                 // to the scan-window region (centred in the slice). This
@@ -1338,7 +1358,10 @@ namespace tw
 
         // ── Chop fade parameter (anti-click ramp at slice boundaries) ────────
         std::atomic<float>* chopFadeMsParam_ = nullptr;  // non-owning; points to PluginProcessor::chopFadeMsAtomic
-        std::atomic<float>* pitchJitterCentsParam_ = nullptr;  // non-owning; points to LayerState::pitchJitterCents (Mix page Phase B)
+        // ── tp55 VIBRATO ────────────────────────────────────────────────────
+        std::atomic<float>* vibratoDepthCentsParam_ = nullptr;  // non-owning; LayerState::vibratoDepthCents
+        std::atomic<float>* vibratoRateHzParam_     = nullptr;  // non-owning; LayerState::vibratoRateHz
+        tw::Vibrato vib_;                  // phase + depth smoother; see Vibrato.h
 
         // ── Scan state (Mark 1.5) ────────────────────────────────────────────
         bool   scanActive       = false;   // mirrors activeConfig.scanEnabled, captured at startNote

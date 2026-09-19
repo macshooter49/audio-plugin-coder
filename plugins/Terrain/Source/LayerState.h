@@ -54,13 +54,18 @@ namespace tw
         // probabilityWeight feeds the RANDOM trigger mode's weighted picker.
         // keyZoneMin/Max define the KEYTRACK trigger mode's MIDI note range for this layer.
         // velocityZoneMin/Max define the VELOCITY trigger mode's range for this layer.
-        // pitchJitterCents adds ±cents random per-voice pitch offset to thicken stacks.
+        // tp55 — VIBRATO replaces the old one-shot JITTER. Max: "jitter isn't broken, it's the
+        // wrong feature — I want it to wobble like a Casio SK-1."  The old field sampled ONE random
+        // detune at note-on and held it for the voice's life (a de-phaser for stacked layers, which
+        // is exactly why it did nothing audible on a lone one-shot). These two drive a real periodic
+        // pitch LFO in SamplerVoice: depth is the PEAK swing in cents, rate is its speed.
         std::atomic<float> probabilityWeight { 0.25f }; // 0..1, default uniform
         std::atomic<int>   keyZoneMin        { 0   };   // 0..127 MIDI note (default seeded by processor)
         std::atomic<int>   keyZoneMax        { 127 };   // 0..127 MIDI note
         std::atomic<int>   velocityZoneMin   { 0   };   // 0..127 inclusive (default seeded by processor)
         std::atomic<int>   velocityZoneMax   { 127 };   // 0..127 inclusive
-        std::atomic<float> pitchJitterCents  { 0.0f };  // 0..100 cents random
+        std::atomic<float> vibratoDepthCents { 0.0f };  // 0..100 cents PEAK swing (0 = off)
+        std::atomic<float> vibratoRateHz     { 5.0f };  // 0.05..12 Hz
 
         // ── Meters — post-volume peak per channel for the strip meter widget ──
         // Audio thread writes after summing into master; UI polls at ~30 Hz.
@@ -103,7 +108,8 @@ namespace tw
                     nullptr,                     // ModulationEngine — wired by processor
                     &synth.warpCache,            // WarpRenderCache from this layer's synth
                     &chopFadeMs,
-                    &pitchJitterCents));         // Mix page Phase B per-layer jitter
+                    &vibratoDepthCents,          // tp55 — per-layer VIBRATO depth (cents)
+                    &vibratoRateHz));            // tp55 — per-layer VIBRATO rate (Hz)
             }
         }
 
