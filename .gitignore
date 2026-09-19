@@ -95,3 +95,6 @@ plugins/Terrain/Tests/spl_cert
 plugins/Terrain/Tests/utl_cert
 plugins/Terrain/Tests/bod_cert
 plugins/Terrain/Tests/hm_tables_cert
+
+# tp43 — the Intel/Mojave feasibility build (cmake -B build-x86 -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14)
+build-*/
