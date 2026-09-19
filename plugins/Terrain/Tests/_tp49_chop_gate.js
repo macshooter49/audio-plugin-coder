@@ -21,11 +21,14 @@ let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('
   
   const st = await p.evaluate(() => { const q = s => document.querySelector(s); const vis = e => { if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).display !== 'none'; };
     return { chopOpen: document.body.classList.contains('chop-open'), btn: q('#mix-btn').textContent, arm: vis(q('#ti-arm')), lib: vis(q('#ti-lib')), seq: vis(q('#ti-seq-pill')), sync: vis(q('.ti-seq-sync')), play: vis(q('.ti-seq-play')), dice: vis(q('#hero .scope-controls-left')), lock: vis(q('#ti-bpm-lock')),
-      words: [...document.querySelectorAll('#mix-panel .trigger-pill, .ti-play-pill, .ti-mode-pill, #mix-panel .mix-strip-knob-label')].map(e => e.textContent.trim()).slice(0, 12), pillBg: getComputedStyle(q('.ti-mode-pill.active')).backgroundColor, pillBorder: getComputedStyle(q('.ti-mode-pill.active')).borderTopColor, rootBg: getComputedStyle(q('#ti-root-picker')).backgroundColor, panelBg: getComputedStyle(q('#mix-panel')).backgroundColor }; });
+      words: [...document.querySelectorAll('#mix-panel .trigger-pill, .ti-play-pill, .ti-mode-pill, #mix-panel .mix-strip-knob-label')].map(e => e.textContent.trim()).slice(0, 12), pillBg: getComputedStyle(q('.ti-mode-pill.active')).backgroundColor, pillBorder: getComputedStyle(q('.ti-mode-pill.active')).borderTopColor, rootBg: getComputedStyle(q('#ti-root-picker')).backgroundColor, panelBg: getComputedStyle(q('#mix-panel')).backgroundColor,
+      ground: ['#plugin', '#header', '#footer', '#mix-panel', '#hero'].map(s2 => getComputedStyle(q(s2)).backgroundColor) }; });
   ok(st.btn === 'CHOP' && st.chopOpen, '[1] the header says CHOP and opening it marks the page (body.chop-open)', JSON.stringify(st));
   ok(st.arm && st.lib && !st.seq && !st.sync && !st.play && !st.dice && !st.lock, '[2] the Arm and the sample library are there; SEQ, SYNC, the play button, the dice and the BPM lock are gone', JSON.stringify(st));
   ok(st.words.indexOf('One-Shot') >= 0 && st.words.indexOf('Pitch') >= 0 && st.words.indexOf('Jitter') >= 0 && st.words.indexOf('1-SHOT') < 0 && st.words.indexOf('PAN') < 0, '[3] the words wear the house case (One-Shot, Pitch, Jitter)', st.words.join(','));
-  ok(st.pillBg === 'rgba(0, 0, 0, 0)' && /183, 148, 255/.test(st.pillBorder) && st.rootBg === 'rgba(0, 0, 0, 0)' && st.panelBg === 'rgb(26, 26, 46)', '[4] a selected pill is a purple outline with nothing filled; the key box is transparent; the panel is the house tone', JSON.stringify({ pillBg: st.pillBg, pillBorder: st.pillBorder, rootBg: st.rootBg, panelBg: st.panelBg }));
+  ok(st.pillBg === 'rgba(0, 0, 0, 0)' && /183, 148, 255/.test(st.pillBorder) && st.rootBg === 'rgba(0, 0, 0, 0)', '[4] a selected pill is a purple outline with nothing filled, and the key box is transparent', JSON.stringify({ pillBg: st.pillBg, pillBorder: st.pillBorder, rootBg: st.rootBg }));
+  // tp52 — ONE GROUND: #plugin carries the house tone and the header, the footer, the waveform and the panel all wear it (Max: "header & FOOTER ARE NOT the same color")
+  ok(st.ground[0] === 'rgb(26, 26, 46)' && st.ground.slice(1).every(c => c === 'rgba(0, 0, 0, 0)'), '[4] header, footer, waveform and panel all wear ONE ground (#1A1A2E on #plugin, nothing painted over it)', JSON.stringify(st.ground));
   await p.evaluate(() => document.getElementById('syn-btn').click()); await sleep(700);
   const sw = await p.evaluate(() => ({ mixOpen: document.getElementById('mix-panel').classList.contains('open'), mixBtnActive: document.getElementById('mix-btn').classList.contains('active'), chopOpen: document.body.classList.contains('chop-open'), synOpen: !document.getElementById('syn-panel').classList.contains('hidden'), controls: document.getElementById('controls').style.display }));
   ok(!sw.mixOpen && !sw.mixBtnActive && !sw.chopOpen && sw.synOpen, '[5] SYN from the Chop page: the page closes and the button drops (no traces — Max: "it leaves traces of itself behind")', JSON.stringify(sw));
@@ -51,5 +54,16 @@ let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('
   const back = await p.evaluate(() => window.__tiLib());
   ok(back.layer === 0 && back.label === names[0] && back.names.join('|') === names.join('|'),
      '[10] coming back to a layer shows ITS sample again — no name is wiped by the switch', JSON.stringify(back));
+  // tp52 — the glass boxes are gone, the sliders are the house notch (white, 2 px), M/S are small, ARM sits with the pads
+  const skin = await p.evaluate(() => { const g = s => { const e = document.querySelector(s); if (!e) return null; const c = getComputedStyle(e); const r = e.getBoundingClientRect(); return { bg: c.backgroundColor, bw: c.borderTopWidth, w: Math.round(r.width), h: Math.round(r.height) }; };
+    return { strip: g('.mix-strip'), trig: g('#mix-trigger-area'), morph: g('.morph-track'), fill: g('.morph-fill'), fader: g('.mix-strip-fader'), ffill: g('.mix-strip-fader-fill'), ms: g('.mix-strip-btn'), pad: g('.ti-layer-pad'),
+      armIn: (document.getElementById('ti-arm') || {}).parentElement ? document.getElementById('ti-arm').parentElement.id : null, stem: g('.stem-header'), libW: g('#ti-lib-name') }; });
+  ok(skin.strip.bg === 'rgba(0, 0, 0, 0)' && skin.strip.bw === '0px' && skin.trig.bg === 'rgba(0, 0, 0, 0)' && skin.trig.bw === '0px',
+     '[9] no glass boxes: the mixer strips and the two right-hand tiles are the page itself', JSON.stringify({ strip: skin.strip, trig: skin.trig }));
+  ok(skin.morph.h === 2 && skin.fader.w === 2 && skin.fill.bg === 'rgb(255, 255, 255)' && skin.ffill.bg === 'rgb(255, 255, 255)',
+     '[9] the sliders are the house notch — 2 px and WHITE, the Layer morph included', JSON.stringify({ morph: skin.morph, fader: skin.fader, fill: skin.fill.bg, ffill: skin.ffill.bg }));
+  ok(skin.pad.w === 16 && skin.pad.h === 16 && skin.ms.w <= 16 && skin.ms.h <= 14 && skin.armIn === 'ti-layer-pads' && (!skin.stem || skin.stem.w === 0),
+     '[9] A-D wear the synth page\'s chip, M/S are small, ARM sits beside D and the STEMS word is gone', JSON.stringify({ pad: skin.pad, ms: skin.ms, armIn: skin.armIn, stem: skin.stem }));
+  ok(skin.libW.w === 124, '[9] the sample library name is a fixed box, so a long name can never reach SLICES or the BPM', JSON.stringify(skin.libW));
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
   await b.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); })();

@@ -14258,8 +14258,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
    and the XY tracker gone; the mixers, LAYER / RR / RANDOM / KEYTRK / VEL and export in our font." Overrides only; the page's logic stands. */
 body.chop-open #hero .scope-controls-left, body.chop-open #hero .scope-controls-right, body.chop-open #hero .crosshair-h,
 body.chop-open #hero .crosshair-v, body.chop-open #hero .xy-readout { display: none !important; }
-body.chop-open #hero { background: #12121F !important; }
-[data-theme="light"] body.chop-open #hero { background: #F3F1F8 !important; }
+body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after { background: transparent !important; }   /* the page's own ground, so the waveform sits on the same tone as the header and the footer */
 #ti-top-right-cluster .ti-seq-play, #ti-top-right-cluster .ti-seq-sync, #ti-seq-pill, #ti-bpm-lock { display: none !important; }
 #mix-panel, #ti-bottom-pills, #ti-root-picker, #ti-layer-pads, #ti-top-right-cluster, #ti-bottom-right-cluster, #ti-chop-panel {
   font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif !important; }
@@ -14387,6 +14386,93 @@ body.chop-open #hero { background: #12121F !important; }
   window.__tiChopArm=function(v){ if(v===undefined) return armed; setArmed(v); return armed; };   /* the gate's hand */
   window.__tiLib=function(){ return { layer:curLayer(), idx:libIdx.slice(), names:libName.slice(), label:(document.getElementById('ti-lib-name')||{}).textContent }; };
   window.__tiLibStep=function(d){ libList(function(){ libLoad((libIdx[curLayer()]<0?-1:libIdx[curLayer()])+d); }); };
+})();
+</script>
+)TIHX") + juce::String (R"TIHX(
+<style id="ti-chop-skin2">
+/* tp52 — ONE GROUND. Max: "header & FOOTER ARE NOT the same color." The synth page paints #plugin (header, page and footer
+   at once, fb630); the Chop page never claimed that ground, so its header and footer wore #232340 over a #1A1A2E panel. */
+body.chop-open #plugin { background: var(--bg-main) !important; }   /* FLAT: the synth page's vignette reads as a lighter header here, because the Chop page has no panel of its own over it */
+body.chop-open #mix-panel { background: transparent !important; border-top: 1px solid rgba(255,255,255,0.075) !important; }
+/* NO GLASS BOXES. Max: "i'm not fw the dark navy box around these sliders and buttons — make them transparent, no boxes or
+   barriers, maybe just those grey separators." The tiles become regions of the page, told apart by one hairline each. */
+#mix-panel .mix-strip, #mix-panel #mix-trigger-area, #mix-panel #mix-stem-area {
+  background: transparent !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
+#mix-panel .mix-strip + .mix-strip { border-left: 1px solid rgba(255,255,255,0.075) !important; }
+#mix-panel #mix-strips { border-right: 1px solid rgba(255,255,255,0.075) !important; padding: 10px 12px !important; }
+#mix-panel #mix-stem-area { border-top: 1px solid rgba(255,255,255,0.075) !important; padding-top: 9px !important; }
+#mix-panel #mix-right { padding: 10px 14px !important; gap: 9px !important; }
+/* the two tiles FILL: no dead space top or bottom */
+#mix-panel #mix-trigger-area { flex: 1 1 auto !important; min-height: 0 !important; padding: 0 !important; display: flex !important; flex-direction: column !important; justify-content: space-evenly !important; }
+#mix-panel #mix-stem-area { flex: 0 0 auto !important; display: flex !important; flex-direction: column !important; gap: 7px !important; }
+#mix-panel .stem-header { display: none !important; }   /* Max: "take away where it says STEMS" */
+/* ── THE SLIDERS ARE THE HOUSE NOTCH: a 2px track at .16 white, a WHITE fill, a 2x9 white bar. No thickness, no purple. ── */
+#mix-panel .morph-track, #mix-panel .prob-slider, #mix-panel #velocity-bar, #mix-panel .kt-range,
+#mix-panel .mix-strip-fader, #mix-panel .mix-strip-meter {
+  background: rgba(255,255,255,0.16) !important; border-radius: 1px !important; box-shadow: none !important; }
+#mix-panel .morph-track, #mix-panel .prob-slider { height: 2px !important; }
+#mix-panel .mix-strip-fader { width: 2px !important; }
+#mix-panel .mix-strip-meter { width: 2px !important; }
+#mix-panel .morph-fill, #mix-panel .prob-fill, #mix-panel .mix-strip-fader-fill {
+  background: #FFFFFF !important; border-radius: 1px !important; box-shadow: none !important; }
+#mix-panel .mix-strip-meter-fill { background: rgba(255,255,255,0.85) !important; box-shadow: none !important; }
+#mix-panel .morph-handle, #mix-panel .mix-strip-fader-handle {
+  width: 9px !important; height: 2px !important; border-radius: 1px !important;
+  background: #FFFFFF !important; border: none !important; box-shadow: none !important; }
+#mix-panel .morph-handle { width: 2px !important; height: 9px !important; }
+#mix-panel .mix-strip-fader-handle { left: 50% !important; transform: translate(-50%, 50%) !important; }
+#mix-panel .kt-handle, #mix-panel .vel-handle {
+  width: 2px !important; border-radius: 1px !important; background: #FFFFFF !important; border: none !important; box-shadow: none !important; }
+#mix-panel .vel-zone, #mix-panel .kt-zone { background: rgba(255,255,255,0.10) !important; border-color: rgba(255,255,255,0.28) !important; }
+/* M and S: smaller, so they sit squarely in the middle of the strip */
+#mix-panel .mix-strip-btn { width: 15px !important; height: 13px !important; font-size: 7px !important; font-weight: 600 !important; border-radius: 4px !important; padding: 0 !important; }
+#mix-panel .mix-strip-buttons { gap: 4px !important; justify-content: center !important; }
+#mix-panel .mix-strip { padding: 8px 4px 7px !important; gap: 5px !important; }
+/* ── A B C D: the synth page's own chip, and centred under the waveform ── */
+#ti-layer-pads { gap: 4px !important; }
+.ti-layer-pad {
+  width: 16px !important; height: 16px !important; box-sizing: border-box !important; margin: 0 !important;
+  border: 1px solid var(--border-strong) !important; border-radius: 4px !important;
+  background: transparent !important; color: var(--text-primary) !important;
+  font: 400 9px/1 -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif !important; letter-spacing: 0 !important;
+  display: inline-grid !important; place-items: center !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.ti-layer-pad:hover { color: #FFFFFF !important; border-color: var(--purple-400) !important; background: rgba(139,92,246,0.22) !important; box-shadow: 0 0 7px rgba(167,139,250,0.45) !important; }
+.ti-layer-pad.active { background: transparent !important; border-color: var(--purple-400) !important; color: #fff !important; box-shadow: none !important; }
+.ti-layer-pad.playing, .ti-layer-pad.active.playing { background: rgba(167,139,250,0.22) !important; }
+.ti-layer-pad.placeholder { opacity: .55 !important; border-style: solid !important; }
+/* SLICES wears the same pill as everything else */
+#ti-slices-btn {
+  background: transparent !important; border: 1px solid rgba(255,255,255,0.45) !important; color: var(--text-secondary) !important;
+  border-radius: 9px !important; font-family: inherit !important; font-weight: 500 !important; font-size: 9.5px !important;
+  letter-spacing: .03em !important; text-transform: none !important; box-shadow: none !important; height: 22px !important; padding: 0 11px !important; }
+#ti-slices-btn:hover { color: var(--text-primary) !important; }
+#ti-slices-btn.open { border-color: var(--purple-400) !important; color: #fff !important; background: transparent !important; }
+#ti-slices-btn .ti-slices-count { color: var(--purple-400) !important; }
+/* the sample library: no boxes on the arrows, a fixed name box so a long name can never reach SLICES or the BPM */
+#ti-lib .ti-lib-nav { border: none !important; background: transparent !important; color: var(--text-secondary) !important; font-size: 13px !important; }
+#ti-lib .ti-lib-nav:hover { color: #fff !important; }
+#ti-lib #ti-lib-name { width: 124px !important; max-width: 124px !important; text-align: center !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+/* the chop's right-click panel no longer blurs the plugin behind it */
+#ti-chop-backdrop { background: transparent !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+#ti-chop-panel .ti-fx-indy, #ti-chop-panel #ti-fx-indy { display: none !important; }
+</style>
+)TIHX")
+       + juce::String (R"TIHX(
+<script>
+(function(){
+  /* tp52 — ARM sits with the layer pads (Max: "put ARM next to ABCD next to D — at the top it clashes with the waveform"),
+     the library rides the middle between SLICES and the BPM, and the INDEPENDENT row leaves the chop menu. */
+  function place(){
+    try{
+      var pads=document.getElementById('ti-layer-pads'), arm=document.getElementById('ti-arm');
+      if(pads&&arm&&arm.parentNode!==pads){ arm.style.height='16px'; arm.style.padding='0 9px'; arm.style.marginLeft='6px'; arm.style.borderRadius='8px'; pads.appendChild(arm); }
+      var br=document.getElementById('ti-bottom-right-cluster'); if(br) br.style.gap='10px';
+      var ind=document.querySelector('#ti-chop-panel .ti-fx-indy, #ti-chop-panel [id*="indy"]'); if(ind) ind.style.display='none';
+    }catch(e){}
+  }
+  function boot(){ place(); setInterval(function(){ if(document.body.classList.contains('chop-open')) place(); },1000); }
+  if(document.readyState==='complete') boot(); else window.addEventListener('load',boot);
 })();
 </script>
 )TIHX");

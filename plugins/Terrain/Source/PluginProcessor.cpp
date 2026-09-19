@@ -14852,13 +14852,19 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (vizLive) analyzerPost.pushSample (0.5f * (wetL + wetR));
         }
 
-        // Master mix + output gain
-        float outL = (dryL * (1.0f - masterMixAmt) + wetL * masterMixAmt) * outputGain;
+        // Master mix. tp51 — THE OUTPUT KNOB IS NO LONGER APPLIED HERE: see the trim at the very end of
+        // this sample's work. Max: "the Output gain isn't a real MASTER OUTPUT gain, it only outputs a
+        // certain part — it's PHONY." MEASURED on the real AU before this change: with a Reverb in the
+        // rack, moving the knob 0 -> -6 dB moved the output 2.43 dB, and with a Delay 2.13 dB (a bare
+        // oscillator moved the honest 6.05). The knob was not bypassed — it sat BEFORE the master
+        // limiter, so at any level that reaches the limiter the knob spent itself buying headroom back
+        // instead of turning the instrument down. A master trim is the LAST thing in the chain.
+        float outL = (dryL * (1.0f - masterMixAmt) + wetL * masterMixAmt);
         leftChannel[i] = outL;
 
         if (rightChannel != nullptr)
         {
-            float outR = (dryR * (1.0f - masterMixAmt) + wetR * masterMixAmt) * outputGain;
+            float outR = (dryR * (1.0f - masterMixAmt) + wetR * masterMixAmt);
             rightChannel[i] = outR;
         }
 
@@ -14866,9 +14872,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // (which already processed indyCaptureBus through the enabled FX per
         // activeIndyMask above) and mix into master. Same spot as the old
         // indy add-back so master volume + soft-clipper still apply.
-        leftChannel[i] += indySumBuffer.getSample (0, i) * outputGain;
+        leftChannel[i] += indySumBuffer.getSample (0, i);          // tp51 — the trim is at the end now
         if (rightChannel != nullptr)
-            rightChannel[i] += indySumBuffer.getSample (1, i) * outputGain;
+            rightChannel[i] += indySumBuffer.getSample (1, i);
 
         // ── fb276-280 — synth FX-rack REVERB (Hall). PER-OSC NO-BLEED SEND: only the routed oscillators
         // (accumulated into reverbSendBuf_ during synth render) feed the reverb; the wet is added back with
@@ -14972,7 +14978,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (chainCount_ > 0 || exUnionAny_)   // fb494 — an empty rack provably does nothing here:
         {                                    // no exclusion subtract, zero chain iterations, zero
                                              // claims. Skips a 960-byte stack zero-init per sample.
-            const float sc = outputGain * kVoiceToFxPad;
+            const float sc = kVoiceToFxPad;   // tp51 — the send is no longer pre-trimmed: the knob is the final stage
             juce::ignoreUnused (exDryL, exDryR);   // tp12 — no exclusion subtract: the pulled sources never reached the mix (SynthVoice exKeep_)
             // fb636 — NOT zero-filled per sample any more (960 bytes x 48,000/s). Every slot writes pendL[c]/pendR[c]
             //  at the end of its iteration, and every read is of an EARLIER slot (the feed mask: j < c; a lane's
@@ -15155,7 +15161,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked
         // peak LIMITER (gain-reduction) so dense chords stay loud without the tanh squaring them
         // into a hard-clip buzz, THEN the transparent-knee clip as a final transient safety catch.
-        // Output knob (outputGain) already applied above, so it keeps full authority over this stage.
+        // tp51 — the Output knob is NOT applied before this stage any more; it is the final trim below, so
+        // the limiter always sees the instrument at its own level and the knob moves the output 1:1.
         // tp30 — the makeup/limiter/clip stage now serves TWO paths: what stayed in the mix, and
         //  what a flow card took out of it. The peak detector still sees the WHOLE instrument
         //  (dry + every capture) and the ONE shared limGain_ is applied to both, so a card that
@@ -15177,16 +15184,19 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // Fast attack (pull down now), slow release (recover smoothly — click-free per the declick rule).
         limGain_ = (limTarget < limGain_) ? (limAtkCoef_ * limGain_ + (1.0f - limAtkCoef_) * limTarget)
                                           : (limRelCoef_ * limGain_ + (1.0f - limRelCoef_) * limTarget);
-        leftChannel[i]  = masterSoftClip (dL * limGain_);
+        // tp51 — THE MASTER TRIM, LAST. Every path that reaches the output is scaled here and nowhere else:
+        // the mix, and (below) each flow-card capture and deferred rack capture, which leave by their own
+        // buffers. At the default 0 dB this multiplies by exactly 1.0, so every existing patch is unchanged.
+        leftChannel[i]  = masterSoftClip (dL * limGain_) * outputGain;
         if (rightChannel != nullptr)
-            rightChannel[i] = masterSoftClip (dR * limGain_);
+            rightChannel[i] = masterSoftClip (dR * limGain_) * outputGain;
         float fClipL = 0.0f, fClipR = 0.0f;
         if (flowAnyRouted_)
             for (int fk = 0; fk < kFlowSlots; ++fk)
             {
                 if (fInL[(size_t) fk] == nullptr) continue;
-                const float a = masterSoftClip (fInL[(size_t) fk][i] * kInstrumentMakeup * limGain_);
-                const float b = masterSoftClip (fInR[(size_t) fk][i] * kInstrumentMakeup * limGain_);
+                const float a = masterSoftClip (fInL[(size_t) fk][i] * kInstrumentMakeup * limGain_) * outputGain;   // tp51
+                const float b = masterSoftClip (fInR[(size_t) fk][i] * kInstrumentMakeup * limGain_) * outputGain;
                 fInL[(size_t) fk][i] = a; fInR[(size_t) fk][i] = b;
                 fClipL += a; fClipR += b;
             }
@@ -15195,8 +15205,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             {
                 const int c = defRackSlots_[(size_t) d];
                 if (dInL[(size_t) c] == nullptr) continue;
-                const float a = masterSoftClip (dInL[(size_t) c][i] * kInstrumentMakeup * limGain_);
-                const float b = masterSoftClip (dInR[(size_t) c][i] * kInstrumentMakeup * limGain_);
+                const float a = masterSoftClip (dInL[(size_t) c][i] * kInstrumentMakeup * limGain_) * outputGain;   // tp51
+                const float b = masterSoftClip (dInR[(size_t) c][i] * kInstrumentMakeup * limGain_) * outputGain;
                 dInL[(size_t) c][i] = a; dInR[(size_t) c][i] = b;
                 fClipL += a; fClipR += b;
             }
