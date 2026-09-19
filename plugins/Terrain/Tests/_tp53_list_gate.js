@@ -87,16 +87,26 @@ const rect = s => { const e = document.querySelector(s); if (!e) return null; co
   });
   ok(pn.bg === 'rgba(22, 20, 34, 0.72)' && /blur\(20px\)/.test(pn.bf) && pn.rad === '12px', '[3] the chop panel wears the HOUSE GLASS — .tpb-panel\'s own tint, blur and radius', JSON.stringify({ bg: pn.bg, bf: pn.bf, rad: pn.rad }));
   ok(!pn.indy, '[3] the INDEPENDENT row is GONE from the DOM, not hidden', JSON.stringify({ indy: pn.indy }));
-  ok(pn.chipsDim === '1', '[3] and the FX chips are live — no grid greyed out by a switch nobody can see', JSON.stringify({ opacity: pn.chipsDim }));
-  ok(!pn.svg && pn.rows.length === 4 && pn.rows.map(r => r.h).join('') === 'ADSR' && pn.rows[0].lab === 'Attack' && pn.rows[2].lab === 'Sustain',
-     '[3] the ADSR graph is four labelled slider rows with numbers — the curve and its four dots are gone', JSON.stringify(pn.rows));
+  // ⚠️ tp54 INVERTED THIS BAR. It asserted the six FX chips were LIVE (tp53 un-greyed them when the
+  //    INDEPENDENT pill went). Max then asked for the chips themselves: "you can remove those pointless
+  //    effects at the bottom of that chop engine right-click menu." Gone from the DOM, so the claim is now
+  //    their ABSENCE — and _tp54_chop_pass_gate [6] owns it.
+  ok(pn.chipsDim === null, '[3] the six FX chips are gone from the chop menu (tp54 — the bar that asserted they were live now asserts they are not there)', JSON.stringify({ grid: pn.chipsDim }));
+  // ⚠️ tp54 widened this: a FIFTH row, Fine (cents), joined the four. Max: "we gotta have a way to fine
+  //    tune chops, not just semitone." The count is asserted exactly so a row appearing or vanishing reds it.
+  ok(!pn.svg && pn.rows.length === 5 && pn.rows.map(r => r.h).join('') === 'ADSRF' && pn.rows[0].lab === 'Attack' && pn.rows[2].lab === 'Sustain' && pn.rows[4].lab === 'Fine',
+     '[3] the ADSR graph is FIVE labelled slider rows with numbers — Attack/Decay/Sustain/Release and tp54\'s Fine; the curve and its four dots are gone', JSON.stringify(pn.rows));
   ok(pn.railH === '2px' && pn.railBg === 'rgba(255, 255, 255, 0.16)' && pn.fillBg === 'rgb(255, 255, 255)' && pn.bar.w === '2px' && pn.bar.h === '9px',
      '[3] and they are the HOUSE notch: a 2 px rail at .16 white, a white fill, a 2x9 white bar', JSON.stringify({ rail: pn.railH, railBg: pn.railBg, fill: pn.fillBg, bar: pn.bar }));
 
   // ── [6] the time-mode letter is transparent white ──
   const wl = await p.evaluate(() => { const d = document.createElement('div'); d.className = 'ti-slice-warp-letter'; d.textContent = 'T';
     document.getElementById('hero').appendChild(d); const c = getComputedStyle(d); const o = { color: c.color, bg: c.backgroundColor }; d.remove(); return o; });
-  ok(/^rgba\(255, 255, 255, 0\.7/.test(wl.color), '[6] a stretched chop\'s time-mode letter is transparent WHITE, not the purple sticker', JSON.stringify(wl));
+  // ⚠️ tp54 REVERSED THIS BAR, and Max reversed it. tp53 read his "transparent white" as the LETTER and
+  //    kept the dark chip behind it; the chip was the thing he was pointing at: "you can make this purple
+  //    again, but I just don't want that gray highlight box around it — no boxes, just a purple letter."
+  ok(wl.color === 'rgb(167, 139, 250)' && wl.bg === 'rgba(0, 0, 0, 0)',
+     '[6] a stretched chop\'s time-mode letter is PURPLE with no box behind it at all', JSON.stringify(wl));
 
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
   await b.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

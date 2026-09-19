@@ -64,6 +64,11 @@ let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('
      '[9] the sliders are the house notch — 2 px and WHITE, the Layer morph included', JSON.stringify({ morph: skin.morph, fader: skin.fader, fill: skin.fill.bg, ffill: skin.ffill.bg }));
   ok(skin.pad.w === 16 && skin.pad.h === 16 && skin.ms.w <= 16 && skin.ms.h <= 14 && skin.armIn === 'ti-layer-pads' && (!skin.stem || skin.stem.w === 0),
      '[9] A-D wear the synth page\'s chip, M/S are small, ARM sits beside D and the STEMS word is gone', JSON.stringify({ pad: skin.pad, ms: skin.ms, armIn: skin.armIn, stem: skin.stem }));
-  ok(skin.libW.w === 124, '[9] the sample library name is a fixed box, so a long name can never reach SLICES or the BPM', JSON.stringify(skin.libW));
+  // ⚠️ tp54 NARROWED THE BOX 124 -> 96, and the reason is the thing this bar was written to prevent: it
+  //    never actually happened. MEASURED on the real plugin, the Slices pill ran 507..567 while #ti-lib
+  //    starts at 550 — a 17 px overlap with the library's left arrow underneath it. A fixed name box stops
+  //    a long NAME from growing into its neighbours; it cannot stop the centred pill group from growing
+  //    into the box. The 28 px this gives back is what buys the clearance (_tp54_chop_pass_gate [2]).
+  ok(skin.libW.w === 96, '[9] the sample library name is a fixed box, so a long name can never reach Slices or the BPM (96 px since tp54 — the pill group needed the room)', JSON.stringify(skin.libW));
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
   await b.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); })();

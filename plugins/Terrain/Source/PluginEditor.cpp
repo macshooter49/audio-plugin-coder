@@ -8315,8 +8315,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
      Lives in a single flex wrapper at bottom-center so the two pill
      groups align symmetrically with ROOT (bottom-left) and the XY
      readout (bottom-right). Top of hero stays clean for the waveform. */
+  /*  🎯 tp54 — ONE CENTERLINE FOR THE WHOLE BOTTOM STRIP (fb275's law, finally applied here).
+      Max, with a screenshot: "these boxes are way out of whack, they don't follow the center line
+      … if I were to draw a line through all the middle of these they need to match."  Every one of
+      these containers was `bottom: 12px` — BOTTOM-aligned, not centre-aligned — and they are four
+      different heights, so their middles sat at 295.3 (the pills), 296 (the library and the BPM),
+      297.5 (the key) and 300 (A-D and Arm): four lines, no two the same.
+      The fix is the law's own recipe — EQUAL-HEIGHT BOXES + align-items:center, and NOT a per-
+      element nudge. Every container below is the same 26 px box pinned at the same `top`, so their
+      middles are identical by construction and a taller pill can never drag one off the line again.
+      top 243 in the 276 px hero ⇒ middle at hero-local 256 ⇒ page 300, which is where A-D and Arm
+      already were ("bring them down to where arm is at … all the way to the BPM").  */
+  #ti-bottom-pills, #ti-root-picker, #ti-layer-pads, #ti-bottom-right-cluster {
+    bottom: auto !important; top: 243px; height: 26px; box-sizing: border-box; align-items: center;
+  }
   #ti-bottom-pills {
-    position: absolute; bottom: 12px; left: 50%;
+    position: absolute; left: 50%;
     transform: translateX(-50%);
     z-index: 5;
     display: flex; gap: 10px; align-items: center;
@@ -8905,21 +8919,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     display: flex; align-items: center; justify-content: center;
     border-radius: 3px;
     font: 700 9px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-    /* tp53 — Max: "a stretched chop's time-mode letter should be transparent white." It was solid #A78BFA — the one
-       purple glyph sitting on a purple-bordered stretched body, so it read as a sticker rather than a mark on the
-       chop. Thin white, the house ink. The dark chip stays (a letter over the waveform needs a floor) but it is
-       quieter, and the hover is white-tinted now instead of purple-on-purple. */
-    color: rgba(255,255,255,0.72);
-    background: rgba(20,18,32,0.45);
-    backdrop-filter: blur(4px);
+    /*  tp54 — Max: "You can make this purple again, but I just don't want that gray highlight box around it.
+        No boxes, just a purple letter."  tp53 read his "transparent white" as the LETTER and kept the chip; the
+        chip was the thing he was pointing at. So: the purple is back and the floor is gone — no fill, no blur,
+        no box. (A blur with no fill still paints a box — tp49's law — so both go.) */
+    color: #A78BFA;
+    background: transparent;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
     cursor: pointer;
     user-select: none;
     pointer-events: auto;
     transition: background 160ms ease, color 160ms ease, transform 160ms ease;
   }
   .ti-slice-warp-letter:hover {
-    background: rgba(255,255,255,0.14);
-    color: #FFFFFF;
+    background: transparent;
+    color: #C9B2FF;
     transform: scale(1.08);
   }
   /* Stretched chop body — subtle inset purple border so visual stretch
@@ -9058,13 +9072,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     background: transparent;
     border: 1px solid rgba(255,255,255,0.45);
     border-radius: 9px;
+    /* tp54 — a word box, not an emblem cell: shorter, so the row does not eat the panel. */
     /* Emblem-only buttons (label removed) — symmetric padding for a
 )TIHX") + juce::String (R"TIHX(       square-ish symbol cell rather than the tall portrait the labeled
        version had. */
-    padding: 12px 6px;
+    padding: 7px 6px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; user-select: none;
-    transition: all 160ms ease;
+    transition: border-color 160ms ease, color 160ms ease;
   }
   #ti-chop-panel .ov-mode:hover { border-color: rgba(255,255,255,0.70); background: transparent; }
   #ti-chop-panel .ov-mode.active {
@@ -9072,12 +9087,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     background: transparent;
     box-shadow: none;
   }
-  #ti-chop-panel .ov-mode .emblem {
-    display: grid; place-items: center;
-    color: rgba(245,243,255,0.55); transition: color 160ms;
+  /*  tp54 — the word sits dead centre of its box and is sized to FILL it comfortably: 10.5 px is
+      big enough to read at a glance and small enough that "Beats" never touches the outline. The
+      four boxes are one grid of 1fr, so Off / Beats / Tone / Text are the same width whatever the
+      word. `.emblem` is kept as a rule in case a future mode wants a glyph — nothing renders it. */
+  #ti-chop-panel .ov-mode .w {
+    font: 500 10.5px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    letter-spacing: .02em; color: rgba(245,243,255,0.55); transition: color 160ms;
   }
-  #ti-chop-panel .ov-mode:hover .emblem { color: rgba(245,243,255,0.85); }
-  #ti-chop-panel .ov-mode.active .emblem { color: #FFFFFF; }
+  #ti-chop-panel .ov-mode:hover .w { color: rgba(245,243,255,0.85); }
+  #ti-chop-panel .ov-mode.active .w { color: #FFFFFF; }
+  #ti-chop-panel .ov-mode .emblem { display: none; }
 
   /* MOTION row — between mode emblems and ADSR, holds SCAN pill + RATE display */
   /* tp53 — MOTION is a ROW now, not a lilac box. Max, on the Chop page: "no boxes or barriers." */
@@ -9247,35 +9267,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
      INDEPENDENT off (default) = chop follows the global FX chain; chips
      dim to ~35% and ignore clicks. INDEPENDENT on = chop detached, chips
      become interactive; user re-enables the engines they want. */
-  #ti-chop-panel .ov-fx {
-    padding: 11px 0 0 0; margin-bottom: 11px;
-    position: relative; z-index: 1;
-    border-top: 1px solid var(--line, rgba(255,255,255,0.06));
-  }
-  /* tp53 — the INDEPENDENT pill and its header row are gone; the chip grid IS the FX section. */
-  /* 6 FX chips in a 3-column × 2-row grid */
-  #ti-chop-panel .ov-fx-grid {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
-  }
-  #ti-chop-panel .ov-fx-chip {
-    padding: 6px 6px;
-    font: 500 9.5px/1 -apple-system; letter-spacing: 0.03em;
-    color: rgba(245,243,255,0.55); text-transform: none;
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.45); border-radius: 9px;
-    text-align: center; cursor: pointer; user-select: none;
-    transition: all 160ms ease;
-    white-space: nowrap; overflow: hidden;
-  }
-  #ti-chop-panel .ov-fx-chip:hover { background: transparent; color: rgba(245,243,255,0.92); border-color: rgba(255,255,255,0.70); }
-  #ti-chop-panel .ov-fx-chip.on {
-    background: transparent;
-    color: #FFFFFF; border-color: var(--purple-400, #b794ff);
-    box-shadow: none;
-  }
-  #ti-chop-panel .ov-fx-chip .sub {
-    color: var(--purple-400, #b794ff); margin-left: 4px;
-  }
+  /* tp54 — the FX chips' CSS went with them. */
 
   /* action row — small icon+label combos */
   #ti-chop-panel .ov-actions {
@@ -9446,7 +9438,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     slicesWrap.classList.add('hidden');  // PITCH default
     slicesWrap.innerHTML =
       '<div id="ti-slices-btn" title="Slicer settings">' +
-        '<span class="ti-slices-label">SLICES</span>' +
+        '<span class="ti-slices-label">Slices</span>' +
         '<span class="ti-slices-count" id="ti-slices-count" style="display:none"></span>' +
       '</div>' +
       '<div id="ti-slicer-drawer">' +
@@ -9513,19 +9505,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       // name via `title` for discoverability; otherwise the visuals speak
       // for themselves. SVG sizes bumped ~1.7× to fill the cell now that
       // the label row is gone, so buttons read as a clean symbol grid.
+      /*  tp54 — WORDS, NOT EMBLEMS. Max: "the three stretch modes — I want them to just have the words
+          inside of them, small enough to fit perfectly in the middle but not too small … Tone, Beats
+          and Texture — you could have Texture be abbreviated to Text … instead of those outdated
+          emblems."  A line, four bars, a wave and a dot-cloud were four drawings that each needed a
+          hover title to say what they were; the word is the icon. Off keeps the first box so the row
+          is still four and turning warp OFF is still one click.  */
       '<div class="ov-modes">' +
-        '<div class="ov-mode" data-mode="0" title="None">' +
-          '<div class="emblem"><svg width="36" height="22" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 L20 7"/></svg></div>' +
-        '</div>' +
-        '<div class="ov-mode" data-mode="1" title="Beats">' +
-          '<div class="emblem"><svg width="36" height="26" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12 V5"/><path d="M8 13 V8"/><path d="M13 11 V4"/><path d="M18 12 V7"/></svg></div>' +
-        '</div>' +
-        '<div class="ov-mode" data-mode="2" title="Tones">' +
-          '<div class="emblem"><svg width="40" height="22" viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg></div>' +
-        '</div>' +
-        '<div class="ov-mode" data-mode="3" title="Texture">' +
-          '<div class="emblem"><svg width="36" height="26" viewBox="0 0 22 16" fill="currentColor"><circle cx="3" cy="9" r="1.2"/><circle cx="7" cy="4" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="15" cy="3" r="1.2"/><circle cx="18" cy="11" r="1.2"/><circle cx="20" cy="6" r="1.2"/></svg></div>' +
-        '</div>' +
+        '<div class="ov-mode" data-mode="0" title="Off — no time stretching"><span class="w">Off</span></div>' +
+        '<div class="ov-mode" data-mode="1" title="Beats — transient-aware, for drums and loops"><span class="w">Beats</span></div>' +
+        '<div class="ov-mode" data-mode="2" title="Tone — pitch-locked, for sustained and melodic material"><span class="w">Tone</span></div>' +
+        '<div class="ov-mode" data-mode="3" title="Texture — smeared and granular"><span class="w">Text</span></div>' +
       '</div>' +
       // MOTION row — SCAN on/off pill + RATE vertical-drag display.
       // Lives between the mode emblems and the ADSR canvas (Layout C).
@@ -9545,7 +9535,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
          12 ms looked like was to drag and listen. These are the HOUSE notch slider — a 2 px rail at .16 white, a white
          fill, a 2x9 white bar — the same one the output trim and the Chop page's own faders wear, with the number on
          the right in tabular figures. Double-click still resets, and Attack / Release still reset to INHERIT (-1). */
-      '<div class="ov-adsr" id="ti-env">' +
+      /* tp54 — piece boundary: removing the FX section merged two TIHX pieces and the result went
+         past MSVC's 16,380-byte raw-string ceiling (Tests/msvc_string_literal_gate.py). */
+)TIHX") + juce::String (R"TIHX(      '<div class="ov-adsr" id="ti-env">' +
         '<div class="ov-ad-row" data-h="A" title="Attack — drag; double-click inherits the global attack">' +
           '<span class="ov-ad-lab">Attack</span><span class="ov-ad-track"><span class="ov-ad-fill"></span><span class="ov-ad-bar"></span></span><span class="ov-ad-val">0 ms</span>' +
         '</div>' +
@@ -9557,6 +9549,19 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         '</div>' +
         '<div class="ov-ad-row" data-h="R" title="Release — drag; double-click inherits the global release">' +
           '<span class="ov-ad-lab">Release</span><span class="ov-ad-track"><span class="ov-ad-fill"></span><span class="ov-ad-bar"></span></span><span class="ov-ad-val">0 ms</span>' +
+        '</div>' +
+        /*  tp54 — FINE TUNE. Max: "we gotta have a way to fine tune chops, not just semitone … maybe
+            add some sort of notch slider to where I can fine tune them. Sometimes they be getting
+            fucked up and I have to tune them myself."
+            🔑 THE ENGINE COULD ALWAYS DO THIS. `Slice::pitchOffsetSemis` is a FLOAT and
+            `setSlicePitch` takes -12.0..+12.0 — it was the UI that threw the cents away, in ONE
+            line: the emblem drag did `v = Math.round(v)`. So this is not a new parameter, a new
+            native or a new field in the patch; it is the half of the existing one that was never
+            exposed. The emblem stays the SEMITONE (it still snaps, which is what makes it usable)
+            and this row is the fraction, +/-50 cents, on the same value. Dragging the emblem now
+            carries the cents with it instead of wiping them. */
+        '<div class="ov-ad-row" data-h="F" title="Fine — cents against the semitone above. Double-click = dead on.">' +
+          '<span class="ov-ad-lab">Fine</span><span class="ov-ad-track"><span class="ov-ad-fill"></span><span class="ov-ad-bar"></span></span><span class="ov-ad-val">0 \u00a2</span>' +
         '</div>' +
       '</div>' +
       // 3 emblem-knob controls (Volume / Pitch / Stretch) — no labels, glyph + value only.
@@ -9599,21 +9604,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           '<div class="ov-val">1.00</div>' +
         '</div>' +
       '</div>' +
-      // ─── FX section (Mark 2 — per-chop FX independence) ──────────────
-      // Grid: 6 chips — Grain / Tape (4-state) / Space / Delay / Eq / June.
-      /* tp53 — the INDEPENDENT pill is GONE, not hidden. tp52 hid it with CSS and a JS sweep, which left a row in the
-         DOM the section still read its state from — and a grid greyed out by a switch nobody could see. Touching any
-         chip arms independence for that chop now, so the grid is always live. */
-      '<div class="ov-fx" id="ti-fx-section">' +
-        '<div class="ov-fx-grid">' +
-          '<div class="ov-fx-chip" data-fx="grain">Grain</div>' +
-          '<div class="ov-fx-chip" data-fx="tape" id="ti-fx-tape">Tape</div>' +
-          '<div class="ov-fx-chip" data-fx="space">Space</div>' +
-          '<div class="ov-fx-chip" data-fx="delay">Delay</div>' +
-          '<div class="ov-fx-chip" data-fx="eq">EQ</div>' +
-          '<div class="ov-fx-chip" data-fx="june">June</div>' +
-        '</div>' +
-      '</div>' +
+      /*  tp54 — THE SIX FX CHIPS ARE GONE. Max: "you can remove where it says Grain, Reverb, like the
+          effects at the bottom of the chop engine right-click menu — you can remove those pointless
+          effects."  They were a per-chop copy of a chain the Patcher already owns, and tp53 had just
+          had to un-grey them from behind a switch nobody could see. The flag and its native stay
+          (saved patches carry it); nothing in this panel writes them any more.  */
       // actions
       '<div class="ov-actions">' +
         '<div class="group">' +
@@ -11192,6 +11187,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   /* tp53 — the ADSR canvas geometry (viewBox, zone widths, the 14px inset) went with the curve. The four
      sliders need one number each: a NORMALISED position, which OV_RANGES + normSkew/denormSkew already give. */
   var ADSR_KEY = { A: 'attack', D: 'decay', S: 'sustain', R: 'release' };
+  /*  tp54 — the cents half of `pitch`. The semitone is Math.round(pitch); the cents are what is
+      left, and they are what the Fine row moves. Clamped to +/-50 so the two controls never argue
+      about the same value: past half a semitone it IS the next semitone. */
+  function ovCents (pitch) { var p = Number(pitch) || 0; return Math.max(-50, Math.min(50, (p - Math.round(p)) * 100)); }
+  function fmtCents (c) { var r = Math.round(c); return (r > 0 ? '+' : '') + r + ' \u00a2'; }
 
   // Skew-aware normalize/denormalize so the envelope zones feel like the
   // global ATTACK/RELEASE knobs (most travel covers small ms).
@@ -11231,6 +11231,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     return null;
   }
 
+  /*  🚨 tp54 — THESE FOUR WERE DELETED BY ACCIDENT IN tp53, AND IT TOOK THE WHOLE PANEL WITH THEM.
+      They sat BETWEEN ovEnvelopePoints and ovRedrawEnvelope, and tp53 replaced that span as one
+      block — so a line-range edit swallowed four helpers that had nothing to do with the change.
+      The failure was not "the numbers stopped formatting": ovApplyState calls ovRedrawEnvelope
+      FIRST, so the ReferenceError aborted it before ovRedrawEmblems / ovRedrawFx / ovRedrawScan
+      ever ran, and Max got a panel where "sliders don't work and some of the buttons don't work".
+      ⚠️ THE LESSON IS THE GATE, NOT THE TYPO. _tp53_list_gate asserted the panel's STRUCTURE and
+      CSS with the panel forced .open and no target — it never drove it against a real chop, so its
+      "no page errors" bar was measuring a page where the panel had never been asked to paint. */
+  function fmtMs (ms)   { return Math.round(ms) + ' ms'; }
+  function fmtPct (v)   { return Math.round(v * 100) + '%'; }
+  function fmtPitch (v) { var s = Math.round(v); return (s >= 0 ? '+' : '') + s + ' st'; }
+  // Drop the unit suffix entirely — the emblem already reads as "stretch", and the multiplication
+  // sign mojibake'd in the WebView. Just the number.
+  function fmtStretch(v){ return v.toFixed(2); }
+
   /* tp53 — ONE NUMBER PER ROW. A key's normalised position is exactly what the old curve used to place its dot
      with: the SAME OV_RANGES skew, so a value that sat a third of the way along the attack zone sits a third of
      the way along the attack slider. Sustain is linear 0..1 and always was. */
@@ -11250,17 +11266,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     var panel = document.getElementById('ti-chop-panel');
     if (!panel) return;
     panel.querySelectorAll('.ov-ad-row').forEach(function (row) {
-      var key = ADSR_KEY[row.dataset.h];
+      var fine = (row.dataset.h === 'F');
+      var key = fine ? 'pitch' : ADSR_KEY[row.dataset.h];
       if (!key) return;
       var v = ovValueFromState(idx, key);
       if (v == null) return;
-      var t  = ovAdsrT(key, v);
+      var t  = fine ? ((ovCents(v) + 50) / 100) : ovAdsrT(key, v);
       var fl = row.querySelector('.ov-ad-fill');
       var br = row.querySelector('.ov-ad-bar');
       var vl = row.querySelector('.ov-ad-val');
       if (fl) fl.style.width = (t * 100) + '%';
       if (br) br.style.left  = (t * 100) + '%';
-      if (vl) { var txt = (key === 'sustain') ? fmtPct(v) : fmtMs(v); if (vl.textContent !== txt) vl.textContent = txt; }
+      if (vl) { var txt = fine ? fmtCents(ovCents(v)) : (key === 'sustain') ? fmtPct(v) : fmtMs(v); if (vl.textContent !== txt) vl.textContent = txt; }
     });
   }
 
@@ -11328,15 +11345,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
        geometries: the pointer's fraction along the track IS the normalised value. Double-click resets — and
        Attack / Release reset to the INHERIT sentinel (-1), exactly as the handles did. */
     panel.querySelectorAll('.ov-ad-row').forEach(function (row) {
-      var which = row.dataset.h, key = ADSR_KEY[which];
+      var which = row.dataset.h, fine = (which === 'F'), key = fine ? 'pitch' : ADSR_KEY[which];
       var tr = row.querySelector('.ov-ad-track');
       if (!tr || !key) return;
-      var NAT = { A: 'setSliceAttackMs', D: 'setSliceDecayMs', S: 'setSliceSustain', R: 'setSliceReleaseMs' };
-      var FLD = { A: 'attackMs', D: 'decayMs', S: 'sustainLevel', R: 'releaseMs' };
+      var NAT = { A: 'setSliceAttackMs', D: 'setSliceDecayMs', S: 'setSliceSustain', R: 'setSliceReleaseMs', F: 'setSlicePitch' };
+      var FLD = { A: 'attackMs', D: 'decayMs', S: 'sustainLevel', R: 'releaseMs', F: 'pitch' };
       function write (idx, s2, v) {
         s2[FLD[which]] = v;
         var fn = getNativeFn(NAT[which]);
         if (fn) { try { fn(idx, v); } catch (_) {} }
+        if (fine) { try { redrawSliceOverlay(); ovRedrawEmblems(idx); } catch (_) {} }
       }
       function setAt (ev) {
         var idx = parseInt(panel.dataset.targetIdx, 10);
@@ -11344,17 +11362,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         var s2 = getSliceData(idx); if (!s2) return;
         var r = tr.getBoundingClientRect();
         var t = Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width)));
-        write(idx, s2, ovAdsrV(key, t));
+        //  the Fine row rides the SEMITONE it is under: it replaces the fraction, never the note.
+        write(idx, s2, fine ? (Math.round(Number(s2.pitch) || 0) + (t * 100 - 50) / 100) : ovAdsrV(key, t));
         ovRedrawEnvelope(idx);
       }
       tr.addEventListener('mousedown', function (e) {
         if (e.button !== 0) return;
         e.preventDefault(); e.stopPropagation();
-        setAt(e);
+        /*  🚨 tp54 — THE LISTENERS GO ON FIRST. They used to be added AFTER the opening setAt, so
+            anything that threw inside the painter did not merely fail to repaint — it aborted this
+            handler before the move/up listeners existed, and the slider became a click-to-set with
+            no drag at all. Ordering turns a painter bug into a painter bug, not a dead control. */
         function mv (ev) { setAt(ev); }
         function up () { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); }
         document.addEventListener('mousemove', mv);
         document.addEventListener('mouseup', up);
+        setAt(e);
       });
       tr.addEventListener('dblclick', function (e) {
         e.preventDefault(); e.stopPropagation();
@@ -11362,7 +11385,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           var idx = parseInt(panel.dataset.targetIdx, 10);
           if (isNaN(idx)) return;
           var s2 = getSliceData(idx); if (!s2) return;
-          write(idx, s2, (which === 'A' || which === 'R') ? -1 : (which === 'S' ? 1.0 : 0));   // A/R inherit the global; D = 0; S = full
+          write(idx, s2, (which === 'A' || which === 'R') ? -1
+                       : (which === 'S') ? 1.0
+                       : (which === 'F') ? Math.round(Number(s2.pitch) || 0)   // dead on the semitone
+                       : 0);
           requestAnimationFrame(function () {
             try { if (getSliceData(idx)) ovRedrawEnvelope(idx); } catch (_) {}
           });
@@ -11390,7 +11416,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           var deltaT = deltaY / 200.0;           // 200 px = full range
           var t = Math.max(0, Math.min(1, startT + deltaT));
           var v = denormSkew(t, range.min, range.max, range.skew);
-          if (key === 'pitch') v = Math.round(v);
+          //  tp54 — the semitone snaps, and the cents the Fine row set ride along with it. Before
+          //  this the emblem's Math.round silently threw away every fine adjustment on the next drag.
+          if (key === 'pitch') v = Math.round(v) + ovCents(s2.pitch) / 100;
           if (key === 'volume') {
             s2.volume = v;
             var fn = getNativeFn('setSliceVolume'); if (fn) { try { fn(idx, v); } catch (_) {} }
@@ -11507,43 +11535,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       if (!isNaN(idx) && getSliceData(idx)) ovRedrawEnvelope(idx);
     });
 
-    // ── FX section (Mark 2) ────────────────────────────────────────────
-    /* tp53 — THE INDEPENDENT PILL IS GONE (Max). It was a door you had to open before the six chips would answer, and
-       every one of them already says what it does. Touching a chip ARMS independence for that chop — the flag still
-       exists and the DSP still reads it, it just no longer has a button of its own. */
-    // FX chips: GRAIN/SPACE/DELAY/EQ/JUNE toggle a bool; TAPE cycles
-    // OFF → STU → CAS → WIR → OFF on each click.
-    panel.querySelectorAll('.ov-fx-chip').forEach(function (chip) {
-      chip.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        try {
-          var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || idx === -1) return;  // FX chips not in pitch mode
-          var s = getSliceData(idx); if (!s) return;
-          if (!s.fxIndependent) {   // tp53 — the first chip touched detaches this chop from the global chain
-            s.fxIndependent = true;
-            var fnI = getNativeFn('setSliceFxIndependent');
-            if (fnI) { try { fnI(idx, true); } catch (_) {} }
-          }
-          var fx = chip.dataset.fx;
-          if (fx === 'tape') {
-            var next = ((Number(s.fxTapeMachine) || 0) + 1) % 4;
-)TIHX") + juce::String (R"TIHX(            s.fxTapeMachine = next;
-            var fnT = getNativeFn('setSliceFxTapeMachine');
-            if (fnT) { try { fnT(idx, next); } catch (_) {} }
-          } else {
-            var key = 'fx' + fx.charAt(0).toUpperCase() + fx.slice(1);
-            var nextOn = !s[key];
-            s[key] = nextOn;
-            var fnB = getNativeFn('setSliceFxBool');
-            if (fnB) { try { fnB(idx, fx, nextOn); } catch (_) {} }
-          }
-          ovRedrawFx(idx);
-        } catch (_) {}
-      });
-    });
+    /* tp54 — the six FX chips left this panel (Max). No wiring, no state writes; the per-chop
+       fxIndependent flag and its natives stay for saved patches. */
 
-    // ── MOTION row — SCAN pill click ───────────────────────────────────────
+    // tp54 — piece boundary (msvc_string_literal_gate).
+)TIHX") + juce::String (R"TIHX(    // ── MOTION row — SCAN pill click ───────────────────────────────────────
     var scanPillEl = document.getElementById('scan-pill');
     if (scanPillEl) {
       scanPillEl.addEventListener('click', function (ev) {
@@ -11614,35 +11610,6 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     }
   }
 
-  // Render the FX section from current chop state. Called from ovApplyState
-  // on open + after every FX click.
-  function ovRedrawFx (idx) {
-    var panel = document.getElementById('ti-chop-panel');
-    var section = document.getElementById('ti-fx-section');
-    if (!panel || !section) return;
-    var s = getSliceData(idx);
-    if (!s) return;
-
-    /* tp53 — no 'inheriting' dim: with the pill gone the grid is always live, and a chip arms independence itself. */
-    // Per-chip on/off + TAPE sub-machine label.
-    var TAPE_NAMES = ['', 'Stu', 'Cas', 'Wir'];   /* tp53 — the house case, like every other word on this page */
-    panel.querySelectorAll('.ov-fx-chip').forEach(function (chip) {
-      var fx = chip.dataset.fx;
-      var on = false;
-      if (fx === 'tape') {
-        var tm = Number(s.fxTapeMachine) || 0;
-        on = tm > 0;
-        chip.innerHTML = on
-            ? 'Tape<span class="sub">\u00b7' + TAPE_NAMES[tm] + '</span>'
-            : 'Tape';
-      } else {
-        var key = 'fx' + fx.charAt(0).toUpperCase() + fx.slice(1);
-        on = !!s[key];
-      }
-      chip.classList.toggle('on', on);
-    });
-  }
-
   // ── MOTION row (scan UI) ──────────────────────────────────────────────────
   function ovRedrawScan (idx) {
     var scanPill    = document.getElementById('scan-pill');
@@ -11695,7 +11662,6 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
 
     ovRedrawEnvelope(idx);
     ovRedrawEmblems(idx);
-    ovRedrawFx(idx);
     ovRedrawScan(idx);
   }
 
@@ -13874,19 +13840,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         +   '<button id="stem-export-all">EXPORT ALL 4</button>'
         +   '<button id="stem-reveal">REVEAL FOLDER</button>'
         + '</div>'
-        + '<div class="stem-source-row">'
-        +   '<div class="stem-source-group">'
-        +     '<button class="stem-source-pill active" data-val="0">DRY</button>'
-        +     '<button class="stem-source-pill" data-val="1">WET</button>'
-        +   '</div>'
-        +   '<button class="stem-clear-btn" id="stem-clear" title="Clear the rolling stem buffer for all 4 layers">CLEAR</button>'
-        +   '<div class="stem-cap-meters" id="stem-cap-meters">'
-        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">A</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="0" style="width:0%"></div></div></div>'
-        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">B</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="1" style="width:0%"></div></div></div>'
-        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">C</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="2" style="width:0%"></div></div></div>'
-        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">D</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="3" style="width:0%"></div></div></div>'
-        +   '</div>'
-        + '</div>'
+        /*  tp54 — DRY / WET / CLEAR AND THE FOUR CAPTURE METERS ARE GONE FROM THE BUILDER.
+            Max: "we probably don't even need dry, wet or clear … take away the A B C D meters right
+            there next to them, so it's just A B C D, Export All 4, Reveal Folder. That's it — these
+            need to be big enough to fill that space."  Built OUT, not hidden: tp53 had to undo
+            exactly that mistake on the chop menu's INDEPENDENT pill, where a row nobody could see
+            was still the thing the section read its state from.
+            ⚠️ WHAT WENT WITH THEM: the capture SOURCE picker (the buffer keeps its stored value,
+            which is Dry) and the manual CLEAR of the rolling stem buffer. The natives are untouched
+            and `.stem-source-pill` / `.stem-cap-meter-fill` queries return an empty list, so the
+            painters that still sweep them are no-ops rather than errors. */
         + '<div class="stem-status" id="stem-status">&nbsp;</div>'
         ;
     }
@@ -14352,6 +14315,135 @@ body.chop-open #mix-panel { height: 288px !important; }
     }catch(e){}
   }
   function boot(){ place(); setInterval(function(){ if(document.body.classList.contains('chop-open')) place(); },1000); }
+  if(document.readyState==='complete') boot(); else window.addEventListener('load',boot);
+})();
+</script>
+)TIHX")
+       + juce::String (R"TIHX(
+<style id="ti-tp54">
+/* ═══ tp54 — MAX'S SECOND PASS ON THE CHOP PAGE ════════════════════════════════════════════════ */
+
+/* ── NO GLOW. Max: "the purple outline with the white stroke of the ABCD has a glow to it. I don't
+      want that glow there — I just want the white on the inside, clean. And do that for the scan
+      mode too." A selected thing in this house is a PURPLE OUTLINE and WHITE INK. Nothing blooms. ── */
+.ti-layer-pad, .ti-layer-pad:hover, .ti-layer-pad.active, .ti-layer-pad.playing, .ti-layer-pad.active.playing,
+.ti-mode-pill, .ti-mode-pill.active, .ti-play-pill, .ti-play-pill.active,
+#ti-slices-btn, #ti-slices-btn.open, #ti-arm, #ti-arm.on,
+#ti-chop-panel .scan-pill, #ti-chop-panel .scan-pill.off, #ti-chop-panel .ov-mode, #ti-chop-panel .ov-mode.active {
+  box-shadow: none !important; text-shadow: none !important; filter: none !important; }
+.ti-layer-pad.playing, .ti-layer-pad.active.playing { background: rgba(167,139,250,0.20) !important; }   /* a tint is a cue; a halo is a smear */
+#ti-arm.on .dot { box-shadow: none !important; }
+
+/* ── "Slices" wears the play pills' exact size, and it may NEVER reach the library ──
+      Max: "slices needs to stop being capital and it needs to have the same size as pitch, slice,
+      one-shot, loop … and it does not need to corrode with our sample library arrows."
+      MEASURED before: the SLICES pill ran 507..567 while #ti-lib starts at 550 — a 17 px overlap,
+      and the library's ‹ was underneath it. The pill is the play pill's size now, and the library's
+      name box gives back 28 px so the centred pill group cannot reach the cluster even at its widest. */
+#ti-slices-btn {
+  padding: 3px 9px !important; height: auto !important;
+  font: 500 9.5px/1 -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif !important;
+  letter-spacing: .03em !important; text-transform: none !important; border-radius: 9px !important; }
+#ti-lib #ti-lib-name { width: 96px !important; max-width: 96px !important; }
+#ti-lib .ti-lib-nav { width: 16px !important; height: 16px !important; font-size: 12px !important; }
+
+/* ── THE SLICES DRAWER IS THE HOUSE MENU ──
+      Max: "that menu right there for the slice mode needs to be updated to our browser-looking menu —
+      the glass menu, the typography, the colors … no highlighted fillings … and that slider needs to
+      be turned into a notch. I want every menu that pops up to be the same."
+      So: .tpb-panel's own glass (the two-pane browser's), the flow tile for every pill, and the
+      FADE slider rebuilt as the house notch — a 2 px rail at .16 white, white fill, 2x9 white bar. */
+#ti-slicer-drawer {
+  background: rgba(22,20,34,0.72) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.4) !important; backdrop-filter: blur(20px) saturate(1.4) !important;
+  border: 1px solid rgba(255,255,255,0.11) !important; border-radius: 12px !important;
+  box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06) !important;
+  padding: 11px 13px !important; gap: 7px !important;
+  font-family: -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif !important; }
+#ti-slicer-drawer .ti-grid-pill, #ti-slicer-drawer .ti-submode-pill, #ti-slicer-drawer .ti-action-btn {
+  background: transparent !important; border: 1px solid rgba(255,255,255,0.45) !important;
+  color: rgba(245,243,255,0.55) !important; border-radius: 9px !important;
+  font: 500 9.5px/1 inherit !important; letter-spacing: .03em !important; text-transform: none !important;
+  padding: 4px 10px !important; box-shadow: none !important; transform: none !important; }
+#ti-slicer-drawer .ti-grid-pill:hover, #ti-slicer-drawer .ti-submode-pill:hover, #ti-slicer-drawer .ti-action-btn:hover {
+  background: transparent !important; border-color: rgba(255,255,255,0.70) !important; color: rgba(245,243,255,0.92) !important; }
+#ti-slicer-drawer .ti-grid-pill.active, #ti-slicer-drawer .ti-submode-pill.active, #ti-slicer-drawer .ti-action-btn:active {
+  background: transparent !important; border-color: var(--purple-400, #b794ff) !important; color: #FFFFFF !important; box-shadow: none !important; }
+#ti-slicer-drawer .ti-submode-pill.hold-active {
+  background: transparent !important; border-color: #F59E0B !important; color: #F8C572 !important; box-shadow: none !important; }
+#ti-slicer-drawer .ti-action-label {
+  font: 500 9.5px/1 inherit !important; letter-spacing: .03em !important; text-transform: none !important;
+  color: rgba(245,243,255,0.45) !important; padding: 4px 6px 4px 2px !important; }
+/* the FADE slider, rebuilt as the notch (a range input dressed as the house rail) */
+#ti-fade-slider {
+  -webkit-appearance: none !important; appearance: none !important;
+  width: 96px !important; height: 16px !important; background: transparent !important;
+  accent-color: auto !important; cursor: ew-resize !important; }
+#ti-fade-slider::-webkit-slider-runnable-track {
+  height: 2px !important; border-radius: 1px !important; background: rgba(255,255,255,0.16) !important; }
+#ti-fade-slider::-webkit-slider-thumb {
+  -webkit-appearance: none !important; appearance: none !important;
+  width: 2px !important; height: 9px !important; border-radius: 1px !important;
+  background: #FFFFFF !important; border: none !important; box-shadow: none !important; margin-top: -3.5px !important; }
+#ti-fade-row span:last-child, #ti-slicer-drawer .ti-fade-value {
+  font: 500 10px/1 inherit !important; font-variant-numeric: tabular-nums; color: rgba(245,243,255,0.92) !important; letter-spacing: .02em !important; }
+
+/* ── THE MIXER'S KNOBS ARE THE SYNTH PAGE'S KNOB ──
+      Max: "the knobs at the bottom and the top are way too thick and they don't match the rest of
+      the parameters and sliders — whenever I go to wavetable position or anything else it's the
+      same exact slider."  MEASURED: #syn-panel .knob-ring draws a 2 px SVG arc on a 24 px ring; this
+      one is a conic gradient masked at 66 %, i.e. a 4.25 px band on a 25 px circle — more than
+      double. Same 24 px ring, same 2 px band, and the house's WHITE value against a faint track. */
+#mix-panel .mix-strip-knob, #mix-panel .mix-strip-knob[data-fn="jitter"] {
+  width: 24px !important; height: 24px !important;
+  -webkit-mask: radial-gradient(closest-side, transparent 83%, #000 84%) !important;
+  mask: radial-gradient(closest-side, transparent 83%, #000 84%) !important;
+  background: conic-gradient(from 225deg, #FFFFFF 0deg, #FFFFFF calc(var(--val,0.5) * 270deg),
+              rgba(255,255,255,0.16) calc(var(--val,0.5) * 270deg), rgba(255,255,255,0.16) 270deg, transparent 270deg) !important; }
+
+/* ── THE STEM PANEL FILLS ITS HALF ──
+      Max: "take away the dry, wet and clear … take away the A B C D meters … so it's just A B C D,
+      Export All 4, Reveal Folder — these need to be big enough to fill that space or it's not
+      going to look right."  The source row is gone (below) and the two rows that remain split the
+      height instead of sitting in a band with dead air under them. */
+#mix-panel #mix-stem-area { flex: 1 1 0 !important; justify-content: stretch !important; gap: 8px !important; }
+#mix-panel #mix-trigger-area { flex: 1 1 0 !important; }
+#mix-panel .stem-status { flex: 0 0 auto !important; }   /* the export line stays — it is the only feedback an export has */
+#mix-panel .stem-buttons, #mix-panel .stem-all-row { flex: 1 1 0 !important; display: flex !important; gap: 8px !important; align-items: stretch !important; }
+#mix-panel .stem-buttons > button, #mix-panel .stem-all-row > button {
+  flex: 1 1 0 !important; height: auto !important; min-height: 0 !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  background: transparent !important; border: 1px solid rgba(255,255,255,0.45) !important;
+  color: var(--text-secondary) !important; border-radius: 9px !important;
+  font: 500 10px/1 inherit !important; letter-spacing: .03em !important; text-transform: none !important;
+  box-shadow: none !important; }
+#mix-panel .stem-buttons > button:hover, #mix-panel .stem-all-row > button:hover {
+  border-color: rgba(255,255,255,0.70) !important; color: var(--text-primary) !important; }
+#mix-panel .stem-buttons > button.armed, #mix-panel .stem-buttons > button.exporting,
+#mix-panel .stem-all-row > button.exporting { border-color: var(--purple-400) !important; color: #fff !important; background: transparent !important; }
+</style>
+)TIHX")
+       + juce::String (R"TIHX(
+<script>
+(function(){
+  /*  tp54 — the three things CSS cannot say.
+      (1) the stem source row leaves the DOM, not just the layout — Max asked for it gone, and a
+          hidden row is the mistake tp53 had to undo on the chop menu's INDEPENDENT pill.
+      (2) "Slices 16" keeps the house case whatever the count painter writes.
+      (3) the drawer's labels lose their colons and their shouting. */
+  var WORDS54 = { 'RANDOM:':'Random', 'FADE:':'Fade', 'CHOP':'Chop', 'CHROMATIC':'Chromatic',
+                  '5TH':'5th', '7TH':'7th', 'OCT':'Oct', 'SLICES':'Slices',
+                  'EXPORT ALL 4':'Export All 4', 'REVEAL FOLDER':'Reveal Folder' };
+  function tidy(){
+    try{
+      var d = document.getElementById('ti-slicer-drawer');
+      if (d) d.querySelectorAll('.ti-action-label, .ti-action-btn, .ti-submode-pill').forEach(function(e){
+        var t = (e.textContent || '').trim(); if (WORDS54[t] != null && e.textContent !== WORDS54[t]) e.textContent = WORDS54[t]; });
+      var lab = document.querySelector('#ti-slices-btn .ti-slices-label');
+      if (lab && lab.textContent !== 'Slices') lab.textContent = 'Slices';
+    }catch(e){}
+  }
+  function boot(){ tidy(); setInterval(tidy, 1200); }
   if(document.readyState==='complete') boot(); else window.addEventListener('load',boot);
 })();
 </script>
