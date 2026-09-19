@@ -9,7 +9,13 @@ const ov = [...cpp.slice(i0, j0).matchAll(/R"TIHX\(([\s\S]*?)\)TIHX"/g)].map(m =
 const PAGE = path.join(OUT, 'tp49_chop_index.html'); fs.writeFileSync(PAGE, html);
 let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('  PASS  ' + l); } else { fail++; console.log('  FAIL  ' + l + (d ? '\n          ' + d : '')); } };
 (async () => { const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--no-sandbox'] });
-  const p = await b.newPage(); await p.setViewport({ width: 820, height: 656, deviceScaleFactor: 2 }); await p.evaluateOnNewDocument(stubSrc + '\nstub(); window.__params.__bpm = 128;'); const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
+  const p = await b.newPage(); await p.setViewport({ width: 820, height: 656, deviceScaleFactor: 2 }); await p.evaluateOnNewDocument(stubSrc + `\nstub();
+    window.__loadPath = []; window.__editLayer = 0;
+    (function(){ const g = window.Juce.getNativeFunction; window.Juce.getNativeFunction = function(n){
+      if (n === 'loadSampleFromPath') return (pth) => { window.__loadPath.push(window.__editLayer + ':' + String(pth).split('/').pop()); return Promise.resolve(0); };
+      if (n === 'setEditingLayer') return (i) => { window.__editLayer = +i; return Promise.resolve(0); };
+      if (n === 'getLayerHasSample') return (i) => Promise.resolve(window.__loadPath.some(x => x.indexOf((i == null ? window.__editLayer : i) + ':') === 0) ? 1 : 0);
+      return g(n); }; })();`); const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   await p.goto('file://' + PAGE, { waitUntil: 'load' }); await sleep(2500);
   await p.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); document.getElementById('mix-btn').click(); }); await sleep(1500);
   
@@ -30,5 +36,20 @@ let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('
   ok(dots && dots.bg === 'rgba(0, 0, 0, 0)' && dots.bw !== '0px', '[7] the layer A-D status row is outlined, not filled', JSON.stringify(dots));
   const bf = await p.evaluate(() => ['#ti-root-picker', '.ti-bpm-display', '#ti-bottom-right-cluster'].map(q => { const e = document.querySelector(q); const cs = e ? getComputedStyle(e) : null; return cs ? (cs.backdropFilter || cs.webkitBackdropFilter || 'none') + '|' + cs.backgroundColor : 'missing'; }));
   ok(bf.every(x => /^none\|rgba\(0, 0, 0, 0\)$/.test(x)), '[8] the key box and BPM have no fill and no blur behind them (no box)', bf.join(' , '));
+  // [9] tp50 — the sample library is PER LAYER (Max: "add a one-shot to A, a different one to B, another to C and D, and it doesn't affect the other ABCD")
+  const pad = (L) => p.evaluate(L => { const el = document.querySelector('#ti-layer-pads .ti-layer-pad[data-layer-idx="' + L + '"]'); el.dispatchEvent(new MouseEvent('click', { bubbles: true })); }, L);
+  const step = async (n) => { for (let i = 0; i < n; i++) { await p.evaluate(() => window.__tiLibStep(1)); await sleep(140); } };
+  const fake = () => p.evaluate(() => { const h = document.getElementById('hero'); h.classList.add('has-sample'); h.classList.remove('empty-state'); });
+  await fake(); await step(1); await pad(1); await sleep(300); await fake(); await step(3); await pad(2); await sleep(300); await fake(); await step(2); await sleep(250);
+  const lay = await p.evaluate(() => window.__tiLib()); const loads = await p.evaluate(() => window.__loadPath);
+  const names = lay.names;
+  ok(names[0] && names[1] && names[2] && !names[3] && names[0] !== names[1] && names[1] !== names[2] && lay.idx[0] === 0 && lay.idx[1] === 2 && lay.idx[2] === 1,
+     '[9] each layer keeps its OWN place in the library and its own sample name (A, B and C differ; D untouched)', JSON.stringify(lay));
+  ok(loads.length > 0 && loads.every(x => /^[0-3]:/.test(x)) && loads.filter(x => x[0] === '1').length === 3 && loads.filter(x => x[0] === '2').length === 2 && loads.filter(x => x[0] === '3').length === 0,
+     '[9] every load landed on the layer that was selected (three into B, two into C, none into D)', loads.join(' , '));
+  await pad(0); await sleep(400);
+  const back = await p.evaluate(() => window.__tiLib());
+  ok(back.layer === 0 && back.label === names[0] && back.names.join('|') === names.join('|'),
+     '[10] coming back to a layer shows ITS sample again — no name is wiped by the switch', JSON.stringify(back));
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
   await b.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); })();

@@ -14332,13 +14332,34 @@ body.chop-open #hero { background: #12121F !important; }
   function retitle(root){ try{ var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null); var t; var list=[]; while((t=w.nextNode())) list.push(t);
       list.forEach(function(n){ var k=n.nodeValue.trim(); if(WORDS.hasOwnProperty(k)) n.nodeValue=n.nodeValue.replace(k,WORDS[k]); }); }catch(e){} }
   function nf(n){ try{ return window.Juce&&window.Juce.getNativeFunction?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
-  var lib=null, libIdx=-1;
+  /* tp50 — THE LIBRARY IS PER LAYER. Max: "whether we're on B, C or D I can change the samples... add a one-shot to A, a different one
+     to B, another to C and D, and it doesn't affect the other ABCD." The engine was already per-layer (loadSampleFromPath lands in
+     layers[editingLayer]); this widget was not — one cursor and one label for all four, so the name lied about B and the arrows
+     carried A's place into it. Every layer now keeps its own place in the library and its own name. */
+  var lib=null, libIdx=[-1,-1,-1,-1], libName=['','','',''];
+  function curLayer(){ try{ var a=document.querySelector('#ti-layer-pads .ti-layer-pad.active'); var i=a?parseInt(a.getAttribute('data-layer-idx'),10):0; return (isFinite(i)&&i>=0&&i<4)?i:0; }catch(e){ return 0; } }
+  /* A NAME IS ONLY DROPPED ON THE ENGINE'S WORD. The hero's has-sample class is false for a beat while a layer restores, and painting
+     from it wiped the name of a layer that was merely mid-switch — a label that lies once stays lying. getLayerHasSample is asked
+     instead, and a name written in the last 3 s is never second-guessed (the decode has not landed yet). */
+  var libAt=[0,0,0,0];
+  function libTick(){ var L=curLayer(); if(!libName[L]||Date.now()-libAt[L]<3000) return; var f=nf('getLayerHasSample'); if(!f) return;
+    try{ Promise.resolve(f(L)).then(function(v){ if((+v)>0.5) return; if(curLayer()!==L) return; libName[L]=''; libIdx[L]=-1; libPaint(); }).catch(function(){}); }catch(e){} }
+  function libPaint(){ var nm=document.getElementById('ti-lib-name'); if(!nm) return; var L=curLayer();
+    var t=libName[L]||'Sample Library'; if(nm.textContent!==t) nm.textContent=t;
+    nm.title=(libName[L]?('Layer '+'ABCD'.charAt(L)+' \u00b7 '+libName[L]):'Sample library')+' \u2014 click to browse, arrows to step'; }
   function libList(cb){ if(lib) return cb(lib); var f=nf('scanSampleFactory'); if(!f) return cb(lib=[]); try{ Promise.resolve(f()).then(function(js){ var o=null; try{ o=JSON.parse(js||'null'); }catch(e){} lib=[]; if(o&&o.cats){ Object.keys(o.cats).forEach(function(c){ (o.cats[c]||[]).forEach(function(file){ lib.push({cat:c,file:file,name:String(file).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '),path:(o.path||'')+'/'+c+'/'+file}); }); }); } cb(lib); }).catch(function(){ cb(lib=[]); }); }catch(e){ cb(lib=[]); } }
-  function libLoad(i){ if(!lib||!lib.length) return; libIdx=((i%lib.length)+lib.length)%lib.length; var it=lib[libIdx]; var nm=document.getElementById('ti-lib-name'); if(nm) nm.textContent=it.name; var f=nf('loadSampleFromPath'); if(f){ try{ f(it.path); }catch(e){} } }
-  function libMenu(x,y){ libList(function(L){ if(!window.__synShowMenu) return; var cats={}; L.forEach(function(it){ (cats[it.cat]=cats[it.cat]||[]).push(it); });
-      var rows=[{isHeader:true,label:'Sample Library'}]; Object.keys(cats).forEach(function(c){ rows.push({label:c,badge:String(cats[c].length),onPick:function(){ var r2=[{isHeader:true,label:c}]; cats[c].forEach(function(it){ r2.push({label:it.name,isChecked:lib.indexOf(it)===libIdx,onPick:function(){ libLoad(lib.indexOf(it)); }}); }); window.__synShowMenu('',r2,x,y); }}); });
+  function libLoad(i){ if(!lib||!lib.length) return; var L=curLayer(); var n=((i%lib.length)+lib.length)%lib.length; libIdx[L]=n; var it=lib[n];
+    libName[L]=it.name; libAt[L]=Date.now(); var nm=document.getElementById('ti-lib-name'); if(nm) nm.textContent=it.name;   /* the name lands now; libPaint's empty-check would beat the decode */
+    var f=nf('loadSampleFromPath'); if(f){ try{ f(it.path); }catch(e){} } }
+  function libMenu(x,y){ var L=curLayer(); libList(function(list){ if(!window.__synShowMenu) return; var cats={}; list.forEach(function(it){ (cats[it.cat]=cats[it.cat]||[]).push(it); });
+      var rows=[{isHeader:true,label:'Sample Library \u00b7 Layer '+'ABCD'.charAt(L)}]; Object.keys(cats).forEach(function(c){ rows.push({label:c,badge:String(cats[c].length),onPick:function(){ var r2=[{isHeader:true,label:c+' \u00b7 Layer '+'ABCD'.charAt(L)}]; cats[c].forEach(function(it){ r2.push({label:it.name,isChecked:list.indexOf(it)===libIdx[L],onPick:function(){ libLoad(list.indexOf(it)); }}); }); window.__synShowMenu('',r2,x,y); }}); });
       if(!Object.keys(cats).length) rows.push({label:'No factory samples found',isDisabled:true}); window.__synShowMenu('',rows,x,y); }); }
-  function bpmTick(){ if(!document.body.classList.contains('chop-open')) return; var f=nf('getHostBpm'); if(!f) return; try{ Promise.resolve(f()).then(function(v){ v=parseFloat(v); if(!isFinite(v)||v<=0) return; var el=document.querySelector('.ti-bpm-value'); if(el){ var t=(Math.round(v*10)/10).toString(); if(el.textContent!==t) el.textContent=t; } }).catch(function(){}); }catch(e){} }
+  function hookLayers(){ if(window.__tiLibHooked) return; window.__tiLibHooked=1;
+    /* a DROP names the layer too (it is the same slot the arrows fill) */
+    var os=window.onSampleLoaded; window.onSampleLoaded=function(info){ try{ if(info&&info.filename) { var L=curLayer(); libName[L]=String(info.filename).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '); libAt[L]=Date.now(); libPaint(); } }catch(e){} return os?os.apply(this,arguments):undefined; };
+    /* every pad click goes through this one door (the pad handler calls it) */
+    var sw=window.switchEditingLayer; if(typeof sw==='function') window.switchEditingLayer=function(){ var r=sw.apply(this,arguments); try{ libPaint(); }catch(e){} return r; }; }
+  function bpmTick(){ if(!document.body.classList.contains('chop-open')) return; try{ libPaint(); libTick(); }catch(e){} var f=nf('getHostBpm'); if(!f) return; try{ Promise.resolve(f()).then(function(v){ v=parseFloat(v); if(!isFinite(v)||v<=0) return; var el=document.querySelector('.ti-bpm-value'); if(el){ var t=(Math.round(v*10)/10).toString(); if(el.textContent!==t) el.textContent=t; } }).catch(function(){}); }catch(e){} }
   var armed=false;
   function paintArm(){ var a=document.getElementById('ti-arm'); if(!a) return; a.classList.toggle('on',armed); a.querySelector('.t').textContent=armed?'Armed':'Arm'; a.title=armed?'Armed — the keys play the chop; click to let the synth play too':'Arm — the keys play the chop and the synth stops'; }
   function setArmed(v){ armed=!!v; paintArm(); var f=nf('setTiArmed'); if(f){ try{ f(armed?1:0); }catch(e){} } }
@@ -14348,6 +14369,7 @@ body.chop-open #hero { background: #12121F !important; }
     var br=document.getElementById('ti-bottom-right-cluster'); if(br&&!document.getElementById('ti-lib')){ var l=document.createElement('div'); l.id='ti-lib'; l.innerHTML='<span class="ti-lib-nav" data-d="-1" title="Previous sample">&#8249;</span><span id="ti-lib-name" title="Sample library">Sample Library</span><span class="ti-lib-nav" data-d="1" title="Next sample">&#8250;</span>';
       l.addEventListener('mousedown',function(e){ e.stopPropagation(); }); l.addEventListener('click',function(e){ e.stopPropagation(); var nav=e.target.closest('.ti-lib-nav'); if(nav){ libList(function(){ libLoad(libIdx+(+nav.dataset.d)); }); return; } if(e.target.id==='ti-lib-name') libMenu(e.clientX,e.clientY); }); br.insertBefore(l,br.firstChild); }
     var bd=document.getElementById('ti-bpm-display'); if(bd) bd.title='Tempo — the DAW\'s';
+    hookLayers(); libPaint();
     retitle(document.getElementById('ti-bottom-pills')||document.body);
   }
   function wire(){
@@ -14363,6 +14385,8 @@ body.chop-open #hero { background: #12121F !important; }
   function boot(){ if(wire()) { dressHero(); return; } var n=0; var iv=setInterval(function(){ if(wire()||++n>40){ clearInterval(iv); dressHero(); } },250); }
   if(document.readyState==='complete') boot(); else window.addEventListener('load',boot);
   window.__tiChopArm=function(v){ if(v===undefined) return armed; setArmed(v); return armed; };   /* the gate's hand */
+  window.__tiLib=function(){ return { layer:curLayer(), idx:libIdx.slice(), names:libName.slice(), label:(document.getElementById('ti-lib-name')||{}).textContent }; };
+  window.__tiLibStep=function(d){ libList(function(){ libLoad((libIdx[curLayer()]<0?-1:libIdx[curLayer()])+d); }); };
 })();
 </script>
 )TIHX");
@@ -14436,7 +14460,11 @@ void TerrainUiCore::loadSampleAsync (const juce::File& file)
 {
     currentSampleSourcePath = file.getFullPathName();
     // Push to processor so DAW state save captures it (survives project reload).
-    audioProcessor.setLoadedSamplePath (currentSampleSourcePath);
+    // tp50 — ONLY for layer A. `loadedSamplePath` is the V1 singleton and its reload path puts that
+    // file in LAYER 0; writing it while editing B/C/D made a V1-state project reopen with (say) D's
+    // one-shot sitting in A. Each layer's own path is filed in layers[li].sourcePath below.
+    if (audioProcessor.editingLayer.load() == 0)
+        audioProcessor.setLoadedSamplePath (currentSampleSourcePath);
 
     auto& loader = audioProcessor.getSampleLoader();
     auto& target = audioProcessor.getSampleBuffer();
