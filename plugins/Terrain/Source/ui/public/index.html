@@ -42751,6 +42751,23 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-node > .tp-body > .flow-vis .reso-cv { border-radius: 13px; }
 #tp-page .tp-node[data-kind="rnd"] { cursor: move; }
 /* the voice column's read when only the visuals show */
+/* ── tp56 — THE CHOP SAMPLER MODULE ───────────────────────────────────────────────────────────
+      Its own face, drawn at the node's size: the layer's letter in the house purple outline, the
+      sample it is holding, and the live peak the mixer strip meters. No ground of its own — the
+      node's .tp-box is the glass, the way every adopted module sits on it. */
+#tp-page .tp-samp { width: 100%; height: 100%; box-sizing: border-box; display: flex; flex-direction: column;
+  justify-content: center; gap: 10px; padding: 12px 14px; color: var(--text-primary); }
+#tp-page .tp-samp-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#tp-page .tp-samp-l { flex: none; width: 30px; height: 30px; border-radius: 9px; display: flex;
+  align-items: center; justify-content: center; border: 1px solid var(--purple-400);
+  font: 500 13px/1 inherit; letter-spacing: .03em; color: #fff; background: transparent; }
+#tp-page .tp-samp-n { flex: 1 1 auto; min-width: 0; font: 500 11px/1.25 inherit; letter-spacing: .02em;
+  color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tp-page .tp-samp-mtr { display: flex; flex-direction: column; gap: 4px; }
+#tp-page .tp-samp-mtr span { display: block; height: 3px; border-radius: 2px; overflow: hidden;
+  background: rgba(255,255,255,0.14); }
+#tp-page .tp-samp-mtr i { display: block; height: 100%; width: 0%; border-radius: 2px;
+  background: var(--purple-400); transition: width .05s linear; }
 #tp-page .tp-vglyph { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: rgba(255,255,255,.6); }
 #tp-page .tp-vglyph svg { width: 70px; height: 46px; }
 
@@ -42888,7 +42905,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var page=null, world=null, cg=null, drawg=null, nodesEl=null, addM=null, nMenu=null, toastEl=null, miniEl=null, modesEl=null, modesHome=null, tileHome={}, tileOrder=[];
   var isOpen=false, built=false, view={x:0,y:0,z:0.6}, nodes=[], cables=[], sel=null, drag=null, raf=0, shims={}, addCtx=null, addCat='All', suppressClick=false, syncT=0, applying=false, prevTapeTab=null, zTop=1;
   var layout={v:6,pos:{},ext:{},view:null,aim:'anything',dlevel:'medium',rlevel:'medium',rlinks:[],viz:false,nodes:[],finl:{}};   /* tp41 — finl: an inline flow card's anchor, the rack device it sits after */
-  var SIZES={osc:[332,140],noise:[220,160],voiceCanvas:[202,196],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
+  var SIZES={osc:[332,140],noise:[220,160],voiceCanvas:[202,196],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150],samp:[208,92]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
   /* tp11 — Max: "extend the bottom … then the top … evenly": a module with dots under its knobs gets 7 px of air on top and 17 at the bottom, so a dot never lands on a knob's LFO streak */
   var PADK={osc:1,filter:1,fx:1,tape:1,noise:1}, PADT=7, PADB=17;
   function padOf(kind){ return PADK[kind]?[PADT,PADB]:[0,0]; }
@@ -42927,7 +42944,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function choiceNorm(id,idx,fallbackN){ var n=0; try{ n=window.__paramCardinality?window.__paramCardinality(id):0; }catch(e){} if(!(n>1)) n=fallbackN||2; return Math.max(0,Math.min(1,idx/(n-1))); }
   function oscLetter(o){ return String(o||'').toUpperCase(); }   /* A, B, C, D … the alphabet is the ceiling: A–Z */
   function OX(o){ return 'SYN_OSC_'+String(o).toUpperCase()+'_'; }
-  function nodeName(n){ if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='noise') return n.sub==='n2'?'Noise 2':'Noise'; if(n.kind==='fx') return (n.core==='tape'?'Tape · '+(n.type||''):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return flowLabel(n.sub);
+  function nodeName(n){ if(n.kind==='samp') return 'Sampler '+String(n.sub||'').toUpperCase();   /* tp56 */
+    if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='noise') return n.sub==='n2'?'Noise 2':'Noise'; if(n.kind==='fx') return (n.core==='tape'?'Tape · '+(n.type||''):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return flowLabel(n.sub);
     if(n.kind==='tape'){ var S=ST(); return 'Tape · '+(MACHINES[S?S.tapeMachine|0:0]||''); }
     return {midi:'MIDI In',out:'Out',filter:'Filter',env:'Envelope',lfo:'LFO',tapeloop:'Deck',voice:'Voices',rnd:'Randomizer'}[n.kind]||n.kind; }
 
@@ -42967,12 +42985,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var oscs=of('osc').sort(function(a,b){ return String(a.sub).localeCompare(String(b.sub)); }), fl=of('flow'), fxs=of('fx').sort(function(a,b){ return (a.idx||0)-(b.idx||0); });
     var noteT=fl.filter(function(n){ return n.sub==='arp'||n.sub==='drift'; }), audT=fl.filter(function(n){ return n.sub==='chop'||n.sub==='glitch'; });
     var nzs=of('noise').sort(function(a,b){ return (a.inst||1)-(b.inst||1); });   /* tp42 */
-    var oscBlock=Math.max(1,oscs.length)*(S.osc[1]+G)-G+(nzs.length?nzs.length*(S.noise[1]+G):0), synthH=Math.max(oscBlock,S.filter[1]+G+S.env[1]);
+    var oscBlock=Math.max(1,oscs.length)*(S.osc[1]+G)-G+(nzs.length?nzs.length*(S.noise[1]+G):0); var synthH=Math.max(oscBlock,S.filter[1]+G+S.env[1]);
     var x0=0, x1=S.midi[0]+64, x2=x1+S.osc[0]+56, x3=x2+S.filter[0]+56;
     var midiY=Math.max(0,Math.round(synthH/2-S.midi[1]/2)); P.midi=[x0,midiY];
     noteT.forEach(function(n,i){ P[n.key]=[x0+Math.round((S.midi[0]-S.flow[0])/2), midiY+S.midi[1]+G+i*(S.flow[1]+G)]; });
     oscs.forEach(function(n,i){ P[n.key]=[x1,i*(S.osc[1]+G)]; });
     nzs.forEach(function(n,i){ P[n.key]=[x1,Math.max(1,oscs.length)*(S.osc[1]+G)+i*(S.noise[1]+G)]; });   /* tp42 */
+    /* tp56 — the SAMPLERS stack under the oscillator column. They are sources like the oscillators,
+       so they belong in the source column; they take no MIDI cable, so nothing reaches left of them. */
+    { var sps=of('samp').sort(function(a,b){ return String(a.sub).localeCompare(String(b.sub)); });
+      var yS=Math.max(1,oscs.length)*(S.osc[1]+G)+nzs.length*(S.noise[1]+G);
+      sps.forEach(function(n,i){ P[n.key]=[x1,yS+i*(S.samp[1]+G)]; });
+      if(sps.length) synthH=Math.max(synthH,yS+sps.length*(S.samp[1]+G)-G); }
     P.filter=[x2,0]; P.env=[x2,S.filter[1]+G]; P.voice=[x2,S.filter[1]+G+S.env[1]+G];   /* tp43 — the voice column under the envelope */
     fxs.forEach(function(n,i){ P[n.key]=[x3+Math.floor(i/4)*(S.fx[0]+G),(i%4)*(S.fx[1]+G)]; });
     var nC=Math.ceil(fxs.length/4), x4=nC?x3+nC*(S.fx[0]+G)+30:x3, y4=0;   /* no effects = no empty column */
@@ -43018,13 +43042,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       if(n.tile){ n.tile.classList.add('tp-viz'); n.glyph.classList.remove('tp-viz'); }
       else n.glyph.classList.add('tp-viz');
       return; }
+    if(n.kind==='samp'){ if(n.el) { n.el.classList.add('tp-viz'); n.viz=n.el; } return; }   /* tp56 — the module IS the picture: the letter, the sample, the meter */
     if(n.kind==='rnd'&&n.el){ n.el.classList.add('tp-viz'); n.viz=n.el; return; }
     if(!s||!n.el||!n.el.querySelector) { if(n.kind==='voice'&&n.body&&!n.body.querySelector('.tp-vglyph')){ var g=document.createElement('div'); g.className='tp-vglyph tp-viz'; g.innerHTML=IC.voice; n.body.appendChild(g); } return; }
     var v=n.el.matches&&n.el.matches(s)?n.el:n.el.querySelector(s); if(v) setVizEl(n,v); }
   function addPort(n,kind,i,x,y,t){ var p=document.createElement('div'); p.className='tp-port k-'+kind; p.dataset.kind=kind; p.dataset.i=i; p.dataset.key=n.key; p.dataset.t=t||'a'; p.innerHTML='<i></i>';
     if(kind==='mod'||kind==='rin'){ p.style.left=(x-9)+'px'; } else { p.style.top=(n.h/2-9)+'px'; }
     p.addEventListener('click',function(e){ e.stopPropagation(); }); n.wrap.appendChild(p); n.ports.push({el:p,kind:kind,i:i,x:x,y:y}); return p; }
-  var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a']},noise:{ins:['n'],outs:['a']},filter:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a']},env:{outs:['m']},voice:{},lfo:{outs:['m']},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']}};   /* tp11 — the Randomizer's port */
+  var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a']},noise:{ins:['n'],outs:['a']},filter:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a']},env:{outs:['m']},voice:{},lfo:{outs:['m']},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']},samp:{outs:['a']}};   /* tp11 — the Randomizer's port · tp56 — a Sampler is a SOURCE: audio out, no in (its notes come from the Chop page's own keys, not the Patcher's MIDI node) */
   var RIN={osc:1,filter:1,env:1,lfo:1,fx:1,tape:1,flow:1};   /* tp11 — what a Randomizer cable can land on (a module's top) */
   function sideSpec(n){ if(n.kind==='flow'){ var k=fKind(n.sub); return (k==='arp'||k==='drift')?{ins:['n'],outs:['n']}:{ins:['a'],outs:['a']}; } return SIDE[n.kind]||{}; }
   function addSidePorts(n){ var sp=sideSpec(n); (sp.ins||[]).forEach(function(t,i){ addPort(n,'in',i,0,n.h/2,t); }); (sp.outs||[]).forEach(function(t,i){ addPort(n,'out',i,n.w,n.h/2,t); }); if(RIN[n.kind]) addPort(n,'rin',0,n.w/2,0,'r'); }
@@ -43092,6 +43117,50 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function noiseOn(i){ var el=noiseEl(i); if(el&&el.classList.contains('noise-off')) return false; if(el&&el._nseen) return true; return pv(noisePfx(i)+'ON',0)>0.5; }   /* the strip's own class is the truth once it has read itself (like osc-off); the shim stands in before that */
   function setNoiseOn(i,on){ setP(noisePfx(i)+'ON',on?1:0); try{ var f=window[i===2?'__tiNoiseResync2':'__tiNoiseResync']; if(f) f(); }catch(e){} }
   function noiseInFilter(){ return pv('SYN_FILTER1_SRC_NOISE',0)>0.5||pv('SYN_FILTER2_SRC_NOISE',0)>0.5; }
+  /* ══ tp56 — THE CHOP SAMPLERS ON THE CANVAS ═══════════════════════════════════════════════════
+     Max: "these aren't the sample oscillator engine, these are sample CHOPPED engines."  So this is
+     its OWN module kind, not a second skin on the oscillator node: Sampler A/B/C/D are the four
+     CHOP PAGE LAYERS, they take their notes from that page's own keys (no MIDI in), and their
+     audio is cabled into the rack like any other source.
+
+     THE MODULE IS BUILT HERE, not adopted from a panel. Every other node MOVES a live element out
+     of the synth page and gives it back on the way out (mkNode's `home`) — but the Chop page has
+     ONE waveform showing the SELECTED layer, not four, so there is no per-layer element to move.
+     Taking it would break the page it came from. This draws the layer's own face instead: its
+     letter, the sample it is holding, and a live meter off the same peak feed the mixer strip
+     polls, so the module says what that layer IS doing, not just that it exists.                */
+  var SAMPL = ['a','b','c','d'];
+  function sampKey(L){ return 'samp-' + L; }
+  function sampIdx(L){ return SAMPL.indexOf(String(L||'').toLowerCase()); }
+  function sampName(L){ try{ var i=sampIdx(L); var lib=window.__tiLib?window.__tiLib():null;
+      var nm=lib&&lib.names?lib.names[i]:null; if(nm) return String(nm).replace(/\.[^.]+$/,''); }catch(e){} return 'No sample'; }
+  function mkSampEl(L){
+    var d=document.createElement('div'); d.className='tp-samp'; d.setAttribute('data-samp',L);
+    d.innerHTML='<div class="tp-samp-head"><span class="tp-samp-l">'+String(L).toUpperCase()+'</span>'
+              + '<span class="tp-samp-n"></span></div>'
+              + '<div class="tp-samp-mtr"><span><i class="l"></i></span><span><i class="r"></i></span></div>';
+    return d; }
+  function adoptSamp(L,at){ L=String(L||'').toLowerCase(); if(sampIdx(L)<0||nodeByKey(sampKey(L))) return null;
+    var n=mkNode(sampKey(L),'samp',mkSampEl(L),{sub:L,at:at}); n.home=null;
+    if(!layout.samp) layout.samp={}; layout.samp[L]=1; saveLayout(); sampPaint(n); return n; }
+  function returnSamp(n){ if(layout.samp) delete layout.samp[n.sub]; saveLayout(); reclip(n); leave(n,function(){}); }
+  function sampPaint(n){ try{ var e=n.el&&n.el.querySelector('.tp-samp-n'); if(e){ var t=sampName(n.sub); if(e.textContent!==t) e.textContent=t; } }catch(x){} }
+  /* the meter: ONE poll for all four modules, only while the canvas is open and a Sampler is on it */
+  var sampPk=null, sampPkT=0;
+  function sampMeters(){ var live=nodes.filter(function(n){ return n.kind==='samp'; });
+    if(!isOpen||!live.length){ if(sampPkT){ clearInterval(sampPkT); sampPkT=0; } return; }
+    if(sampPkT) return;
+    sampPkT=setInterval(function(){
+      if(!isOpen||!nodes.some(function(n){ return n.kind==='samp'; })){ clearInterval(sampPkT); sampPkT=0; return; }
+      try{ if(!sampPk) sampPk=NF('getLayerPeakLevels'); if(!sampPk) return;
+        Promise.resolve(sampPk()).then(function(arr){ if(!arr||arr.length<4) return;
+          nodes.forEach(function(n){ if(n.kind!=='samp') return; var i=sampIdx(n.sub), v=arr[i]||{};
+            var l=n.el.querySelector('.tp-samp-mtr .l'), r=n.el.querySelector('.tp-samp-mtr .r');
+            if(l) l.style.width=Math.round(Math.max(0,Math.min(1,+v.l||0))*100)+'%';
+            if(r) r.style.width=Math.round(Math.max(0,Math.min(1,+v.r||0))*100)+'%'; }); }).catch(function(){});
+      }catch(x){}
+    },70); }
+
   function adoptNoise(i,at){ var el=noiseEl(i); if(!el||nodeByKey(noiseKey(i))) return null; var n=mkNode(noiseKey(i),'noise',el,{sub:i===2?'n2':'n',inst:i,at:at}); modDots(n); return n; }
   function returnNoise(n){ reclip(n); if(n.viz) clearVizStyle(n.viz); leave(n,function(){ if(n.el&&n.el.parentNode===n.body) goHome(n); }); }
   /* tp43 — THE VOICE COLUMN as a module (Mono/Legato/Poly, Voices, Velocity + Key as drag sources, Portamento, Glide, Macros). */
@@ -43150,6 +43219,20 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function flowInlId(m){ var p=flowPfx(m); return p?p+'INLINE':null; }
   function flowRankId(m){ var p=flowPfx(m); return p?p+'RANK':null; }
   function flowIds41(m){ var p=flowPfx(m); return p?[p+'TAPS',p+'INLINE',p+'RANK']:[]; }
+  /* ══ tp56 — WHAT A SAMPLER'S CABLE WRITES ═════════════════════════════════════════════════════
+     One parameter per device, <device>_CHOPS, a 4-bit mask: bit L = chop layer L feeds that device.
+     Its id is the device's own _TAPS id with the suffix swapped, so there is no second hand-copied
+     table to fall out of step (fb435's lesson, which cost a whole pill row that nothing consumed). */
+  function chopsIdOf(d){ return (d&&d.tapsP)?String(d.tapsP).replace(/_TAPS$/,'_CHOPS'):null; }
+  function chopsOf(d){ var id=chopsIdOf(d); return id?Math.round(pv(id,0)*15):0; }
+  function chopSetSrc(d,L,on){ var id=chopsIdOf(d), i=sampIdx(L); if(!id||i<0) return false;
+    seedOn([id]); var b=chopsOf(d), k=1<<i, nb=on?(b|k):(b&~k); if(nb===b) return false;
+    track([id],function(){}); setP(id,nb/15); return true; }
+  /* every device that claims this layer, as {dev index, node} */
+  function chopClaims(L){ var i=sampIdx(L); if(i<0) return [];
+    var devs=window.__fxrDevs?window.__fxrDevs():[], out=[];
+    devs.forEach(function(d,ix){ if(d && (chopsOf(d)&(1<<i))) out.push({idx:ix,dev:d}); }); return out; }
+
   function flowTaps(m){ var id=flowTapId(m); return id?Math.round(pv(id,0)*2047):0; }
   function flowSetTap(m,i,direct){ var id=flowTapId(m); if(!id||!(i>=0&&i<NSRC)) return; var b=flowTaps(m), k=1<<i, nb=direct?(b|k):(b&~k); if(nb!==b) setP(id,nb/2047); }
   function flowInline(m){ var id=flowInlId(m); return id?pv(id,0)>0.5:false; }
@@ -43232,6 +43315,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     oscList().forEach(function(o){ if(!oscDev(o)) return; var on=oscOn(o), n=nodeByKey('osc-'+o); if(on&&!n){ if(adoptOsc(o)) changed=true; } else if(!on&&n){ returnOsc(n); changed=true; } });
     [1,2].forEach(function(i){ if(!noiseEl(i)) return; var on=noiseOn(i), n=nodeByKey(noiseKey(i)); if(on&&!n){ if(adoptNoise(i)) changed=true; } else if(!on&&n){ returnNoise(n); changed=true; } });   /* tp42 */
     var tOn=toggleOn('tape-toggle'), tn=nodeByKey('tape'); if(tOn&&!tn){ if(adoptTape()) changed=true; } else if(!tOn&&tn){ returnTape(tn); changed=true; }
+    if(layout.samp) SAMPL.forEach(function(L){ if(layout.samp[L]&&!nodeByKey(sampKey(L))){ if(adoptSamp(L)) changed=true; } });   /* tp56 — a Sampler the patch put here comes back */
+    nodes.forEach(function(n){ if(n.kind==='samp') sampPaint(n); });
+    sampMeters();
     var ch=window.__flowChain?window.__flowChain():[]; ch.forEach(function(m){ if(!nodeByKey('flow-'+m)){ if(adoptFlowNode(m)) changed=true; } });
     nodes.slice().forEach(function(n){ if(n.kind==='flow'&&ch.indexOf(n.sub)<0){ returnFlowNode(n); changed=true; } });   /* tp20 — presence follows the chain, every instance */
     if(changed){ var o=nodeByKey('out'); if(o) o.wrap.style.zIndex=++zTop; drawMini(); } return changed; }
@@ -43256,6 +43342,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
        FxChainTopology::build runs it: a source ENTERS at the first slot routed to it; a slot eats every
        unconsumed upstream slot that shares a source; whatever nothing eats goes to Out. Every cable below is
        read off that, so the canvas can no longer disagree with the audio. */
+    /* tp56 — THE SAMPLERS' CABLES. A chop layer is NOT in the oscillator source space the slot
+       topology below sorts (that space is the synth's, 21 sources wide, and a chop has no seat in
+       it) — its cable is exactly what the engine does with it: into every device whose _CHOPS bit
+       it has lit, and to Out when nothing claims it, which is the Chop page's own mixer path. */
+    nodes.filter(function(n){ return n.kind==='samp'; }).forEach(function(sn){
+      var claims=chopClaims(sn.sub);
+      if(!claims.length){ add(sn,'out',0,outN,'in',0,'a',{chopDry:sn.sub},true); return; }
+      claims.forEach(function(c){ var dn=nodeByKey('fx-'+c.dev.core+'-'+c.dev.inst);
+        if(dn) add(sn,'out',0,dn,'in',0,'a',{chop:{dev:c.idx,L:sn.sub}}); }); });
     var ins=[]; var tp=nodeByKey('tape'), tl=nodeByKey('tapeloop'); if(tp) ins.push(tp); if(tl&&!deckActive()) ins.push(tl);   /* tp43 — a deck in the chain is a slot, not a fixture */
     for(var ii=0;ii<ins.length;ii++) add(ins[ii],'out',0,ii+1<ins.length?ins[ii+1]:outN,'in',0,'a',null,true);
     var dryHead=ins.length?ins[0]:outN;
@@ -43349,7 +43444,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function layoutIn(el,root){ var x=0,y=0,e=el; while(e&&e!==root){ x+=e.offsetLeft; y+=e.offsetTop; e=e.offsetParent; }
     var z=zoomIn(el,root); return {x:x*z,y:y*z,w:el.offsetWidth*z,h:el.offsetHeight*z}; }   /* layout offsets: a transform in flight does not touch them */
   function clearVizStyle(v){ try{ v.style.removeProperty('--vz'); v.style.width=''; v.style.height=''; v.style.minHeight=''; v.style.maxHeight=''; v.style.flex=''; }catch(e){} }
-  function vizFit(n){ if(!n.viz||n.kind==='midi'||n.kind==='out'||n.kind==='rnd'||(n.kind==='flow'&&!n.ext)) return; var v=n.viz; unclip(n);
+  function vizFit(n){ if(!n.viz||n.kind==='midi'||n.kind==='out'||n.kind==='rnd'||n.kind==='samp'||(n.kind==='flow'&&!n.ext)) return;   /* tp56 — a Sampler module is DRAWN at its node's size; there is nothing to scale */ var v=n.viz; unclip(n);
     try{ var pad=10, W=n.w-2*pad, H=n.h-2*pad;
       if(n.kind==='tapeloop'){ H=Math.min(H,Math.round(W*0.42)); reelSize(W,H); }
       else if(n.kind==='tape'){ var AW=360, AH=230, sc=Math.min(W/AW,H/AH); v.style.width=AW+'px'; v.style.height=AH+'px'; window.__tpTapeSize=[AW,AH];
@@ -43413,6 +43508,24 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       if(a.kind==='env'){ var en=window.__envCurNum?window.__envCurNum():1; if(window.__tiAddRoute) window.__tiAddRoute(en||1,0,mp.dest); return true; } return false; }
     if(t==='n'){ if(b.kind==='flow'){ var ch=window.__flowChain?window.__flowChain():[]; if(ch.indexOf(b.sub)<0){ ch.push(b.sub); window.__flowSetChain&&window.__flowSetChain(ch); } return true; } if(b.kind==='osc'){ toast('Every oscillator already takes the notes'); return true; } return false; }
     if(t==='a'){
+      /* ── tp56 — A SAMPLER'S CABLE ──────────────────────────────────────────────────────────
+         Into an EFFECT: that device's _CHOPS bit lights, the layer leaves the dry mix, and its
+         audio arrives at that device's input alongside whatever oscillators it already carries.
+         Into OUT: every claim is dropped and the layer goes back to the Chop page's own mixer.
+         Anywhere else is honest about why not — the synth's main filter and the note-side cards
+         are the SYNTH's, and a chop layer has no source slot in them. */
+      if(a.kind==='samp'){
+        if(b.kind==='fx'){ var dvS=(window.__fxrDevs?window.__fxrDevs():[])[b.idx];
+          if(!dvS) return false;
+          if(chopSetSrc(dvS,a.sub,true)) toast(nodeName(a)+' \u2192 '+nodeName(b));
+          else toast(nodeName(a)+' already feeds '+nodeName(b));
+          return true; }
+        if(b.kind==='out'){ var claimsS=chopClaims(a.sub);
+          if(!claimsS.length){ toast('It already reaches Out'); return true; }
+          claimsS.forEach(function(c){ chopSetSrc(c.dev,a.sub,false); });
+          toast(nodeName(a)+' \u2192 Out'); return true; }
+        toast(nodeName(a)+' is a chop layer — cable it into an effect, or to Out');
+        return true; }
       if(b.kind==='filter'&&a.kind==='osc'){ setP(OX(a.sub)+'F'+curFilterSlot()+'MIX',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} return true; }
       if(b.kind==='filter'&&a.kind==='noise'){ setP('SYN_FILTER'+curFilterSlot()+'_SRC_NOISE',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} toast(nodeName(a)+' → the filter (both noises share the filter\'s noise pill)'); return true; }   /* tp42 */
       if(b.kind==='fx'){ var oscIdx=[], direct=false;
@@ -43477,6 +43590,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else if(e.frts){ e.frts.forEach(function(r){ var fi4=flowSrcIds(r.m); seedOn(fi4); track(fi4,function(){}); flowSetSrc(r.m,r.osc,0); flowSetTap(r.m,r.osc,false); }); }
     else if(e.frtm){ var fi5=flowSrcIds(e.frtm.m); seedOn(fi5); track(fi5,function(){}); e.frtm.srcs.forEach(function(i){ flowSetSrc(e.frtm.m,i,0); }); }
     else if(e.finl){ setFlowInline(e.finl.m,false); if(!quiet) toast(flowLabel(e.finl.m)+' runs after the rack again'); }
+    else if(e.chop){ var dvC=(window.__fxrDevs?window.__fxrDevs():[])[e.chop.dev]; if(dvC) chopSetSrc(dvC,e.chop.L,false); }   /* tp56 */
     else if(e.dck){ deckSetSrc(e.dck.osc,false); }   /* tp43 */
     else if(e.dckm){ e.dckm.srcs.forEach(function(i){ deckSetSrc(i,false); }); }
     else
@@ -44190,6 +44304,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else if(n.kind==='osc'){ if(nodes.filter(function(x){return x.kind==='osc';}).length<=1){ toast('The last oscillator stays'); return; } setOscOn(n.sub,false); }
     else if(n.kind==='noise'){ setNoiseOn(n.inst||1,false); }   /* tp42 */
     else if(n.kind==='voice'){ layout.voice=0; saveLayout(); returnVoice(n); commit(); soon(); return; }   /* tp43 */
+    else if(n.kind==='samp'){ chopClaims(n.sub).forEach(function(c){ chopSetSrc(c.dev,n.sub,false); });   /* tp56 — taking it off the canvas gives the layer back to the Chop page's mixer */
+      returnSamp(n); commit(); soon(); return; }
     else if(n.kind==='tape'){ setToggle('tape-toggle',false); }
     else if(n.kind==='tapeloop'){ setToggle('loop-toggle',false); }
     else if(n.kind==='flow'){ var ch=window.__flowChain?window.__flowChain():[]; window.__flowSetChain&&window.__flowSetChain(ch.filter(function(m){return m!==n.sub;})); }
@@ -44274,10 +44390,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(a==='modulation') return rollRack('mod');
     generate(); }
   /* the add browser — two panes, names only: All · Oscillators · Filters · Flow · Tape · Effects */
-  var CATS=['All','Oscillators','Filters','Flow','Tape','Effects','Utility'];   /* tp43 — Utility: the voice column */
+  var CATS=['All','Oscillators','Chop','Filters','Flow','Tape','Effects','Utility'];   /* tp56 — the Chop samplers get their own shelf, next to the oscillators they are not */   /* tp43 — Utility: the voice column */
   function catalog(){ var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');
     oscList().forEach(function(o){ var on=!!nodeByKey('osc-'+o); it.push({k:'osc:'+o,n:'Oscillator '+oscLetter(o),cat:'Oscillators',dis:on,note:on?'Already on the canvas':null}); });
     { var n1=!!nodeByKey(noiseKey(1)), n2=!!nodeByKey(noiseKey(2)); it.push(n1&&n2?{k:'noise:2',n:'Noise',cat:'Oscillators',dis:true,note:'Both noises are on the canvas'}:{k:n1?'noise:2':'noise:1',n:'Noise',cat:'Oscillators',dis:false,note:n1?'A second noise (Noise 2)':null}); }   /* tp49 — ONE entry (Max: "why put Noise 2 when we can just duplicate the same Noise"): the first add is Noise, the next is Noise 2 on the canvas */   /* tp42 — the noise modules */
+    SAMPL.forEach(function(L){ var on=!!nodeByKey(sampKey(L));
+      it.push({k:'samp:'+L,n:'Sampler '+L.toUpperCase(),cat:'Chop',dis:on,note:on?'Already on the canvas':'Chop layer '+L.toUpperCase()}); });   /* tp56 */
     it.push({k:'flt',n:'Filter',cat:'Filters'});   /* tp9 — another filter = the rack's Filter card (the whole roster), as many as its pool holds */
     { var vOn=!!nodeByKey('voice'); it.push({k:'voice',n:'Voices',cat:'Utility',dis:vOn,note:vOn?'Already on the canvas':null}); }   /* tp43 — Max: "add the voice menu back … there's a couple of things we can drag from there" */
     FLOWS.forEach(function(m){ var mx=FLOW_INST_MAX[m]||1, free=null; for(var n=1;n<=mx;n++){ var key=n>1?m+n:m; if(!nodeByKey('flow-'+key)){ free=key; break; } }
@@ -44300,6 +44418,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if((m=/^osc:(.+)$/.exec(k))){ setOscOn(m[1],true); n=adoptOsc(m[1],at); if(!n){ toast('That oscillator is not here'); closeMenus(); return; }
       /* tp41 — a NEW oscillator goes to Out and nowhere else: no flow card on the canvas eats it by default */
       var si6=srcIdx(m[1]); if(si6>=0) (window.__flowChain?window.__flowChain():[]).forEach(function(fm){ var fk6=fKind(fm); if(fk6!=='chop'&&fk6!=='glitch') return; var id6=flowSrcId(fm,si6); if(!id6) return; seedOn([id6]); track([id6],function(){}); flowSetSrc(fm,si6,0); }); }
+    else if((m=/^samp:([a-d])$/.exec(k))){ n=adoptSamp(m[1],at); if(!n){ toast('That sampler is already on the canvas'); closeMenus(); return; }
+      /* tp41's law, applied to a chop: it arrives routed to NOTHING but Out — the Chop page's own
+         mixer is what it has always been, and a cable is the only thing that changes that. */
+      sampMeters(); if(!addCtx) toast('Sampler '+String(m[1]).toUpperCase()+' is on the canvas — cable it into an effect'); }
     else if((m=/^noise:([12])$/.exec(k))){ var ni=+m[1]; setNoiseOn(ni,true); n=adoptNoise(ni,at); if(!n){ toast('That noise is not here'); closeMenus(); return; }
       var sn=srcIdx(ni===2?'n2':'n'); (window.__flowChain?window.__flowChain():[]).forEach(function(fm){ var fk7=fKind(fm); if(fk7!=='chop'&&fk7!=='glitch') return; var id7=flowSrcId(fm,sn); if(!id7) return; seedOn([id7]); track([id7],function(){}); flowSetSrc(fm,sn,0); }); }   /* tp42 — a new noise goes to Out and nowhere else */
     else if((m=/^flow:(.+)$/.exec(k))){ var ch=window.__flowChain?window.__flowChain():[]; if(ch.indexOf(m[1])<0){ ch.push(m[1]); window.__flowSetChain&&window.__flowSetChain(ch); } n=adoptFlowNode(m[1],at);

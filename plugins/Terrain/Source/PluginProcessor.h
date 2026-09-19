@@ -3192,6 +3192,16 @@ private:
     //  upstream device eats that output and never taps the oscillator at all.
     std::atomic<float>* poolTapRef_[(size_t) kPoolSendCount] {};
     std::atomic<float>* hallTapRef_ = nullptr; std::atomic<float>* dlyTapRef_ = nullptr; std::atomic<float>* dstTapRef_ = nullptr;
+    // ── tp56 — THE CHOP SAMPLERS ON THE CANVAS ──────────────────────────────────────────────────
+    //  <device>_CHOPS, a 4-bit mask: bit L = chop layer L (0=A..3=D) feeds this device's send bus.
+    //  Resolved in cacheTapRefs alongside _TAPS, read once per block in the same place.
+    std::atomic<float>* poolChopRef_[(size_t) kPoolSendCount] {};
+    std::atomic<float>* hallChopRef_ = nullptr; std::atomic<float>* dlyChopRef_ = nullptr; std::atomic<float>* dstChopRef_ = nullptr;
+    unsigned poolChopMask_[(size_t) kPoolSendCount] {};   // per block, unpacked from the params above
+    unsigned hallChopMask_ = 0, dlyChopMask_ = 0, dstChopMask_ = 0;
+    unsigned chopRoutedMask_ = 0;                // bit L = layer L is cabled somewhere, so it leaves the dry mix
+    bool     chopLive_[4] { false, false, false, false };   // this block: layer L rendered and is audible
+    float    chopGainL_[4] { 0, 0, 0, 0 }, chopGainR_[4] { 0, 0, 0, 0 };   // its mixer gain + equal-power pan
     std::array<float, (size_t) kPoolSendCount * 6> poolTapG_ {}, poolTapGB_ {}, lastPoolTapG_ {}, lastPoolTapGB_ {};
     float hallTapG_[6] {}, dlyTapG_[6] {}, dstTapG_[6] {}, hallTapGB_[6] {}, dlyTapGB_[6] {}, dstTapGB_[6] {};
     float lastHallTapG_[6] {}, lastDlyTapG_[6] {}, lastDstTapG_[6] {}, lastHallTapGB_[6] {}, lastDlyTapGB_[6] {}, lastDstTapGB_[6] {};

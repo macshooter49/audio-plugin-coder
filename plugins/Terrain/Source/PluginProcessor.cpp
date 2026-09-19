@@ -7431,6 +7431,41 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                 juce::ParameterID { "FLOW_CHAIN_INST_" + juce::String (i), 1 }, "Flow Chain " + juce::String (i) + " Instance",
                 juce::StringArray { "1", "2", "3", "4" }, 0));
     }
+
+    // ══ tp56 — THE CHOP SAMPLERS ON THE CANVAS ═══════════════════════════════════════════════════
+    //  Max: "these aren't the sample oscillator engine, these are sample CHOPPED engines" — Sampler
+    //  A/B/C/D as real modules on the Patcher, routable into effects / filter / EQ / tape / granular.
+    //
+    //  ONE PARAMETER PER DEVICE, not one per (layer, device): <device>_CHOPS is a 4-bit mask, bit L =
+    //  chop layer L (0=A .. 3=D) feeds that device's send bus. 0 everywhere is the default, and 0
+    //  means the Chop page's law — the layer sums into the master exactly as it always has — so an
+    //  untouched patch is BIT-IDENTICAL (tp41's rule, and the reason this is safe to ship).
+    //
+    //  🔑 DECLARED LAST, ON PURPOSE. Every other parameter's index is unchanged by this block, so a
+    //  host project automating an existing parameter by index still points at the same control.
+    {
+        auto CH = [&layoutReal] (const juce::String& id, const juce::String& nm)
+        { layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id + "_CHOPS", 1 },
+                                                                     nm + " Chop Sources", 0, 15, 0)); };
+        static const std::pair<const char*, const char*> kCKinds[] = {
+            { "SYN_RVB", "Reverb" }, { "SYN_DLY", "Delay" }, { "SYN_DST", "Distortion" }, { "SYN_GRN", "Granular" },
+            { "SYN_TPE", "Tape" }, { "SYN_FLT", "Filter" }, { "SYN_CHO", "Chorus" }, { "SYN_FLA", "Flanger" },
+            { "SYN_PHA", "Phaser" }, { "SYN_EQZ", "Equalizer" }, { "SYN_WID", "Widen" }, { "SYN_CMP", "Compress" },
+            { "SYN_OTT", "OTT" }, { "SYN_BOD", "Bode" }, { "SYN_UTL", "Utility" }, { "SYN_SPL", "Splitter" } };
+        for (const auto& kd : kCKinds)
+            for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+                CH (juce::String (kd.first) + (i == 0 ? juce::String() : juce::String (i + 1)),
+                    juce::String (kd.second) + (i == 0 ? juce::String() : " " + juce::String (i + 1)));
+        CH ("SYN_DCK", "Deck");
+        // The audio FLOW cards are send-bus devices like any other — uniform map, no holes, no
+        // special case for a jassert to trip over later.
+        for (int i = 0; i < wc::kFlowInstances; ++i)
+        {
+            const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+            CH ("FLOW_CHOP" + nn, "Flow Chop"    + (i == 0 ? juce::String() : " " + juce::String (i + 1)));
+            CH ("FLOW_GLI"  + nn, "Flow Glitch"  + (i == 0 ? juce::String() : " " + juce::String (i + 1)));
+        }
+    }
     return layoutReal;
 }
 
@@ -8336,6 +8371,26 @@ void TerrainAudioProcessor::cacheTapRefs()
     outCableRefN2_ = R ("SYN_NOISE2_OUT");
     noise2OnRef_   = R ("SYN_NOISE2_ON");
     for (int q = 0; q < kPoolSendCount; ++q) jassert (poolN2Ref_[(size_t) q] != nullptr);
+
+    // ── tp56 — the same table again, for the CHOP SAMPLERS' 4-bit mask per device ──────────────
+    hallChopRef_ = R ("SYN_RVB_CHOPS"); dlyChopRef_ = R ("SYN_DLY_CHOPS"); dstChopRef_ = R ("SYN_DST_CHOPS");
+    for (int e = 0; e < kFxExtra; ++e)
+    {
+        poolChopRef_[(size_t) e]                  = R ("SYN_DLY" + juce::String (e + 2) + "_CHOPS");
+        poolChopRef_[(size_t) (kFxExtra + e)]     = R ("SYN_DST" + juce::String (e + 2) + "_CHOPS");
+        poolChopRef_[(size_t) (2 * kFxExtra + e)] = R ("SYN_RVB" + juce::String (e + 2) + "_CHOPS");
+    }
+    for (const auto& [base, pfx] : kAll)
+        for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+            poolChopRef_[(size_t) (base + i)] = R (juce::String (pfx) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_CHOPS");
+    for (int i = 0; i < wc::kFlowInstances; ++i)
+    {
+        const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+        poolChopRef_[(size_t) (kChpSendBase + i)] = R ("FLOW_CHOP" + nn + "_CHOPS");
+        poolChopRef_[(size_t) (kGliSendBase + i)] = R ("FLOW_GLI"  + nn + "_CHOPS");
+    }
+    poolChopRef_[(size_t) kDckSendBase] = R ("SYN_DCK_CHOPS");
+    for (int q = 0; q < kPoolSendCount; ++q) jassert (poolChopRef_[(size_t) q] != nullptr);
 }
 
 void TerrainAudioProcessor::cacheDeckParams()   // tp43
@@ -10486,6 +10541,24 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     }
 
     TI_PROF ("sampler");
+    // ══ tp56 — THE CHOP SAMPLERS' CABLES, RESOLVED ═══════════════════════════════════════════
+    //  Read HERE and not with the tp41 taps further down, because the very first thing the mask
+    //  decides is whether a layer still sums into the master — and that happens in the loop just
+    //  below, long before the send buses exist. A routed layer LEAVES the dry mix and comes back
+    //  through whatever device claimed it; that is tp41's law for an oscillator, applied to a chop.
+    //  Every mask defaults to 0, and 0 is the Chop page's own law, so an untouched patch is
+    //  bit-identical — nothing below this line runs unless a cable exists.
+    {
+        auto bits4 = [] (std::atomic<float>* r) noexcept -> unsigned
+        { return r != nullptr ? (unsigned) juce::jlimit (0, 15, (int) std::lround (r->load())) : 0u; };
+        unsigned any = 0u;
+        hallChopMask_ = bits4 (hallChopRef_); dlyChopMask_ = bits4 (dlyChopRef_); dstChopMask_ = bits4 (dstChopRef_);
+        any |= hallChopMask_ | dlyChopMask_ | dstChopMask_;
+        for (int q = 0; q < kPoolSendCount; ++q) { poolChopMask_[(size_t) q] = bits4 (poolChopRef_[(size_t) q]); any |= poolChopMask_[(size_t) q]; }
+        chopRoutedMask_ = any;
+        for (int L = 0; L < 4; ++L) { chopLive_[L] = false; chopGainL_[L] = 0.0f; chopGainR_[L] = 0.0f; }
+    }
+
     // ── Mark 2 task 4 / task 9: render each populated layer into its own scratch
     // buffer, then sum (with vol/mute/solo) into master `buffer`.
     // Task 9 complete: each layer now receives its own per-layer SliceContext.
@@ -10610,7 +10683,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             // Only AUDIBLE layers contribute to the master mix. Muted / solo-
             // excluded layers still rendered above (so their voices release),
             // they just don't sum here.
-            if (audible)
+            // tp56 — …and a layer with a CABLE leaves the dry mix entirely: its audio is handed to
+            // the devices that claimed it further down, and adding it here too would play it twice.
+            // The mixer's fader and pan still apply — they are upstream of the routing, the way the
+            // synth page's level is upstream of an oscillator's sends.
+            const bool chopRouted = (chopRoutedMask_ & (1u << (unsigned) li)) != 0u;
+            if (audible && chopRouted)
+            {
+                chopLive_[li]  = true;
+                chopGainL_[li] = gL;
+                chopGainR_[li] = gR;
+            }
+            if (audible && ! chopRouted)
             {
                 buffer.addFrom (0, 0, scratch, 0, 0, numSamples, gL);
                 buffer.addFrom (1, 0, scratch, 1, 0, numSamples, gR);
@@ -12802,6 +12886,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             poolN2G_[(size_t) q] = on (poolN2Ref_[(size_t) q]);
             if (poolN2G_[(size_t) q] > 0.0f) poolRouteAny_[(size_t) q] = true;
         }
+        // tp56 — A CHOP CABLE ARMS THE SEND, exactly like a lit source pill does. Without this the
+        // device's bus is never allocated or cleared and the device itself never runs, so a chop
+        // cabled into a silent rack would simply vanish — routed out of the dry mix into nothing.
+        if (hallChopMask_ && hallPower_) hallRouteActive_ = true;
+        if (dlyChopMask_  && dlyPower_)  dlyRouteActive_  = true;
+        if (dstChopMask_  && dstPower_)  dstRouteActive_  = true;
+        for (int q = 0; q < kPoolSendCount; ++q)
+            if (poolChopMask_[(size_t) q]) poolRouteAny_[(size_t) q] = true;
     }
 
     pushFx3Params();     // fb413 — ONE setParams per instance per block, not per sample
@@ -13024,6 +13116,33 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     if (routedDryBuf_.getNumSamples() < numSamples)
         routedDryBuf_.setSize (2, numSamples, false, true, true);
     routedDryBuf_.clear (0, numSamples);
+
+    // ══ tp56 — THE CHOP SAMPLERS FEED THE RACK ═══════════════════════════════════════════════
+    //  Each routed layer's audio — its Chop-page fader and pan already applied — is added into
+    //  every device bus that claimed it. HERE and not earlier: the buses are cleared immediately
+    //  above, and the synth's voices write into them below, so a chop and an oscillator sharing a
+    //  device sum at that device's input exactly the way two oscillators do. Nothing in this block
+    //  runs on a patch with no chop cable.
+    if (chopRoutedMask_ != 0u)
+    {
+        auto feed = [&] (juce::AudioBuffer<float>& dst, unsigned mask) noexcept
+        {
+            if (mask == 0u || dst.getNumSamples() < numSamples || dst.getNumChannels() < 2) return;
+            for (int L = 0; L < 4; ++L)
+            {
+                if (! chopLive_[L] || (mask & (1u << (unsigned) L)) == 0u) continue;
+                const auto& src = layerScratch[(size_t) L];
+                if (src.getNumSamples() < numSamples || src.getNumChannels() < 2) continue;
+                dst.addFrom (0, 0, src, 0, 0, numSamples, chopGainL_[L]);
+                dst.addFrom (1, 0, src, 1, 0, numSamples, chopGainR_[L]);
+            }
+        };
+        if (hallRouteActive_) feed (reverbSendBuf_,     hallChopMask_);
+        if (dlyRouteActive_)  feed (delaySendBuf_,      dlyChopMask_);
+        if (dstRouteActive_)  feed (distortionSendBuf_, dstChopMask_);
+        for (int q = 0; q < kPoolSendCount; ++q)
+            if (poolRouteAny_[(size_t) q]) feed (poolSendBuf_[(size_t) q], poolChopMask_[(size_t) q]);
+    }
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
