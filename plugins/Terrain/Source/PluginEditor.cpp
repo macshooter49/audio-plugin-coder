@@ -8905,8 +8905,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     display: flex; align-items: center; justify-content: center;
     border-radius: 3px;
     font: 700 9px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-    color: #A78BFA;
-    background: rgba(20,18,32,0.55);
+    /* tp53 — Max: "a stretched chop's time-mode letter should be transparent white." It was solid #A78BFA — the one
+       purple glyph sitting on a purple-bordered stretched body, so it read as a sticker rather than a mark on the
+       chop. Thin white, the house ink. The dark chip stays (a letter over the waveform needs a floor) but it is
+       quieter, and the hover is white-tinted now instead of purple-on-purple. */
+    color: rgba(255,255,255,0.72);
+    background: rgba(20,18,32,0.45);
     backdrop-filter: blur(4px);
     cursor: pointer;
     user-select: none;
@@ -8914,8 +8918,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     transition: background 160ms ease, color 160ms ease, transform 160ms ease;
   }
   .ti-slice-warp-letter:hover {
-    background: rgba(139,92,246,0.35);
-    color: white;
+    background: rgba(255,255,255,0.14);
+    color: #FFFFFF;
     transform: scale(1.08);
   }
   /* Stretched chop body — subtle inset purple border so visual stretch
@@ -8976,22 +8980,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   }
   #ti-chop-backdrop.open { opacity: 1; pointer-events: auto; }
 
+  /* tp53 — THE HOUSE GLASS, not a paper index card. Max: "the chop right-click menu still needs the house-glass rebuild."
+     These four lines are .tpb-panel's own (the two-pane browser, fb166 — the house component), copied verbatim so this
+     surface and every other menu in the plugin are ONE material: the same tint, the same 20px blur + 1.4 saturate, the
+     same hairline, the same 12px radius, the same drop shadow with the 1px inner light on top. The index-card
+     hole-punch and its ruled paper lines are GONE — they were the one surface in Terrain pretending to be an object. */
   #ti-chop-panel {
     position: fixed; z-index: 4001;
     left: 50%; top: 50%;
     transform: translate(-50%, -50%) scale(0.97);
     transform-origin: center;
     width: 400px;
-    background:
-      radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,0.04), transparent 60%),
-      linear-gradient(180deg, #1f1a2e, #15121f);
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 4px;
-    box-shadow:
-      0 30px 60px rgba(0,0,0,0.55),
-      0 4px 10px rgba(0,0,0,0.35),
-      inset 0 1px 0 rgba(255,255,255,0.06);
-    padding: 18px 20px 16px;
+    background: rgba(22,20,34,0.72);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid rgba(255,255,255,0.11);
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+    padding: 16px 18px 14px;
     opacity: 0; pointer-events: none;
     transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
                 transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -9002,24 +9008,6 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   #ti-chop-panel.open {
     opacity: 1; pointer-events: auto;
     transform: translate(-50%, -50%) scale(1);
-  }
-  /* index-card hole-punch + ruled lines (decorative, behind content) */
-  #ti-chop-panel::before {
-    content: '';
-    position: absolute; top: 14px; left: 14px;
-    width: 5px; height: 5px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.45);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-  }
-  #ti-chop-panel::after {
-    content: '';
-    position: absolute; inset: 38px 14px 60px 14px; pointer-events: none;
-    background-image: repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 23px,
-      rgba(245,243,255,0.022) 24px);
   }
   /* Kill italics globally inside the panel — Terrain has no italic typography. */
   #ti-chop-panel em, #ti-chop-panel i { font-style: normal; }
@@ -9056,16 +9044,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   }
 
   /* mode pills row */
+  /* tp53 — the 18 px left gutter every row carried was the index card's ruled margin. The card is gone, so the
+     panel's own 18 px padding is the whole inset and every row starts on ONE left edge (Max's alignment law). */
   #ti-chop-panel .ov-modes {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-    margin-bottom: 14px; padding-left: 18px;
+    margin-bottom: 12px; padding-left: 0;
     position: relative; z-index: 1;
   }
   #ti-chop-panel .ov-mode {
     position: relative;
-    background: rgba(0,0,0,0.18);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 3px;
+    /* tp53 — THE FLOW TILE, the one pill the Chop page wears everywhere else: nothing filled, a thin white
+       outline, and SELECTED is a purple outline with white ink. No tinted fill, no glow. */
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 9px;
     /* Emblem-only buttons (label removed) — symmetric padding for a
 )TIHX") + juce::String (R"TIHX(       square-ish symbol cell rather than the tall portrait the labeled
        version had. */
@@ -9074,52 +9066,50 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     cursor: pointer; user-select: none;
     transition: all 160ms ease;
   }
-  #ti-chop-panel .ov-mode:hover {
-    background: rgba(255,255,255,0.04);
-    border-color: rgba(255,255,255,0.10);
-  }
+  #ti-chop-panel .ov-mode:hover { border-color: rgba(255,255,255,0.70); background: transparent; }
   #ti-chop-panel .ov-mode.active {
-    border-color: rgba(139,92,246,0.55);
-    background: rgba(139,92,246,0.10);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 14px rgba(139,92,246,0.18);
+    border-color: var(--purple-400, #b794ff);
+    background: transparent;
+    box-shadow: none;
   }
   #ti-chop-panel .ov-mode .emblem {
     display: grid; place-items: center;
     color: rgba(245,243,255,0.55); transition: color 160ms;
   }
   #ti-chop-panel .ov-mode:hover .emblem { color: rgba(245,243,255,0.85); }
-  #ti-chop-panel .ov-mode.active .emblem { color: #8b5cf6; }
+  #ti-chop-panel .ov-mode.active .emblem { color: #FFFFFF; }
 
   /* MOTION row — between mode emblems and ADSR, holds SCAN pill + RATE display */
+  /* tp53 — MOTION is a ROW now, not a lilac box. Max, on the Chop page: "no boxes or barriers." */
   #ti-chop-panel .motion-row {
     display: flex; align-items: center; gap: 10px;
-    padding: 6px 10px;
-    background: rgba(80, 60, 130, 0.18);
-    border: 1px solid rgba(140, 100, 220, 0.18);
-    border-radius: 8px;
-    margin: 0 0 14px 18px;
-    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    margin: 0 0 12px 0;
+    height: 22px;
     box-sizing: border-box;
     position: relative; z-index: 1;
   }
   #ti-chop-panel .motion-label {
-    font: 700 9px/1 -apple-system; letter-spacing: 1.5px;
-    color: rgba(245,243,255,0.55); text-transform: uppercase;
+    font: 500 9.5px/1 -apple-system; letter-spacing: .03em;
+    color: rgba(245,243,255,0.45); text-transform: none;
   }
   #ti-chop-panel .scan-pill {
     display: inline-flex; align-items: center;
     height: 18px; padding: 0 10px;
-    background: rgba(140, 100, 220, 0.28);
-    border: 1px solid rgba(168, 136, 255, 0.5);
-    border-radius: 10px;
-    font: 700 9px/1 -apple-system; letter-spacing: 1.5px; text-transform: uppercase;
+    background: transparent;
+    border: 1px solid var(--purple-400, #b794ff);
+    border-radius: 9px;
+    font: 500 9px/1 -apple-system; letter-spacing: .03em; text-transform: none;
     color: #fff; cursor: pointer; user-select: none;
-    transition: all 160ms ease;
+    transition: color 160ms ease, border-color 160ms ease;
   }
   #ti-chop-panel .scan-pill.off {
-    background: rgba(80, 60, 130, 0.12);
-    border-color: rgba(140, 100, 220, 0.2);
-    opacity: 0.55;
+    background: transparent;
+    border-color: rgba(255,255,255,0.45);
+    color: rgba(245,243,255,0.55);
+    opacity: 1;
   }
   #ti-chop-panel .rate-display {
     margin-left: auto; display: inline-flex; align-items: baseline; gap: 6px;
@@ -9127,7 +9117,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   }
   #ti-chop-panel .rate-display.dim { cursor: default; }
   #ti-chop-panel .rate-display .rate-label {
-    font: 700 9px/1 -apple-system; letter-spacing: 1.5px; text-transform: uppercase;
+    font: 500 9.5px/1 -apple-system; letter-spacing: .03em; text-transform: none;
     color: rgba(245,243,255,0.45);
   }
   #ti-chop-panel .rate-display .rate-value { color: rgba(245,243,255,0.92); font-weight: 600; }
@@ -9141,57 +9131,53 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     transition: color 200ms ease;
   }
 
-  /* ADSR envelope canvas — the centrepiece */
-  #ti-chop-panel .ov-env {
-    margin: 0 0 14px 18px;
-    height: 168px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent 70%);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 3px;
+  /* tp53 — THE ADSR: four house notch sliders with their numbers. Same furniture as the output trim (tp1) and the
+     Chop page's faders (tp52): a 2 px rail at .16 white, a WHITE fill, a 2x9 white bar. No purple, no glow, no box. */
+  #ti-chop-panel .ov-adsr {
+    margin: 0 0 13px 0;
+    display: flex; flex-direction: column; gap: 9px;
     position: relative; z-index: 1;
-    overflow: hidden;
   }
-  #ti-chop-panel .ov-env-svg {
-    position: absolute; inset: 14px 14px 12px 14px;
-    width: calc(100% - 28px); height: calc(100% - 26px);
-    pointer-events: none;
+  #ti-chop-panel .ov-ad-row { display: flex; align-items: center; gap: 10px; }
+  #ti-chop-panel .ov-ad-lab {
+    flex: none; width: 50px;
+    font: 500 9.5px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    letter-spacing: .03em; color: rgba(245,243,255,0.45);
   }
-  #ti-chop-panel .ov-env-fill { fill: rgba(139,92,246,0.12); stroke: none; }
-  #ti-chop-panel .ov-env-line {
-    fill: none; stroke: #8b5cf6; stroke-width: 1.6;
-    stroke-linejoin: round; stroke-linecap: round;
-    filter: drop-shadow(0 0 5px rgba(139,92,246,0.45));
+  #ti-chop-panel .ov-ad-track { position: relative; flex: 1; height: 16px; cursor: ew-resize; }
+  #ti-chop-panel .ov-ad-track::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    height: 2px; border-radius: 1px; background: rgba(255,255,255,0.16);
   }
-  /* draggable handles — solid filled purple, sit centered on the envelope line */
-  #ti-chop-panel .ov-env-handle {
-    position: absolute;
-    width: 9px; height: 9px; border-radius: 50%;
-    background: #8b5cf6;
-    border: none;
-    box-shadow: 0 0 7px rgba(139,92,246,0.55);
-    transform: translate(-50%, -50%);
-    cursor: grab; z-index: 2;
-    transition: box-shadow 140ms, transform 140ms;
+  #ti-chop-panel .ov-ad-fill {
+    position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    height: 2px; width: 0; border-radius: 1px; background: #FFFFFF;
   }
-  #ti-chop-panel .ov-env-handle:hover {
-    box-shadow: 0 0 12px rgba(139,92,246,0.85);
-    background: #a78bfa;
+  #ti-chop-panel .ov-ad-bar {
+    position: absolute; top: 50%; left: 0; width: 2px; height: 9px; border-radius: 1px;
+    background: #FFFFFF; transform: translate(-50%, -50%);
+    box-shadow: 0 0 4px rgba(255,255,255,0.35);
   }
-  #ti-chop-panel .ov-env-handle:active,
-  #ti-chop-panel .ov-env-handle.dragging { cursor: grabbing; }
+  #ti-chop-panel .ov-ad-row:hover .ov-ad-lab { color: rgba(245,243,255,0.80); }
+  #ti-chop-panel .ov-ad-val {
+    flex: none; width: 56px; text-align: right;
+    font: 500 10px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    font-variant-numeric: tabular-nums;
+    color: rgba(245,243,255,0.92);
+  }
 
   /* three emblem controls — Volume / Pitch / Stretch. No text labels. */
   #ti-chop-panel .ov-ctrls {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-    padding: 0 0 0 18px; margin-bottom: 14px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    padding: 0; margin-bottom: 12px;
     position: relative; z-index: 1;
   }
   #ti-chop-panel .ov-ctrl {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 10px;
-    background: rgba(0,0,0,0.22);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 3px;
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 9px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 9px;
     cursor: ns-resize;
     transition: border-color 140ms, background 140ms;
     /* min-width:0 + overflow:hidden = grid columns stay locked at 1fr no
@@ -9200,13 +9186,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     min-width: 0;
     overflow: hidden;
   }
-  #ti-chop-panel .ov-ctrl:hover {
-    background: rgba(0,0,0,0.34);
-    border-color: rgba(255,255,255,0.10);
-  }
+  #ti-chop-panel .ov-ctrl:hover { background: transparent; border-color: rgba(255,255,255,0.70); }
   #ti-chop-panel .ov-ctrl:hover .ov-emblem { animation-play-state: paused; }
   #ti-chop-panel .ov-ctrl .ov-emblem {
-    color: #8b5cf6; flex-shrink: 0;
+    color: rgba(245,243,255,0.55); flex-shrink: 0;   /* tp53 — ink, not a purple accent */
   }
   #ti-chop-panel .ov-ctrl .ov-val {
     font: 600 12px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
@@ -9265,74 +9248,48 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
      dim to ~35% and ignore clicks. INDEPENDENT on = chop detached, chips
      become interactive; user re-enables the engines they want. */
   #ti-chop-panel .ov-fx {
-    padding: 10px 0 0 18px; margin-bottom: 12px;
+    padding: 11px 0 0 0; margin-bottom: 11px;
     position: relative; z-index: 1;
     border-top: 1px solid var(--line, rgba(255,255,255,0.06));
   }
-  #ti-chop-panel .ov-fx-header {
-    display: flex; align-items: stretch;
-    margin-bottom: 10px;
-  }
-  /* INDEPENDENT pill — full-width row, same height as the VOL/PITCH/STRETCH knob pills above */
-  #ti-chop-panel .ov-indy {
-    flex: 1;
-    padding: 9px 10px;
-    display: flex; align-items: center; justify-content: center;
-    font: 700 9px/1 -apple-system; letter-spacing: 0.18em;
-    color: rgba(245,243,255,0.40); text-transform: uppercase;
-    background: rgba(0,0,0,0.22);
-    border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
-    cursor: pointer; user-select: none;
-    transition: all 160ms ease;
-  }
-  #ti-chop-panel .ov-indy:hover { background: rgba(255,255,255,0.04); color: rgba(245,243,255,0.92); }
-  #ti-chop-panel .ov-indy.on {
-    background: linear-gradient(135deg, #8b5cf6, #7C3AED);
-    color: white; border-color: #8b5cf6;
-    box-shadow: 0 0 12px rgba(139,92,246,0.40);
-  }
+  /* tp53 — the INDEPENDENT pill and its header row are gone; the chip grid IS the FX section. */
   /* 6 FX chips in a 3-column × 2-row grid */
   #ti-chop-panel .ov-fx-grid {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
   }
   #ti-chop-panel .ov-fx-chip {
-    padding: 7px 6px;
-    font: 700 9px/1 -apple-system; letter-spacing: 0.18em;
-    color: rgba(245,243,255,0.40); text-transform: uppercase;
-    background: rgba(0,0,0,0.18);
-    border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
+    padding: 6px 6px;
+    font: 500 9.5px/1 -apple-system; letter-spacing: 0.03em;
+    color: rgba(245,243,255,0.55); text-transform: none;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.45); border-radius: 9px;
     text-align: center; cursor: pointer; user-select: none;
     transition: all 160ms ease;
     white-space: nowrap; overflow: hidden;
   }
-  #ti-chop-panel .ov-fx-chip:hover {
-    background: rgba(255,255,255,0.04); color: rgba(245,243,255,0.92);
-    border-color: rgba(255,255,255,0.10);
-  }
+  #ti-chop-panel .ov-fx-chip:hover { background: transparent; color: rgba(245,243,255,0.92); border-color: rgba(255,255,255,0.70); }
   #ti-chop-panel .ov-fx-chip.on {
-    background: rgba(139,92,246,0.18);
-    color: rgba(245,243,255,0.92); border-color: rgba(139,92,246,0.55);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    background: transparent;
+    color: #FFFFFF; border-color: var(--purple-400, #b794ff);
+    box-shadow: none;
   }
   #ti-chop-panel .ov-fx-chip .sub {
-    color: #a78bfa; margin-left: 4px;
+    color: var(--purple-400, #b794ff); margin-left: 4px;
   }
-  /* Inheriting state: dim and disable the chip grid */
-  #ti-chop-panel .ov-fx.inheriting .ov-fx-grid { opacity: 0.30; pointer-events: none; }
 
   /* action row — small icon+label combos */
   #ti-chop-panel .ov-actions {
     display: flex; justify-content: space-between; align-items: center;
-    padding-left: 18px;
+    padding-left: 0;
     position: relative; z-index: 1;
   }
   #ti-chop-panel .ov-actions .group { display: flex; gap: 14px; }
   #ti-chop-panel .ov-act {
     display: flex; align-items: center; gap: 7px;
-    font: 700 9px/1 -apple-system; letter-spacing: 0.18em;
-    color: rgba(245,243,255,0.40);
+    font: 500 9.5px/1 -apple-system; letter-spacing: 0.03em; 
+    color: rgba(245,243,255,0.45);
     cursor: pointer; user-select: none;
-    text-transform: uppercase;
+    text-transform: none;
     transition: color 140ms;
   }
   #ti-chop-panel .ov-act:hover { color: rgba(245,243,255,0.92); }
@@ -9573,27 +9530,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       // MOTION row — SCAN on/off pill + RATE vertical-drag display.
       // Lives between the mode emblems and the ADSR canvas (Layout C).
       '<div class="motion-row">' +
-        '<span class="motion-label">MOTION</span>' +
-        '<span class="scan-pill off" id="scan-pill">SCAN OFF</span>' +
+        '<span class="motion-label">Motion</span>' +
+        '<span class="scan-pill off" id="scan-pill">Scan Off</span>' +
         '<span class="rate-display dim" id="rate-display" ' +
               'title="Drag vertically to set scan rate. Rates &lt; 1.0 drop pitch (varispeed character). ' +
                      'For pitch-locked slow scan, set warp mode to TONES with stretch ratio = 1 / rate ' +
                      '(e.g. rate 0.5 + stretch 2.0).">' +
-          '<span class="rate-label">RATE</span>' +
+          '<span class="rate-label">Rate</span>' +
           '<span class="rate-value" id="rate-value">1.00\xd7</span>' +
         '</span>' +
       '</div>' +
-      // ADSR envelope canvas: SVG path + 4 absolute-positioned handles.
-      // Handles carry no numeric tooltips — the curve shape IS the readout.
-      '<div class="ov-env" id="ti-env">' +
-        '<svg class="ov-env-svg" id="ti-env-svg" viewBox="0 0 332 142" preserveAspectRatio="none">' +
-          '<path class="ov-env-fill" id="ti-env-fill" d=""/>' +
-          '<path class="ov-env-line" id="ti-env-line" d=""/>' +
-        '</svg>' +
-        '<div class="ov-env-handle" data-h="A"></div>' +
-        '<div class="ov-env-handle" data-h="D"></div>' +
-        '<div class="ov-env-handle" data-h="S"></div>' +
-        '<div class="ov-env-handle" data-h="R"></div>' +
+      /* tp53 — THE ADSR IS FOUR SLIDERS AND FOUR NUMBERS (Max: "replace the ADSR graph with sliders / numbers"). The
+         168 px curve was pretty and unreadable: four dots on a line, no value anywhere, and the only way to learn what
+         12 ms looked like was to drag and listen. These are the HOUSE notch slider — a 2 px rail at .16 white, a white
+         fill, a 2x9 white bar — the same one the output trim and the Chop page's own faders wear, with the number on
+         the right in tabular figures. Double-click still resets, and Attack / Release still reset to INHERIT (-1). */
+      '<div class="ov-adsr" id="ti-env">' +
+        '<div class="ov-ad-row" data-h="A" title="Attack — drag; double-click inherits the global attack">' +
+          '<span class="ov-ad-lab">Attack</span><span class="ov-ad-track"><span class="ov-ad-fill"></span><span class="ov-ad-bar"></span></span><span class="ov-ad-val">0 ms</span>' +
+        '</div>' +
+        '<div class="ov-ad-row" data-h="D" title="Decay — drag; double-click = 0">' +
+          '<span class="ov-ad-lab">Decay</span><span class="ov-ad-track"><span class="ov-ad-fill"></span><span class="ov-ad-bar"></span></span><span class="ov-ad-val">0 ms</span>' +
+        '</div>' +
+        '<div class="ov-ad-row" data-h="S" title="Sustain — drag; double-click = 100%">' +
+          '<span class="ov-ad-lab">Sustain</span><span class="ov-ad-track"><span class="ov-ad-fill"></span><span class="ov-ad-bar"></span></span><span class="ov-ad-val">100%</span>' +
+        '</div>' +
+        '<div class="ov-ad-row" data-h="R" title="Release — drag; double-click inherits the global release">' +
+          '<span class="ov-ad-lab">Release</span><span class="ov-ad-track"><span class="ov-ad-fill"></span><span class="ov-ad-bar"></span></span><span class="ov-ad-val">0 ms</span>' +
+        '</div>' +
       '</div>' +
       // 3 emblem-knob controls (Volume / Pitch / Stretch) — no labels, glyph + value only.
       // Stretch is hidden when warp = none.
@@ -9636,20 +9600,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         '</div>' +
       '</div>' +
       // ─── FX section (Mark 2 — per-chop FX independence) ──────────────
-      // Header: small "FX" label + INDEPENDENT toggle pill + meta tag-line.
-      // Grid: 6 chips below — Grain / Tape (4-state) / Space / Delay / Eq / June.
-      // Grayed when INDEPENDENT is off (chop is inheriting the global chain).
+      // Grid: 6 chips — Grain / Tape (4-state) / Space / Delay / Eq / June.
+      /* tp53 — the INDEPENDENT pill is GONE, not hidden. tp52 hid it with CSS and a JS sweep, which left a row in the
+         DOM the section still read its state from — and a grid greyed out by a switch nobody could see. Touching any
+         chip arms independence for that chop now, so the grid is always live. */
       '<div class="ov-fx" id="ti-fx-section">' +
-        '<div class="ov-fx-header">' +
-          '<div class="ov-indy" id="ti-fx-indy">INDEPENDENT</div>' +
-        '</div>' +
         '<div class="ov-fx-grid">' +
-          '<div class="ov-fx-chip" data-fx="grain">GRAIN</div>' +
-          '<div class="ov-fx-chip" data-fx="tape" id="ti-fx-tape">TAPE</div>' +
-          '<div class="ov-fx-chip" data-fx="space">SPACE</div>' +
-          '<div class="ov-fx-chip" data-fx="delay">DELAY</div>' +
+          '<div class="ov-fx-chip" data-fx="grain">Grain</div>' +
+          '<div class="ov-fx-chip" data-fx="tape" id="ti-fx-tape">Tape</div>' +
+          '<div class="ov-fx-chip" data-fx="space">Space</div>' +
+          '<div class="ov-fx-chip" data-fx="delay">Delay</div>' +
           '<div class="ov-fx-chip" data-fx="eq">EQ</div>' +
-          '<div class="ov-fx-chip" data-fx="june">JUNE</div>' +
+          '<div class="ov-fx-chip" data-fx="june">June</div>' +
         '</div>' +
       '</div>' +
       // actions
@@ -9657,15 +9619,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         '<div class="group">' +
           '<div class="ov-act" data-act="rev">' +
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 L 4 9 L 9 4"/><path d="M4 9 H 16 A 4 4 0 0 1 20 13 V 20"/></svg>' +
-            'REVERSE' +
+            'Reverse' +
           '</div>' +
           '<div class="ov-act" data-act="resetPitch">' +
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 A 9 9 0 1 0 6 5"/><path d="M3 3 V 8 H 8"/></svg>' +
-            'RESET' +
+            'Reset' +
           '</div>' +
           '<div class="ov-act danger" data-act="del">' +
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 5 L 19 19 M 19 5 L 5 19"/></svg>' +
-)TIHX") + juce::String (R"TIHX(            'DELETE' +
+)TIHX") + juce::String (R"TIHX(            'Delete' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -11227,18 +11189,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   var GLOBAL_ATTACK_DEFAULT  = 5.0;
   var GLOBAL_RELEASE_DEFAULT = 800.0;
 
-  // ADSR canvas geometry (matches the SVG viewBox in the DOM).
-  var ENV_VB_W       = 332;
-  var ENV_VB_H       = 142;
-  var ENV_PEAK_Y     = 10;       // y at envelope peak (top)
-  var ENV_BASE_Y     = 132;      // y at envelope baseline
-  var ENV_ATTACK_W   = 60;       // px allocated to attack zone at maxAttackMs
-  var ENV_DECAY_W    = 60;       // px allocated to decay zone at maxDecayMs
-  var ENV_PLATEAU_W  = 80;       // fixed visual width of sustain plateau
-  var ENV_RELEASE_W  = 120;      // px allocated to release zone at maxReleaseMs
-  // SVG element is inset 14 14 12 14 inside the .ov-env container.
-  var ENV_INSET_L    = 14;
-  var ENV_INSET_T    = 14;
+  /* tp53 — the ADSR canvas geometry (viewBox, zone widths, the 14px inset) went with the curve. The four
+     sliders need one number each: a NORMALISED position, which OV_RANGES + normSkew/denormSkew already give. */
+  var ADSR_KEY = { A: 'attack', D: 'decay', S: 'sustain', R: 'release' };
 
   // Skew-aware normalize/denormalize so the envelope zones feel like the
   // global ATTACK/RELEASE knobs (most travel covers small ms).
@@ -11278,85 +11231,36 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     return null;
   }
 
-  // Compute the four envelope handle positions (in SVG viewBox coords) from
-  // the current chop's A / D / S / R values.
-  function ovEnvelopePoints (idx) {
-    var a  = ovValueFromState(idx, 'attack');
-    var d  = ovValueFromState(idx, 'decay');
-    var sv = ovValueFromState(idx, 'sustain');
-    var r  = ovValueFromState(idx, 'release');
-    var aT = normSkew(a, OV_RANGES.attack.min,  OV_RANGES.attack.max,  OV_RANGES.attack.skew);
-    var dT = normSkew(d, OV_RANGES.decay.min,   OV_RANGES.decay.max,   OV_RANGES.decay.skew);
-    var rT = normSkew(r, OV_RANGES.release.min, OV_RANGES.release.max, OV_RANGES.release.skew);
-    var aPx = aT * ENV_ATTACK_W;
-    var dPx = dT * ENV_DECAY_W;
-    var rPx = rT * ENV_RELEASE_W;
-    var sustainY = ENV_BASE_Y - sv * (ENV_BASE_Y - ENV_PEAK_Y);
-    var xA = aPx;
-    var xD = xA + dPx;
-    var xS = xD + ENV_PLATEAU_W * 0.5;
-    var xPlateauEnd = xD + ENV_PLATEAU_W;
-    var xR = xPlateauEnd + rPx;
-    return {
-      A: { x: xA, y: ENV_PEAK_Y, val: a, ms: a },
-      D: { x: xD, y: sustainY, val: d, ms: d },
-      S: { x: xS, y: sustainY, val: sv },
-      R: { x: xR, y: ENV_BASE_Y, val: r, ms: r },
-      sustainY: sustainY,
-      xPlateauEnd: xPlateauEnd
-    };
+  /* tp53 — ONE NUMBER PER ROW. A key's normalised position is exactly what the old curve used to place its dot
+     with: the SAME OV_RANGES skew, so a value that sat a third of the way along the attack zone sits a third of
+     the way along the attack slider. Sustain is linear 0..1 and always was. */
+  function ovAdsrT (key, v) {
+    if (key === 'sustain') return Math.max(0, Math.min(1, v));
+    var R = OV_RANGES[key];
+    return normSkew(v, R.min, R.max, R.skew);
+  }
+  function ovAdsrV (key, t) {
+    if (key === 'sustain') return Math.max(0, Math.min(1, t));
+    var R = OV_RANGES[key];
+    return denormSkew(t, R.min, R.max, R.skew);
   }
 
-  function fmtMs (ms)   { return Math.round(ms) + ' ms'; }
-  function fmtPct (v)   { return Math.round(v * 100) + '%'; }
-  function fmtPitch (v) { var s = Math.round(v); return (s >= 0 ? '+' : '') + s + ' st'; }
-  // Drop the unit suffix entirely — the accordion emblem already reads as
-  // "stretch", and the multiplication-sign glyph mojibake'd in the WebView
-  // (showed up as "A + macron + extras" at small sizes). Just the number.
-  function fmtStretch(v){ return v.toFixed(2); }
-
-  // Redraw envelope path + reposition the 4 handles + update tooltips.
+  // Repaint the four ADSR sliders (fill width, bar position, number).
   function ovRedrawEnvelope (idx) {
     var panel = document.getElementById('ti-chop-panel');
-    var env   = document.getElementById('ti-env');
-    if (!panel || !env) return;
-    var pts = ovEnvelopePoints(idx);
-
-    // Envelope path: baseline → attack peak → decay end → plateau → release → baseline
-    var d = 'M 0 ' + ENV_BASE_Y +
-            ' L ' + pts.A.x + ' ' + pts.A.y +
-            ' L ' + pts.D.x + ' ' + pts.D.y +
-            ' L ' + pts.xPlateauEnd + ' ' + pts.sustainY +
-            ' L ' + pts.R.x + ' ' + pts.R.y +
-            ' L ' + ENV_VB_W + ' ' + ENV_BASE_Y;
-    var dFill = d + ' Z';
-    document.getElementById('ti-env-line').setAttribute('d', d);
-    document.getElementById('ti-env-fill').setAttribute('d', dFill);
-
-    // Position handles using the ENV CONTAINER's HTML metrics — NOT the SVG's
-    // offset properties. SVGSVGElement does not expose HTMLElement.offsetLeft
-    // / offsetWidth / offsetHeight; in WKWebView they return 0/undefined,
-    // which collapsed every handle to the top-left corner.
-    //
-    // .ov-env has padding:0, so its clientWidth/clientHeight equal its
-    // content-box. CSS absolute-positioning measures style.left/top from the
-    // offsetParent's PADDING-BOX — the same origin the SVG's `inset: 14 14
-    // 12 14` uses. So both share the coordinate space: add the hardcoded
-    // inset (14 left / 14 top) to viewBox coords and the math just works,
-    // regardless of border width, regardless of any open-transition transform.
-    var contentW = env.clientWidth;
-    var contentH = env.clientHeight;
-    var svgW = contentW - 28;   // 14 left + 14 right inset
-    var svgH = contentH - 26;   // 14 top  + 12 bottom inset
-    var sx = svgW / ENV_VB_W;
-    var sy = svgH / ENV_VB_H;
-    var handles = panel.querySelectorAll('.ov-env-handle');
-    handles.forEach(function (h) {
-      var which = h.dataset.h;
-      var p = pts[which];
-      if (!p) return;
-      h.style.left = (14 + p.x * sx) + 'px';
-      h.style.top  = (14 + p.y * sy) + 'px';
+    if (!panel) return;
+    panel.querySelectorAll('.ov-ad-row').forEach(function (row) {
+      var key = ADSR_KEY[row.dataset.h];
+      if (!key) return;
+      var v = ovValueFromState(idx, key);
+      if (v == null) return;
+      var t  = ovAdsrT(key, v);
+      var fl = row.querySelector('.ov-ad-fill');
+      var br = row.querySelector('.ov-ad-bar');
+      var vl = row.querySelector('.ov-ad-val');
+      if (fl) fl.style.width = (t * 100) + '%';
+      if (br) br.style.left  = (t * 100) + '%';
+      if (vl) { var txt = (key === 'sustain') ? fmtPct(v) : fmtMs(v); if (vl.textContent !== txt) vl.textContent = txt; }
     });
   }
 
@@ -11420,87 +11324,45 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       });
     });
 
-    // ENV handle drag — each handle controls one envelope parameter.
-    // A: drag X = attack ms.  D: drag X = decay ms (relative to A).
-    // S: drag Y = sustain level.  R: drag X = release ms (after plateau).
-    panel.querySelectorAll('.ov-env-handle').forEach(function (h) {
-      var which = h.dataset.h;
-      h.addEventListener('mousedown', function (e) {
-        h.classList.add('dragging');
-        var svg = document.getElementById('ti-env-svg');
-        function move (ev) {
-          var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx)) return;
-          var s = getSliceData(idx); if (!s) return;
-          var rect = svg.getBoundingClientRect();
-          // convert pointer to SVG-viewBox space
-          var vx = (ev.clientX - rect.left) / Math.max(1, rect.width)  * ENV_VB_W;
-          var vy = (ev.clientY - rect.top ) / Math.max(1, rect.height) * ENV_VB_H;
-          if (which === 'A') {
-            var t = Math.max(0, Math.min(1, vx / ENV_ATTACK_W));
-            var ms = denormSkew(t, OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
-            s.attackMs = ms;
-            var fn = getNativeFn('setSliceAttackMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
-          } else if (which === 'D') {
-            // D's x = A.x + decayPx → decayPx = vx - aPx
-            var aT = normSkew(s.attackMs >= 0 ? s.attackMs : GLOBAL_ATTACK_DEFAULT,
-                              OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
-            var aPx = aT * ENV_ATTACK_W;
-            var dPx = Math.max(0, Math.min(ENV_DECAY_W, vx - aPx));
-            var dT = dPx / ENV_DECAY_W;
-            var ms = denormSkew(dT, OV_RANGES.decay.min, OV_RANGES.decay.max, OV_RANGES.decay.skew);
-            s.decayMs = ms;
-            var fn = getNativeFn('setSliceDecayMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
-          } else if (which === 'S') {
-            // map vy [PEAK..BASE] → level [1..0]
-            var lvl = 1.0 - (vy - ENV_PEAK_Y) / (ENV_BASE_Y - ENV_PEAK_Y);
-            lvl = Math.max(0, Math.min(1, lvl));
-            s.sustainLevel = lvl;
-            var fn = getNativeFn('setSliceSustain'); if (fn) { try { fn(idx, lvl); } catch (_) {} }
-          } else if (which === 'R') {
-            // R's x = plateauEnd + releasePx → releasePx = vx - plateauEnd
-            var aT2 = normSkew(s.attackMs >= 0 ? s.attackMs : GLOBAL_ATTACK_DEFAULT,
-                               OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
-            var dT2 = normSkew(s.decayMs || 0,
-                               OV_RANGES.decay.min, OV_RANGES.decay.max, OV_RANGES.decay.skew);
-            var plateauEnd = aT2 * ENV_ATTACK_W + dT2 * ENV_DECAY_W + ENV_PLATEAU_W;
-            var rPx = Math.max(0, Math.min(ENV_RELEASE_W, vx - plateauEnd));
-            var rT = rPx / ENV_RELEASE_W;
-            var ms = denormSkew(rT, OV_RANGES.release.min, OV_RANGES.release.max, OV_RANGES.release.skew);
-            s.releaseMs = ms;
-            var fn = getNativeFn('setSliceReleaseMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
-          }
-          ovRedrawEnvelope(idx);
-        }
-        function up () {
-          h.classList.remove('dragging');
-          document.removeEventListener('mousemove', move);
-          document.removeEventListener('mouseup', up);
-        }
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', up);
+    /* tp53 — ADSR SLIDER DRAG. One rail per parameter, so the arithmetic is one line instead of four zone
+       geometries: the pointer's fraction along the track IS the normalised value. Double-click resets — and
+       Attack / Release reset to the INHERIT sentinel (-1), exactly as the handles did. */
+    panel.querySelectorAll('.ov-ad-row').forEach(function (row) {
+      var which = row.dataset.h, key = ADSR_KEY[which];
+      var tr = row.querySelector('.ov-ad-track');
+      if (!tr || !key) return;
+      var NAT = { A: 'setSliceAttackMs', D: 'setSliceDecayMs', S: 'setSliceSustain', R: 'setSliceReleaseMs' };
+      var FLD = { A: 'attackMs', D: 'decayMs', S: 'sustainLevel', R: 'releaseMs' };
+      function write (idx, s2, v) {
+        s2[FLD[which]] = v;
+        var fn = getNativeFn(NAT[which]);
+        if (fn) { try { fn(idx, v); } catch (_) {} }
+      }
+      function setAt (ev) {
+        var idx = parseInt(panel.dataset.targetIdx, 10);
+        if (isNaN(idx)) return;
+        var s2 = getSliceData(idx); if (!s2) return;
+        var r = tr.getBoundingClientRect();
+        var t = Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width)));
+        write(idx, s2, ovAdsrV(key, t));
+        ovRedrawEnvelope(idx);
+      }
+      tr.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
         e.preventDefault(); e.stopPropagation();
+        setAt(e);
+        function mv (ev) { setAt(ev); }
+        function up () { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); }
+        document.addEventListener('mousemove', mv);
+        document.addEventListener('mouseup', up);
       });
-      // Double-click → reset this envelope parameter to its default.
-      h.addEventListener('dblclick', function (e) {
+      tr.addEventListener('dblclick', function (e) {
         e.preventDefault(); e.stopPropagation();
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
           if (isNaN(idx)) return;
-          var s = getSliceData(idx); if (!s) return;
-          if (which === 'A') {
-            s.attackMs = -1;
-            var fn = getNativeFn('setSliceAttackMs'); if (fn) { try { fn(idx, -1); } catch (_) {} }
-          } else if (which === 'D') {
-            s.decayMs = 0;
-            var fn = getNativeFn('setSliceDecayMs');  if (fn) { try { fn(idx, 0); } catch (_) {} }
-          } else if (which === 'S') {
-            s.sustainLevel = 1.0;
-            var fn = getNativeFn('setSliceSustain');  if (fn) { try { fn(idx, 1.0); } catch (_) {} }
-          } else if (which === 'R') {
-            s.releaseMs = -1;
-            var fn = getNativeFn('setSliceReleaseMs');if (fn) { try { fn(idx, -1); } catch (_) {} }
-          }
+          var s2 = getSliceData(idx); if (!s2) return;
+          write(idx, s2, (which === 'A' || which === 'R') ? -1 : (which === 'S' ? 1.0 : 0));   // A/R inherit the global; D = 0; S = full
           requestAnimationFrame(function () {
             try { if (getSliceData(idx)) ovRedrawEnvelope(idx); } catch (_) {}
           });
@@ -11646,25 +11508,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     });
 
     // ── FX section (Mark 2) ────────────────────────────────────────────
-    // INDEPENDENT pill: toggles fxIndependent. Per-FX state is preserved
-    // underneath, so flipping off → on restores the user's last selection.
-    var indyEl = document.getElementById('ti-fx-indy');
-    if (indyEl) {
-      indyEl.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        try {
-          var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx)) return;
-          if (idx === -1) return;  // FX independence not available in pitch mode
-          var sf = getSliceData(idx); if (!sf) return;
-          var on = !sf.fxIndependent;
-          sf.fxIndependent = on;
-          var fn = getNativeFn('setSliceFxIndependent');
-          if (fn) { try { fn(idx, on); } catch (_) {} }
-          ovRedrawFx(idx);
-        } catch (_) {}
-      });
-    }
+    /* tp53 — THE INDEPENDENT PILL IS GONE (Max). It was a door you had to open before the six chips would answer, and
+       every one of them already says what it does. Touching a chip ARMS independence for that chop — the flag still
+       exists and the DSP still reads it, it just no longer has a button of its own. */
     // FX chips: GRAIN/SPACE/DELAY/EQ/JUNE toggle a bool; TAPE cycles
     // OFF → STU → CAS → WIR → OFF on each click.
     panel.querySelectorAll('.ov-fx-chip').forEach(function (chip) {
@@ -11674,7 +11520,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           var idx = parseInt(panel.dataset.targetIdx, 10);
           if (isNaN(idx) || idx === -1) return;  // FX chips not in pitch mode
           var s = getSliceData(idx); if (!s) return;
-          if (!s.fxIndependent) return;   // chip is grayed in inherit mode
+          if (!s.fxIndependent) {   // tp53 — the first chip touched detaches this chop from the global chain
+            s.fxIndependent = true;
+            var fnI = getNativeFn('setSliceFxIndependent');
+            if (fnI) { try { fnI(idx, true); } catch (_) {} }
+          }
           var fx = chip.dataset.fx;
           if (fx === 'tape') {
             var next = ((Number(s.fxTapeMachine) || 0) + 1) % 4;
@@ -11773,24 +11623,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     var s = getSliceData(idx);
     if (!s) return;
 
-    var indyOn = !!s.fxIndependent;
-    section.classList.toggle('inheriting', !indyOn);
-
-    var indyEl = document.getElementById('ti-fx-indy');
-    if (indyEl) indyEl.classList.toggle('on', indyOn);
-
+    /* tp53 — no 'inheriting' dim: with the pill gone the grid is always live, and a chip arms independence itself. */
     // Per-chip on/off + TAPE sub-machine label.
-    var TAPE_NAMES = ['', 'STU', 'CAS', 'WIR'];
+    var TAPE_NAMES = ['', 'Stu', 'Cas', 'Wir'];   /* tp53 — the house case, like every other word on this page */
     panel.querySelectorAll('.ov-fx-chip').forEach(function (chip) {
       var fx = chip.dataset.fx;
       var on = false;
-      var label = chip.dataset.fx.toUpperCase();
       if (fx === 'tape') {
         var tm = Number(s.fxTapeMachine) || 0;
         on = tm > 0;
         chip.innerHTML = on
-            ? 'TAPE<span class="sub">·' + TAPE_NAMES[tm] + '</span>'
-            : 'TAPE';
+            ? 'Tape<span class="sub">\u00b7' + TAPE_NAMES[tm] + '</span>'
+            : 'Tape';
       } else {
         var key = 'fx' + fx.charAt(0).toUpperCase() + fx.slice(1);
         on = !!s[key];
@@ -11810,7 +11654,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     var on   = !!s.scanEnabled;
     var rate = (typeof s.scanRate === 'number' && s.scanRate > 0.05) ? s.scanRate : 1.0;
     scanPill.classList.toggle('off', !on);
-    scanPill.textContent = on ? 'SCAN ON' : 'SCAN OFF';
+    scanPill.textContent = on ? 'Scan On' : 'Scan Off';   /* tp53 — the house case */
     rateDisplay.classList.toggle('dim', !on);
     rateValue.textContent = rate.toFixed(2) + '\xd7';
   }
@@ -14309,10 +14153,8 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
 #ti-arm { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 11px; cursor: pointer; user-select: none; }
 #ti-arm .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.25); }
 #ti-arm.on .dot { background: var(--purple-400); box-shadow: 0 0 6px rgba(183,148,255,.8); }
-/* the chop's right-click panel: the house glass */
-#ti-chop-panel { background: rgba(24,24,38,0.92) !important; -webkit-backdrop-filter: blur(14px) saturate(1.3) !important; backdrop-filter: blur(14px) saturate(1.3) !important;
-  border: 1px solid rgba(255,255,255,0.10) !important; border-radius: 10px !important; box-shadow: 0 12px 34px rgba(0,0,0,.5) !important; }
-#ti-chop-panel::before, #ti-chop-panel::after { display: none !important; }
+/* the chop's right-click panel wears the house glass in its OWN rule now (tp53) — the overrides that used to patch it here
+   are gone, so there is one place that says what this surface is made of. */
 #ti-root-picker::before, #ti-root-picker::after, .ti-bpm-display::before, .ti-bpm-display::after, #ti-bottom-right-cluster::before, #ti-bottom-right-cluster::after,
 #ti-layer-pads::before, #ti-layer-pads::after, #ti-bottom-pills::before, #ti-bottom-pills::after, #ti-mode-toggle::before, #ti-play-mode-toggle::before { display: none !important; }
 #ti-root-picker, #ti-layer-pads, #ti-bottom-pills, #ti-mode-toggle, #ti-play-mode-toggle, #ti-bottom-right-cluster, .ti-bpm-display, #ti-lib { background: transparent !important; box-shadow: none !important; border: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }   /* a blur with no fill still reads as a dark box over the mesh */
@@ -14335,7 +14177,7 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
      to B, another to C and D, and it doesn't affect the other ABCD." The engine was already per-layer (loadSampleFromPath lands in
      layers[editingLayer]); this widget was not — one cursor and one label for all four, so the name lied about B and the arrows
      carried A's place into it. Every layer now keeps its own place in the library and its own name. */
-  var lib=null, libIdx=[-1,-1,-1,-1], libName=['','','',''];
+  var lib=null, libCats=null, libIdx=[-1,-1,-1,-1], libName=['','','',''];
   function curLayer(){ try{ var a=document.querySelector('#ti-layer-pads .ti-layer-pad.active'); var i=a?parseInt(a.getAttribute('data-layer-idx'),10):0; return (isFinite(i)&&i>=0&&i<4)?i:0; }catch(e){ return 0; } }
   /* A NAME IS ONLY DROPPED ON THE ENGINE'S WORD. The hero's has-sample class is false for a beat while a layer restores, and painting
      from it wiped the name of a layer that was merely mid-switch — a label that lies once stays lying. getLayerHasSample is asked
@@ -14346,13 +14188,44 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
   function libPaint(){ var nm=document.getElementById('ti-lib-name'); if(!nm) return; var L=curLayer();
     var t=libName[L]||'Sample Library'; if(nm.textContent!==t) nm.textContent=t;
     nm.title=(libName[L]?('Layer '+'ABCD'.charAt(L)+' \u00b7 '+libName[L]):'Sample library')+' \u2014 click to browse, arrows to step'; }
-  function libList(cb){ if(lib) return cb(lib); var f=nf('scanSampleFactory'); if(!f) return cb(lib=[]); try{ Promise.resolve(f()).then(function(js){ var o=null; try{ o=JSON.parse(js||'null'); }catch(e){} lib=[]; if(o&&o.cats){ Object.keys(o.cats).forEach(function(c){ (o.cats[c]||[]).forEach(function(file){ lib.push({cat:c,file:file,name:String(file).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '),path:(o.path||'')+'/'+c+'/'+file}); }); }); } cb(lib); }).catch(function(){ cb(lib=[]); }); }catch(e){ cb(lib=[]); } }
-  function libLoad(i){ if(!lib||!lib.length) return; var L=curLayer(); var n=((i%lib.length)+lib.length)%lib.length; libIdx[L]=n; var it=lib[n];
-    libName[L]=it.name; libAt[L]=Date.now(); var nm=document.getElementById('ti-lib-name'); if(nm) nm.textContent=it.name;   /* the name lands now; libPaint's empty-check would beat the decode */
-    var f=nf('loadSampleFromPath'); if(f){ try{ f(it.path); }catch(e){} } }
-  function libMenu(x,y){ var L=curLayer(); libList(function(list){ if(!window.__synShowMenu) return; var cats={}; list.forEach(function(it){ (cats[it.cat]=cats[it.cat]||[]).push(it); });
-      var rows=[{isHeader:true,label:'Sample Library \u00b7 Layer '+'ABCD'.charAt(L)}]; Object.keys(cats).forEach(function(c){ rows.push({label:c,badge:String(cats[c].length),onPick:function(){ var r2=[{isHeader:true,label:c+' \u00b7 Layer '+'ABCD'.charAt(L)}]; cats[c].forEach(function(it){ r2.push({label:it.name,isChecked:list.indexOf(it)===libIdx[L],onPick:function(){ libLoad(list.indexOf(it)); }}); }); window.__synShowMenu('',r2,x,y); }}); });
-      if(!Object.keys(cats).length) rows.push({label:'No factory samples found',isDisabled:true}); window.__synShowMenu('',rows,x,y); }); }
+  /* tp53 \u2014 THE LIBRARY *IS* THE SAMPLE BROWSER. Max: "the sample library should BE the SAMPLE / GRANULAR / RESYNTH browser,
+     not a menu of its own." It is now the very same component (openTwoPaneBrowser, fb74/fb166's two-pane glass) built from the
+     very same two sources in the very same order as openSampleBrowser \u2014 the factory library in catOrder, then each import
+     FOLDER as its own deletable category, then the loose Imports \u2014 so the chop's list and an oscillator's list are one list.
+     Only the DOOR differs: a pick calls loadSampleFromPath (the chop's per-layer native, tp50) instead of loadSampleByPath.
+     \u26a0\ufe0f The flat `lib` the \u2039 \u203a arrows walk is built from that SAME ordered list, so the arrows and the browser agree on
+     "next"; before tp53 the arrows knew only the factory. */
+  var LIBCATS=['Pad','Keys','Bell','Pluck','Synth','Lead','Bass','808','Chord','Accent','Atmosphere','Vocal','Guitar','Organ','Flute','Strings','Brass','Drums','FX','Misc','Textures'];   /* == openSampleBrowser's catOrder */
+  function libCatOrder(ks){ return ks.slice().sort(function(a,b){ var i=LIBCATS.indexOf(a), j=LIBCATS.indexOf(b); if(i<0)i=99; if(j<0)j=99; return (i-j)||a.localeCompare(b); }); }
+  function libPretty(f){ var s=String(f).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').trim(); return s||String(f); }
+  /* ONE walk, TWO shapes: `cats` for the browser, `lib` (flat, same order) for the arrows. */
+  function libList(cb){ if(lib) return cb(lib,libCats); var ff=nf('scanSampleFactory'), imf=nf('listSampleImports'), fact=null, imp=null, done=0;
+    function fin(){ if(++done<2) return; lib=[]; libCats=[];
+      if(fact&&fact.cats) libCatOrder(Object.keys(fact.cats)).forEach(function(c){ var items=(fact.cats[c]||[]).map(function(fn2){ var it={cat:c,name:libPretty(fn2),path:(fact.path||'')+'/'+c+'/'+fn2}; lib.push(it); return it; }); libCats.push({label:c,items:items}); });
+      imp=imp||{files:[],folders:[]};
+      (imp.folders||[]).forEach(function(fld){ var items=(fld.items||[]).map(function(it2){ var it={cat:fld.name,name:it2.name,path:it2.path}; lib.push(it); return it; }); libCats.push({label:fld.name,delKind:'folder',delPath:fld.path,items:items}); });
+      if((imp.files||[]).length){ var items=imp.files.map(function(it2){ var it={cat:'Imports',name:it2.name,path:it2.path}; lib.push(it); return it; }); libCats.push({label:'Imports',items:items}); }
+      cb(lib,libCats); }
+    if(ff){ try{ Promise.resolve(ff()).then(function(js){ try{ fact=JSON.parse(js); }catch(e){} fin(); }).catch(fin); }catch(e){ fin(); } } else fin();
+    if(imf){ try{ Promise.resolve(imf()).then(function(js){ try{ imp=JSON.parse(js); }catch(e){} fin(); }).catch(fin); }catch(e){ fin(); } } else fin(); }
+  function libLoad(i){ if(!lib||!lib.length) return; var L=curLayer(); var n=((i%lib.length)+lib.length)%lib.length; libIdx[L]=n; libLand(lib[n].name,lib[n].path); }
+  function libLand(name,path){ var L=curLayer();
+    libName[L]=name; libAt[L]=Date.now(); var nm=document.getElementById('ti-lib-name'); if(nm) nm.textContent=name;   /* the name lands now; libPaint's empty-check would beat the decode */
+    var f=nf('loadSampleFromPath'); if(f){ try{ f(path); }catch(e){} } }
+  function libBrowse(ev){ if(!window.openTwoPaneBrowser) return; var L=curLayer();
+    libList(function(flat,cats){
+      var sel=(libIdx[L]>=0&&flat[libIdx[L]])?flat[libIdx[L]].path:null, openCat=0;
+      var built=cats.map(function(c,ci){ if(sel&&(c.items||[]).some(function(it){ return it.path===sel; })) openCat=ci;
+        return { label:c.label, delKind:c.delKind, delPath:c.delPath, items:(c.items||[]).map(function(it){
+          return { name:it.name, path:it.path, sel:(it.path===sel), pick:(function(o){ return function(){ libIdx[L]=flat.indexOf(o); libLand(o.name,o.path); }; })(it) }; }) }; });
+      if(!built.length) built=[{label:'Sample Library',items:[]}];
+      /* the import lands in the SHARED registry (kind 2) the oscillators read, and the reopen shows it \u2014 the chop owns the
+         reopen while its browser is the one that is up. No headphone: auditionOscSample previews an OSCILLATOR's sample. */
+      window.__sampBrReopen=function(){ lib=null; libCats=null; libBrowse(ev); };
+      window.openTwoPaneBrowser(ev, { importLabel:'\uff0b Import Sample',
+        onImport: function(){ var pf=nf('pickSampleImport'); if(pf){ try{ pf('a'); }catch(e){} } },
+        onDelete: function(kind,p){ var rf=nf('removeSampleImport'); if(rf){ try{ rf(p); }catch(e){} } },
+        cats: built, openCat: openCat }); }); }
   function hookLayers(){ if(window.__tiLibHooked) return; window.__tiLibHooked=1;
     /* a DROP names the layer too (it is the same slot the arrows fill) */
     var os=window.onSampleLoaded; window.onSampleLoaded=function(info){ try{ if(info&&info.filename) { var L=curLayer(); libName[L]=String(info.filename).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '); libAt[L]=Date.now(); libPaint(); } }catch(e){} return os?os.apply(this,arguments):undefined; };
@@ -14366,7 +14239,10 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
     var tr=document.getElementById('ti-top-right-cluster'); if(tr&&!document.getElementById('ti-arm')){ var a=document.createElement('div'); a.id='ti-arm'; a.innerHTML='<span class="dot"></span><span class="t">Arm</span>'; a.addEventListener('mousedown',function(e){ e.stopPropagation(); }); a.addEventListener('click',function(e){ e.stopPropagation(); setArmed(!armed); }); tr.appendChild(a);
       var g=nf('getTiArmed'); if(g){ try{ Promise.resolve(g()).then(function(v){ armed=(+v)>0.5; paintArm(); }).catch(function(){}); }catch(e){} } paintArm(); }
     var br=document.getElementById('ti-bottom-right-cluster'); if(br&&!document.getElementById('ti-lib')){ var l=document.createElement('div'); l.id='ti-lib'; l.innerHTML='<span class="ti-lib-nav" data-d="-1" title="Previous sample">&#8249;</span><span id="ti-lib-name" title="Sample library">Sample Library</span><span class="ti-lib-nav" data-d="1" title="Next sample">&#8250;</span>';
-      l.addEventListener('mousedown',function(e){ e.stopPropagation(); }); l.addEventListener('click',function(e){ e.stopPropagation(); var nav=e.target.closest('.ti-lib-nav'); if(nav){ libList(function(){ libLoad(libIdx+(+nav.dataset.d)); }); return; } if(e.target.id==='ti-lib-name') libMenu(e.clientX,e.clientY); }); br.insertBefore(l,br.firstChild); }
+      /* ⚠️ tp53 — libIdx became an ARRAY in tp50 (one place per layer) and this line was never moved with it: `libIdx + d`
+         stringified the whole array ("-1,-1,-1,-1" + 1) and every arrow click handed libLoad a NaN, so the arrows have been
+         dead since tp50. The gate passed because __tiLibStep — the hand it uses — already stepped the per-layer index. */
+      l.addEventListener('mousedown',function(e){ e.stopPropagation(); }); l.addEventListener('click',function(e){ e.stopPropagation(); var nav=e.target.closest('.ti-lib-nav'); if(nav){ window.__tiLibStep(+nav.dataset.d); return; } if(e.target.id==='ti-lib-name') libBrowse(e); }); br.insertBefore(l,br.firstChild); }
     var bd=document.getElementById('ti-bpm-display'); if(bd) bd.title='Tempo — the DAW\'s';
     hookLayers(); libPaint();
     retitle(document.getElementById('ti-bottom-pills')||document.body);
@@ -14394,6 +14270,12 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
    at once, fb630); the Chop page never claimed that ground, so its header and footer wore #232340 over a #1A1A2E panel. */
 body.chop-open #plugin { background: var(--bg-main) !important; }   /* FLAT: the synth page's vignette reads as a lighter header here, because the Chop page has no panel of its own over it */
 body.chop-open #mix-panel { background: transparent !important; border-top: 1px solid rgba(255,255,255,0.075) !important; }
+/* tp53 — THE FOOTER SITS WHERE THE PATCHER'S SITS. Max: "the Chop footer is at 592, the Patcher's is at 608." Measured, both:
+   the Patcher pins #footer absolutely to the bottom of the 656 box (42515), so its output slider rides 624.5..640.5 and the box
+   is full. The Chop page leaves #footer in flow behind a 272 px panel — 44 + 276 + 272 = 592, and 16 px of #plugin ground shows
+   BELOW the footer. The panel takes those 16 px back (272 -> 288) and the footer lands at 608 with nothing under it. The panel's
+   own children are flex, so the strips simply breathe; nothing inside it is positioned from the top. */
+body.chop-open #mix-panel { height: 288px !important; }
 /* NO GLASS BOXES. Max: "i'm not fw the dark navy box around these sliders and buttons — make them transparent, no boxes or
    barriers, maybe just those grey separators." The tiles become regions of the page, told apart by one hairline each. */
 #mix-panel .mix-strip, #mix-panel #mix-trigger-area, #mix-panel #mix-stem-area {
@@ -14455,7 +14337,6 @@ body.chop-open #mix-panel { background: transparent !important; border-top: 1px 
 #ti-lib #ti-lib-name { width: 124px !important; max-width: 124px !important; text-align: center !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
 /* the chop's right-click panel no longer blurs the plugin behind it */
 #ti-chop-backdrop { background: transparent !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-#ti-chop-panel .ti-fx-indy, #ti-chop-panel #ti-fx-indy { display: none !important; }
 </style>
 )TIHX")
        + juce::String (R"TIHX(
@@ -14468,7 +14349,6 @@ body.chop-open #mix-panel { background: transparent !important; border-top: 1px 
       var pads=document.getElementById('ti-layer-pads'), arm=document.getElementById('ti-arm');
       if(pads&&arm&&arm.parentNode!==pads){ arm.style.height='16px'; arm.style.padding='0 9px'; arm.style.marginLeft='6px'; arm.style.borderRadius='8px'; pads.appendChild(arm); }
       var br=document.getElementById('ti-bottom-right-cluster'); if(br) br.style.gap='10px';
-      var ind=document.querySelector('#ti-chop-panel .ti-fx-indy, #ti-chop-panel [id*="indy"]'); if(ind) ind.style.display='none';
     }catch(e){}
   }
   function boot(){ place(); setInterval(function(){ if(document.body.classList.contains('chop-open')) place(); },1000); }

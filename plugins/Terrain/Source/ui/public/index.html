@@ -22985,6 +22985,24 @@ setTimeout(function wireSynControls () {
           bw = Math.max (120, Math.min (bw, (window.innerWidth  - pw.left) / z));
           bh = Math.max (120, Math.min (bh, (window.innerHeight - pw.top ) / z));
         }
+        /* 🔑 tp53 — THE FOOTER IS PART OF THE FLOOR. Max, with a screenshot of the LFO card's menu: "look at the
+           word EXTEND" — its last rows sat ON the output slider. The clamp was doing its job against the wrong
+           box. On the Patcher the output strip is NOT below #syn-panel, it is pinned absolutely OVER the panel's
+           last 48 px (body.tp-open #footer { position:absolute; bottom:0; z-index:31 }), so a menu clamped to the
+           panel's own bottom lands underneath it every time — and .syn-ctx-menu's z-index (2147483646) means it
+           paints over the slider instead of being merely hidden by it.
+           The usable floor is therefore the footer's TOP, not the panel's bottom. maxHeight is computed from bh
+           below, so this also makes an over-tall menu SCROLL inside the space it really has rather than run out
+           of the window — which is the fb275 law ("menus/popups never cut off") applied to the one edge that was
+           still lying about where it was. Local px throughout: offsetHeight, never a client rect (fb368's law). */
+        (function () {
+          var ftr = document.getElementById ('footer');
+          if (! ftr) return;
+          var fc = getComputedStyle (ftr);
+          if (fc.position !== 'absolute' || fc.visibility === 'hidden' || fc.display === 'none') return;   // only the Patcher pins it over the panel
+          var fh = ftr.offsetHeight || 48;
+          bh = Math.max (120, bh - fh);
+        }) ();
         // Cap height to the box BEFORE measuring so a 27-item menu becomes scrollable.
         menuEl.style.maxHeight = Math.max(120, bh - 16) + 'px';
         menuEl.style.left = '0px';
