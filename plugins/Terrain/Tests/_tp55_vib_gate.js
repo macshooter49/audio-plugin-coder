@@ -69,10 +69,17 @@ const spy = () => { const bridge = window.Juce, orig = bridge.getNativeFunction;
   const depthLog = await drag('.mix-strip[data-layer="1"] .mix-strip-knob[data-fn="vib"]', 80);
   const dCalls = (depthLog || []).filter(e => e[0] === 'setLayerVibratoDepth');
   const dLast = dCalls.length ? dCalls[dCalls.length - 1] : null;
-  const dRing = await p.evaluate(() => getComputedStyle(document.querySelector('.mix-strip[data-layer="1"] .mix-strip-knob[data-fn="vib"]')).getPropertyValue('--val').trim());
-  ok(dCalls.length >= 3 && dLast && dLast[1] === 1 && dLast[2] > 30 && dLast[2] <= 100 && parseFloat(dRing) > 0.3,
-     '[1] 🚨 THE DEPTH KNOB IS A REAL DRAG — an 80 px pull on strip B sends cents for layer 1 and the ring follows',
-     (dCalls.length + ' calls, last = ' + JSON.stringify(dLast) + ', ring --val=' + dRing));
+  /* ⚠️ tp57 REPLACED THE CONIC GRADIENT WITH AN SVG ARC (Max: "they look like they're tearing and
+     being stretched ... I see some data ripples"), so `--val` is no longer what the ring is drawn
+     from. The bar asks the same question of the new drawing: the value arc's dash length is the
+     ring's position, and the number inside it is the value the knob is showing. */
+  const dRing = await p.evaluate(() => { const k = document.querySelector('.mix-strip[data-layer="1"] .mix-strip-knob[data-fn="vib"]');
+    const v = k.querySelector('.kr-v'); const kv = k.querySelector('.kv');
+    return { dash: v ? v.style.strokeDasharray : null, num: kv ? kv.textContent : null }; });
+  ok(dCalls.length >= 3 && dLast && dLast[1] === 1 && dLast[2] > 30 && dLast[2] <= 100
+     && dRing.dash && parseFloat(dRing.dash) > 20 && +dRing.num > 30,
+     '[1] 🚨 THE DEPTH KNOB IS A REAL DRAG — an 80 px pull on strip B sends cents for layer 1, and the arc and its number follow',
+     (dCalls.length + ' calls, last = ' + JSON.stringify(dLast) + ', ring = ' + JSON.stringify(dRing)));
 
   // ── [2] 🚨 THE RATE KNOB SENDS Hz, AND ITS SWEEP IS LOG ────────────────────────────────────
   //  A LINEAR 0.05..12 Hz dial buries every musical rate (4-7 Hz) in the first half-inch of
@@ -89,8 +96,11 @@ const spy = () => { const bridge = window.Juce, orig = bridge.getNativeFunction;
   // the log sweep, read off the knob's own ring position at the musical band
   const sweep = await p.evaluate(() => {
     const k = document.querySelector('.mix-strip[data-layer="2"] .mix-strip-knob[data-fn="vibrate"]');
-    const val = () => parseFloat(getComputedStyle(k).getPropertyValue('--val')) || 0;
-    return { at5: val() };      // the default the strip restored
+    /* tp57 — read off the SVG arc: __synArc writes `<dash> 100` over 75 units of travel, so the
+       normalised position is dash/75. */
+    const v = k.querySelector('.kr-v');
+    const dash = v ? parseFloat(v.style.strokeDasharray) : NaN;
+    return { at5: isFinite(dash) ? dash / 75 : 0, num: (k.querySelector('.kv') || {}).textContent };
   });
   ok(sweep.at5 > 0.6 && sweep.at5 < 0.95,
      '[2b] THE SWEEP IS LOG — the 5 Hz default sits in the useful middle-upper of the dial, not pinned at 0.4 of a linear 12 Hz',
@@ -110,10 +120,19 @@ const spy = () => { const bridge = window.Juce, orig = bridge.getNativeFunction;
   const ring = await p.evaluate(() => {
     const k = document.querySelector('.mix-strip-knob[data-fn="vib"]'); const r = k.getBoundingClientRect();
     const cs = getComputedStyle(k);
-    return { w: Math.round(r.width), h: Math.round(r.height), mask: (cs.webkitMaskImage || cs.maskImage || '').slice(0, 90) };
+    const v = k.querySelector('.kr-v');
+    const syn = document.querySelector('#syn-panel .knob-ring .kr-v');
+    return { w: Math.round(r.width), h: Math.round(r.height), svg: !!k.querySelector('svg.kr-svg'),
+             stroke: v ? getComputedStyle(v).strokeWidth : null,
+             synStroke: syn ? getComputedStyle(syn).strokeWidth : null,
+             mask: (cs.webkitMaskImage || cs.maskImage || 'none'), bg: cs.backgroundImage };
   });
-  ok(ring.w === 24 && ring.h === 24 && /83%/.test(ring.mask),
-     '[4] THE NEW KNOBS ARE THE HOUSE KNOB — 24 px, the 2 px band tp54 measured off the synth page', JSON.stringify(ring));
+  /* tp57 — the knob is the synth page's ARC now, not a masked conic gradient. Max: "they look kind
+     of low quality, they look like they're tearing ... the wavetable knobs are smooth and perfect."
+     The bar compares the stroke against the synth page's own, so the two cannot drift. */
+  ok(ring.w === 24 && ring.h === 24 && ring.svg && ring.stroke === '2px'
+     && !/gradient/.test(ring.mask) && !/conic/.test(ring.bg),
+     '[4] THE NEW KNOBS ARE THE HOUSE KNOB — the synth page\'s 24 px SVG arc at 2 px, with no conic gradient and no mask left underneath it', JSON.stringify(ring));
 
   // ── [5] THE CENTERLINE INSIDE THE STRIP — VIB and RATE share one ─────────────────────────
   const mids = await p.evaluate(() => [...document.querySelectorAll('.mix-strip[data-layer="0"] .mix-strip-krow .mix-strip-knob')]

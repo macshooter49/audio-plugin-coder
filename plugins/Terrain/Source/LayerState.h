@@ -67,6 +67,14 @@ namespace tw
         std::atomic<float> vibratoDepthCents { 0.0f };  // 0..100 cents PEAK swing (0 = off)
         std::atomic<float> vibratoRateHz     { 5.0f };  // 0.05..12 Hz
 
+        // ── tp57 — THE BPM LOCK ────────────────────────────────────────────────────────────
+        //  Max: "if something is locked onto that BPM then it has to be stretched to the BPM so
+        //  everything can stay in time."  sourceBpm is what this layer's sample IS (read from its
+        //  name, else from its length — Source/LoopTempo.h); timeStretchMul is what the processor
+        //  works out from it each block and the voice applies at note-on. 0 / 1.0 = untouched.
+        std::atomic<float> sourceBpm      { 0.0f };   // 0 = unknown, and unknown means do not stretch
+        std::atomic<float> timeStretchMul { 1.0f };   // 1.0 = off
+
         // ── Meters — post-volume peak per channel for the strip meter widget ──
         // Audio thread writes after summing into master; UI polls at ~30 Hz.
         std::atomic<float> peakLevelL { 0.0f };
@@ -109,7 +117,8 @@ namespace tw
                     &synth.warpCache,            // WarpRenderCache from this layer's synth
                     &chopFadeMs,
                     &vibratoDepthCents,          // tp55 — per-layer VIBRATO depth (cents)
-                    &vibratoRateHz));            // tp55 — per-layer VIBRATO rate (Hz)
+                    &vibratoRateHz,              // tp55 — per-layer VIBRATO rate (Hz)
+                    &timeStretchMul));           // tp57 — the BPM lock's stretch, resolved per block
             }
         }
 

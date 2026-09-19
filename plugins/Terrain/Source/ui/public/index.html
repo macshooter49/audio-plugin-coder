@@ -44247,7 +44247,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           if(isOpen){ adoptFx(); syncPresence(); sync(); }
           commit();
           if(isOpen) glideTidy();
-          if(tool) tool.classList.remove('dis'); toast((whole?('A new '+aim+' preset'):('New '+Object.keys(BLKLBL).filter(function(k){ return B[k]; }).map(function(k){ return BLKLBL[k].toLowerCase(); }).join(' + ')+' · '+aim))+' · '+lvl+' — play it'+(capR&&isFinite(capR.cap)?(' · CPU ≈'+capR.est+'%'+(capR.trims.length?' (capped at '+capR.cap+'%: '+capR.trims.slice(0,3).join(', ')+(capR.trims.length>3?'…':'')+')':'')+(capR.est>capR.cap?' — still over: '+lvl+'\'s LFOs, effects and flow cards alone cost that much; lower the reach or raise the cap':'')):''));
+          if(tool) tool.classList.remove('dis');
+          /* tp57 — THE TOAST SAYS WHAT YOU GOT, NOT WHAT IT COST. Max: "whenever we randomize we have
+             breadcrumb text at the bottom that says CPU cut. People don't need to see that."  The cap
+             still does its work — it is the same capRoll and the same trims — it just stops narrating.
+             The numbers move to __tpLastRoll so a gate or a bug report can still read them. */
+          try{ window.__tpLastRoll={aim:aim,level:lvl,whole:!!whole,cpu:capR?capR.est:null,cap:capR?capR.cap:null,trims:capR?capR.trims.slice():[]}; }catch(e){}
+          toast((whole?('A new '+aim+' preset'):('New '+Object.keys(BLKLBL).filter(function(k){ return B[k]; }).map(function(k){ return BLKLBL[k].toLowerCase(); }).join(' + ')+' · '+aim))+' · '+lvl+' — play it');
           try{ if(window.__tpDiceDone) window.__tpDiceDone(); }catch(e){} }); } ];   /* tp35 — the roll reports its end (the synth dice's lock) */
     /* tp35 — NO LATENT DICE (Max: "what are the chances that we can have a no latent dice roll"). The six steps ran one per
        260 ms so their toasts could be read — 1.7 s of pacing around ~40 ms of work (measured per step in the real

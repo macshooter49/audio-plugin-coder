@@ -84,7 +84,8 @@ namespace tw
                       WarpRenderCache*    wc = nullptr,
                       std::atomic<float>* chopFadeRef = nullptr,
                       std::atomic<float>* vibratoDepthCentsRef = nullptr,
-                      std::atomic<float>* vibratoRateHzRef     = nullptr) noexcept
+                      std::atomic<float>* vibratoRateHzRef     = nullptr,
+                      std::atomic<float>* timeStretchMulRef    = nullptr) noexcept
             : sample (sb),
               attackMsParam (attackMsRef),
               releaseMsParam (releaseMsRef),
@@ -93,7 +94,8 @@ namespace tw
               warpCache_ (wc),
               chopFadeMsParam_ (chopFadeRef),
               vibratoDepthCentsParam_ (vibratoDepthCentsRef),
-              vibratoRateHzParam_     (vibratoRateHzRef) {}
+              vibratoRateHzParam_     (vibratoRateHzRef),
+              timeStretchMulParam_    (timeStretchMulRef) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
@@ -194,6 +196,27 @@ namespace tw
             // zero is also what keeps the render DETERMINISTIC — the old jitter pulled
             // juce::Random here, and a null test cannot reproduce that.
             vib_.reset();
+
+            // ── tp57 — THE BPM LOCK, APPLIED ONCE, HERE ────────────────────────────────────
+            //  ONE site on purpose. TerrainSynth fills VoiceConfig::stretchRatio in six different
+            //  places (one per slice mode) and patching all six is how the seventh gets forgotten;
+            //  every one of them ends up in activeConfig, so this is the only place that has to
+            //  know. The multiplier is 1.0 whenever the lock is off or the layer's tempo is
+            //  unknown, so a patch that never touches the lock is untouched.
+            //
+            //  ⚠️ IT ALSO TURNS THE WARP ON. stretchRatio is IGNORED at warpMode None — the NONE
+            //  path is a plain varispeed read with no stretcher in it — so a lock that only set the
+            //  ratio would do nothing at all on the default chop. BEATS is the mode that holds the
+            //  transients, which is what a drum loop needs and what Max is locking.
+            if (timeStretchMulParam_ != nullptr)
+            {
+                const float m = timeStretchMulParam_->load();
+                if (m > 0.0f && std::abs (m - 1.0f) > 1.0e-4f)
+                {
+                    activeConfig.stretchRatio = juce::jlimit (0.1f, 15.0f, activeConfig.stretchRatio * m);
+                    if (activeConfig.warpMode == WarpMode::None) activeConfig.warpMode = WarpMode::Beats;
+                }
+            }
 
             // Warp engine: select mode + reset state for this trigger. The
             // dispatcher lazily allocates the underlying spectral engine on
@@ -1361,6 +1384,7 @@ namespace tw
         // ── tp55 VIBRATO ────────────────────────────────────────────────────
         std::atomic<float>* vibratoDepthCentsParam_ = nullptr;  // non-owning; LayerState::vibratoDepthCents
         std::atomic<float>* vibratoRateHzParam_     = nullptr;  // non-owning; LayerState::vibratoRateHz
+        std::atomic<float>* timeStretchMulParam_    = nullptr;  // non-owning; LayerState::timeStretchMul (tp57)
         tw::Vibrato vib_;                  // phase + depth smoother; see Vibrato.h
 
         // ── Scan state (Mark 1.5) ────────────────────────────────────────────

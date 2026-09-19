@@ -24,7 +24,11 @@ let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('
       words: [...document.querySelectorAll('#mix-panel .trigger-pill, .ti-play-pill, .ti-mode-pill, #mix-panel .mix-strip-knob-label')].map(e => e.textContent.trim()).slice(0, 12), pillBg: getComputedStyle(q('.ti-mode-pill.active')).backgroundColor, pillBorder: getComputedStyle(q('.ti-mode-pill.active')).borderTopColor, rootBg: getComputedStyle(q('#ti-root-picker')).backgroundColor, panelBg: getComputedStyle(q('#mix-panel')).backgroundColor,
       ground: ['#plugin', '#header', '#footer', '#mix-panel', '#hero'].map(s2 => getComputedStyle(q(s2)).backgroundColor) }; });
   ok(st.btn === 'CHOP' && st.chopOpen, '[1] the header says CHOP and opening it marks the page (body.chop-open)', JSON.stringify(st));
-  ok(st.arm && st.lib && !st.seq && !st.sync && !st.play && !st.dice && !st.lock, '[2] the Arm and the sample library are there; SEQ, SYNC, the play button, the dice and the BPM lock are gone', JSON.stringify(st));
+  /* tp57 — THE LOCK IS BACK AND IT IS REAL. tp51 hid it because it did nothing; Max asked for it
+     by name ("we had a lock icon next to the BPM ... if something is locked onto that BPM then it
+     has to be stretched to the BPM so everything can stay in time") and it now drives TI_BPM_LOCK.
+     SEQ, SYNC, the play button and the dice are still gone — that half of the bar is untouched. */
+  ok(st.arm && st.lib && !st.seq && !st.sync && !st.play && !st.dice && st.lock, '[2] the Arm, the sample library and the BPM LOCK are there; SEQ, SYNC, the play button and the dice are gone', JSON.stringify(st));
   /* tp55 — "Jitter" is not a word on this page any more: the knob became a real VIBRATO (depth +
      rate), because a one-shot random detune did nothing audible on a lone one-shot. The bar still
      asks the same question — sentence case, not the old shouting — of the words that are there. */
@@ -37,7 +41,10 @@ let pass = 0, fail = 0; const ok = (c, l, d) => { if (c) { pass++; console.log('
   ok(!sw.mixOpen && !sw.mixBtnActive && !sw.chopOpen && sw.synOpen, '[5] SYN from the Chop page: the page closes and the button drops (no traces — Max: "it leaves traces of itself behind")', JSON.stringify(sw));
   await p.evaluate(() => { document.getElementById('mix-btn').click(); }); await sleep(600); await p.evaluate(() => { window.__tiChopArm(true); }); await sleep(200);
   const arm = await p.evaluate(() => ({ on: document.getElementById('ti-arm').classList.contains('on'), txt: document.getElementById('ti-arm').textContent.trim(), setCalls: window.__natCount['setTiArmed'] || 0 }));
-  ok(arm.on && arm.txt === 'Armed' && arm.setCalls === 1, '[6] the Arm lights, reads Armed and writes setTiArmed', JSON.stringify(arm));
+  /* tp57 — THE WORD DOES NOT CHANGE. Max: "whenever we press arm I don't like how it moves to
+     Armed, it adds the ed at the end. I don't want that — just have it be a button where it fades
+     in purple, fades out purple." The label is constant; the dot and the outline carry the state. */
+  ok(arm.on && arm.txt === 'Arm' && arm.setCalls === 1, '[6] the Arm lights and writes setTiArmed — and it still reads "Arm", not "Armed"', JSON.stringify(arm));
   const dots = await p.evaluate(() => { const d = document.querySelector('#mix-panel .layer-status-dot'); const cs = d ? getComputedStyle(d) : null; return cs ? { bg: cs.backgroundColor, bw: cs.borderTopWidth } : null; });
   ok(dots && dots.bg === 'rgba(0, 0, 0, 0)' && dots.bw !== '0px', '[7] the layer A-D status row is outlined, not filled', JSON.stringify(dots));
   const bf = await p.evaluate(() => ['#ti-root-picker', '.ti-bpm-display', '#ti-bottom-right-cluster'].map(q => { const e = document.querySelector(q); const cs = e ? getComputedStyle(e) : null; return cs ? (cs.backdropFilter || cs.webkitBackdropFilter || 'none') + '|' + cs.backgroundColor : 'missing'; }));

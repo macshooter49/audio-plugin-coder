@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "LoopTempo.h"   // tp57 — the BPM lock reads the loop's own tempo (JUCE-free, gated by Tests/looptempo_cert.cpp)
 static const char* const kSrcBSfx[4] = { "SRC_E", "SRC_F", "SRC_G", "SRC_H" };   // tp20 — bank 1's route pills, every device
 #if JUCE_MAC
  #include <sys/stat.h>   // fb611 — SF_DATALESS: the flag that says a listed file's bytes are still in iCloud
@@ -2923,6 +2924,36 @@ void TerrainAudioProcessor::timerCallback()
     // AU. One lock owns all of it. The audio thread never waits on this.
     const std::lock_guard<std::mutex> prepGuard (prepLock_);
     if (bankB_.load (std::memory_order_acquire) == nullptr && bankBWanted()) ensureBankB();   // tp20 — the pool wakes up
+
+    // ══ tp57 — WHAT TEMPO IS EACH LAYER'S SAMPLE, AND WHAT DOES THE LOCK OWE IT ═══════════════
+    //  Read HERE and not at the load sites: there are five of them (drop, browser, preset restore,
+    //  two editor paths) and the fifth is the one that gets forgotten. This sees whatever landed,
+    //  however it landed. It is also the only thread allowed to read `sourceFileName`, which is a
+    //  juce::String the message thread writes — the audio thread never touches anything but the
+    //  two atomics below.
+    {
+        const bool lockOn = (tiBpmLockP_ != nullptr && tiBpmLockP_->load() > 0.5f);
+        const double host = (double) currentBPM.load (std::memory_order_relaxed);
+        for (auto& L : layers)
+        {
+            auto buf = L.sampleBuffer.load();
+            if (buf == nullptr || buf->getNumSamples() <= 0)
+            {
+                if (L.sourceBpm.load() != 0.0f) L.sourceBpm.store (0.0f);
+                L.timeStretchMul.store (1.0f);
+                continue;
+            }
+            if (L.sourceBpm.load() <= 0.0f)
+            {
+                const double sr  = L.sampleBuffer.getSampleRate() > 0.0 ? L.sampleBuffer.getSampleRate() : getSampleRate();
+                const double len = (sr > 0.0) ? (double) buf->getNumSamples() / sr : 0.0;
+                const double bpm = tw::looptempo::detect (L.sourceFileName.toRawUTF8(), len, host);
+                L.sourceBpm.store ((float) bpm);   // 0 stays 0 and 0 means "do not stretch"
+            }
+            const float sb = L.sourceBpm.load();
+            L.timeStretchMul.store (lockOn ? (float) tw::looptempo::stretchTo ((double) sb, host) : 1.0f);
+        }
+    }
 
     // fb496 — LAZY ARM, on the message thread where the ~1 GB allocation belongs.
     // The stem rings only ever hold audio from a layer that HAS a sample (the write
@@ -7342,6 +7373,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                 layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { juce::String ("SYN_DCK_") + sfx, 1 }, juce::String ("Deck ") + sfx, false));
             layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "SYN_DCK_POWER", 1 }, "Deck Power", true));
             layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "TI_ARMED", 1 }, "Chop Armed", false));   // tp49 — the Chop page owns the keys while armed (Max)
+            // tp57 — THE BPM LOCK, and it is GLOBAL (Max: "the BPM and the lock will have to be
+            // global, and that will be nice because A B C and D can now be locked to the BPM").
+            layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "TI_BPM_LOCK", 1 }, "Chop BPM Lock", false));
             layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "SYN_DCK_ACTIVE", 1 }, "Deck In Chain", false));
             layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "SYN_DCK_RANK", 1 }, "Deck Chain Rank", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
             I ("SYN_DCK_TAPS", "Deck Direct Taps");
@@ -8399,6 +8433,7 @@ void TerrainAudioProcessor::cacheDeckParams()   // tp43
     static const char* const sfx [6] = { "SRC_A", "SRC_B", "SRC_C", "SRC_D", "SRC_SUB", "SRC_NOISE" };
     dckRefs_.active = R ("SYN_DCK_ACTIVE"); dckRefs_.rank = R ("SYN_DCK_RANK"); dckRefs_.power = R ("SYN_DCK_POWER");
     tiArmedP_ = R ("TI_ARMED");   // tp49
+    tiBpmLockP_ = R ("TI_BPM_LOCK");   // tp57
     for (int k = 0; k < 6; ++k) dckRefs_.src [k] = R (juce::String ("SYN_DCK_") + sfx[k]);
     for (int k = 0; k < 4; ++k) dckRefs_.srcB[k] = R (juce::String ("SYN_DCK_") + kSrcBSfx[k]);
 }

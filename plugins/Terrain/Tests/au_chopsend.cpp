@@ -246,6 +246,61 @@ int main()
              + " arm=" + (arms?"y":"n") + " inst1=" + (inst1?"y":"n"));
     }
 
+    // ── [4] tp57 — THE BPM LOCK IS A REAL, GLOBAL, AUTOMATABLE PARAMETER ────────────────────
+    //  Max: "the BPM and the lock will have to be global, and that will be nice because A B C and D
+    //  can now be locked to the BPM."  One parameter, off by default, and setting it must not move
+    //  a synth patch by one bit — no chop layer has a sample here, so there is nothing to stretch,
+    //  and a lock that cost an untouched patch anything would be a regression whatever it does when
+    //  a sample IS loaded.
+    {
+        Au a; if (! a.open()) { printf ("  !! cannot open the AU\n"); return 2; }
+        const bool has = a.has ("Chop BPM Lock");
+        Float32 v = -1;
+        if (has) AudioUnitGetParameter (a.au, a.byName.at ("Chop BPM Lock"), kAudioUnitScope_Global, 0, &v);
+        a.close();
+        chk (has && v == 0.0f, "[4] THE BPM LOCK EXISTS, IS GLOBAL AND IS OFF BY DEFAULT",
+             std::string ("present=") + (has ? "yes" : "NO") + " default=" + std::to_string (v));
+    }
+    {
+        Au a; if (! a.open()) return 2;
+        a.set ("Osc A Enable", 1.0f); a.set ("Synth OSC A Level", 0.8f);
+        a.pump (0.40); a.render (30, nullptr); a.note (57, 100);
+        std::vector<float> off; a.render (60, &off); a.note (57, 0); a.render (4, nullptr); a.close();
+
+        Au c; if (! c.open()) return 2;
+        c.set ("Osc A Enable", 1.0f); c.set ("Synth OSC A Level", 0.8f);
+        /* ⚠️ A NULL BAR MUST NOT BE ABLE TO PASS BECAUSE THE PARAMETER IS MISSING. The first cut of
+           this read PASS against a stale binary that had no "Chop BPM Lock" at all: `set` printed
+           its "no parameter named" line, changed nothing, and the two identical renders nulled at
+           -240. The whole bar was measuring a control that did not exist. */
+        const bool lockSet = c.set ("Chop BPM Lock", 1.0f);
+        Float32 back = -1;
+        if (c.has ("Chop BPM Lock"))
+            AudioUnitGetParameter (c.au, c.byName.at ("Chop BPM Lock"), kAudioUnitScope_Global, 0, &back);
+        c.pump (0.40); c.render (30, nullptr); c.note (57, 100);
+        std::vector<float> on; c.render (60, &on); c.note (57, 0); c.render (4, nullptr); c.close();
+
+        const double db = nullDb (off, on);
+        chk (lockSet && back > 0.5f && rmsDb (off) > -60.0 && db < -180.0,
+             "[5] THE LOCK REALLY WENT ON, THE NOTE REALLY SOUNDED, AND THE SYNTH IS BIT-IDENTICAL",
+             "lock set=" + std::string (lockSet ? "yes" : "NO") + " read back=" + std::to_string (back)
+             + " · note " + std::to_string (rmsDb (off)) + " dBFS · null " + std::to_string (db) + " dB");
+    }
+    // ── [6] AND THE VOICE ACTUALLY APPLIES IT ───────────────────────────────────────────────
+    {
+        const std::string src = slurp ("Source/SamplerVoice.h");
+        const bool applies = src.find ("timeStretchMulParam_->load()") != std::string::npos;
+        const bool ratio   = src.find ("activeConfig.stretchRatio * m") != std::string::npos;
+        const bool warps   = src.find ("activeConfig.warpMode = WarpMode::Beats") != std::string::npos;
+        const std::string pr = slurp ("Source/PluginProcessor.cpp");
+        const bool detects = pr.find ("tw::looptempo::detect") != std::string::npos;
+        const bool feeds   = pr.find ("tw::looptempo::stretchTo") != std::string::npos;
+        chk (applies && ratio && warps && detects && feeds,
+             "[6] THE VOICE APPLIES THE STRETCH *AND* TURNS THE WARP ON — a ratio without a warp mode does nothing at all (the NONE path ignores stretchRatio)",
+             std::string ("load=") + (applies?"y":"n") + " ratio=" + (ratio?"y":"n") + " beats=" + (warps?"y":"n")
+             + " detect=" + (detects?"y":"n") + " stretchTo=" + (feeds?"y":"n"));
+    }
+
     printf ("\n  %d passed, %d failed\n\n", npass, nfail);
     return nfail ? 1 : 0;
 }

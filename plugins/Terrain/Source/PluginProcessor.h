@@ -3195,6 +3195,7 @@ private:
     // ── tp56 — THE CHOP SAMPLERS ON THE CANVAS ──────────────────────────────────────────────────
     //  <device>_CHOPS, a 4-bit mask: bit L = chop layer L (0=A..3=D) feeds this device's send bus.
     //  Resolved in cacheTapRefs alongside _TAPS, read once per block in the same place.
+    std::atomic<float>* tiBpmLockP_ = nullptr;   // tp57 — TI_BPM_LOCK, the global time lock
     std::atomic<float>* poolChopRef_[(size_t) kPoolSendCount] {};
     std::atomic<float>* hallChopRef_ = nullptr; std::atomic<float>* dlyChopRef_ = nullptr; std::atomic<float>* dstChopRef_ = nullptr;
     unsigned poolChopMask_[(size_t) kPoolSendCount] {};   // per block, unpacked from the params above

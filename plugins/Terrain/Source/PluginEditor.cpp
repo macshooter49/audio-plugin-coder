@@ -2466,6 +2466,32 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 auto* prm = audioProcessor.getAPVTS().getParameter ("TI_ARMED");
                 complete (juce::var ((prm != nullptr && prm->getValue() > 0.5f) ? 1 : 0));
             })
+            /* tp57 — THE BPM LOCK. Max: "we had a lock icon next to the BPM ... if something is
+               locked onto that BPM then it has to be stretched to the BPM so everything can stay in
+               time ... the lock will be global."  One parameter for all four layers, exactly like
+               the ARM above it, so it rides presets and DAW automation for free. */
+            .withNativeFunction("setTiBpmLock", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    if (auto* prm = audioProcessor.getAPVTS().getParameter ("TI_BPM_LOCK"))
+                    { prm->beginChangeGesture(); prm->setValueNotifyingHost ((float) args[0] > 0.5f ? 1.0f : 0.0f); prm->endChangeGesture(); }
+                complete ({});
+            })
+            .withNativeFunction("getTiBpmLock", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                auto* prm = audioProcessor.getAPVTS().getParameter ("TI_BPM_LOCK");
+                complete (juce::var ((prm != nullptr && prm->getValue() > 0.5f) ? 1 : 0));
+            })
+            /* what each layer's sample turned out to BE, so the page can say so */
+            .withNativeFunction("getLayerSourceBpm", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                 : audioProcessor.editingLayer.load();
+                complete (juce::var ((double) audioProcessor.layers[(size_t) li].sourceBpm.load()));
+            })
             .withNativeFunction("getHostBpm", [this](const juce::Array<juce::var>&,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {   // tp49 — the Chop page's BPM is the DAW's (Max: "bpm should also match our DAW by default")
@@ -7912,21 +7938,32 @@ void TerrainUiCore::CaptureDragStrip::paint (juce::Graphics& g)
     {
         int mins = static_cast<int>(avail) / 60;
         int secs = static_cast<int>(avail) % 60;
+        /*  tp57 — ONE PURPLE. Max: "look at the bottom strip where it says capture-off — that's a
+            different color than what's actually being displayed here. Make the color the same as
+            everything else, the color is literally a different purple than our dark purple."
+            He is right and it was not even a purple: 0x44606080 is a BLUE-GREY, picked before the
+            house had a token. --purple-400 is #B794FF on dark and #A78BFA on light, and every
+            selected thing on the page already wears it; the strip's quiet states now wear it at a
+            quiet alpha and its live state at full weight. */
+        static constexpr juce::uint32 kPurpleDark  = 0xFFB794FF;   // --purple-400, dark theme
+        static constexpr juce::uint32 kPurpleLight = 0xFFA78BFA;   // --purple-400, light theme
+        const juce::Colour house  = juce::Colour (dark ? kPurpleDark : kPurpleLight);
+        const juce::Colour quiet  = house.withAlpha (0.42f);
         if (! processor.getCaptureEnabled())   // tp49 — Max: "when the capture is OFF make the text say Capture - Off"
         {
-            g.setColour(dark ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
+            g.setColour(quiet);
             g.setFont(juce::FontOptions(fs));
             g.drawText("CAPTURE - OFF", b, juce::Justification::centred);
         }
         else if (avail < 1.0f)
         {
-            g.setColour(dark ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
+            g.setColour(quiet);
             g.setFont(juce::FontOptions(fs));
             g.drawText("CAPTURE: LISTENING...", b, juce::Justification::centred);
         }
         else
         {
-            g.setColour(dark ? juce::Colour(0xFF9B93B0) : juce::Colour(0xFF6B5B7B));
+            g.setColour(house.withAlpha (0.80f));
             g.setFont(juce::FontOptions(fs));
             g.drawText("CAPTURE: " + juce::String(mins) + "m " + juce::String(secs) + "s  \u2014  DRAG TO DAW",
                        b, juce::Justification::centred);
@@ -9665,12 +9702,102 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   }
 
   // ── Native fn helper (capital J) ──────────────────────────────────────────
-  function getNativeFn (name) {
+  /* ══ tp57 — SELECT ALL THE CHOPS ═══════════════════════════════════════════════════════════
+     Max: "while I'm in the chop engine I want to press Ctrl+A or Command+A and it selects all of
+     my chops, 4 to 32 ... and then I'm able to right click them and it's the SAME right click menu
+     that we have. It's a global ADSR, and this is good because I would like to put my release at
+     zero most of the time ... I could either press delete to delete them."
+
+     🔑 THE FAN-OUT LIVES IN getNativeFn, NOT IN FIFTEEN HANDLERS.
+     Every control in the chop menu ends the same way — `getNativeFn('setSliceX')(targetIdx, v)` —
+     and there are about fifteen of them. Patching each one is how the sixteenth gets forgotten, and
+     the sixteenth is the one Max finds. So while a multi-chop selection is live, THE LOOKUP hands
+     back a setter that writes to every selected chop instead of one. A control added tomorrow is
+     covered the day it is written, with nobody having to remember this.
+     ⚠️ It only fans a call whose FIRST ARGUMENT IS THE PRIMARY TARGET. The panel also calls these
+     natives for other chops (the marker drags, the audition), and those must stay surgical. */
+  var ovSel = [];                       // chop indices a global edit reaches; [] = the target alone
+  function ovSelActive () { return ovSel.length > 1; }
+  function ovSelSet (list) { ovSel = (list || []).slice(); paintSliceSel(); }
+  function ovSelClear () { if (! ovSel.length) return; ovSel = []; paintSliceSel(); }
+  window.__tiChopSel = function () { return ovSel.slice(); };   /* the gate's hand */
+  function paintSliceSel () {
+    try {
+      document.querySelectorAll('#ti-slice-overlays .ti-slice-body').forEach(function (b) {
+        b.classList.toggle('sel', ovSel.indexOf(parseInt(b.dataset.idx, 10)) >= 0); });
+      var pn = document.getElementById('ti-chop-panel');
+      if (pn) pn.classList.toggle('multi', ovSelActive());
+      var numEl = document.getElementById('ti-chop-num');
+      if (numEl && ovSelActive()) numEl.textContent = 'ALL ' + ovSel.length;
+    } catch (_) {}
+  }
+)TIHX") + juce::String (R"TIHX(
+  function ovSelectAll () {
+    if (state.sliceMode !== 1 || !state.slices || state.slices.length < 1) return false;
+    var all = []; for (var i = 0; i < state.slices.length; ++i) all.push(i);
+    ovSelSet(all);
+    return true;
+  }
+  /* Delete every selected chop. Highest index FIRST: deleteSlice re-indexes what is left, so
+     walking upward would delete the wrong chops from the second one on. */
+  function ovDeleteSelection () {
+    if (! ovSelActive()) return false;
+    var fn = getNativeFnRaw('deleteSlice'); if (! fn) return false;
+    var list = ovSel.slice().sort(function (a, b) { return b - a; });
+    ovSelClear();
+    var last = null;
+    list.forEach(function (i) { try { last = fn(i); } catch (_) {} });
+    if (last && typeof last.then === 'function') last.then(applySlicesJson).catch(function () {});
+    else if (typeof last === 'string') applySlicesJson(last);
+    closeChopOverlay();
+    return true;
+  }
+  /* the un-fanned lookup, for the few calls that must stay surgical */
+  function getNativeFnRaw (name) {
     var bridge = window.Juce || window.juce;
     if (bridge && typeof bridge.getNativeFunction === 'function') {
       try { return bridge.getNativeFunction(name); } catch (_) {}
     }
     return null;
+  }
+  /* ⌘A / Ctrl+A selects every chop; ⌫ deletes the selection; Esc drops it. Only while the Chop
+     page is open and only in SLICE mode — in PITCH mode there is one virtual chop and nothing to
+     select. The handler never swallows a key that belongs to a text field. */
+  document.addEventListener('keydown', function (ev) {
+    try {
+      if (! document.body.classList.contains('chop-open')) return;
+      var t = ev.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      var k = (ev.key || '').toLowerCase();
+      if (k === 'a' && (ev.metaKey || ev.ctrlKey)) { if (ovSelectAll()) { ev.preventDefault(); ev.stopPropagation(); } return; }
+      if (k === 'escape') { ovSelClear(); return; }
+      if ((k === 'delete' || k === 'backspace') && ovSelActive()) { ev.preventDefault(); ev.stopPropagation(); ovDeleteSelection(); }
+    } catch (_) {}
+  }, true);
+
+)TIHX") + juce::String (R"TIHX(
+  function getNativeFn (name) {
+    var bridge = window.Juce || window.juce;
+    var fn = null;
+    if (bridge && typeof bridge.getNativeFunction === 'function') {
+      try { fn = bridge.getNativeFunction(name); } catch (_) { fn = null; }
+    }
+    if (! fn) return null;
+    if (! ovSelActive() || ! /^setSlice/.test(name)) return fn;
+    var panel = document.getElementById('ti-chop-panel');
+    var primary = panel ? parseInt(panel.dataset.targetIdx, 10) : NaN;
+    if (! isFinite(primary)) return fn;
+    return function () {
+      var a = [].slice.call(arguments);
+      if (a.length < 1 || a[0] !== primary) return fn.apply(null, a);   // not a global edit
+      var out = null;
+      for (var i = 0; i < ovSel.length; ++i) {
+        var b = a.slice(); b[0] = ovSel[i];
+        var r = fn.apply(null, b);
+        if (ovSel[i] === primary) out = r;
+      }
+      return out;
+    };
   }
 
   // ── JS PARAMS metadata + MODULATABLE list ────────────────────────────────
@@ -10216,7 +10343,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     var countEl = document.getElementById('ti-slices-count');
     if (countEl) {
       if (n > 0) {
-        countEl.textContent = ' ' + n;   // "SLICES 16" — no separator dot (rendered as Â· under Latin-1 fallback and the dot is visual noise anyway)
+        countEl.textContent = String(n);   // tp57 — no leading space: the pill's own gap does the spacing, and a space made the digits sit off-centre in their box
         countEl.style.display = '';
       } else {
         countEl.textContent = '';
@@ -10459,6 +10586,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       body.style.left  = leftPx  + 'px';
       body.style.width = widthPx + 'px';
       body.dataset.idx = i;
+      if (ovSel.indexOf(i) >= 0) body.classList.add('sel');   // tp57 — part of a global selection
       attachSliceGestures(body, i);
       overlays.appendChild(body);
 
@@ -11060,6 +11188,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     body.addEventListener('mousedown', function (ev) {
       if (ev.button !== 0) return;  // left-click only here
       ev.stopPropagation();         // don't let the XY pad eat this
+      if (ovSelActive() && ovSel.indexOf(idx) < 0) ovSelClear();   /* tp57 — clicking away drops it */
       if (ev.detail >= 2) { ev.preventDefault(); return; }
 
       // Stretch on body — shift+drag OR sticky (this chop already warp-
@@ -11142,6 +11271,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     body.addEventListener('contextmenu', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
+      /* tp57 — a right-click INSIDE the selection keeps it, and the menu edits all of it. A
+         right-click on a chop that is not selected means the user has moved on: the selection is
+         dropped and the menu is the single-chop menu it has always been. */
+      if (ovSelActive() && ovSel.indexOf(idx) < 0) ovSelClear();
       openSliceContextMenu(ev, idx);
     });
 
@@ -11259,8 +11392,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       ⚠️ THE LESSON IS THE GATE, NOT THE TYPO. _tp53_list_gate asserted the panel's STRUCTURE and
       CSS with the panel forced .open and no target — it never drove it against a real chop, so its
       "no page errors" bar was measuring a page where the panel had never been asked to paint. */
-  function fmtMs (ms)   { return Math.round(ms) + ' ms'; }
+  /* tp57 — SECONDS ONCE IT IS SECONDS. Max: "our right click menu goes in milliseconds, but our
+     real ADSR on the back tells us the actual seconds — can we stop using all milliseconds and get
+     to like four or five seconds it releases. We have to see the seconds."  The synth page's
+     envelope already reads "Dec 1.38s / Rel 300ms" and this panel did not, so the same number read
+     two different ways depending on which window you were in. One rule, the synth page's: under a
+     second it is whole milliseconds, over a second it is two decimals of a second. */
+  function fmtMs (ms)   { return (ms >= 1000) ? ((ms / 1000).toFixed(2) + ' s') : (Math.round(ms) + ' ms'); }
   function fmtPct (v)   { return Math.round(v * 100) + '%'; }
+  window.__tiFmtMs = fmtMs;   /* tp57 — the gate reads the SHIPPED formatter, never a copy of it */
   function fmtPitch (v) { var s = Math.round(v); return (s >= 0 ? '+' : '') + s + ' st'; }
   // Drop the unit suffix entirely — the emblem already reads as "stretch", and the multiplication
   // sign mojibake'd in the WebView. Just the number.
@@ -11666,7 +11806,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         nameEl2.innerHTML = 'CHOP<span class="num" id="ti-chop-num">01</span>';
       }
       var freshNumEl = document.getElementById('ti-chop-num');
-      if (freshNumEl) freshNumEl.textContent = (idx + 1 < 10 ? '0' : '') + (idx + 1);
+      /* tp57 — the header says out loud that an edit is global. Without it the panel looks exactly
+         the way it does for one chop, and a release set to 0 would silently reach all thirty-two. */
+      if (freshNumEl) freshNumEl.textContent = ovSelActive() ? ('ALL ' + ovSel.length)
+                                                             : ((idx + 1 < 10 ? '0' : '') + (idx + 1));
       var delEl2 = panel.querySelector('.ov-act.danger[data-act="del"]');
       if (delEl2) delEl2.style.display = '';
     }
@@ -12984,8 +13127,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     }
 
     // Arc knobs use --val (0..1) sweeping the conic-gradient ring.
-    function setPanVisual (knob, p)     { knob.style.setProperty('--val', String((p + 1) / 2)); }   // -1..1 -> 0..1
-    function setVibDepthVisual (knob, c) { knob.style.setProperty('--val', String(c / 100)); }       // 0..100 cents -> 0..1
+    /* ══ tp57 — THE STRIP'S KNOBS ARE THE SYNTH PAGE'S KNOB, DRAWN AND LABELLED ═══════════════
+       The arc is the shipped `window.__synArc` / `__synEnsureArc` — the same SVG stroke the whole
+       instrument uses — because matching a drawing by describing it in a second place is how two
+       drawings drift. The number is `__synRingVal`, likewise. Both are globals on the page the
+       overlay is injected into, so there is nothing to duplicate and nothing to keep in step.
+       A host that somehow lacks them falls back to the old --val, so a knob is never blank. */
+    function ringPaint (knob, norm, bipolar, label) {
+      if (! knob) return;
+      try {
+        if (window.__synArc) { window.__synArc(knob, norm, !!bipolar); }
+        else knob.style.setProperty('--val', String(norm));
+        if (window.__synRingVal) window.__synRingVal(knob, label);
+      } catch (_) { knob.style.setProperty('--val', String(norm)); }
+    }
+    /* Pan reads as a SIGNED number, negative left and positive right, which is what Max asked for
+       and what the pan law actually is; dead centre says C rather than a signed zero. */
+    function panLabel (p) { var n = Math.round(p * 50); return n === 0 ? 'C' : (n > 0 ? '+' + n : String(n)); }
+    function setPanVisual (knob, p)     { ringPaint(knob, (p + 1) / 2, true, panLabel(p)); }   // -1..1 -> 0..1, bipolar
+    function setVibDepthVisual (knob, c) { ringPaint(knob, c / 100, false, String(Math.round(c))); }   // cents
     /* Rate reads 0.05..12 Hz. A LOG sweep so the musical 4-7 Hz sits mid-dial instead of
        squashed into the first half-inch of a linear 12 Hz travel. */
     var VIB_RATE_MIN = 0.05, VIB_RATE_MAX = 12.0;
@@ -12997,7 +13157,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       var t = Math.max(0, Math.min(1, n));
       return VIB_RATE_MIN * Math.pow(VIB_RATE_MAX / VIB_RATE_MIN, t);
     }
-    function setVibRateVisual (knob, hz) { knob.style.setProperty('--val', String(vibRateToNorm(hz))); }
+    /* Rate is read in Hz: two significant figures under 10, whole numbers above, so the ring never
+       has to shrink its face to fit (7.5 px holds three characters — fb630's law). */
+    function rateLabel (hz) { return hz >= 10 ? String(Math.round(hz)) : (Math.round(hz * 10) / 10).toFixed(1); }
+    function setVibRateVisual (knob, hz) { ringPaint(knob, vibRateToNorm(hz), false, rateLabel(hz)); }
     // Fader: vol 0..2 -> 0..100% of travel. Sets fill height + handle bottom.
     function setFaderVisual (fader, vol) {
       var pct = (vol / 2.0) * 100;
@@ -13471,11 +13634,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
 
     // LAYER MORPH — full-width blend that travels A..D. Light each stop by
     // proximity so you see the blend move through the layers.
+    /* tp57 — THE HANDLE IS WHERE THE POINTER IS, AND IT REACHES BOTH ENDS.
+       Max: "the slider only goes halfway to the end — I need to slide it to actually match my mouse
+       because it's delayed from my mouse, and I hate mouse offset from the actual slider ... I need
+       it to move all the way over to the edge of A and D, because that's how sliders work."
+       Both complaints were ONE bug and it was right here: the pointer was mapped across the FULL
+       track (0..1) while the handle was painted at 12.5 %..87.5 % — so the handle sat up to an
+       eighth of the track away from the cursor and could never touch either end. It was trying to
+       line up with the CENTRES of the A..D dots; those dots now span the full width, so their outer
+       edges are the track's ends and a straight mapping lines up with both. */
     function paintMorph (p) {
-      // Handle travels aligned under the A..D dots above (their centers sit at
-      // ~12.5%..87.5%), so the dots double as the morph's labels.
       var handle = document.getElementById('morph-handle');
-      if (handle) handle.style.left = (12.5 + p * 75) + '%';
+      if (handle) handle.style.left = (Math.max(0, Math.min(1, p)) * 100) + '%';
     }
 
     function wireLayerMorph () {
@@ -13900,8 +14070,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         +   '<button class="stem-btn" data-layer="3">D</button>'
         + '</div>'
         + '<div class="stem-all-row">'
-        +   '<button id="stem-export-all">EXPORT ALL 4</button>'
-        +   '<button id="stem-reveal">REVEAL FOLDER</button>'
+        /*  tp57 — EMBLEMS. Max: "export all four can just be an emblem, reveal folder can be like a
+            folder emblem ... I think we're going to stick with the emblems, because I'm tired of
+            looking at it."  The WORD survives as the button's title, so a hover still says which is
+            which and nothing is lost to someone who has not learned the glyphs yet. */
+        +   '<button id="stem-export-all" title="Export all 4 stems" aria-label="Export all 4 stems">'
+        +     '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
+        +       '<path d="M11 3v10"/><path d="M7.4 9.6 11 13.2l3.6-3.6"/><path d="M4 15v2.2A1.8 1.8 0 0 0 5.8 19h10.4a1.8 1.8 0 0 0 1.8-1.8V15"/>'
+        +     '</svg></button>'
+        +   '<button id="stem-reveal" title="Reveal the stems folder" aria-label="Reveal the stems folder">'
+        +     '<svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">'
+        +       '<path d="M3 6.6A1.6 1.6 0 0 1 4.6 5h3.3l1.7 2.1h7.8A1.6 1.6 0 0 1 19 8.7v6.7a1.6 1.6 0 0 1-1.6 1.6H4.6A1.6 1.6 0 0 1 3 15.4z"/>'
+        +     '</svg></button>'
         + '</div>'
         /*  tp54 — DRY / WET / CLEAR AND THE FOUR CAPTURE METERS ARE GONE FROM THE BUILDER.
             Max: "we probably don't even need dry, wet or clear … take away the A B C D meters right
@@ -13917,9 +14097,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         ;
     }
 
+    /* tp57 — IT GOES AWAY. Max: "every time I try to export something I have this bottom box that
+       says exporting stem A and it just stays there ... enough with the breadcrumb text."  The drag
+       line in particular had no clearing path at all — once written it stayed for the life of the
+       editor. Every message now fades out on its own; a new one cancels the old timer. */
+    var stemStatusT = 0;
     function setStemStatus (msg) {
       var el = document.getElementById('stem-status');
-      if (el) el.textContent = msg || '';
+      if (! el) return;
+      clearTimeout(stemStatusT);
+      el.textContent = msg || '';
+      el.style.opacity = msg ? '1' : '0';
+      if (msg) stemStatusT = setTimeout(function () {
+        try { el.style.opacity = '0'; setTimeout(function(){ el.textContent=''; }, 260); } catch (e) {}
+      }, 2600);
     }
 
     function flashStemBtn (btn) {
@@ -14193,7 +14384,7 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
 <script>
 (function(){
   /* tp49 — THE CHOP PAGE'S HANDS: seamless switching, the ARM, the sample library, the DAW's BPM, the house words. */
-  var WORDS={'LAYER':'Layer','RR':'RR','RANDOM':'Random','KEYTRK':'Keytrack','VEL':'Velocity','RESET TO A':'Reset to A','STEMS':'Stems',
+  var WORDS={'LAYER':'Layer','RR':'Robin','RANDOM':'Random','KEYTRK':'Keytrack','VEL':'Velocity','RESET TO A':'Reset to A','STEMS':'Stems',
     'EXPORT ALL 4':'Export All 4','REVEAL FOLDER':'Reveal Folder','DRY':'Dry','WET':'Wet','CLEAR':'Clear','PAN':'Pan','VIB':'Vib','RATE':'Rate',
     'PITCH':'Pitch','SLICE':'Slice','1-SHOT':'One-Shot','LOOP':'Loop','MUTE':'Mute','SOLO':'Solo','SYNC':'Sync','SHUFFLE':'Shuffle','RESET':'Reset'};
   function retitle(root){ try{ var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null); var t; var list=[]; while((t=w.nextNode())) list.push(t);
@@ -14257,10 +14448,30 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
     var os=window.onSampleLoaded; window.onSampleLoaded=function(info){ try{ if(info&&info.filename) { var L=curLayer(); libName[L]=String(info.filename).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '); libAt[L]=Date.now(); libPaint(); } }catch(e){} return os?os.apply(this,arguments):undefined; };
     /* every pad click goes through this one door (the pad handler calls it) */
     var sw=window.switchEditingLayer; if(typeof sw==='function') window.switchEditingLayer=function(){ var r=sw.apply(this,arguments); try{ libPaint(); }catch(e){} return r; }; }
-  function bpmTick(){ if(!document.body.classList.contains('chop-open')) return; try{ libPaint(); libTick(); }catch(e){} var f=nf('getHostBpm'); if(!f) return; try{ Promise.resolve(f()).then(function(v){ v=parseFloat(v); if(!isFinite(v)||v<=0) return; var el=document.querySelector('.ti-bpm-value'); if(el){ var t=(Math.round(v*10)/10).toString(); if(el.textContent!==t) el.textContent=t; } }).catch(function(){}); }catch(e){} }
+  function bpmTick(){ if(!document.body.classList.contains('chop-open')) return; try{ libPaint(); libTick(); lockTick(); }catch(e){} var f=nf('getHostBpm'); if(!f) return; try{ Promise.resolve(f()).then(function(v){ v=parseFloat(v); if(!isFinite(v)||v<=0) return; var el=document.querySelector('.ti-bpm-value'); if(el){ var t=(Math.round(v*10)/10).toString(); if(el.textContent!==t) el.textContent=t; } }).catch(function(){}); }catch(e){} }
   var armed=false;
-  function paintArm(){ var a=document.getElementById('ti-arm'); if(!a) return; a.classList.toggle('on',armed); a.querySelector('.t').textContent=armed?'Armed':'Arm'; a.title=armed?'Armed — the keys play the chop; click to let the synth play too':'Arm — the keys play the chop and the synth stops'; }
+  /* tp57 — THE WORD DOES NOT CHANGE. Max: "whenever we press arm I don't like how it moves to
+     Armed, it adds the ed at the end — I don't want that. Just have it be a button where it fades
+     in purple, fades out purple." The label is constant, the DOT and the outline carry the state,
+     and both cross-fade (see #ti-arm's transitions). A control whose label moves is a control whose
+     neighbours move with it. */
+  function paintArm(){ var a=document.getElementById('ti-arm'); if(!a) return; a.classList.toggle('on',armed);
+    var t=a.querySelector('.t'); if(t&&t.textContent!=='Arm') t.textContent='Arm';
+    a.title=armed?'Armed — the keys play the chop; click to let the synth play too':'Arm — the keys play the chop and the synth stops'; }
   function setArmed(v){ armed=!!v; paintArm(); var f=nf('setTiArmed'); if(f){ try{ f(armed?1:0); }catch(e){} } }
+  /* tp57 — the time lock. Global: one switch, all four layers. */
+  var bpmLocked=false, srcBpm=[0,0,0,0];
+  function paintLock(){ var lk=document.getElementById('ti-bpm-lock'); if(!lk) return;
+    lk.classList.toggle('on',bpmLocked);
+    var known=srcBpm.filter(function(v){ return v>0; });
+    lk.title = bpmLocked
+      ? (known.length ? ('Locked to the session — ' + known.length + ' of 4 layers stretched to the BPM')
+                      : 'Locked to the session — no layer has a readable tempo yet, so nothing is being stretched')
+      : 'Lock every layer to the session tempo';
+  }
+  function setBpmLock(v){ bpmLocked=!!v; paintLock(); var f=nf('setTiBpmLock'); if(f){ try{ f(bpmLocked?1:0); }catch(e){} } }
+  function lockTick(){ var f=nf('getLayerSourceBpm'); if(!f) return;
+    for(var i=0;i<4;i++) (function(i){ try{ Promise.resolve(f(i)).then(function(v){ var n=+v||0; if(n!==srcBpm[i]){ srcBpm[i]=n; paintLock(); } }).catch(function(){}); }catch(e){} })(i); }
   function dressHero(){
     var tr=document.getElementById('ti-top-right-cluster'); if(tr&&!document.getElementById('ti-arm')){ var a=document.createElement('div'); a.id='ti-arm'; a.innerHTML='<span class="dot"></span><span class="t">Arm</span>'; a.addEventListener('mousedown',function(e){ e.stopPropagation(); }); a.addEventListener('click',function(e){ e.stopPropagation(); setArmed(!armed); }); tr.appendChild(a);
       var g=nf('getTiArmed'); if(g){ try{ Promise.resolve(g()).then(function(v){ armed=(+v)>0.5; paintArm(); }).catch(function(){}); }catch(e){} } paintArm(); }
@@ -14269,7 +14480,22 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
          stringified the whole array ("-1,-1,-1,-1" + 1) and every arrow click handed libLoad a NaN, so the arrows have been
          dead since tp50. The gate passed because __tiLibStep — the hand it uses — already stepped the per-layer index. */
       l.addEventListener('mousedown',function(e){ e.stopPropagation(); }); l.addEventListener('click',function(e){ e.stopPropagation(); var nav=e.target.closest('.ti-lib-nav'); if(nav){ window.__tiLibStep(+nav.dataset.d); return; } if(e.target.id==='ti-lib-name') libBrowse(e); }); br.insertBefore(l,br.firstChild); }
+    /* ══ tp57 — THE LOCK ═══════════════════════════════════════════════════════════════════════
+       Max: "we had a lock icon next to the BPM ... I think that lock, I would want it to be like
+       things are locked in in time. So that includes drum loops, everything — we have to find a way
+       to stretch it to our BPM ... if I have multiple drum loops that I'm chopping up, the drum
+       loops wouldn't stay out of whack."
+       The glyph was already in the markup and tp51 hid it because it did nothing. It drives
+       TI_BPM_LOCK now; the engine reads each layer's own tempo (Source/LoopTempo.h) and hands the
+       voice a stretch at note-on. The title says what it knows, per layer, so a loop it could not
+       read says so instead of silently doing nothing. */
     var bd=document.getElementById('ti-bpm-display'); if(bd) bd.title='Tempo — the DAW\'s';
+    var lk=document.getElementById('ti-bpm-lock');
+    if(lk&&!lk.dataset.wired){ lk.dataset.wired='1';
+      lk.addEventListener('mousedown',function(e){ e.stopPropagation(); });
+      lk.addEventListener('click',function(e){ e.stopPropagation(); setBpmLock(!bpmLocked); });
+      var gl=nf('getTiBpmLock'); if(gl){ try{ Promise.resolve(gl()).then(function(v){ bpmLocked=(+v)>0.5; paintLock(); }).catch(function(){}); }catch(e){} }
+      paintLock(); }
     hookLayers(); libPaint();
     retitle(document.getElementById('ti-bottom-pills')||document.body);
   }
@@ -14457,12 +14683,39 @@ body.chop-open #mix-panel { height: 288px !important; }
       same exact slider."  MEASURED: #syn-panel .knob-ring draws a 2 px SVG arc on a 24 px ring; this
       one is a conic gradient masked at 66 %, i.e. a 4.25 px band on a 25 px circle — more than
       double. Same 24 px ring, same 2 px band, and the house's WHITE value against a faint track. */
+/* ── tp57 — AND THEY ARE THE SAME *DRAWING*, NOT JUST THE SAME SIZE ──
+      Max: "the knobs above pan and above vibrato look kind of low quality, they look like they're
+      tearing and being stretched ... I see some data ripples inside. When you look at the wavetable
+      knobs they're actually better quality and they're smooth and perfect."
+      He is describing conic-gradient banding. tp54 matched the synth page's SIZE and WEIGHT but kept
+      the conic + radial-mask construction, and a hard colour stop swept around a 24 px circle is
+      rasterised as a staircase — the "ripples" are the gradient's own quantisation, and the mask's
+      edge at 83/84 % aliases on top of it. The synth page does not draw arcs that way: it strokes an
+      SVG circle with a dash offset and round caps, which the renderer antialiases properly at any
+      size. Same element, same geometry (r=10 on a 24 box, 270° of travel, pathLength 100), painted
+      the way the rest of the instrument is painted.
+      ⚠️ THE BACKGROUND AND MASK MUST BOTH GO. Leaving either behind paints the old staircase
+      underneath the new arc, which looks like the bug is half-fixed. */
 #mix-panel .mix-strip-knob {
   width: 24px !important; height: 24px !important;
-  -webkit-mask: radial-gradient(closest-side, transparent 83%, #000 84%) !important;
-  mask: radial-gradient(closest-side, transparent 83%, #000 84%) !important;
-  background: conic-gradient(from 225deg, #FFFFFF 0deg, #FFFFFF calc(var(--val,0.5) * 270deg),
-              rgba(255,255,255,0.16) calc(var(--val,0.5) * 270deg), rgba(255,255,255,0.16) 270deg, transparent 270deg) !important; }
+  position: relative !important; border-radius: 50% !important;
+  background: none !important; -webkit-mask: none !important; mask: none !important; }
+#mix-panel .mix-strip-knob .kr-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+#mix-panel .mix-strip-knob .kr-t { fill: none; stroke: rgba(255,255,255,0.16); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 75 25; }
+#mix-panel .mix-strip-knob .kr-v { fill: none; stroke: #FFFFFF; stroke-width: 2; stroke-linecap: round; }
+#mix-panel .mix-strip-knob .kr-n { fill: #FFFFFF; opacity: .5; display: none; }
+#mix-panel .mix-strip-knob.kr-bip .kr-n { display: block; }
+/* ── THE NUMBER LIVES IN THE RING ──
+      Max: "could you also input the number in there too — if it's plus to the right, negative to the
+      left, and what the number of vibrato is, just like how we have the numbers in wavetable
+      position. We've got to keep that consistent."  The same face fb630/fb637 settled for the synth
+      page, including the 0.2em top pad that puts a DIGIT (which has no descender) in the optical
+      middle of the ring rather than the em box's middle. */
+#mix-panel .mix-strip-knob .kv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; font-family: -apple-system, 'SF Pro Display', sans-serif; font-weight: 300;
+  color: var(--text-secondary); line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums;
+  white-space: nowrap; padding-top: 0.2em; box-sizing: border-box; }
+#mix-panel .mix-strip-krow { gap: 10px !important; }
 
 /* ── THE STEM PANEL FILLS ITS HALF ──
       Max: "take away the dry, wet and clear … take away the A B C D meters … so it's just A B C D,
@@ -14484,6 +14737,150 @@ body.chop-open #mix-panel { height: 288px !important; }
   border-color: rgba(255,255,255,0.70) !important; color: var(--text-primary) !important; }
 #mix-panel .stem-buttons > button.armed, #mix-panel .stem-buttons > button.exporting,
 #mix-panel .stem-all-row > button.exporting { border-color: var(--purple-400) !important; color: #fff !important; background: transparent !important; }
+
+)TIHX") + juce::String (R"TIHX(
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   tp57 — MAX'S CHOP PASS
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ── ONE TYPEFACE, ONE WEIGHT, ACROSS THE WHOLE PAGE ──
+      Max: "I see Chop 02 — I think we have a different font now, we need that same thin Apple SF Pro
+      text ... slices, I think 8 is a different font ... please don't make it bold, just make it thin,
+      probably even ultra thin." Three families and five weights were in play here: the hero cluster
+      inherited -apple-system while the overlay panel and the drawer carried their own stacks, and
+      several numbers were 700. Everything on this page now names the SAME stack and nothing is
+      heavier than 500. */
+#hero, #hero *, #ti-chop-panel, #ti-chop-panel *, #ti-slicer-drawer, #ti-slicer-drawer *,
+#ti-bottom-pills, #ti-bottom-pills *, #ti-bottom-right-cluster, #ti-bottom-right-cluster *,
+#ti-top-right-cluster, #ti-top-right-cluster *, #ti-root-picker, #ti-root-picker *, #ti-lib, #ti-lib * {
+  font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif !important; }
+#hero [class*="ti-"], #ti-chop-panel *, #ti-slicer-drawer * { font-weight: 500 !important; }
+
+/* ── THE BPM IS THE BIGGEST NUMBER ON THE STRIP, AND IT IS WHITE AND ULTRA THIN ──
+      Max: "BPM is way too small, it needs to be beefed up to match 140 ... the number in the BPM
+      should be white and that lock should be purple ... that could be an ultra thin type of thing."
+      It was 700 weight, 10 px, PURPLE — the loudest treatment on the page carrying the smallest
+      glyphs. 15 px at weight 200 in white reads as the anchor it is; tabular figures so 99 and 140
+      do not shuffle the row. */
+#ti-bpm-display { gap: 6px !important; padding: 0 2px 0 6px !important; }
+#ti-bpm-display .ti-bpm-value {
+  font: 200 15px/1 -apple-system, 'SF Pro Display', system-ui, sans-serif !important;
+  font-variant-numeric: tabular-nums !important; letter-spacing: .01em !important;
+  color: #FFFFFF !important; min-width: 26px !important; text-align: right !important; }
+#ti-bpm-display .ti-bpm-label {
+  font: 500 8.5px/1 inherit !important; letter-spacing: .12em !important;
+  color: rgba(245,243,255,0.42) !important; }
+
+/* ── THE LOCK IS BACK, AND IT IS REAL ──
+      Max: "we had a lock icon next to the BPM ... if something is locked onto that BPM then it has
+      to be stretched to the BPM so everything can stay in time ... the lock will be global."
+      tp51 hid it because it did nothing; it drives TI_BPM_LOCK now. */
+/* ⚠️ THE CENTERLINE (fb275 / tp54) SURVIVES BOTH OF THESE. `.ti-bpm-display` is aligned on the
+   BASELINE so "BPM" sits on the number's foot — which is right for the two words and wrong for a
+   13 px glyph beside a 15 px digit, measured 1 px high. `align-self` centres the lock on the line
+   without touching the two words. The Slices pill needed the mirror of it: its count grew to 11 px,
+   the wrap around it is baseline-aligned in the pill row, and the taller child dragged the whole
+   pill 1.5 px down. A wrap that is a flex box has no baseline to drag. */
+#ti-slices-wrap { display: flex !important; align-items: center !important; }
+#ti-bpm-lock { align-self: center !important; display: inline-flex !important; width: 13px !important; height: 13px !important;
+  margin-left: 1px !important; color: rgba(255,255,255,0.34) !important; cursor: pointer !important;
+  transition: color .18s ease !important; }
+#ti-bpm-lock:hover { color: rgba(255,255,255,0.62) !important; }
+#ti-bpm-lock.on, #ti-bpm-lock.on:hover { color: var(--purple-400) !important; }
+#ti-bpm-lock svg { width: 100% !important; height: 100% !important; }
+
+/* ── ARM STAYS "ARM" ──
+      Max: "whenever we press arm I don't like how it moves to Armed, it adds the ed at the end. I
+      don't want that — just have it be a button where it fades in purple, fades out purple."
+      The word no longer changes (see paintArm); the DOT and the outline carry the state, and both
+      cross-fade instead of snapping. */
+#ti-arm { transition: color .22s ease, border-color .22s ease !important; }
+#ti-arm .dot { transition: background .22s ease !important; }
+#ti-arm.on .dot { background: var(--purple-400) !important; }
+
+/* ── THE SLICE COUNT IS A WHITE ULTRA-THIN NUMBER, AND IT BREATHES ──
+      Max: "where it says slices, 8 — I want you to make that number white ... white ultra thin ...
+      slices like that gets way too close to the box." The count was purple and 700; and the pill's
+      padding was 3/9 with a 6 px gap, which put the digits hard against the right edge. */
+#ti-slices-btn { padding: 3px 11px !important; gap: 7px !important; }
+#ti-slices-btn .ti-slices-count {
+  color: #FFFFFF !important; font-weight: 200 !important; font-size: 11px !important;
+  font-variant-numeric: tabular-nums !important; letter-spacing: .01em !important;
+  min-width: 11px !important; text-align: center !important; }
+
+/* ── NOTHING SITS ON AN EDGE ──
+      Max: "make sure that none of these numbers or texts inside the boxes are too close to the
+      bottom or the top, to the left or the right — they're perfectly spaced out in the middle with
+      space all around." Every pill on this strip centres on both axes and carries its own breathing
+      room, so a one-character label and a two-character one sit identically. */
+.ti-mode-pill, .ti-play-pill, .ti-layer-pad, #ti-arm, #ti-slices-btn,
+#mix-panel .trigger-pill, #mix-panel .layer-status-dot, #mix-panel .stem-buttons > button,
+#mix-panel .stem-all-row > button {
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  line-height: 1 !important; }
+.ti-layer-pad { padding: 0 !important; min-width: 16px !important; }   /* tp49's measured law: A-D wear the synth page's 16 px chip */
+
+)TIHX") + juce::String (R"TIHX(
+/* ── A SELECTED CHOP ──
+      Max: "Ctrl+A and it selects all of my chops ... and then I'm able to right click them."  A
+      selection has to be VISIBLE or a global release of 0 arrives as a mystery. The house's own
+      selected treatment: a purple outline and nothing filled, the same as every pill on the page. */
+#ti-slice-overlays .ti-slice-body.sel { box-shadow: inset 0 0 0 1px var(--purple-400) !important;
+  background: rgba(167,139,250,0.10) !important; }
+#ti-chop-panel .ov-head .name .num { letter-spacing: .04em; }
+
+/* ── THE TRIGGER PANE FILLS ITS BOX ──
+      Max: "make layer, round robin, random, key track, velocity, A B C D and that slider bigger so
+      it can actually match the bottom ... my rule here is that the top always needs to match the
+      bottom ... I don't want that fucking dead space."  MEASURED: the content stopped at y 810 in a
+      box that ran to 910 — a hundred pixels of nothing under the slider. The rows share the height
+      now and the pane's padding is symmetric. */
+#mix-panel #mix-trigger-area { padding: 11px 12px !important; display: flex !important;
+  flex-direction: column !important; gap: 9px !important; }
+#mix-panel #trigger-pills { margin-bottom: 0 !important; flex: 0 0 34px !important; gap: 7px !important; }
+#mix-panel #trigger-pills .trigger-pill { flex: 1 1 0 !important; padding: 0 !important; height: 100% !important; }
+#mix-panel #trigger-context { flex: 1 1 auto !important; min-height: 0 !important; display: flex !important; }
+/* ⚠️ #trigger-context is a flex COLUMN (its own rule says so), so a panel inside it is a column
+   ITEM — `align-items: stretch` does nothing for its height and the panel collapsed to its
+   content: MEASURED at 27 px inside a 64 px box, which is exactly the dead space Max is pointing
+   at. In a column the thing that fills is `flex: 1 1 auto`. */
+#mix-panel #trigger-context .trigger-panel { width: 100% !important; flex: 1 1 auto !important; min-height: 0 !important; }
+#mix-panel #trigger-context .trigger-panel[data-panel="layer"],
+#mix-panel #trigger-context .trigger-panel[data-panel="rr"] {
+  display: none; flex-direction: column !important; gap: 9px !important; }
+#mix-panel #trigger-context[data-mode="0"] .trigger-panel[data-panel="layer"],
+#mix-panel #trigger-context[data-mode="1"] .trigger-panel[data-panel="rr"] { display: flex !important; }
+#mix-panel .trigger-panel[data-panel="layer"] .trigger-hint,
+#mix-panel .trigger-panel[data-panel="rr"] .trigger-hint { flex: 0 0 auto !important; margin: 0 !important; }
+#mix-panel .layer-status-dots { flex: 1 1 0 !important; display: flex !important; gap: 8px !important;
+  align-items: stretch !important; margin: 0 !important; }
+#mix-panel .layer-status-dots .layer-status-dot { flex: 1 1 0 !important; width: auto !important;
+  height: auto !important; min-height: 0 !important; padding: 0 !important; }
+#mix-panel .layer-morph { flex: 0 0 auto !important; margin: 0 0 2px 0 !important; }
+
+/* ── THE STEM PANE MATCHES THE PANE ABOVE IT ──
+      Max: "our stem separator boxes do not match the top boxes in terms of the length — you see how
+      far the slider goes and how far Layer and A go at the top."  Same padding, same gaps, same
+      row heights, so the two halves of the right column read as one grid. */
+#mix-panel #mix-stem-area { padding: 11px 12px !important; display: flex !important;
+  flex-direction: column !important; gap: 9px !important; }
+#mix-panel .stem-buttons, #mix-panel .stem-all-row { gap: 8px !important; }
+
+/* ── EXPORT ALL 4 AND REVEAL FOLDER ARE EMBLEMS ──
+      Max: "export all four can just be an emblem, reveal folder can be like a folder emblem ...
+      because I'm tired of looking at it."  The word stays as the button's title, so nothing is lost
+      to a mouse that hovers; the box carries a glyph the size of the letters beside it. */
+#mix-panel .stem-all-row > button svg { width: 17px; height: 17px; display: block; }
+#mix-panel .stem-all-row > button { gap: 0 !important; }
+
+/* ── ONE PURPLE ──
+      Max: "look at the bottom strip where it says capture-off, that's a different color than what's
+      actually being displayed ... chop mode needs to have the same color, the color is literally a
+      different purple than our dark purple."  Both were hard-coded, and neither matched the token
+      every other selected thing on the page uses. */
+#capture-badge, .capture-badge, #ti-capture-badge,
+body.chop-open #capture-badge, body.chop-open .capture-badge {
+  color: var(--purple-400) !important; }
 </style>
 )TIHX")
        + juce::String (R"TIHX(
