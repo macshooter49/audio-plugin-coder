@@ -42989,8 +42989,16 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function markViz(n){ var s=VIZ[n.kind];
     if(n.kind==='osc'){ setVizEl(n,oscVizEl(n)); return; }
     if(n.kind==='flow'){ if(n.body&&!n.body.querySelector('.tp-vglyph')){ var tile=n.tile||document.querySelector('#flow-modes .flow-mode[data-mode="'+n.sub+'"]'); var emb=tile?tile.querySelector('svg.emb'):null; var gf=document.createElement('div'); gf.className='tp-vglyph'; gf.innerHTML=emb?'<svg viewBox="0 0 42 42" fill="currentColor">'+emb.innerHTML+'</svg>':IC.voice; n.body.appendChild(gf); n.glyph=gf; }
-      var scr=(n.ext&&n.card)?n.card.querySelector('.screen'):null;   /* tp11 — an extended card shows its own SCREEN in the eye, not a four-square glyph blown up (Max: "cruddy") */
-      if(scr){ n.glyph.classList.remove('tp-viz'); setVizEl(n,scr); } else { if(n.viz){ reclip(n); n.viz.classList.remove('tp-viz'); clearVizStyle(n.viz); n.viz=null; } n.glyph.classList.toggle('tp-viz',!!n.ext); }
+      /*  tp54 — REVERSED FROM tp11, BY THE SAME PERSON. tp11 made an extended flow card show its own
+          `.screen` in the eye, because a four-square glyph blown up looked "cruddy" to Max then. He
+          has now seen it in use: "if you turn the emblem mode on and open up an extended glitch card
+          — an extended flow card in general — it doesn't have the emblem on there like it used to,
+          instead the glitch has a pop-out of the small UI interface, which looks terrible. I just
+          want the regular plain white animated emblem, but not stretched."
+          So the card's own emblem is the picture again whether it is extended or not, and "not
+          stretched" is already the law here: vizFit uses ONE scale on both axes for this branch. */
+      if(n.viz){ reclip(n); n.viz.classList.remove('tp-viz'); clearVizStyle(n.viz); n.viz=null; }
+      n.glyph.classList.toggle('tp-viz',!!n.ext);
       if(n.tile) n.tile.classList.toggle('tp-viz',!n.ext); return; }
     if(n.kind==='rnd'&&n.el){ n.el.classList.add('tp-viz'); n.viz=n.el; return; }
     if(!s||!n.el||!n.el.querySelector) { if(n.kind==='voice'&&n.body&&!n.body.querySelector('.tp-vglyph')){ var g=document.createElement('div'); g.className='tp-vglyph tp-viz'; g.innerHTML=IC.voice; n.body.appendChild(g); } return; }
