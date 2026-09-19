@@ -13739,7 +13739,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                  ⚠️ __crvDrawnCurve describes the CURVE CARD's drawing, which is instance 1's — so the
                  mirror is applied to every saturate card that is ON a drawn mode, and the live feed
                  below still owns every other card's geometry. */
-              var coreM=rack.querySelector('.fxr-core[data-core="saturate"]');
+              var mCards=(window.__fxrCardsAll?window.__fxrCardsAll(rack):[].slice.call(rack.querySelectorAll('.fxr-dev')));
+              var coreM=null; for(var mq=0;mq<mCards.length&&!coreM;mq++) coreM=mCards[mq].querySelector('.fxr-core[data-core="saturate"]');
               if(coreM&&window.__crvDrawnCurve){ var dcM=window.__crvDrawnCurve(97);
                 if(dcM){ var svgM=coreM.querySelector('svg'), pM=svgM?svgM.querySelector('.dst-curve'):null;
                   if(pM){ var dM='',iM;
@@ -13847,7 +13848,16 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                   }
                   /* instance 1 keeps the first card in the rack; every pooled instance finds its own
                      card by walking DEVS, so the order of the rack cannot mis-assign a curve. */
-                  var dCores=rack.querySelectorAll('.fxr-core[data-core="saturate"]'), dcI=0;
+                  /* 🚨 AND THE CARDS ARE NOT ALWAYS IN THE RACK. The Patcher MOVES a card out of
+                     #fxr-rack into its node (adoptFx → n.body.appendChild), so a rack-scoped query
+                     finds nothing there — a distortion spawned while the canvas is open would never
+                     be painted at all, instance 1 included. It only looked fine because a card
+                     painted BEFORE it was adopted keeps its `d` attribute on the way over. Every
+                     other driver on this page already walks __fxrCardsAll for exactly this reason
+                     (the reverb's, the delay's, the tape's); this one now does too. */
+                  var dCards=(window.__fxrCardsAll?window.__fxrCardsAll(rack):[].slice.call(rack.querySelectorAll('.fxr-dev')));
+                  var dCores=[]; for(var dq=0;dq<dCards.length;dq++){ var dc0=dCards[dq].querySelector('.fxr-core[data-core="saturate"]'); if(dc0) dCores.push(dc0); }
+                  var dcI=0;
                   for(dcI=0;dcI<dCores.length;dcI++){
                     var dvEl=dCores[dcI].closest('.fxr-dev'), dvIx=dvEl?+dvEl.getAttribute('data-dev'):-1;
                     var dvD=(dvIx>=0)?DEVS[dvIx]:null, dvN=dvD?(dvD.inst|0):0;

@@ -111,7 +111,39 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
      '[4] EVERY SHAPE-BEARING CARD IN THE RACK HAS A DRAWN LINE',
      sweep.length + ' lines checked' + (empties.length ? ' · EMPTY: ' + JSON.stringify(empties) : ' · none empty'));
 
-  ok(errs.length === 0, '[5] THE PAGE THREW NOTHING', errs.join(' | '));
+  // ── [5] 🚨 AND ON THE PATCHER, WHERE THE CARDS DO NOT LIVE IN THE RACK ──────────────────
+  //  The canvas MOVES a card out of #fxr-rack into its node (adoptFx → n.body.appendChild), so a
+  //  rack-scoped query finds nothing there. This never showed up by eye because a card painted
+  //  BEFORE it was adopted carries its `d` attribute over — only a distortion SPAWNED while the
+  //  canvas is open comes up blank, which is exactly the way Max hit it. Both cards are wiped and
+  //  re-pushed from inside the canvas, so a stale attribute cannot carry the bar.
+  const onCanvas = await p.evaluate(async () => {
+    if (!window.setActivePanel) return { err: 'no panel switch' };
+    window.setActivePanel('tp');
+    await new Promise(r => setTimeout(r, 2600));
+    document.querySelectorAll('.fxr-core[data-core="saturate"] .dst-curve').forEach(e => e.setAttribute('d', ''));
+    const N = 128, mk = (k) => { const c = [];
+      for (let i = 0; i < N; i++) { const x = i / (N - 1) * 2 - 1;
+        c.push(k === 0 ? Math.max(-1, Math.min(1, x * 3)) : k === 1 ? Math.tanh(x * 2.2) / Math.tanh(2.2)
+             : Math.sign(x) * Math.pow(Math.abs(x), 0.45)); } return c; };
+    window.__dstVizPush = { m: 13, b: 0.6, x: 1, c: mk(0), o: new Array(48).fill(0.5),
+      e: [ { i: 2, m: 5, b: 0.6, x: 1, c: mk(1), o: new Array(48).fill(0.5) },
+           { i: 3, m: 9, b: 0.6, x: 1, c: mk(2), o: new Array(48).fill(0.5) } ] };
+    window.__tiFrame && window.__tiFrame();
+    await new Promise(r => setTimeout(r, 300));
+    window.__tiFrame && window.__tiFrame();
+    await new Promise(r => setTimeout(r, 300));
+    const cards = [...document.querySelectorAll('.fxr-core[data-core="saturate"]')];
+    return { inRack: cards.filter(c => c.closest('#fxr-rack')).length,
+             onCanvas: cards.filter(c => c.closest('#tp-page')).length,
+             pts: cards.map(c => { const d = (c.querySelector('.dst-curve') || {}).getAttribute
+               ? c.querySelector('.dst-curve').getAttribute('d') || '' : ''; return d.trim().split(/[ML]/).filter(Boolean).length; }) };
+  });
+  ok(onCanvas.onCanvas === 3 && onCanvas.pts.length === 3 && onCanvas.pts.every(n => n > 100),
+     '[5] 🚨 A DISTORTION ADOPTED ONTO THE PATCHER STILL DRAWS ITS CURVE — the cards are out of #fxr-rack there, and a rack-scoped query finds nothing',
+     JSON.stringify(onCanvas));
+
+  ok(errs.length === 0, '[6] THE PAGE THREW NOTHING', errs.join(' | '));
   console.log('\n  ' + pass + ' passed, ' + fail + ' failed\n');
   await b.close(); process.exit(fail ? 1 : 0);
 })();
