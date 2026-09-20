@@ -18167,6 +18167,10 @@ function setActivePanel(which, restoring) {
   applyEqPanelOpen(which === 'eq');
   applyDelayPanelOpen(which === 'dly');
   applyModPanelOpen(which === 'mod');
+  /* tp65 — Max: "I just don't want to see it." The front page (#controls, the hero) shows only when NO page is
+     up. MOD / EQ / DLY are pages, not overlays over it, so they hide the controls the way SYN does — the Chop
+     page's close handlers used to restore them under the MOD panel (CHOP → MOD showed the hero behind MOD). */
+  if (which === 'mod' || which === 'eq' || which === 'dly') { var _ctl = document.getElementById('controls'); if (_ctl) _ctl.style.display = 'none'; }
   currentActivePanel = which;
   /* fb636 — the front page is a STILL picture now, painted when it is owed and never per frame (animate).
      Showing it clears both still latches so the next paint — this click's own wake burst, or the one asked
@@ -18190,17 +18194,17 @@ function restoreUiPage(n) {
   if (n === _uiPageRestored) return;   // idempotent — the restore push repeats every tick
   // fb622 — EQ and DLY have no button any more, and a preset saved with one of them open would
   // otherwise reopen every user into a panel they never chose. Those two pages fall back to SYN.
-  var page = (n >= 1 && n <= 5) ? UI_PAGE_IDS[n - 1] : null;   /* tp1 */
+  var page = (n >= 1 && n <= 5) ? UI_PAGE_IDS[n - 1] : 'syn';   /* tp1 · tp65 — page 0 (the front) lands on SYN: the front page is never shown */
   if (page === 'eq' || page === 'dly') page = 'syn';
   if (typeof setActivePanel === 'function') setActivePanel(page, true);
   _uiPageRestored = n;   // fb636 — only once it has applied (a throw retries on the next push instead of locking the page out)
 }
   if(!window.__cardOnly&&window.__bootPage>=1&&window.__bootPage<=5){try{restoreUiPage(window.__bootPage);}catch(e){}}   /* fb514 -- parse-time apply: runs before init() registers the front painter, so the front page never boots when reopening onto a panel */
 document.getElementById('eq-btn').addEventListener('click', () => {
-  setActivePanel(currentActivePanel === 'eq' ? null : 'eq');
+  if (currentActivePanel !== 'eq') setActivePanel('eq');   /* tp65 — no pill toggles back to the front page */
 });
 document.getElementById('eq-back-btn').addEventListener('click', () => {
-  setActivePanel(null);
+  setActivePanel('syn');   /* tp65 — "back" is the synth page, never the front */
 });
 document.getElementById('eq-flatten-btn').addEventListener('click', () => {
   for (let i = 0; i < 7; ++i) {
@@ -25152,10 +25156,10 @@ function applyDelayPanelOpen(open) {
 }
 
 document.getElementById('delay-btn').addEventListener('click', () => {
-  setActivePanel(currentActivePanel === 'dly' ? null : 'dly');
+  if (currentActivePanel !== 'dly') setActivePanel('dly');   /* tp65 */
 });
 document.getElementById('delay-back-btn').addEventListener('click', () => {
-  setActivePanel(null);
+  setActivePanel('syn');   /* tp65 */
 });
 
 // ---- SYNC pill: toggle FREE/SYNC. Also flips the TIME knob's value

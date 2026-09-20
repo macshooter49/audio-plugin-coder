@@ -13657,7 +13657,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
             panel.classList.remove('open');
             mixBtn.classList.remove('active');
             var ctrls = document.getElementById('controls');
-            if (ctrls) ctrls.style.display = '';
+            // tp65 — this runs AFTER the pill's own handler opened its page: leave the front hidden under it
+            if (ctrls) ctrls.style.display = (typeof currentActivePanel !== 'undefined' && currentActivePanel) ? 'none' : '';
           }
         });
       });
@@ -14850,7 +14851,7 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
          keys in a host, so ⌘A has to arrive through keyPressed; this is what arms that route. */
       try{ var fCO=nf('setChopOpen'); if(fCO) fCO(open?1:0); }catch(e){}
       if(open){ retitle(panel); dressHero(); bpmTick(); } }
-    function close(){ if(!panel.classList.contains('open')) return; panel.classList.remove('open'); mixBtn.classList.remove('active'); var c=document.getElementById('controls'); if(c) c.style.display=''; sync(); }
+    function close(){ if(!panel.classList.contains('open')) return; panel.classList.remove('open'); mixBtn.classList.remove('active'); var c=document.getElementById('controls'); if(c) c.style.display=(typeof currentActivePanel!=='undefined'&&currentActivePanel)?'none':''; sync(); }   /* tp65 — the page that closed it stays over the front */
     mixBtn.addEventListener('click',function(){ setTimeout(sync,0); });
     /* Max: "getting out of the mix menu is BROKEN — it leaves traces of itself behind": any other page opening closes this one, like SYNTH → PATCHER */
     window.addEventListener('tipanelchange',function(e){ var w=e&&e.detail?e.detail.panel:null; if(w) close(); });

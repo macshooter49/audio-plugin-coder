@@ -93,6 +93,15 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    return {m1,m2,c1,c2}; });
  ok(r3.m1==='mod' && r3.m2==='mod', '[3] the MOD pill: a second click on the lit pill stays on MOD (it used to fall back to the hero)', JSON.stringify(r3));
  ok(r3.c1 && r3.c2, '[3b] the CHOP pill: a second click on the lit pill stays on the Chop page', JSON.stringify(r3));
+ /* tp65 — Max: "just make sure I can't go back to it whenever I press mod on and off and I press the chop engine on and
+    off. I just don't want to see it." Every pill sequence, and the page-0 restore, must leave the front (#controls) hidden. */
+ const r3c=await p.evaluate(async()=>{ const shown=id=>{ const e=document.getElementById(id); if(!e) return false; const cs=getComputedStyle(e), r=e.getBoundingClientRect(); return cs.display!=='none'&&cs.visibility!=='hidden'&&r.width>0&&r.height>0; };
+   const out=[]; const go=async id=>{ document.getElementById(id).click(); await new Promise(r=>setTimeout(r,450)); out.push(id+':'+(shown('controls')?'FRONT':'ok')+':'+currentActivePanel); };
+   for(const id of ['syn-btn','mod-btn','mix-btn','mod-btn','mix-btn','syn-btn','mix-btn','syn-btn','syn-btn','mod-btn','mod-btn','mix-btn','mix-btn','syn-btn']) await go(id);
+   restoreUiPage(0); await new Promise(r=>setTimeout(r,300)); out.push('page0:'+(shown('controls')?'FRONT':'ok')+':'+currentActivePanel);
+   return out; });
+ ok(r3c.every(x=>x.indexOf(':FRONT')<0) && /page0:ok:syn$/.test(r3c[r3c.length-1]),
+    '🚨 [3c] THE FRONT PAGE IS NEVER SHOWN: fourteen pill presses in every order (CHOP → MOD used to leave the hero under MOD) and a saved page 0 lands on SYN', r3c.join(' '));
 
  // ── [4] the Settings ink ──
  const r4=await p.evaluate(()=>{ const b=document.querySelector('#rr-bend-row b'), st=b&&b.nextElementSibling, lab=document.querySelector('#rr-bend-row .settings-label');

@@ -29,6 +29,12 @@ when first encoded for a save (`tiWriteSampleSpare`; factory paths and our own f
 **Bank B is released** (`releaseIdleBankBIfUnused`: unwanted 3 s + no voice → `bankB_ = nullptr` →
 +3 audioSeq → `synthEngineB_.reset()`). ⚠️ read it on **malloc size_in_use** — the footprint does not
 move for a release of many small blocks (the harness prints both now).
+**tp65 — THE FRONT PAGE IS NEVER SHOWN.** Max: "just make sure I can't go back to it … I just don't want to
+see it." `setActivePanel` hides `#controls` for MOD/EQ/DLY (the Chop page's two close handlers used to restore
+them under MOD: CHOP → MOD showed the hero behind the panel — they now respect `currentActivePanel`);
+`restoreUiPage(0)` lands on SYN (a page saved with Chop open stores 0 and the editor pushes it); the hidden
+EQ/DLY toggles and back buttons go to SYN, never null. The hero section is still in the DOM (the tape section,
+the deck's home) — it is simply unreachable. `_tp64_gate.js` [3c] walks fourteen pill presses + page 0.
 **Also:** MOD and CHOP pills never toggle off (only SYN has a back); the Settings bend "2"/"st" are
 white in the label's font (the root ink follows the Theme setting, Light by default, while the UI is
 hard-coded dark — the light theme is still the last pass).
