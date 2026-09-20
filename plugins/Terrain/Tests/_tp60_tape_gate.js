@@ -28,8 +28,12 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  // ── [0] THE SHELF LISTS FIVE ────────────────────────────────────────────────────────────
  const cat=await p.evaluate(()=>{ const all=window.__tpCatalog?window.__tpCatalog():[];
    return all.filter(i=>i.cat==='Tape').map(i=>i.n); });
- ok(cat.length===5 && cat.join('|')==='Tape · Studio|Tape · Cassette|Tape · Reel|Tape · Porta|Tape · Wire',
-    '[0] 🚨 THE TAPE SHELF LISTS FIVE AGAIN — tp43a deleted the three global machines and Porta and Wire went with them',
+ /* tp63 — REVERSED, ON MAX'S WORD. tp60 read "where are the rest of my TAPE MODES" as three more TYPES on the
+    rack's Tape card and built them on a different engine. He had meant the three MACHINE MODULES — Reel (the
+    Harmonic Sculptor), Porta, Wire — whose DSP and hero UI never left; tp43a had only deleted their browser
+    entries. The shelf lists those three as modules again plus the card's two types, five entries, no prefix. */
+ ok(cat.length===5 && cat.join('|')==='Reel|Porta|Wire|Studio|Cassette',
+    '[0] 🚨 THE TAPE SHELF LISTS FIVE AGAIN — the three MACHINE modules tp43a unlisted, and the card\'s two types, plain names',
     JSON.stringify(cat));
 
  // ── [1] 🚨 FIVE DIFFERENT PICTURES, RENDERED ───────────────────────────────────────────
@@ -64,8 +68,8 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    await new Promise(r=>setTimeout(r,600));
    const d=(window.__fxrDevs?window.__fxrDevs():[])[i];
    return {types:d?d.types:null}; });
- ok(types.types && types.types.join('|')==='Studio|Cassette|Reel|Porta|Wire',
-    '[2] THE ROUTED TAPE CARD OFFERS ALL FIVE — appended, so slots 0..2 never renumber a saved patch',
+ ok(types.types && types.types.join('|')==='Studio|Cassette',
+    '[2] THE ROUTED TAPE CARD OFFERS TWO — Studio and Cassette, the ones with a back panel (tp63: Reel / Porta / Wire are modules, not card types)',
     JSON.stringify(types));
 
  ok(errs.length===0,'[3] NO PAGE ERRORS', errs.slice(0,3).join(' | ')||'clean');

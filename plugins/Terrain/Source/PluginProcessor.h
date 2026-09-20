@@ -2464,6 +2464,12 @@ private:
     // definition in PluginProcessor.cpp for why 1,152 MiB used to be spent in the constructor.
     void prepareModalEnginesIfNeeded();
     void prepareHarmonicEnginesIfNeeded();   // fb517 — HARM's clone of the modal arm (~65 MB/instance)
+    // tp63 — the way back (see SynthVoice::disarmModalEngines). Timer-driven, message thread only.
+    void releaseIdleEnginesIfUnused();
+    bool anyVoiceActive() const noexcept;
+    juce::uint32 modalUnusedSinceMs_ = 0, harmUnusedSinceMs_ = 0;   // 0 = wanted (or never measured)
+    juce::uint64 modalDisarmSeq_ = 0, harmDisarmSeq_ = 0;           // audioSeq_ when the voices were disarmed; 0 = armed
+    static constexpr juce::uint32 kEngineIdleMs = 3000;             // unused this long, with no voice sounding → give it back
     // ══ fb528 — THE PREPARE LOCK ═══════════════════════════════════════════════════════════
     //  prepareToPlay IS NOT A MESSAGE-THREAD CALLBACK. JUCE's AU wrapper runs it on whatever
     //  thread calls AudioUnitInitialize/AudioUnitReset (juce_audio_plugin_client_AU_1.mm:274) —

@@ -90,7 +90,8 @@ const PAGE=process.argv[2]||(process.cwd()+'/Source/ui/public/index.html');
  // ── [6] SOURCE — what the C++ side does with the setting (the half a page test cannot drive) ──
  const ed=fs.readFileSync('Source/PluginEditor.cpp','utf8'), pr=fs.readFileSync('Source/PluginProcessor.cpp','utf8');
  const deco=['__grnVizPush','__tpeVizPush','__fx3VizPush','__fx4VizPush'].every(k=>new RegExp('if \\(decoTick\\) js << "window\\.'+k).test(ed));
- const dst=/if \(decoTick\) js << "window\.__dstVizPush=/.test(ed) && /js << "window\.__fltVizPush=" << audioProcessor\.getFilterVizJson\(\) << ";";\s+\/\/ fb382 — the filter is essential/.test(ed);
+ /* tp63 — the distortion push is ONE counter now (tp62's nested pair de-phased after any quiet spell) */
+ const dst=/if \(uiStatic \? decoTick : quarter\) js << "window\.__dstVizPush=/.test(ed) && /if \(quarter\) js << "window\.__fltVizPush=" << audioProcessor\.getFilterVizJson\(\) << ";";\s+\/\/ fb382 — the filter is essential/.test(ed);
  const scope=/&& ! uiStatic;\s+\/\/ tp62 — with motion off the scope parks/.test(ed);
  const spec=/pushEqW && specTick && wanted && spectrumLive/.test(ed);
  const rate=/int uiHz = audioProcessor\.getMotionEnabled\(\) \? 60 : 30;/.test(ed);

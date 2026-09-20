@@ -7052,7 +7052,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         </div>
         <div class="settings-row" id="rr-bend-row" title="Pitch bend range in semitones — drag the number, double-click for 2">
           <span class="settings-label">Pitch bend range</span>
-          <span><b style="cursor:ns-resize;user-select:none;font-weight:400;font-variant-numeric:tabular-nums;">2</b><span style="opacity:.55;margin-left:4px;">st</span></span>
+          <span><b style="cursor:ns-resize;user-select:none;font-weight:400;font-variant-numeric:tabular-nums;color:var(--text-primary);">2</b><span style="opacity:.55;margin-left:4px;">st</span></span>
         </div>
       </div>
       <div class="settings-footer">
@@ -10889,7 +10889,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                    knobs:[['Center',50,'SYN_PHA_CENTER'],['Stages',35,'SYN_PHA_STAGES'],['Spread',20,'SYN_PHA_SPREAD'],['Stereo',30,'SYN_PHA_STEREO'],
                           ['Touch',50,'SYN_PHA_TOUCH'],['Lag',30,'SYN_PHA_LAG'],['Floor',20,'SYN_PHA_FLOOR'],['Color',0,'SYN_PHA_COLOR']]}},
             {name:'Tape',core:'tape',type:'Studio',
-             types:['Studio','Cassette','Reel','Porta','Wire'],   /* tp43 — Reel (15 IPS) joins · tp60 — Porta and Wire come back, each per cable and each with its own transport */
+             types:['Studio','Cassette'],   /* tp63 — Reel / Porta / Wire are the MACHINE MODULES again (the browser's Tape shelf), not card types; TapeFxEngine's voices 3/4 stay in the engine, unreachable */   /* tp43 — Reel (15 IPS) joins · tp60 — Porta and Wire come back, each per cable and each with its own transport */
              preset:'Init',code:'',on:false,pwrP:'SYN_TPE_POWER',tp:'SYN_TPE_TYPE',
              // 🔑🔑 tpN — THE PARAM'S CHOICE COUNT, WHICH IS NOT THE DROPDOWN'S OPTION COUNT.
              // SYN_TPE_TYPE was born choice(8) at fb365 (2 live + 6 reserved, so the live
@@ -43234,7 +43234,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
    two?" They were the GLOBAL machines tp43a deleted when it moved tape onto the cables — right
    call, two casualties. Porta and Wire are routed card types now, each with its own transport
    (TapeFxEngine::voiceForType) and its own drawing, so nothing in this list is an alias. */
-  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette','Reel','Porta','Wire'];
+  /* ══ tp63 — THE THREE MACHINES ARE BACK, AS THE MODULES THEY WERE ═════════════════════════════
+     Max: "where the fuck did the other two tape modes go? ... I had a Harmonic Sculptor, I had a Reel ...
+     why aren't they modules? ... you gave me three other tape modes that are the same fucking thing."
+     He is right about what happened. The hero's tape section — TAPE_MACHINE: Reel (the Harmonic
+     Sculptor: Sculpt / Weave / Tilt), Porta (the cassette transport) and Wire (the wire recorder), each
+     with its three knobs and no back panel — never left the engine or the page. tp43a deleted their
+     three BROWSER entries (`k:'tape:N'`), so they became unreachable, and tp60 then built three new
+     TYPES on the rack's Tape card on top of a different engine and called them by the same names.
+     Those three card types are withdrawn (the card offers Studio and Cassette, the two that have a
+     back panel); the three machine modules are listed again, exactly as before tp43a, and nothing is
+     called "Tape · anything" — it is the Tape shelf, people know. */
+  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette'];
   function oscList(){ try{ if(window.__oscPool&&window.__oscPool.length) return window.__oscPool.slice(); }catch(e){} return OSC; }   /* the oscillator pool (E–Z land here when the engine has them) */
   var IC={ fit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
     tidy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -43265,8 +43276,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function oscLetter(o){ return String(o||'').toUpperCase(); }   /* A, B, C, D … the alphabet is the ceiling: A–Z */
   function OX(o){ return 'SYN_OSC_'+String(o).toUpperCase()+'_'; }
   function nodeName(n){ if(n.kind==='samp') return 'Sampler '+String(n.sub||'').toUpperCase();   /* tp56 */
-    if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='noise') return n.sub==='n2'?'Noise 2':'Noise'; if(n.kind==='fx') return (n.core==='tape'?'Tape · '+(n.type||''):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return flowLabel(n.sub);
-    if(n.kind==='tape'){ var S=ST(); return 'Tape · '+(MACHINES[S?S.tapeMachine|0:0]||''); }
+    if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='noise') return n.sub==='n2'?'Noise 2':'Noise'; if(n.kind==='fx') return (n.core==='tape'?(n.type||'Tape'):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return flowLabel(n.sub);
+    if(n.kind==='tape'){ var S=ST(); return MACHINES[S?S.tapeMachine|0:0]||'Tape'; }   /* tp63 — Reel / Porta / Wire, no prefix */
     return {midi:'MIDI In',out:'Out',filter:'Filter',env:'Envelope',lfo:'LFO',tapeloop:'Deck',voice:'Voices',rnd:'Randomizer'}[n.kind]||n.kind; }
 
   /* ── the page (built once, inside #syn-panel so every device keeps its CSS) ── */
@@ -43615,6 +43626,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function setFlowInline(m,on,afterKey){ var ids=flowIds41(m); if(!ids.length) return; track(ids,function(){}); if(!layout.finl) layout.finl={}; if(on){ layout.finl[m]={after:afterKey||null}; setP(flowInlId(m),1); placeInlineFlows(); } else { delete layout.finl[m]; setP(flowInlId(m),0); } saveLayout(); }
   window.__tpAfterRanks=function(){ if(isOpen) placeInlineFlows(); };
   window.__tpSoon=function(){ if(isOpen) soon(); };
+  function oscInFilter(o){ return pv(OX(o)+'F1MIX')>0.001||pv(OX(o)+'F2MIX')>0.001; }   /* tp63 — the oscillator has a cable into the master filter */
   function masksShare(a,b){ var n=Math.max(a.length,b.length); for(var i=0;i<n;i++) if(a[i]&&b[i]) return true; return false; }   /* tp61 — NALL wide when it is handed slot masks, NSRC wide when it is handed pill masks */
   /* THE OUTPUT CABLE. Cut it and the oscillator reaches Out only through whatever card claims
      it — claimed by nothing, it is silent, which is Max's "if it isn't hooked up to anything it
@@ -43957,10 +43969,22 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         if(a.kind==='fx'||a.kind==='flow'){ if(sampClaim(b,a)) return true; }
         toast(nodeName(b)+' takes audio from an effect or a Chop/Glitch card — an oscillator reaches it through those');
         return true; }
-      if(b.kind==='filter'&&a.kind==='osc'){ setP(OX(a.sub)+'F'+curFilterSlot()+'MIX',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} return true; }
+      if(b.kind==='filter'&&a.kind==='osc'){ setP(OX(a.sub)+'F'+curFilterSlot()+'MIX',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){}
+        /* ══ tp63 — THE MASTER FILTER ALWAYS WINS ═══════════════════════════════════════════════════
+           Max: "every time I connect a flow card to the oscillator it works, but then I try to connect
+           the master filter and it just won't work — it says it's on A but I have to disable the flow
+           cards. I should always be able to connect my master filter to whatever A B C D S N."
+           tp41's law made a cable FROM the oscillator a RAW tap: the card (or device) took the
+           oscillator before the filter and the voice pulled it out of the main bus — so the filtered
+           signal went nowhere and "the filter did nothing". A cable INTO the master filter now turns
+           every raw tap on that oscillator into a post-filter one, on every flow card and every
+           device that carries it: osc → filter → card, which is what he drew. */
+        var fi=srcIdx(a.sub); if(fi>=0){ (window.__flowChain?window.__flowChain():[]).forEach(function(m){ if((flowTaps(m)>>fi)&1) flowSetTap(m,fi,false); });
+          (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d,i){ if(d&&d.route&&d.route[fi]&&((d.taps|0)>>fi)&1) window.__fxrSetRoute&&window.__fxrSetRoute(i,fi,1,0); }); }
+        return true; }
       if(b.kind==='filter'&&a.kind==='noise'){ setP('SYN_FILTER'+curFilterSlot()+'_SRC_NOISE',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} toast(nodeName(a)+' → the filter (both noises share the filter\'s noise pill)'); return true; }   /* tp42 */
       if(b.kind==='fx'){ var oscIdx=[], direct=false;
-        if(a.kind==='osc'||a.kind==='noise'){ oscIdx=[srcIdx(a.sub)]; direct=true; }   /* tp42 — a noise module is a source like any oscillator · tp40 — E-H too: the route index is the pill's, 0..3 = A-D, 6..9 = E-H · tp41 — from the OSCILLATOR = a direct tap (raw, never the filter) */
+        if(a.kind==='osc'||a.kind==='noise'){ oscIdx=[srcIdx(a.sub)]; direct=!(a.kind==='osc'&&oscInFilter(a.sub)); }   /* tp42 — a noise module is a source like any oscillator · tp40 — E-H too · tp41 — from the OSCILLATOR = a direct tap · tp63 — unless the oscillator is IN the master filter: then it arrives filtered (the filter always wins) */
         else if(a.kind==='filter'||a.kind==='tape'||a.kind==='tapeloop') oscIdx=OSC.concat(['e','f','g','h']).map(function(o){ return (a.kind!=='filter'||pv(OX(o)+'F1MIX')>0.001||pv(OX(o)+'F2MIX')>0.001)?srcIdx(o):-1; }).filter(function(i){return i>=0;});
         oscIdx=oscIdx.filter(function(i){ return i>=0; }); if(oscIdx.length){ var dv=(window.__fxrDevs?window.__fxrDevs():[])[b.idx]; if(dv&&dv.tapsP) track([dv.tapsP],function(){}); oscIdx.forEach(function(i){ window.__fxrSetRoute&&window.__fxrSetRoute(b.idx,i,1,direct?1:0); }); if(direct) toast(nodeName(a)+' → '+nodeName(b)+' · direct, not through the filter'); return true; }
         if(a.kind==='fx'){ var devs=window.__fxrDevs?window.__fxrDevs():[]; var order=[]; for(var i=0;i<devs.length;i++) order.push(i); order.splice(order.indexOf(b.idx),1); order.splice(order.indexOf(a.idx)+1,0,b.idx); window.__fxrReorder&&window.__fxrReorder(order); return true; }
@@ -43978,7 +44002,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         var bk=fKind(b.sub);
         if(bk==='chop'||bk==='glitch'){
           var idxs=[], directF=false;
-          if(a.kind==='osc'||a.kind==='noise'){ var si=srcIdx(a.sub); if(si>=0) idxs=[si]; directF=true; }   /* tp41 — from the oscillator = raw · tp42 — or a noise module */
+          if(a.kind==='osc'||a.kind==='noise'){ var si=srcIdx(a.sub); if(si>=0) idxs=[si]; directF=!(a.kind==='osc'&&oscInFilter(a.sub)); }   /* tp41 — from the oscillator = raw · tp42 — or a noise module · tp63 — filtered if the oscillator is in the master filter */
           else if(a.kind==='filter'||a.kind==='tape'||a.kind==='tapeloop')
             idxs=oscList().map(srcIdx).filter(function(i){ return i>=0; });
           else if(a.kind==='fx'){ var ad=(window.__fxrDevs?window.__fxrDevs():[])[a.idx]; (ad&&ad.route||[]).forEach(function(v,i){ if(v) idxs.push(i); });   /* tp41 — the card eats what THAT device carries, not the whole instrument */
@@ -44879,7 +44903,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     /* tp43 — Max: "these tape modes need to stop being global … actually follow the patcher's cables". The browser offers the
        ROUTED tape card in its three machines; the global master machine is no longer spawned from here (a patch that has it on
        still shows its node). */
-    TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:'Tape · '+nm,cat:'Tape'}); });
+    MACHINES.forEach(function(nm,i){ var cur=tapeUp&&mach===i; it.push({k:'tape:'+i,n:nm,cat:'Tape',dis:cur,note:cur?'Already on the canvas':null}); });   /* tp63 — restored (tp43a deleted them) */
+    TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:nm,cat:'Tape'}); });
     FXLIST.forEach(function(k){ it.push({k:k,n:FXNAMES[k],cat:'Effects'}); }); return it; }
   function fitsCtx(it){ if(!addCtx) return true; var t=addCtx.t; if(t==='m') return false; if(t==='n') return it.cat==='Flow'&&/arp|drift/.test(it.k); if(t==='a') return it.cat==='Effects'||it.cat==='Tape'||(it.cat==='Flow'&&/chop|glitch/.test(it.k)); return false; }
   function openAdd(cx,cy,ctx){ closeMenus(); addCtx=ctx; var w=toWorld(cx,cy); addM.dataset.wx=w.x; addM.dataset.wy=w.y; addM.querySelector('input').value=''; renderAdd(); placeMenu(addM,cx,cy); try{ addM.querySelector('input').focus(); }catch(e){} }
@@ -44971,6 +44996,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      connect() takes the node objects themselves, so a bar that wanted to drive the shipped cable
      gate had to re-implement it — which is exactly the class of test that has lied here twice. */
   window.__tpRaw=function(){ return nodes; };
+  window.__tpNodeName=nodeName; window.__tpAddFromList=addFromList; window.__tpState=ST;   /* tp63 — the gates */
   window.__tpSyncPresence=syncPresence; window.__tpAdoptSamp=adoptSamp; window.__tpReturnSamp=returnSamp;
   window.__tpLayout=function(){ return layout; };
   window.__tpFlowChops=flowChopsOf; window.__tpChopsOf=chopsOf; window.__tpSampKey=sampKey;

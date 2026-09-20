@@ -244,9 +244,11 @@ const fake=()=>{const N=1200,mn=[],mx=[];for(let i=0;i<N;i++){const e=.2+.7*Math
    document.body.classList.remove('ti-capture-off'); await new Promise(r=>setTimeout(r,200));
    const onOp=+getComputedStyle(btn).opacity, onPe=getComputedStyle(btn).pointerEvents;
    return {off:{op:offOp, pe:offPe, row:offRow}, triggerOp:trOp, says, stOp, on:{op:onOp, pe:onPe}}; });
+ /* tp63 — REVERSED: no caption. Max: "take away where it says capture is off no stems — forget captions and
+    breadcrumbs." The grey is the message. The bar now requires the caption to be ABSENT. */
  ok(r9.off.op<0.5 && r9.off.row<0.5 && r9.off.pe==='none' && r9.triggerOp===1 && r9.on.op===1 && r9.on.pe!=='none'
-    && /Capture is off/.test(r9.says) && r9.stOp===1,
-    '[9] capture off greys the stem BUTTONS, says why at full strength, and leaves the layer page alone', JSON.stringify(r9));
+    && !/Capture is off/.test(r9.says),
+    '[9] capture off greys the stem BUTTONS with NO caption, and leaves the layer page alone', JSON.stringify(r9));
 
  ok(errs.length===0, '[10] the page threw nothing', errs.join(' | '));
  console.log('\n  '+pass+' passed, '+fail+' failed\n');

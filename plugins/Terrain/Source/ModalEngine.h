@@ -100,6 +100,8 @@ class ModalEngine
 {
 public:
     // ═══════════════════════════════ setup ═══════════════════════════════════
+    // tp63 — see DelayA::release. isActive() goes false too, so readPos01() stays behind its guard.
+    void release() noexcept { dlA_.release(); dlB_.release(); combA_.release(); combB_.release(); boreN_.release(); boreB_.release(); active_ = false; }
     void prepare (double sampleRate, bool /*bankOwner*/ = true) noexcept
     {
         rate_  = sampleRate > 1000.0 ? sampleRate : 48000.0;
@@ -389,6 +391,10 @@ private:
         std::vector<float> buf; int size = 0, inPoint = 0, outPoint = 0;
         float coeff = 0.f, apInput = 0.f, lastOut = 0.f, delay = 1.f;
         void prepare (int maxLen) noexcept { size = std::max (8, maxLen); buf.assign ((size_t) size, 0.f); inPoint = 0; clear(); setDelay (1.f); }
+        // tp63 — the memory back. MESSAGE THREAD, and only once the voice's modalReady_ has been false
+        //  for a grace period (see TerrainAudioProcessor::releaseIdleEnginesIfUnused): the render path is
+        //  gated on that flag, so nothing is reading this line by the time it goes.
+        void release() noexcept { std::vector<float>().swap (buf); size = 0; inPoint = outPoint = 0; }
         void clear() noexcept { std::fill (buf.begin(), buf.end(), 0.f); apInput = 0.f; lastOut = 0.f; }
         void setDelay (float d) noexcept
         {

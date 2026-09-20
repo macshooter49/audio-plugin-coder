@@ -6972,12 +6972,15 @@ void TerrainUiCore::timerCallback()
         // promise to lose: the object is evaluated straight into the page.
         // Rate-limited to ~15 Hz (the poll's own cadence) so this stays ~16 KB/s, well under the
         // 40-80 KB/s that fb342 identified as the frame-drop threshold.
-        if (++dstVizPushCtr_ >= 4)
-        {
-            dstVizPushCtr_ = 0;
-            if (decoTick) js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";   // tp62 — decorative cadence with motion off
-            js << "window.__fltVizPush=" << audioProcessor.getFilterVizJson() << ";";   // fb382 — the filter is essential: every fourth tick, always
-        }
+        /* ⚠️ tp63 — ONE COUNTER PER FEED. tp62 nested the distortion push inside this counter AND
+           decoTick: dstVizPushCtr_ only advances while this block runs (it is under the quiet gate)
+           while motionTick_ advances every tick, so after any quiet spell the two de-phase and the
+           two conditions never coincide again — the shaper stopped following its TYPE with motion
+           off (Max: "I go to soft clip and it still has the asymmetric shape"). The static cadence
+           is decoTick alone; the motion-on cadence is this counter alone. */
+        const bool quarter = (++dstVizPushCtr_ >= 4); if (quarter) dstVizPushCtr_ = 0;
+        if (uiStatic ? decoTick : quarter) js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";
+        if (quarter) js << "window.__fltVizPush=" << audioProcessor.getFilterVizJson() << ";";   // fb382 — the filter is essential: every fourth tick, always
         // fb363 — THE GRANULAR CARD PUSHES EVERY FRAME, not at the distortion's 15 Hz.
         // Max: "it is not 4K 60 frames per second, and them frames are very very low... that looks
         // like a sample and hold." He was describing the rate limit exactly — a waveform refreshed
@@ -8039,7 +8042,12 @@ void TerrainUiCore::CaptureDragStrip::paint (juce::Graphics& g)
             quiet alpha and its live state at full weight. */
         static constexpr juce::uint32 kPurpleDark  = 0xFFB794FF;   // --purple-400, dark theme
         static constexpr juce::uint32 kPurpleLight = 0xFFA78BFA;   // --purple-400, light theme
-        const juce::Colour house  = juce::Colour (dark ? kPurpleDark : kPurpleLight);
+        /* tp63 — Max: "where it says capture-off, I want the letters to be white on the dark theme,
+           and the opposite on the light theme." The purple was tp57's answer to a blue-grey; the
+           strip's quiet word now reads like the page's own quiet labels: white ink on dark, dark
+           ink on light. The live (exporting / drag) states keep their colours. */
+        const juce::Colour house  = dark ? juce::Colour (0xFFFFFFFF) : juce::Colour (0xFF1A1A2E);
+        juce::ignoreUnused (kPurpleDark, kPurpleLight);
         /* tp58 — 0.42 over the page's dark ground composited to a slate grey: the token was
            right and the WEIGHT made it read as a different colour anyway. The page's own quiet
            labels sit far brighter than that, which is the comparison Max is making. */
@@ -15197,7 +15205,11 @@ body.chop-open #controls { display: none !important; }
      is the other half of the collision below. */
   color: #FFFFFF !important; font-weight: 200 !important; font-size: 9.5px !important;
   font-variant-numeric: tabular-nums !important; letter-spacing: .01em !important;
-  min-width: 11px !important; text-align: center !important; }
+  /* tp63 — Max: "I click 8 to 64, 8 to 32, it moves. I don't want the slices to be anywhere. Just
+     add the 8 and make the box a little bigger, don't move nothing." The pill row is centred, so
+     a count that is one digit wide at 8 and two at 64 moved BOTH edges every time. Two tabular
+     digits' width is reserved whatever the count says. */
+  min-width: 2.2ch !important; width: 2.2ch !important; text-align: center !important; }
 
 /* ── NOTHING SITS ON AN EDGE ──
       Max: "make sure that none of these numbers or texts inside the boxes are too close to the
@@ -15422,10 +15434,8 @@ body.chop-open #capture-badge, body.chop-open .capture-badge {
 body.ti-capture-off #mix-panel #mix-stem-area .stem-buttons,
 body.ti-capture-off #mix-panel #mix-stem-area .stem-all-row {
   opacity: .30 !important; pointer-events: none !important; }
-body.ti-capture-off #mix-panel #mix-stem-area .stem-status {
-  opacity: 1 !important; }
-body.ti-capture-off #mix-panel #mix-stem-area .stem-status::after {
-  content: 'Capture is off — no stems are being recorded'; }
+/* tp63 — and NO caption. Max: "take away where it says capture is off no stems — forget captions and
+   breadcrumbs." The grey is the message. (The line also came through the raw string as mojibake.) */
 </style>
 <script>
 /* tp61 — the body class the settings toggle writes is only written once the SETTINGS panel has

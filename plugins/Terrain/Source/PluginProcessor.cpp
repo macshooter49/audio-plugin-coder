@@ -3069,6 +3069,7 @@ void TerrainAudioProcessor::timerCallback()
     for (int o = 0; o < ParameterIDs::kOscCount; ++o) rebuildGeodeIfNeeded (o);   // tp20 — every oscillator of every bank
     prepareModalEnginesIfNeeded();   // fb498 — arm MODAL's waveguide lines the first time an osc asks for them
     prepareHarmonicEnginesIfNeeded();   // fb517 — same, for HARM's partial banks
+    releaseIdleEnginesIfUnused();       // tp63 — and give them back when no oscillator has wanted them for a while
 
     // fb514 — THE CLOSED-EDITOR IDLE GOVERNOR. This timer dispatches on the HOST'S UI thread;
     // seven closed instances at 60 Hz = 420 message-thread dispatches a second competing with
@@ -3193,6 +3194,58 @@ void TerrainAudioProcessor::prepareHarmonicEnginesIfNeeded()
     if (! wanted) return;
 
     forEachVoiceAllBanks ([] (tw::SynthVoice* v, int) { v->prepareHarmonicEngines(); });
+}
+
+// ══ tp63 — THE WAY BACK ═══════════════════════════════════════════════════════════════════════════
+//  Max: "every time I randomize my memory goes up ... it just won't go down. Cut the shit off that's
+//  being saved." Measured (Tests/au_lazy_memory.cpp): switching ONE oscillator to MODAL arms +1,213 MB
+//  per bank, HARM +55 MB, and returning the patch to default gave back nothing. A dice roll visits
+//  both, so the second and third rolls cost 3 GB that the fourth patch never used.
+//
+//  The rule: an engine family that NO oscillator in either bank has asked for, for kEngineIdleMs,
+//  while NO voice is sounding, is disarmed (its ready flag goes false on every voice — the render
+//  path's own bounds guard, so from the next block no engine is read) and, once the audio thread has
+//  provably left the block it was in (audioSeq_ advanced by two), released. Re-arming is the
+//  existing lazy path, untouched: the first tick that sees the engine wanted again prepares it.
+//  ⚠️ Disarm and release are two ticks apart on purpose — the flag store and the free must never
+//  share a block with a render that started before the store.
+bool TerrainAudioProcessor::anyVoiceActive() const noexcept
+{
+    for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoices_[(size_t) i]) if (v->isVoiceActive()) return true;
+    if (bankB_.load (std::memory_order_acquire) != nullptr)
+        for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoicesB_[(size_t) i]) if (v->isVoiceActive()) return true;
+    return false;
+}
+
+void TerrainAudioProcessor::releaseIdleEnginesIfUnused()
+{
+    const auto* ENG = ParameterIDs::kOsc_ENGINE;
+    bool wantModal = false, wantHarm = false;
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+    {
+        const int e = (int) *rawParam (ENG[o]);
+        wantModal = wantModal || e == (int) tw::SynthVoice::Engine::MODAL;
+        wantHarm  = wantHarm  || e == (int) tw::SynthVoice::Engine::HARM;
+    }
+    const juce::uint32 now = juce::Time::getMillisecondCounter();
+    const juce::uint64 seq = audioSeq_.load (std::memory_order_seq_cst);
+    auto step = [&] (bool wanted, juce::uint32& unusedSince, juce::uint64& disarmSeq, bool armedAnywhere,
+                     void (tw::SynthVoice::*disarm)() noexcept, void (tw::SynthVoice::*release)() noexcept)
+    {
+        if (wanted) { unusedSince = 0; disarmSeq = 0; return; }        // wanted: the lazy arm owns it
+        if (! armedAnywhere) { unusedSince = 0; disarmSeq = 0; return; } // nothing to give back
+        if (unusedSince == 0) { unusedSince = now; return; }
+        if (now - unusedSince < kEngineIdleMs) return;
+        if (anyVoiceActive()) { unusedSince = now; return; }             // a tail is still sounding: start the clock again
+        if (disarmSeq == 0) { forEachVoiceAllBanks ([&] (tw::SynthVoice* v, int) { (v->*disarm)(); }); disarmSeq = seq; return; }
+        if (seq < disarmSeq + 3) return;                                 // +1 entry / +1 exit per block: +3 = the block in flight at the store has exited AND a fresh one has begun
+        forEachVoiceAllBanks ([&] (tw::SynthVoice* v, int) { (v->*release)(); });
+        unusedSince = 0; disarmSeq = 0;
+    };
+    bool modalArmed = false, harmArmed = false;
+    forEachVoiceAllBanks ([&] (tw::SynthVoice* v, int) { modalArmed = modalArmed || v->modalArmed(); harmArmed = harmArmed || v->harmArmed(); });
+    step (wantModal, modalUnusedSinceMs_, modalDisarmSeq_, modalArmed || modalDisarmSeq_ != 0, &tw::SynthVoice::disarmModalEngines,    &tw::SynthVoice::releaseModalEngines);
+    step (wantHarm,  harmUnusedSinceMs_,  harmDisarmSeq_,  harmArmed  || harmDisarmSeq_  != 0, &tw::SynthVoice::disarmHarmonicEngines, &tw::SynthVoice::releaseHarmonicEngines);
 }
 
 void TerrainAudioProcessor::rebuildGeodeIfNeeded (int o)

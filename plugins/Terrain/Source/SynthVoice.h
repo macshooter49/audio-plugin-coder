@@ -1301,6 +1301,31 @@ class SynthVoice : public juce::SynthesiserVoice
             { int u = 0; for (auto& e : modalEngD_) e.prepare (sampleRate_, u++ == 0); }
             modalReady_.store (true, std::memory_order_release);
         }
+        // ══ tp63 — AND THE WAY BACK. Max: "every time I randomize my memory goes up ... it just won't go
+        //  down." A dice roll that visits MODAL arms ~1.2 GB per bank (au_lazy_memory.cpp) and nothing ever
+        //  gave it back. Two steps, both MESSAGE THREAD, driven by the processor's idle timer:
+        //   1. disarmModalEngines()  — modalReady_ goes false. The render path is gated on it (the bounds
+        //      guard above), so from the NEXT block no engine in this voice is read. Idempotent.
+        //   2. releaseModalEngines() — once the audio thread has advanced past the block that could still
+        //      have been inside a render (the processor waits on audioSeq_), the lines are freed.
+        //  prepareModalEngines() re-arms exactly as on first use, so a patch that asks for MODAL again
+        //  pays the allocation again — on the message thread, where it always was.
+        void disarmModalEngines() noexcept { modalReady_.store (false, std::memory_order_release); }
+        void releaseModalEngines() noexcept
+        {
+            if (modalReady_.load (std::memory_order_acquire)) return;   // re-armed meanwhile: keep it
+            for (auto& e : modalEngA_) e.release(); for (auto& e : modalEngB_) e.release();
+            for (auto& e : modalEngC_) e.release(); for (auto& e : modalEngD_) e.release();
+        }
+        bool modalArmed() const noexcept { return modalReady_.load (std::memory_order_acquire); }
+        void disarmHarmonicEngines() noexcept { harmReady_.store (false, std::memory_order_release); }
+        void releaseHarmonicEngines() noexcept
+        {
+            if (harmReady_.load (std::memory_order_acquire)) return;
+            for (auto& e : harmEngA_) e.release(); for (auto& e : harmEngB_) e.release();
+            for (auto& e : harmEngC_) e.release(); for (auto& e : harmEngD_) e.release();
+        }
+        bool harmArmed() const noexcept { return harmReady_.load (std::memory_order_acquire); }
         // fb517 — HARM's LAZY ARM, the modal pattern above cloned verbatim (same thread rules,
         // same one-way publication, same acquire/release pairing).
         void prepareHarmonicEngines()

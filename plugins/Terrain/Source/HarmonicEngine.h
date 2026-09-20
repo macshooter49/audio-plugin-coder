@@ -180,6 +180,15 @@ public:
     // ── setup ────────────────────────────────────────────────────────────────
     // bankOwner = true for the unison ANCHOR (allocates the spectrum-build arrays);
     // siblings only allocate render state and borrow the anchor's bank via adoptBank().
+    // tp63 — the partial banks back (message thread, behind the voice's harmReady_ grace — see
+    //  TerrainAudioProcessor::releaseIdleEnginesIfUnused). noteOn's `scatMul_.size()` guard would
+    //  re-assign on the audio thread if this engine were ever rendered released; the voice's
+    //  harmReady_ gate is what makes sure it never is.
+    void release() noexcept
+    {
+        for (auto* v : { &phase_, &ampZL_, &ampZR_, &ratio_, &amp_, &panL_, &panR_, &baseAmp_, &scatMul_ })
+            std::vector<float>().swap (*v);
+    }
     void prepare (double sampleRate, bool bankOwner = true) noexcept
     {
         rate_ = sampleRate > 1000.0 ? sampleRate : 48000.0;
