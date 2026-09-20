@@ -12471,6 +12471,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       }
     }
 
+)TIHX") + juce::String (R"TIHX(
     // ── Restore ALL layer state on editor reopen (Mark 2 Phase 1 fix) ─────────
     // The processor survives editor close/reopen with all 4 layer atomics +
     // sample buffers intact. We hydrate JS state from C++ in this order:
