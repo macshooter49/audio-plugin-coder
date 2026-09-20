@@ -1,7 +1,39 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD `43ba776`+ (tp63b)**, pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp64** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp64 (2026-09-20, evening) — THE MACHINES AS CARDS, THE DECK, THE CHOP PAGE FOLLOWS THE PRESET, BANK B
+**The three tape machines are card TYPES again — on the machine DSP this time.** Max: "make them like
+everything else … duplicatable and per-routable … we can run cables in and out". `TAPEFX` lists five
+(Studio / Cassette with the back panel; Reel / Porta / Wire three knobs, `d.noBack`), each ×6
+(`kFxInstances`). 🚨 **THE ROOT OF "THE DSP IS THE SAME":** `applyTpe` clamped `wantType` to `ty <= 1`
+from the day the card was born, so tp43's Reel and tp60's Porta / Wire ran as Studio in every host.
+Widened to 4. The Reel reads `SYN_TPE*_SCULPT/WEAVE/TILT` (declared per instance since fb365, read by
+nothing) into `Params::sculpt/weave/tilt`; only StudioMachine consumes them, so Studio / Cassette are
+untouched. `Tests/au_tape_types.cpp` on the installed AU: closest pair 2.83 dB, Reel/Porta 14.3 dB,
+Tilt moves the Sculptor 9 dB (⚠️ the card needs `Tape SRC_A` lit or the engine is never built and the
+slot passes through). The browser's `tape:N` (global machine) entries are gone; `kind:'tape'` stays for
+a patch that has the hero machine on. `fxrRestoreTapeOne` reads v[2..4] for a Reel.
+**The Deck** was ~98 % alive (kind `tapeloop`, `adoptLoop`/`returnLoop`, `kDeckKind` 18 in the chain,
+`SYN_DCK_*`) and had NEVER had a browser entry. Now `k:'deck'` on the Tape shelf; presence =
+`SYN_DCK_ACTIVE` (the tp61 sampler law) or `layout.deck` for an uncabled one; Remove clears its routes.
+🚨 **The Chop page follows the preset.** The preset carried everything (embedded FLAC per layer, slices,
+markers, mixer) and `setStateInformation` restored it all — the page hydrated ONCE at boot
+(`heroOverlay`'s two IIFEs), so a recall showed the previous patch's waveform over the new sound.
+`window.__tiChopRepull` (= `tiHydrateLayersFromCpp` → `tiPullSlicerFromCpp`, plus every registered
+`__tiChopPulls` entry: strips/trigger/stems, hold, ARM/BPM/lib strip) runs from `onPatchLoaded`. Also
+saved now: per-layer `sampleLoopMode` (the 1-SHOT/LOOP pill — every .terrain came back one-shot) and
+`sourceBpmUser`. A user sample is written once as a spare `<data dir>/Samples/Imported/<name>.flac`
+when first encoded for a save (`tiWriteSampleSpare`; factory paths and our own folder skipped).
+**Bank B is released** (`releaseIdleBankBIfUnused`: unwanted 3 s + no voice → `bankB_ = nullptr` →
++3 audioSeq → `synthEngineB_.reset()`). ⚠️ read it on **malloc size_in_use** — the footprint does not
+move for a release of many small blocks (the harness prints both now).
+**Also:** MOD and CHOP pills never toggle off (only SYN has a back); the Settings bend "2"/"st" are
+white in the label's font (the root ink follows the Theme setting, Light by default, while the UI is
+hard-coded dark — the light theme is still the last pass).
+**Gates:** `Tests/_tp64_gate.js` (15), `au_tape_types.cpp` (5), `au_lazy_memory.cpp` (+2); tp63 [0]/[0b]
+and tp60 [0]/[2] rewritten to the tp64 law. All page gates green.
 
 ## tp63 (2026-09-20, afternoon) — THE MACHINES, THE FILTER, THE RANDOMIZE MEMORY
 **The three tape machines are modules again.** `TAPE_MACHINE` (Reel = Harmonic Sculptor, Porta, Wire)

@@ -32,8 +32,11 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
     rack's Tape card and built them on a different engine. He had meant the three MACHINE MODULES — Reel (the
     Harmonic Sculptor), Porta, Wire — whose DSP and hero UI never left; tp43a had only deleted their browser
     entries. The shelf lists those three as modules again plus the card's two types, five entries, no prefix. */
- ok(cat.length===5 && cat.join('|')==='Reel|Porta|Wire|Studio|Cassette',
-    '[0] 🚨 THE TAPE SHELF LISTS FIVE AGAIN — the three MACHINE modules tp43a unlisted, and the card\'s two types, plain names',
+ /* tp64 — REVERSED AGAIN, ON MAX'S WORD: "make them like everything else … duplicatable and per-routable". The three
+    machines are card TYPES on the routed card (on the machine DSP now — the processor's clamp had forced every type
+    above Cassette to Studio), and the Deck joins the shelf. Six entries, the card's own names, no prefix. */
+ ok(cat.length===6 && cat.join('|')==='Studio|Cassette|Reel|Porta|Wire|Deck',
+    '[0] 🚨 THE TAPE SHELF LISTS SIX (tp64) — the routed card in five types and the Deck, plain names',
     JSON.stringify(cat));
 
  // ── [1] 🚨 FIVE DIFFERENT PICTURES, RENDERED ───────────────────────────────────────────
@@ -68,8 +71,8 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    await new Promise(r=>setTimeout(r,600));
    const d=(window.__fxrDevs?window.__fxrDevs():[])[i];
    return {types:d?d.types:null}; });
- ok(types.types && types.types.join('|')==='Studio|Cassette',
-    '[2] THE ROUTED TAPE CARD OFFERS TWO — Studio and Cassette, the ones with a back panel (tp63: Reel / Porta / Wire are modules, not card types)',
+ ok(types.types && types.types.join('|')==='Studio|Cassette|Reel|Porta|Wire',
+    '[2] THE ROUTED TAPE CARD OFFERS FIVE — Studio / Cassette (back panel) and Reel / Porta / Wire (three knobs, tp64)',
     JSON.stringify(types));
 
  ok(errs.length===0,'[3] NO PAGE ERRORS', errs.slice(0,3).join(' | ')||'clean');

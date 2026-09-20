@@ -3071,6 +3071,7 @@ void TerrainAudioProcessor::timerCallback()
     prepareHarmonicEnginesIfNeeded();   // fb517 — same, for HARM's partial banks
     releaseIdleEnginesIfUnused();       // tp63 — and give them back when no oscillator has wanted them for a while
     releaseIdleWavetables();            // tp63 — and the wavetables the dice visited and left behind
+    releaseIdleBankBIfUnused();         // tp64 — and the second oscillator bank, when no E–H oscillator is on
 
     // fb514 — THE CLOSED-EDITOR IDLE GOVERNOR. This timer dispatches on the HOST'S UI thread;
     // seven closed instances at 60 Hz = 420 message-thread dispatches a second competing with
@@ -3247,6 +3248,33 @@ void TerrainAudioProcessor::releaseIdleEnginesIfUnused()
     forEachVoiceAllBanks ([&] (tw::SynthVoice* v, int) { modalArmed = modalArmed || v->modalArmed(); harmArmed = harmArmed || v->harmArmed(); });
     step (wantModal, modalUnusedSinceMs_, modalDisarmSeq_, modalArmed || modalDisarmSeq_ != 0, &tw::SynthVoice::disarmModalEngines,    &tw::SynthVoice::releaseModalEngines);
     step (wantHarm,  harmUnusedSinceMs_,  harmDisarmSeq_,  harmArmed  || harmDisarmSeq_  != 0, &tw::SynthVoice::disarmHarmonicEngines, &tw::SynthVoice::releaseHarmonicEngines);
+}
+
+// tp64 — THE PLATEAU. Bank B (oscillators E–H) is a whole second synthesiser: +298 MB the first time any E–H
+//  oscillator is switched on, and until now it stayed for the life of the instance. Same fence as the engines:
+//  no E–H oscillator on for kEngineIdleMs and no voice sounding → UNPUBLISH (bankB_ = nullptr: every audio-thread
+//  reader loads bankB_ afresh each time it wants the bank, so nothing new reaches it) → +3 audioSeq (the block in
+//  flight at the store has exited and a fresh one has begun) → delete. ensureBankB() rebuilds it the moment an E–H
+//  oscillator is switched on again (the timer's `bankB_ == nullptr && bankBWanted()` path).
+void TerrainAudioProcessor::releaseIdleBankBIfUnused()
+{
+    if (synthEngineB_ == nullptr) { bankBUnusedSinceMs_ = 0; bankBUnpubSeq_ = 0; return; }
+    const juce::uint32 now = juce::Time::getMillisecondCounter();
+    const juce::uint64 seq = audioSeq_.load (std::memory_order_seq_cst);
+    if (bankBUnpubSeq_ != 0)
+    {
+        if (seq < bankBUnpubSeq_ + 3) return;
+        for (auto& v : synthVoicesB_) v = nullptr;   // the synthesiser owns the voices
+        synthEngineB_.reset();
+        bankBUnusedSinceMs_ = 0; bankBUnpubSeq_ = 0;
+        return;
+    }
+    if (bankBWanted()) { bankBUnusedSinceMs_ = 0; return; }
+    if (bankBUnusedSinceMs_ == 0) { bankBUnusedSinceMs_ = now; return; }
+    if (now - bankBUnusedSinceMs_ < kEngineIdleMs) return;
+    if (anyVoiceActive()) { bankBUnusedSinceMs_ = now; return; }
+    bankB_.store (nullptr, std::memory_order_release);
+    bankBUnpubSeq_ = seq;
 }
 
 // tp63 — see WavetableBank::unpublish. A preset that no oscillator (either bank) names for kEngineIdleMs
@@ -9306,7 +9334,9 @@ void TerrainAudioProcessor::applyTpe (int inst0, float inL, float inR,
     const bool tpeFresh = (tpeParBlk_[(size_t) inst0] != fxBlockGen_);
     tw::TapeFxEngine::Params& tp = tpePar_[(size_t) inst0];
     const int ty = (int) V.type->load();              // choice params read as the INDEX
-    const int wantType = (ty >= 0 && ty <= 1) ? ty : 0;   // the 6 reserved slots clamp to Studio
+    const int wantType = (ty >= 0 && ty <= 4) ? ty : 0;   // tp64 — five live types; the 3 reserved slots clamp to Studio
+    // (this read `ty <= 1` from the day the card was born, so tp43's Reel and tp60's Porta / Wire never reached
+    //  the engine — every type above Cassette ran as Studio, which is what Max heard: "the DSP is the same")
 
     // The type RE-SEAT lives in the engine (TapeFxEngine::process) so the offline harness can
     // measure it — see the note there. This just states the wish.
@@ -9322,6 +9352,9 @@ void TerrainAudioProcessor::applyTpe (int inst0, float inL, float inR,
     // transports. The SCULPT/WEAVE/TILT params stay declared (a param can never be removed
     // without renumbering the host's list) but nothing reads them any more.
     tp.p1 = M (V.p1); tp.p2 = M (V.p2); tp.p3 = M (V.p3);
+    // tp64 — the Reel type is StudioMachine + the Harmonic Sculptor, and those three are its front row.
+    //  TILT is declared -100..100, so its normalised read is re-centred to the machine's -1..+1.
+    tp.sculpt = M (V.sculpt); tp.weave = M (V.weave); tp.tilt = M (V.tilt) * 2.0f - 1.0f;
     tp.mix     = M (V.mix);
     tp.repeats = M (V.repeats);
     tp.drive   = M (V.drive);
@@ -17789,6 +17822,41 @@ juce::String TerrainAudioProcessor::getRestoreMissesJson() const
     return juce::JSON::toString (juce::var (o.get()), true);
 }
 
+// tp64 — the spare copy of a user sample (see buildStateTree's layer loop). Message thread, save path, once per
+//  sample. The factory library (…/Resources/Samples/…) and our own Samples folder are never duplicated.
+static void tiWriteSampleSpare (const juce::AudioBuffer<float>& buf, double sr, const juce::String& name, const juce::String& srcPath)
+{
+    try
+    {
+        const auto samplesDir = terrainDataDirP().getChildFile ("Samples");
+        if (srcPath.contains ("/Resources/Samples/") || srcPath.contains ("\\Resources\\Samples\\")) return;   // factory
+        if (srcPath.isNotEmpty() && ! srcPath.startsWith ("mem:") && juce::File (srcPath).isAChildOf (samplesDir)) return;   // already ours
+        const auto dir = samplesDir.getChildFile ("Imported");
+        if (! dir.isDirectory() && ! dir.createDirectory()) return;
+        juce::String base = juce::File::createLegalFileName (name.isNotEmpty() ? name : juce::String ("Sample"));
+        if (base.containsChar ('.')) base = base.upToLastOccurrenceOf (".", false, false);
+        if (base.trim().isEmpty()) base = "Sample";
+        const auto f = dir.getChildFile (base + ".flac");
+        if (f.existsAsFile() && f.getSize() > 0) return;
+        const int nch = juce::jmax (1, buf.getNumChannels()), n = buf.getNumSamples();
+        if (n <= 0) return;
+        float peak = 0.0f;
+        for (int c = 0; c < nch; ++c) { const auto r = buf.findMinMax (c, 0, n); peak = juce::jmax (peak, std::abs (r.getStart()), std::abs (r.getEnd())); }
+        juce::AudioBuffer<float> scaled; const juce::AudioBuffer<float>* src = &buf;
+        if (std::isfinite (peak) && peak > 1.0f) { scaled.makeCopyOf (buf); scaled.applyGain (1.0f / peak); src = &scaled; }
+        std::unique_ptr<juce::OutputStream> stream = f.createOutputStream();
+        if (stream == nullptr) return;
+        juce::FlacAudioFormat fmt;
+        auto writer = fmt.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                       .withSampleRate ((sr >= 1.0 && sr <= 384000.0) ? sr : 48000.0)
+                                                       .withNumChannels (nch)
+                                                       .withBitsPerSample (24));
+        if (writer != nullptr) { writer->writeFromAudioSampleBuffer (*src, 0, n); writer.reset(); }
+        else { stream.reset(); f.deleteFile(); }
+    }
+    catch (...) {}
+}
+
 // Fill every sample slot the just-restored state names. Called SYNCHRONOUSLY at the end of
 // setStateInformation, for the same reason prefetchOscWavetables(4) is called there: the host can
 // start calling processBlock the instant it returns. Nothing here touches the message thread, the
@@ -18296,6 +18364,11 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
         layerNode.setProperty ("rootMidiNote",     L.rootMidiNote.load(),       nullptr);
         layerNode.setProperty ("sliceMode",        L.sliceMode.load(),          nullptr);
         layerNode.setProperty ("playMode",         L.playMode.load(),           nullptr);
+        // tp64 — the 1-SHOT / LOOP pill (per layer: the voices read L.sampleLoopMode, and nothing saved it — every
+        //  .terrain came back one-shot) and the BPM the user TYPED for the layer (LayerState.h: "survives until a
+        //  different sample lands in that layer" — it did not survive a save).
+        layerNode.setProperty ("sampleLoopMode",   L.sampleLoopMode.load(),     nullptr);
+        layerNode.setProperty ("sourceBpmUser",    (double) L.sourceBpmUser.load(), nullptr);
         layerNode.setProperty ("sliceCount",       L.sliceCount.load(),         nullptr);
         layerNode.setProperty ("chopFadeMs",       L.chopFadeMs.load(),         nullptr);
         layerNode.setProperty ("volume",           L.volume.load(),             nullptr);
@@ -18396,11 +18469,17 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
                 const auto key = tiKeyOf (buf);
                 if (key != assetKeyLayer_[(size_t) li] || assetB64Layer_[(size_t) li].isEmpty())
                 {
-                    assetB64Layer_[(size_t) li] = tw::asset::encode (*buf, layers[(size_t) li].sampleBuffer.getSampleRate(),
-                                                                     0, layers[(size_t) li].sourceFileName.isNotEmpty()
-                                                                            ? layers[(size_t) li].sourceFileName
-                                                                            : tiAssetName (layers[(size_t) li].sourcePath));
+                    const juce::String nm = layers[(size_t) li].sourceFileName.isNotEmpty()
+                                                ? layers[(size_t) li].sourceFileName
+                                                : tiAssetName (layers[(size_t) li].sourcePath);
+                    assetB64Layer_[(size_t) li] = tw::asset::encode (*buf, layers[(size_t) li].sampleBuffer.getSampleRate(), 0, nm);
                     assetKeyLayer_[(size_t) li] = key;
+                    // tp64 — Max: "it should still make a copy of the FLAC and duplicate it inside of the Terrain folder so
+                    //  we don't have to look for our main directory in case we lose it." Beside the embedded copy the
+                    //  preset carries, a USER sample (a drop, or a file that is not one of the factory's) is written once,
+                    //  here, when it is first encoded for a save: <data dir>/Samples/Imported/<name>.flac. Reference-in-
+                    //  place stays the import law; this is the spare. A name that is already there is left alone.
+                    tiWriteSampleSpare (*buf, layers[(size_t) li].sampleBuffer.getSampleRate(), nm, layers[(size_t) li].sourcePath);
                 }
                 if (assetB64Layer_[(size_t) li].isNotEmpty())
                     state.setProperty ("layerAsset" + s, assetB64Layer_[(size_t) li], nullptr);
@@ -19436,6 +19515,8 @@ void TerrainAudioProcessor::loadV1State (const juce::ValueTree& loaded)
         // Reset pitchModeSlice to default-constructed state.
         L.pitchModeSlice = tw::Slice{};
         L.activeSliceIndex.store (0);
+        L.sampleLoopMode.store (0);   // tp64 — a layer the state does not name is one-shot, at auto BPM
+        L.sourceBpmUser.store (0.0f);
         L.volume.store (1.0f);
         L.mute.store   (false);
         L.solo.store   (false);
@@ -19508,6 +19589,8 @@ void TerrainAudioProcessor::loadV2State (const juce::ValueTree& loaded)
         std::atomic_store (&L.currentSlices, tw::SliceListPtr{});
         L.pitchModeSlice = tw::Slice{};
         L.activeSliceIndex.store (0);
+        L.sampleLoopMode.store (0);   // tp64 — a layer the state does not name is one-shot, at auto BPM
+        L.sourceBpmUser.store (0.0f);
         L.volume.store (1.0f);
         L.mute.store   (false);
         L.solo.store   (false);
@@ -19529,6 +19612,8 @@ void TerrainAudioProcessor::loadV2State (const juce::ValueTree& loaded)
         L.rootMidiNote.store     ((int) layerNode.getProperty ("rootMidiNote", 60));
         L.sliceMode.store        ((int) layerNode.getProperty ("sliceMode",    0));
         L.playMode.store         ((int) layerNode.getProperty ("playMode",     0));
+        L.sampleLoopMode.store   ((int) layerNode.getProperty ("sampleLoopMode", 0));            // tp64
+        L.sourceBpmUser.store    ((float)(double) layerNode.getProperty ("sourceBpmUser", 0.0));   // tp64
         L.sliceCount.store       ((int) layerNode.getProperty ("sliceCount",   4));
         L.chopFadeMs.store ((float)(double) layerNode.getProperty ("chopFadeMs", 5.0));
         L.volume.store     ((float)(double) layerNode.getProperty ("volume",     1.0));

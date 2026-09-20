@@ -24,18 +24,19 @@ const fake=()=>{const N=1200,mn=[],mx=[];for(let i=0;i<N;i++){const e=.2+.7*Math
  await p.goto('file://'+PAGE+'?page=1',{waitUntil:'load'}); await sleep(2200);
  await p.evaluate(()=>document.documentElement.setAttribute('data-theme','dark'));
 
- // ── [0] the Tape shelf: three MACHINE modules + two card types, plain names; a machine lands as a module ──
+ // ── [0] the Tape shelf (tp64 law): the ROUTED card's five types + the Deck; picking a machine lands a CARD, not the master module ──
  await p.evaluate(()=>window.setActivePanel('tp')); await sleep(2200);
  const r0=await p.evaluate(async()=>{ const cat=(window.__tpCatalog?window.__tpCatalog():[]).filter(i=>i.cat==='Tape').map(i=>i.n+':'+i.k);
    const tapeBefore=!!window.__tpNodeByKey('tape');
-   window.__tpAddFromList && window.__tpAddFromList('tape:1',300,200); await new Promise(r=>setTimeout(r,900));
-   const n=window.__tpNodeByKey('tape'); const S=window.__tpState?window.__tpState():null;
-   return {cat, tapeBefore, tapeAfter:!!n, name:n?window.__tpNodeName(n):null, machine:S?S.tapeMachine:null,
+   window.__tpAddFromList && window.__tpAddFromList('tapefx:Porta',300,200); await new Promise(r=>setTimeout(r,900));
+   const devs=(window.__fxrDevs?window.__fxrDevs():[]).filter(d=>d&&d.core==='tape');
+   const names=(window.__tpNodes?window.__tpNodes():[]).map(n=>window.__tpNodeName(window.__tpNodeByKey(n.key)));
+   return {cat, tapeBefore, tapeAfter:!!window.__tpNodeByKey('tape'), cardTypes:devs.map(d=>d.type), names,
            tapeOn:!!(document.getElementById('tape-toggle')&&!document.getElementById('tape-toggle').classList.contains('off'))}; });
- ok(r0.cat.join('|')==='Reel:tape:0|Porta:tape:1|Wire:tape:2|Studio:tapefx:Studio|Cassette:tapefx:Cassette',
-    '🚨 [0] THE TAPE SHELF: Reel / Porta / Wire are the MACHINE MODULES again (tp43a unlisted them, tp60 rebuilt them as card types), plus the card\'s Studio / Cassette — no "Tape ·"', r0.cat.join(' | '));
- ok(!r0.tapeBefore && r0.tapeAfter && r0.name==='Porta' && r0.machine===1 && r0.tapeOn,
-    '[0b] picking Porta puts the machine module on the canvas, sets TAPE_MACHINE, turns the hero tape section on', JSON.stringify({tapeAfter:r0.tapeAfter,name:r0.name,machine:r0.machine,tapeOn:r0.tapeOn}));
+ ok(r0.cat.join('|')==='Studio:tapefx:Studio|Cassette:tapefx:Cassette|Reel:tapefx:Reel|Porta:tapefx:Porta|Wire:tapefx:Wire|Deck:deck',
+    '🚨 [0] THE TAPE SHELF (tp64): the routed card in its five types + the Deck — the global master machine is not offered, no "Tape ·"', r0.cat.join(' | '));
+ ok(!r0.tapeBefore && !r0.tapeAfter && r0.cardTypes.indexOf('Porta')>=0 && r0.names.indexOf('Porta')>=0 && !r0.tapeOn,
+    '[0b] picking Porta lands a routed CARD named Porta (a node, cables in and out) and leaves the hero\'s master machine off', JSON.stringify({tapeAfter:r0.tapeAfter,cardTypes:r0.cardTypes,tapeOn:r0.tapeOn}));
 
  // ── [1] the master filter always wins ──
  const r1=await p.evaluate(async()=>{ const N=()=>window.__tpRaw();

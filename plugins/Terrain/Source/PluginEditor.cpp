@@ -12299,7 +12299,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     // Gated on 1-SHOT (sampleLoopMode === 0) for symmetry with the LOOP+HOLD
     // block; if the persisted state is somehow HOLD + LOOP (e.g. saved in an
     // old build), force HOLD off and push the correction back to C++.
-    (function () {
+    function tiPullHoldFromCpp () {   // tp64 — boot, and every preset recall
       var getFn = getNativeFn('getHoldMode');
       if (!getFn) return;
       try {
@@ -12321,7 +12321,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           });
         }
       } catch (_) {}
-    })();
+    }
+    tiPullHoldFromCpp(); (window.__tiChopPulls = window.__tiChopPulls || []).push(tiPullHoldFromCpp);
 
     // FADE slider — anti-click fade at slice boundaries (CHOP_FADE_MS).
     // Writes to APVTS via setChopFadeMs native fn; reads initial value back on load.
@@ -12429,7 +12430,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     //   1. Fresh plugin instance: empty list, sub-mode 0, mode PITCH.
     //   2. Editor close+reopen on same instance: slice list survives.
     //   3. DAW project reload: slicesJson restored from state info.
-    (function () {
+    function tiPullSlicerFromCpp () {   // tp64 — boot, AND every preset recall (window.__tiChopRepull)
       // Restore pitch-mode virtual slice from C++ (DAW save/restore or editor reopen).
       syncPitchSliceFromCpp();
 
@@ -12468,7 +12469,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           else setSliceModeUI(parseInt(m, 10) || 0);
         } catch (_) {}
       }
-    })();
+    }
 
     // ── Restore ALL layer state on editor reopen (Mark 2 Phase 1 fix) ─────────
     // The processor survives editor close/reopen with all 4 layer atomics +
@@ -12485,7 +12486,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     //      sample-loop pill) from the just-populated state.*.
     //   6. Pull the editing layer's pitch slice + slices from C++ (these still
     //      live in per-layer C++ state and aren't shipped in the payload).
-    (function () {
+    function tiHydrateLayersFromCpp () {
       var elFn = getNativeFn('getEditingLayerIdx');
       var loadFn = getNativeFn('getAllLayerPayloads');
       if (!elFn || !loadFn) {
@@ -12502,6 +12503,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
             });
           }
         } catch (_) {}
+        tiPullSlicerFromCpp();
         return;
       }
 
@@ -12534,7 +12536,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           // onSampleLoaded populates state.* (peaks, peakScale, length) and
           // triggers drawWaveform + redrawSliceOverlay + syncPitchSliceFromCpp.
           if (window.onSampleLoaded) window.onSampleLoaded({
-            filename:      '',
+            filename:      (payloads && payloads[elIdx] && payloads[elIdx].filename) || '',   /* tp64 — names the library strip too */
             sampleRate:    0,
             lengthSamples: elMirror.sampleLengthSamples,
             numChannels:   2,
@@ -12550,6 +12552,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           if (typeof applyLayerStateToUI === 'function') applyLayerStateToUI();
         } else {
           // Editing layer had no sample → make sure #hero shows empty-state.
+          // tp64 — and DROP the previous patch's waveform and chops: a recall into an empty layer used to keep them.
+          try { restoreLayerSnapshot(null); drawWaveform(); redrawSliceOverlay(); if (typeof applyLayerStateToUI === 'function') applyLayerStateToUI(); } catch (_) {}
           var hero = document.getElementById('hero');
           if (hero) {
             hero.classList.remove('has-sample');
@@ -12557,8 +12561,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
             hero.classList.add('empty-state');
           }
         }
-      }).catch(function () {});
-    })();
+        // tp64 — the library strip names every layer, not only the one on screen
+        try { if (payloads && window.__tiLibNameSet) for (var jn = 0; jn < 4 && jn < payloads.length; ++jn) if (payloads[jn] && payloads[jn].filename) window.__tiLibNameSet(jn, payloads[jn].filename); } catch (_) {}
+        // tp64 — the slices, the pitch-mode markers, the sub-mode and the mode of the editing layer — AFTER the
+        // waveform, because onSampleLoaded re-pulls the pitch slice and the overlay needs the length.
+        tiPullSlicerFromCpp();
+      }).catch(function () { try { tiPullSlicerFromCpp(); } catch (_) {} });
+    }
+    /* ══ tp64 — THE CHOP PAGE FOLLOWS THE PRESET ══════════════════════════════════════════════════════
+       Max: "it saves the DSP and it wires everything … I can still hear it, but visually it's not there.
+       Visually, it loses the one-shots, it loses our chops." The preset carried every layer's audio (embedded,
+       fb621), its slices, its markers and its mixer, and setStateInformation put them all back — but this
+       hydration ran ONCE, at boot, so a recall showed the previous patch's waveform over the new patch's
+       sound. onPatchLoaded (index.html) now calls __tiChopRepull: the layers, the slicer, and every pull the
+       page runs when the Chop panel opens (strips, trigger, stems, ARM, BPM lock, the library strip). */
+    window.__tiChopRepull = function () {
+      try { tiHydrateLayersFromCpp(); } catch (_) {}
+      try { (window.__tiChopPulls || []).forEach(function (f) { try { f(); } catch (_) {} }); } catch (_) {}
+    };
+    tiHydrateLayersFromCpp();
   }
 
   function updateRootDisplay () {
@@ -13607,9 +13628,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       var mixBtn = document.getElementById('mix-btn');
       var panel  = document.getElementById('mix-panel');
       if (! mixBtn || ! panel) return;
+      // tp64 — what a panel open pulls, a preset recall pulls too (window.__tiChopRepull)
+      (window.__tiChopPulls = window.__tiChopPulls || []).push(function () { restoreStripsFromCpp(); pullTriggerStateFromCpp(); pullStemStateFromCpp(); });
 
       mixBtn.addEventListener('click', function () {
-        var willOpen = ! panel.classList.contains('open');
+        if (panel.classList.contains('open')) return;   // tp64 — the lit CHOP pill stays put (only SYN has a back)
+        var willOpen = true;
         // Close other panels first (existing setActivePanel handles eq/dly/mod).
         if (willOpen && typeof setActivePanel === 'function') setActivePanel(null);
         panel.classList.toggle('open', willOpen);
@@ -14691,6 +14715,8 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
         onImport: function(){ var pf=nf('pickSampleImport'); if(pf){ try{ pf('a'); }catch(e){} } },
         onDelete: function(kind,p){ var rf=nf('removeSampleImport'); if(rf){ try{ rf(p); }catch(e){} } },
         cats: built, openCat: openCat }); }); }
+  window.__tiLibNameSet=function(L,fn){ try{ L=L|0; libName[L]=String(fn).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '); libPaint(); }catch(e){} };   /* tp64 — a recall names every layer's strip */
+  (window.__tiChopPulls=window.__tiChopPulls||[]).push(function(){ try{ dressHero(); }catch(e){} try{ libPaint(); lockTick(); }catch(e){} });   /* tp64 — ARM, BPM lock, the typed BPM */
   function hookLayers(){ if(window.__tiLibHooked) return; window.__tiLibHooked=1;
     /* a DROP names the layer too (it is the same slot the arrows fill) */
     var os=window.onSampleLoaded; window.onSampleLoaded=function(info){ try{ if(info&&info.filename) { var L=curLayer(); libName[L]=String(info.filename).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' '); libAt[L]=Date.now(); libPaint(); } }catch(e){} return os?os.apply(this,arguments):undefined; };

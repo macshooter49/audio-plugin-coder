@@ -269,6 +269,7 @@ public:
         int   character = 0;      // 0..7
         int   heads     = 0;      // 0..7
         float p1 = 0.0f, p2 = 0.0f, p3 = 0.0f;   // the machine's own three, 0..1
+        float sculpt = 0.35f, weave = 0.30f, tilt = 0.0f;   // tp64 — the Reel type's Harmonic Sculptor (tilt -1..+1); Cassette / Wire ignore them
         float mix   = 0.35f;      // equal-power; 1.0 = FULLY wet, zero dry
         float timeSec = 0.38f;    // the LONGEST head — what the Time readout says
         float repeats = 0.30f;
@@ -888,10 +889,12 @@ private:
         const float wireHiss = juceClampf (0.95f * C.noise * std::pow (hk, 0.62f) * gate, 0.0f, 0.75f);
         const float sat   = juceClampf (pr_.p2 * C.sat, 0.0f, 1.0f);
         const float mWow  = pr_.p1;
-        const float tilt  = juceClampf ((pr_.p3 * 2.0f - 1.0f) + (C.hf - 1.0f) * 0.5f, -1.0f, 1.0f);
+        // tp64 — the Sculptor's three are the REEL type's own knobs (Params::sculpt / weave / tilt), not the Wow /
+        //  Saturate / Hiss trio: only StudioMachine reads them, so Studio (= WireMachine) and Cassette are untouched.
+        const float tilt  = juceClampf (pr_.tilt + (C.hf - 1.0f) * 0.5f, -1.0f, 1.0f);
         lastHiss_ = (machineFor (pr_.type) == 1) ? cassHiss : wireHiss;
-        oL = tapeL_.processSample (inL, mWow, sat, cassHiss, mWow, sat, wireHiss, pr_.p1, pr_.p2, tilt);
-        oR = tapeR_.processSample (inR, mWow, sat, cassHiss, mWow, sat, wireHiss, pr_.p1, pr_.p2, tilt);
+        oL = tapeL_.processSample (inL, mWow, sat, cassHiss, mWow, sat, wireHiss, pr_.sculpt, pr_.weave, tilt);
+        oR = tapeR_.processSample (inR, mWow, sat, cassHiss, mWow, sat, wireHiss, pr_.sculpt, pr_.weave, tilt);
     }
 
     // ── wow + flutter, per machine, exactly the character each one is documented

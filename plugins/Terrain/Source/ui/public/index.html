@@ -7052,7 +7052,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         </div>
         <div class="settings-row" id="rr-bend-row" title="Pitch bend range in semitones — drag the number, double-click for 2">
           <span class="settings-label">Pitch bend range</span>
-          <span><b style="cursor:ns-resize;user-select:none;font-weight:400;font-variant-numeric:tabular-nums;color:var(--text-primary);">2</b><span style="opacity:.55;margin-left:4px;">st</span></span>
+          <span style="font:inherit;font-size:13px;color:#ECE8F2;"><b style="cursor:ns-resize;user-select:none;font:inherit;font-weight:400;color:#ECE8F2;">2</b><span style="opacity:.7;margin-left:4px;color:#ECE8F2;">st</span></span>
         </div>
       </div>
       <div class="settings-footer">
@@ -10700,8 +10700,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              slot would have to lie about one of them in the host's automation list. */
           var TPE_SETS={
             'Studio'  :[['Wow',28,'SYN_TPE_WOW'],['Saturate',40,'SYN_TPE_SAT'],['Hiss',18,'SYN_TPE_HISS']],
-            'Cassette':[['Wow',28,'SYN_TPE_WOW'],['Saturate',40,'SYN_TPE_SAT'],['Hiss',18,'SYN_TPE_HISS']]
+            'Cassette':[['Wow',28,'SYN_TPE_WOW'],['Saturate',40,'SYN_TPE_SAT'],['Hiss',18,'SYN_TPE_HISS']],
+            /* tp64 — the three MACHINES as card types, each per cable and duplicatable: Reel = StudioMachine + the
+               Harmonic Sculptor on its own three (SCULPT / WEAVE / TILT have been declared per instance since fb365
+               and nothing read them); Porta and Wire = the Cassette and Wire machines through tp60's transports. */
+            'Reel'    :[['Sculpt',35,'SYN_TPE_SCULPT'],['Drive',30,'SYN_TPE_WEAVE'],['Timbre',50,'SYN_TPE_TILT']],
+            'Porta'   :[['Wow',28,'SYN_TPE_WOW'],['Saturate',40,'SYN_TPE_SAT'],['Hiss',18,'SYN_TPE_HISS']],
+            'Wire'    :[['Wow',28,'SYN_TPE_WOW'],['Saturate',40,'SYN_TPE_SAT'],['Hiss',18,'SYN_TPE_HISS']]
           };
+          var TPE_SIMPLE={'Reel':1,'Porta':1,'Wire':1};   /* tp64 — three knobs, no back panel (Max: "the other three don't") */
           function TPE_FRONT(type){
             var set=TPE_SETS[type]||TPE_SETS['Studio'];
             var k=set.map(function(x){ return {l:x[0],v:x[1],p:x[2]}; });
@@ -10712,7 +10719,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              old one (Cassette->Wire is the same three params, so it must not reset them). */
           function tpeApplyType(d,type){
             var keep={}; (d.knobs||[]).forEach(function(k){ if(k&&k.p) keep[fxParamTail(k.p)]=k.v; });
-            d.type=type; d.knobs=TPE_FRONT(type);
+            d.type=type; d.knobs=TPE_FRONT(type); d.noBack=!!TPE_SIMPLE[type];   /* tp64 — no flip on the machines */
             var base=FX_PREFIX['tape'], pre=instPrefix('tape',d.inst||1);
             d.knobs.forEach(function(k){
               if(k.p&&k.p.indexOf(base)===0) k.p=pre+k.p.slice(base.length);
@@ -10889,7 +10896,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                    knobs:[['Center',50,'SYN_PHA_CENTER'],['Stages',35,'SYN_PHA_STAGES'],['Spread',20,'SYN_PHA_SPREAD'],['Stereo',30,'SYN_PHA_STEREO'],
                           ['Touch',50,'SYN_PHA_TOUCH'],['Lag',30,'SYN_PHA_LAG'],['Floor',20,'SYN_PHA_FLOOR'],['Color',0,'SYN_PHA_COLOR']]}},
             {name:'Tape',core:'tape',type:'Studio',
-             types:['Studio','Cassette'],   /* tp63 — Reel / Porta / Wire are the MACHINE MODULES again (the browser's Tape shelf), not card types; TapeFxEngine's voices 3/4 stay in the engine, unreachable */   /* tp43 — Reel (15 IPS) joins · tp60 — Porta and Wire come back, each per cable and each with its own transport */
+             types:['Studio','Cassette','Reel','Porta','Wire'],   /* tp64 — the three machines are card types AGAIN, this time on the machine DSP: the processor clamped every type above Cassette to Studio (which is why tp60's three "sounded the same"), and Reel now reads its Sculptor knobs */   /* tp43 — Reel (15 IPS) joins · tp60 — Porta and Wire come back, each per cable and each with its own transport */
              preset:'Init',code:'',on:false,pwrP:'SYN_TPE_POWER',tp:'SYN_TPE_TYPE',
              // 🔑🔑 tpN — THE PARAM'S CHOICE COUNT, WHICH IS NOT THE DROPDOWN'S OPTION COUNT.
              // SYN_TPE_TYPE was born choice(8) at fb365 (2 live + 6 reserved, so the live
@@ -13546,7 +13553,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               if(v[0]!=null){ var tnR=(d.tpN||T.length); var ti=Math.round(v[0]*(tnR-1));   /* fb373 — same scale as the write, or reopen shows a type the DSP is not running */
                 if(ti>=0&&ti<T.length) tpeApplyType(d,T[ti]); }
               if(v[1]!=null) d.on=v[1]>0.5;
-              var fk=[5,6,7];   /* fb367 — both machines share Wow/Saturate/Hiss */
+              var fk=(d.type==='Reel')?[2,3,4]:[5,6,7];   /* fb367 — the transports share Wow/Saturate/Hiss · tp64 — the Reel's row is Sculpt/Drive/Timbre */
               for(var i2=0;i2<3;i2++){ if(v[fk[i2]]!=null&&d.knobs[i2]) d.knobs[i2].v=Math.round(v[fk[i2]]*100); }
               if(v[8]!=null&&d.knobs[3]) d.knobs[3].v=Math.round(v[8]*100);
               if(v[9]!=null){ var o1=d.back.d1.opts, ci=Math.round(v[9]*(o1.length-1)); if(ci>=0&&ci<o1.length) d.back.d1.v=o1[ci]; }
@@ -14182,7 +14189,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                 var sw=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
                 var dv2=rack.querySelectorAll('.fxr-dev'); for(var s=0;s<dv2.length;s++){ if(sw[s]){ dv2[s].classList.add('swapped'); var ac=dv2[s].querySelector('[data-act="swap"]'); if(ac)ac.classList.add('act'); } } }
               if(DEVS[di]&&DEVS[di].core==='tape'){ tpeApplyType(DEVS[di],t.value);   /* fb365 — per-type front row */
-                var swT=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
+                var swT=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); if(DEVS[di].noBack) swT[di]=false; render();   /* tp64 */
                 var dvT=rack.querySelectorAll('.fxr-dev'); for(var sT=0;sT<dvT.length;sT++){ if(swT[sT]){ dvT[sT].classList.add('swapped'); var acT=dvT[sT].querySelector('[data-act="swap"]'); if(acT)acT.classList.add('act'); } } }
               if(DEVS[di]&&DEVS[di].core==='saturate'){ dstApplyType(DEVS[di],t.value,true);   /* fb319 — per-family relabel + per-mode SIG default (the Soft≡Hard fix) */
                 var sw2=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
@@ -28587,7 +28594,10 @@ function initModPanel() {
   if (!modBtn || !modPanel || !controls) return;
 
   modBtn.addEventListener('click', () => {
-    setActivePanel(currentActivePanel === 'mod' ? null : 'mod');
+    /* tp64 — Max: "I shouldn't be able to click on and off on the chop mode or the mod page. It shouldn't do
+       anything." Only the SYN pill has a back (the Patcher); MOD and CHOP are the end of their lane, so a
+       second click on the lit pill stays put instead of falling back to the hero. */
+    if (currentActivePanel !== 'mod') setActivePanel('mod');
   });
 }
 
@@ -42563,6 +42573,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   }
   window.onPatchLoaded = function (meta, how) {   /* fb635 — how: 'host' = a host-driven restore (undo, A/B, host preset recall) */
     loadDone();
+    try{ if(window.__tiChopRepull) window.__tiChopRepull(); }catch(e){}   /* tp64 — the Chop page: its layers, chops, markers, strips (it hydrated once, at boot) */
     /* fb622 — hold every card's write-back until the restore has settled. The parameter relays fire
        at once, but the shim-bound flow-card controls only notice a preset on their next 700 ms poll,
        and each of those arrivals would otherwise schedule a push of the PREVIOUS card's state. */
@@ -43245,7 +43256,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      Those three card types are withdrawn (the card offers Studio and Cassette, the two that have a
      back panel); the three machine modules are listed again, exactly as before tp43a, and nothing is
      called "Tape · anything" — it is the Tape shelf, people know. */
-  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette'];
+  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette','Reel','Porta','Wire'];   /* tp64 — MACHINES names the legacy global node only */
   function oscList(){ try{ if(window.__oscPool&&window.__oscPool.length) return window.__oscPool.slice(); }catch(e){} return OSC; }   /* the oscillator pool (E–Z land here when the engine has them) */
   var IC={ fit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
     tidy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -43454,6 +43465,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     modesEl=document.getElementById('flow-modes'); if(modesEl){ modesHome={parent:modesEl.parentNode,next:modesEl.nextSibling}; tileHome={}; tileOrder=[]; Array.prototype.forEach.call(modesEl.querySelectorAll('.flow-mode'),function(t){ tileHome[t.getAttribute('data-mode')]=t; tileOrder.push(t); }); nodesEl.appendChild(modesEl); }
     (window.__flowChain?window.__flowChain():[]).forEach(function(m){ adoptFlowNode(m); });
     if(toggleOn('tape-toggle')) adoptTape();   /* tp8 — the deck is not on the canvas (Max) */
+    if(deckActive()||layout.deck) adoptLoop();   /* tp64 — unless it is cabled, or was dragged out of the Tape shelf */
     try{ if(window._fxSizeFn) setTimeout(window._fxSizeFn,60); }catch(e){}   /* tp8 — no window resize inside the world */
     adoptFx();
     var fv=q('#flow-device .flow-vis'); if(fv) mkNode('rnd','rnd',fv);   /* the Randomizer = the synth's own terrain map (tp6) */
@@ -43684,6 +43696,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     oscList().forEach(function(o){ if(!oscDev(o)) return; var on=oscOn(o), n=nodeByKey('osc-'+o); if(on&&!n){ if(adoptOsc(o)) changed=true; } else if(!on&&n){ returnOsc(n); changed=true; } });
     [1,2].forEach(function(i){ if(!noiseEl(i)) return; var on=noiseOn(i), n=nodeByKey(noiseKey(i)); if(on&&!n){ if(adoptNoise(i)) changed=true; } else if(!on&&n){ returnNoise(n); changed=true; } });   /* tp42 */
     var tOn=toggleOn('tape-toggle'), tn=nodeByKey('tape'); if(tOn&&!tn){ if(adoptTape()) changed=true; } else if(!tOn&&tn){ returnTape(tn); changed=true; }
+    /* tp64 — THE DECK is present while it is CABLED (SYN_DCK_ACTIVE, a parameter: travels with the patch) or dragged out
+       and not yet cabled (layout.deck). Removing it clears its routes, so the presence follows. */
+    { var dWant=deckActive()||!!layout.deck, dn=nodeByKey('tapeloop'); if(dWant&&!dn){ if(!toggleOn('loop-toggle')) setToggle('loop-toggle',true); if(adoptLoop()) changed=true; } else if(!dWant&&dn){ returnLoop(dn); changed=true; } }
     /* ══ tp61 — A CABLED SAMPLER IS PRESENT BECAUSE THE PATCH SAYS SO ═══════════════════════════
        Max: "I had put Sampler A on the patcher, but the ABCD sampler chop engines keep
        disappearing." Every other module's presence is a PARAMETER — the oscillators' ENABLE, the
@@ -44806,7 +44821,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else if(n.kind==='samp'){ chopClaims(n.sub).forEach(function(c){ chopSetSrc(c.dev,n.sub,false); });   /* tp56 — taking it off the canvas gives the layer back to the Chop page's mixer */
       returnSamp(n); commit(); soon(); return; }
     else if(n.kind==='tape'){ setToggle('tape-toggle',false); }
-    else if(n.kind==='tapeloop'){ setToggle('loop-toggle',false); }
+    else if(n.kind==='tapeloop'){ var dm=deckMask(); for(var di=0;di<NSRC;di++) if(dm[di]) deckSetSrc(di,false); setP('SYN_DCK_ACTIVE',0); layout.deck=0; saveLayout(); setToggle('loop-toggle',false); }   /* tp64 — its routes go with it */
     else if(n.kind==='flow'){ var ch=window.__flowChain?window.__flowChain():[]; window.__flowSetChain&&window.__flowSetChain(ch.filter(function(m){return m!==n.sub;})); }
     else { toast('That module is part of the synth'); return; }
     syncPresence(); commit(); soon(); }
@@ -44903,8 +44918,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     /* tp43 — Max: "these tape modes need to stop being global … actually follow the patcher's cables". The browser offers the
        ROUTED tape card in its three machines; the global master machine is no longer spawned from here (a patch that has it on
        still shows its node). */
-    MACHINES.forEach(function(nm,i){ var cur=tapeUp&&mach===i; it.push({k:'tape:'+i,n:nm,cat:'Tape',dis:cur,note:cur?'Already on the canvas':null}); });   /* tp63 — restored (tp43a deleted them) */
+    /* tp64 — Max: "stop having these tape modes become master … they're duplicatable … we can run cables in and out".
+       The Tape shelf is the ROUTED card in its five types (Studio / Cassette with a back panel; Reel / Porta / Wire =
+       the three machines, three knobs, no back panel), each up to FX_MAXINST.tape deep — plus the Deck. The global
+       master machine (`tape:N`, kind 'tape') is no longer offered; a patch that has it on still shows its node. */
     TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:nm,cat:'Tape'}); });
+    { var dOn=!!nodeByKey('tapeloop'); it.push({k:'deck',n:'Deck',cat:'Tape',dis:dOn,note:dOn?'Already on the canvas':'Records what is cabled in, plays it back into the chain'}); }
     FXLIST.forEach(function(k){ it.push({k:k,n:FXNAMES[k],cat:'Effects'}); }); return it; }
   function fitsCtx(it){ if(!addCtx) return true; var t=addCtx.t; if(t==='m') return false; if(t==='n') return it.cat==='Flow'&&/arp|drift/.test(it.k); if(t==='a') return it.cat==='Effects'||it.cat==='Tape'||(it.cat==='Flow'&&/chop|glitch/.test(it.k)); return false; }
   function openAdd(cx,cy,ctx){ closeMenus(); addCtx=ctx; var w=toWorld(cx,cy); addM.dataset.wx=w.x; addM.dataset.wy=w.y; addM.querySelector('input').value=''; renderAdd(); placeMenu(addM,cx,cy); try{ addM.querySelector('input').focus(); }catch(e){} }
@@ -44930,7 +44949,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       var fk2=fKind(m[1]); if(n&&(fk2==='chop'||fk2==='glitch')){ var fids2=flowSrcIds(m[1]); seedOn(fids2); track(fids2.concat(flowIds41(m[1])),function(){}); for(var pi=0;pi<NSRC;pi++) flowSetSrc(m[1],pi,0); if(!addCtx) toast(flowLabel(m[1])+' is on the canvas — cable something into it'); } }
     else if((m=/^tape:(\d)$/.exec(k))){ var had=nodeByKey('tape'); setToggle('tape-toggle',true); setMachine(+m[1]); n=had||adoptTape(at); if(had) toast('One tape machine at a time — it is '+MACHINES[+m[1]]+' now'); }
     else if((m=/^tapefx:(.+)$/.exec(k))){ var idx=window.__fxrAdd?window.__fxrAdd('tape'):-1; if(idx<0){ toast('No free slot for Tape'); closeMenus(); return; } setFxType(idx,m[1]); pendingAt=at; adoptFx(); var devs=window.__fxrDevs?window.__fxrDevs():[]; var d=devs[idx]; n=d?nodeByKey('fx-'+d.core+'-'+d.inst):null; }
-    else if(k==='deck'){ setToggle('loop-toggle',true); n=adoptLoop(at); }
+    else if(k==='deck'){ setToggle('loop-toggle',true); layout.deck=1; saveLayout(); n=adoptLoop(at); if(n&&!addCtx) toast('The Deck is on the canvas — cable something into it, and out of it'); }   /* tp64 */
     else if(k==='voice'){ n=adoptVoice(at); if(n){ layout.voice=1; } }   /* tp43 */
     else { var idx2=window.__fxrAdd?window.__fxrAdd(k):-1; if(idx2<0){ toast('No free slot for '+(FXNAMES[k]||k)); closeMenus(); return; } pendingAt=at; adoptFx(); var devs2=window.__fxrDevs?window.__fxrDevs():[]; var d2=devs2[idx2]; n=d2?nodeByKey('fx-'+d2.core+'-'+d2.inst):null; }
     if(n){ if(!layout.pos[n.key]){ n.x=at[0]; n.y=at[1]; place(n); } layout.pos[n.key]=[n.x,n.y]; if(addCtx&&addCtx.pk==='out'&&n.ports.some(function(p){return p.kind==='in';})) connect(addCtx.n,'out',addCtx.pi,n,'in',0); }
@@ -44997,6 +45016,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      gate had to re-implement it — which is exactly the class of test that has lied here twice. */
   window.__tpRaw=function(){ return nodes; };
   window.__tpNodeName=nodeName; window.__tpAddFromList=addFromList; window.__tpState=ST;   /* tp63 — the gates */
+  window.__tpRemoveNode=removeNode; window.__tpSyncPresence=syncPresence; window.__tpLayout=function(){ return layout; }; window.__tpSetP=setP;   /* tp64 — the gates */
   window.__tpSyncPresence=syncPresence; window.__tpAdoptSamp=adoptSamp; window.__tpReturnSamp=returnSamp;
   window.__tpLayout=function(){ return layout; };
   window.__tpFlowChops=flowChopsOf; window.__tpChopsOf=chopsOf; window.__tpSampKey=sampKey;

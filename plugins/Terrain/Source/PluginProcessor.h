@@ -2467,6 +2467,8 @@ private:
     // tp63 — the way back (see SynthVoice::disarmModalEngines). Timer-driven, message thread only.
     void releaseIdleEnginesIfUnused();
     void releaseIdleWavetables();   // tp63 — tables no oscillator names for kEngineIdleMs (see WavetableBank::unpublish)
+    void releaseIdleBankBIfUnused();   // tp64 — bank B (E–H) when no E–H oscillator is on: unpublish, +3 audioSeq, delete
+    juce::uint32 bankBUnusedSinceMs_ = 0; juce::uint64 bankBUnpubSeq_ = 0;
     std::array<juce::uint32, (size_t) tw::WavetableBank::kNumPresets> wtUnusedSinceMs_ {};
     std::array<juce::uint64, (size_t) tw::WavetableBank::kNumPresets> wtUnpubSeq_ {};
     bool anyVoiceActive() const noexcept;
