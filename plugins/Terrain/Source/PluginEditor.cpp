@@ -209,6 +209,15 @@ static juce::String tiHostKeyJs (const juce::String& key)
     return "window.__tiHostKey&&window.__tiHostKey('"
          + key.replace ("\\", "\\\\").replace ("'", "\\'") + "')";
 }
+// tp59 — a CHORD, with its modifiers, dispatched into the page as a real KeyboardEvent so the
+// page's own keydown handlers run unchanged. tiHostKeyJs above types into an input and drops
+// modifiers entirely; ⌘A is not typing.
+static juce::String tiHostChordJs (const juce::String& key, bool meta, bool ctrl)
+{
+    return "window.__tiHostChord&&window.__tiHostChord('"
+         + key.replace ("\\", "\\\\").replace ("'", "\\'") + "',"
+         + (meta ? "1" : "0") + "," + (ctrl ? "1" : "0") + ")";
+}
 
 static juce::String tiSafePresetName (const juce::String& name)
 {
@@ -1522,6 +1531,26 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 const bool on = args.size() > 0 && static_cast<double> (args[0]) > 0.5;
                 tiEditArmed_ = on;
                 if (on) { setWantsKeyboardFocus (true); grabKeyboardFocus(); }
+                complete (juce::var{});
+            })
+            .withNativeFunction("setChopOpen", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                /* tp59 — the Chop page opened(1)/closed(0). While it is up this component holds
+                   keyboard focus so keyPressed can forward ⌘A / Delete / Escape, exactly the
+                   device fb135 built for inline editors — because fb135 also established that the
+                   PAGE never gets keys in a host. keyPressed consumes only those three, so every
+                   other key goes back up the responder chain to the DAW (fb514's law). */
+                const bool on = args.size() > 0 && static_cast<double> (args[0]) > 0.5;
+                tiChopOpen_ = on;
+                if (on) { setWantsKeyboardFocus (true); grabKeyboardFocus(); }
+                else    { tiChopSelLive_ = false; }
+                complete (juce::var{});
+            })
+            .withNativeFunction("setChopSelLive", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                tiChopSelLive_ = args.size() > 0 && static_cast<double> (args[0]) > 0.5;
                 complete (juce::var{});
             })
             .withNativeFunction("savePreset", [](const juce::Array<juce::var>& args,
@@ -8915,6 +8944,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     background: #C4B5FD;
     box-shadow: 0 0 12px rgba(139,92,246,0.9);
   }
+  /* 🚨 tp59 — AND CHOP 1'S NUMBER TOO. Max: "look at the top left, there's a black one right
+     there ... that needs to get out of here."  Chop 1 has no boundary to drag — its left edge IS
+     the waveform's — so redrawSliceOverlay appends its label as a BARE div with no marker around
+     it. This rule was scoped `.ti-slice-marker .ti-slice-label`, so that one label matched NOTHING
+     and rendered as unstyled default text: no purple, no plate, wrong font — a black 1 sitting
+     alone at the left edge while 2..16 wore the house chip. The origin label is a sibling now, so
+     it gets the same treatment and simply has no line under it, which is correct: the sample's own
+     edge is that boundary. */
+  #ti-slice-overlays > .ti-slice-label,
   .ti-slice-marker .ti-slice-label {
     position: absolute; top: 2px; left: -10px; width: 20px;
     text-align: center;
@@ -9012,6 +9050,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     border-radius: 1px;
   }
   /* Center marker — the 0-semitone reference line. */
+      )TIHX")
+      + juce::String (R"TIHX(
   .ti-slice-pitch-bar::before {
     content: ''; position: absolute;
     left: 50%; top: -2px; bottom: -2px;
@@ -9172,6 +9212,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     letter-spacing: 0.04em;
     margin-left: 8px;
   }
+  #ti-chop-panel .ov-head .ov-all {
+    margin-left: auto; margin-right: 8px; padding: 2px 7px;
+    font: 500 9px/1 inherit; letter-spacing: .12em;
+    color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 7px; cursor: pointer; user-select: none;
+    transition: color .15s, border-color .15s;
+  }
+  #ti-chop-panel .ov-head .ov-all:hover { color: #fff; border-color: var(--purple-400); }
+  #ti-chop-panel.multi .ov-head .ov-all { color: #fff; border-color: var(--purple-400); }
   #ti-chop-panel .ov-head .ov-close {
     position: absolute; right: 14px; top: 50%;
     transform: translateY(-50%);
@@ -9631,6 +9680,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       // header — CHOP title centered, close button anchored top-right
       '<div class="ov-head">' +
         '<div class="name">CHOP<span class="num" id="ti-chop-num">01</span></div>' +
+        /* tp59 — ⌘A NEEDS A MOUSE TWIN. The chord rides keyPressed now and that is the real fix,
+           but a shortcut whose only route is the host's keyboard handling is a feature you can
+           lose to a DAW preference. One click here does the same thing, and it is where a right
+           click already brought you. */
+        '<div class="ov-all" id="ti-chop-all" title="Select every chop (⌘A)">ALL</div>' +
         '<div class="ov-close" id="ti-chop-close" title="Close">' +
           '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>' +
         '</div>' +
@@ -9799,6 +9853,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   function ovSelSet (list) { ovSel = (list || []).slice(); paintSliceSel(); }
   function ovSelClear () { if (! ovSel.length) return; ovSel = []; paintSliceSel(); }
   window.__tiChopSel = function () { return ovSel.slice(); };   /* the gate's hand */
+  window.__tiChopSelectAll = function () { return ovSelectAll(); };   /* the ALL chip + the gate */
   function paintSliceSel () {
     try {
       document.querySelectorAll('#ti-slice-overlays .ti-slice-body').forEach(function (b) {
@@ -9807,6 +9862,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       if (pn) pn.classList.toggle('multi', ovSelActive());
       var numEl = document.getElementById('ti-chop-num');
       if (numEl && ovSelActive()) numEl.textContent = 'ALL ' + ovSel.length;
+      /* tp59 — the count rides the hero's Slices pill too, because that is the one place that is
+         always on screen. The chop MENU's header only says ALL 8 when the menu happens to be
+         open, and Max's ⌘A was pressed with no menu up: even when the selection was live there
+         was nothing on screen saying so. */
+      var sc = document.getElementById('ti-slices-count');
+      if (sc) sc.classList.toggle('sel', ovSelActive());
+      var sb = document.getElementById('ti-slices-btn');
+      if (sb) sb.classList.toggle('sel', ovSelActive());
+      /* Delete belongs to the host unless a selection is up — see TerrainUiCore::keyPressed. */
+      try { var br = window.Juce || window.juce;
+            if (br && br.getNativeFunction) br.getNativeFunction('setChopSelLive')(ovSelActive() ? 1 : 0);
+      } catch (_) {}
     } catch (_) {}
   }
 )TIHX") + juce::String (R"TIHX(
@@ -14602,6 +14669,8 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
     inp.value=(v>0)?String(Math.round(v*10)/10):''; inp.placeholder='?';
     var done=false;
     function finish(commit){ if(done) return; done=true;
+      /* tp59 — hand the keyboard back. Same bridge, same order as every other inline editor. */
+      try{ if(window.__tiActiveInp===inp){ window.__tiActiveInp=null; if(window.__tiEditArm) window.__tiEditArm(0); } }catch(e){}
       var val=inp.value; try{ inp.parentNode.replaceChild(el,inp); }catch(e){}
       el.style.display=''; if(commit) commitSrcBpm(val); else paintSrcBpm(); }
     inp.addEventListener('keydown',function(e){ e.stopPropagation();
@@ -14609,6 +14678,12 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
     inp.addEventListener('blur',function(){ finish(true); });
     inp.addEventListener('mousedown',function(e){ e.stopPropagation(); });
     el.parentNode.replaceChild(inp,el); inp.focus(); inp.select();
+    /* 🚨 tp59 — AND REGISTER IT WITH THE HOST-KEY BRIDGE, or this field cannot be typed into in a
+       DAW at all. tp58 shipped it as a plain <input> relying on the WKWebView having focus, which
+       is the exact assumption fb135 recorded as false ("FL kept the keys"). Arming hands focus to
+       JUCE, whose keyPressed types each keystroke into __tiActiveInp — the proven path the preset
+       rename and every other inline editor already use. */
+    try{ window.__tiActiveInp=inp; if(window.__tiEditArm) window.__tiEditArm(1); }catch(e){}
   }
   function dressHero(){
     var tr=document.getElementById('ti-top-right-cluster'); if(tr&&!document.getElementById('ti-arm')){ var a=document.createElement('div'); a.id='ti-arm'; a.innerHTML='<span class="dot"></span><span class="t">Arm</span>'; a.addEventListener('mousedown',function(e){ e.stopPropagation(); }); a.addEventListener('click',function(e){ e.stopPropagation(); setArmed(!armed); }); tr.appendChild(a);
@@ -14634,6 +14709,10 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
       lk.addEventListener('click',function(e){ e.stopPropagation(); setBpmLock(!bpmLocked); });
       var gl=nf('getTiBpmLock'); if(gl){ try{ Promise.resolve(gl()).then(function(v){ bpmLocked=(+v)>0.5; paintLock(); paintSrcBpm(); }).catch(function(){}); }catch(e){} }
       paintLock(); }
+    var allBtn=document.getElementById('ti-chop-all');
+    if(allBtn&&!allBtn.dataset.wired){ allBtn.dataset.wired='1';
+      allBtn.addEventListener('mousedown',function(e){ e.stopPropagation(); });
+      allBtn.addEventListener('click',function(e){ e.stopPropagation(); try{ window.__tiChopSelectAll&&window.__tiChopSelectAll(); }catch(x){} }); }
     var sb=document.getElementById('ti-bpm-src');
     if(sb&&!sb.dataset.wired){ sb.dataset.wired='1';
       sb.addEventListener('mousedown',function(e){ e.stopPropagation(); });
@@ -14644,7 +14723,11 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
   }
   function wire(){
     var mixBtn=document.getElementById('mix-btn'), panel=document.getElementById('mix-panel'); if(!mixBtn||!panel) return false;
-    function sync(){ var open=panel.classList.contains('open'); document.body.classList.toggle('chop-open',open); mixBtn.classList.toggle('active',open); if(open){ retitle(panel); dressHero(); bpmTick(); } }
+    function sync(){ var open=panel.classList.contains('open'); document.body.classList.toggle('chop-open',open); mixBtn.classList.toggle('active',open);
+      /* tp59 — hand the keyboard to JUCE while this page is up. fb135 proved the page never gets
+         keys in a host, so ⌘A has to arrive through keyPressed; this is what arms that route. */
+      try{ var fCO=nf('setChopOpen'); if(fCO) fCO(open?1:0); }catch(e){}
+      if(open){ retitle(panel); dressHero(); bpmTick(); } }
     function close(){ if(!panel.classList.contains('open')) return; panel.classList.remove('open'); mixBtn.classList.remove('active'); var c=document.getElementById('controls'); if(c) c.style.display=''; sync(); }
     mixBtn.addEventListener('click',function(){ setTimeout(sync,0); });
     /* Max: "getting out of the mix menu is BROKEN — it leaves traces of itself behind": any other page opening closes this one, like SYNTH → PATCHER */
@@ -14891,6 +14974,13 @@ body.chop-open #mix-panel { height: 288px !important; }
   background: rgba(20,18,34,0.90) !important; color: rgba(255,255,255,0.78) !important;
   font-style: normal !important; font-size: 9.5px !important; letter-spacing: .03em !important;
   transition: opacity .22s !important;
+  /* 🚨 tp59 — INVISIBLE UNTIL IT HAS SOMETHING TO SAY. tp58 turned this line into a chip with a
+     BACKGROUND and left it at the default opacity 1, and its markup carries a &nbsp; — so a dark
+     bar 358x19 painted straight across the Export / Reveal row from the moment the page loaded.
+     Max: "the bottom of the stem separator looks fucked up too. It has that purple whatever."
+     setStemStatus already writes opacity 1 / 0; it just never ran before the first export, so the
+     REST state had to be the one declared here. */
+  opacity: 0;
 }
 #mix-panel .stem-buttons, #mix-panel .stem-all-row { flex: 1 1 0 !important; display: flex !important; gap: 8px !important; align-items: stretch !important; }
 #mix-panel .stem-buttons > button, #mix-panel .stem-all-row > button {
@@ -14956,6 +15046,33 @@ body.chop-open #mix-panel { height: 288px !important; }
 #ti-bpm-lock.on, #ti-bpm-lock.on:hover { color: var(--purple-400) !important; }
 #ti-bpm-lock svg { width: 100% !important; height: 100% !important; }
 
+/* ══ tp59 — THE SLICES PILL CLEARS THE LIBRARY *WITH A COUNT IN IT* ═══════════════════════════
+      Max: "Slices once again fucks up with the sample library."
+      MEASURED with sixteen chops loaded: 2.7 px between the Slices pill's right edge and the
+      library. tp54's bar [2] wants more than 12 and has read 13.1 the whole time — because it
+      measures with NO SLICES LOADED, where the count badge is display:none and the pill is a
+      dozen pixels narrower. 🚨 A GATE THAT ONLY EVER SEES THE EMPTY STATE CANNOT SEE THIS
+      COLLISION, which is why it has now shipped twice. The bar loads sixteen chops first.
+      THE ROW MOVES, NOTHING SHRINKS. The pills are centred on the HERO (left:50%), but the space
+      they actually live in runs from the root picker's right edge (60) to the cluster's left
+      (575) — centre 317, not 410. The row has always sat right of its own span with ~188 px of
+      empty hero on its left; 14 px back toward the middle buys the clearance and costs no
+      control a single character. */
+#ti-bottom-pills { transform: translateX(calc(-50% - 14px)) !important; }
+
+/* ══ tp59 — THE GRAIN ENGINE / EFFECTS STRIP CANNOT FOLLOW YOU ONTO THE CHOP PAGE ═════════════
+      Max: "take away that bug or glitch where it says grain engine at the bottom and then the
+      effects. I want that page out of here."
+      It was hidden by an INLINE STYLE set in exactly one place — the mix button's own click
+      handler (`ctrls.style.display = willOpen ? 'none' : ''`). Four other places in the page set
+      that same inline style back to '' (the synth panel's close among them), so arriving at the
+      Chop page from SYN left #controls on, under an already-open chop panel that never re-ran its
+      handler. Max's screenshot is exactly that route.
+      🔑 A STATE IS A CLASS, NOT AN INLINE STYLE FIVE PLACES FIGHT OVER. `body.chop-open` is
+      already the authority for "the Chop page is up"; an !important rule keyed on it beats every
+      inline style, so whoever re-shows #controls next cannot undo this. */
+body.chop-open #controls { display: none !important; }
+
 /* ── ARM STAYS "ARM" ──
       Max: "whenever we press arm I don't like how it moves to Armed, it adds the ed at the end. I
       don't want that — just have it be a button where it fades in purple, fades out purple."
@@ -14971,7 +15088,12 @@ body.chop-open #mix-panel { height: 288px !important; }
       padding was 3/9 with a 6 px gap, which put the digits hard against the right edge. */
 #ti-slices-btn { padding: 3px 11px !important; gap: 7px !important; }
 #ti-slices-btn .ti-slices-count {
-  color: #FFFFFF !important; font-weight: 200 !important; font-size: 11px !important;
+  /* tp59 — 9.5 px, not 11. The count is the TALLEST thing in this pill, so its line box set the
+     pill's height: 19 px against the play pills' 17.5, which is why the word inside sat low
+     against its neighbours ("it looks like it's very low on top of the box"). Matching the label's
+     size puts the pill back on the row's own height, and the digits get narrower with it — which
+     is the other half of the collision below. */
+  color: #FFFFFF !important; font-weight: 200 !important; font-size: 9.5px !important;
   font-variant-numeric: tabular-nums !important; letter-spacing: .01em !important;
   min-width: 11px !important; text-align: center !important; }
 
@@ -14992,6 +15114,13 @@ body.chop-open #mix-panel { height: 288px !important; }
       Max: "Ctrl+A and it selects all of my chops ... and then I'm able to right click them."  A
       selection has to be VISIBLE or a global release of 0 arrives as a mystery. The house's own
       selected treatment: a purple outline and nothing filled, the same as every pill on the page. */
+/* tp59 — and it has to READ. A 1 px inset ring on a dark waveform is not an answer to "did that
+   select anything"; Max pressed ⌘A with no menu open, where the ring was the ONLY feedback there
+   was. The selected chops now carry a purple wash as well, and the hero's Slices count goes
+   purple so the state is legible without opening anything. */
+#ti-slice-overlays .ti-slice-body.sel { background: rgba(167,139,250,0.16) !important; }
+#ti-slices-btn.sel { border-color: var(--purple-400) !important; color: #fff !important; }
+#ti-slices-btn .ti-slices-count.sel { color: var(--purple-400) !important; }
 #ti-slice-overlays .ti-slice-body.sel { box-shadow: inset 0 0 0 1px var(--purple-400) !important;
   background: rgba(167,139,250,0.10) !important; }
 #ti-chop-panel .ov-head .name .num { letter-spacing: .04em; }
@@ -16008,11 +16137,49 @@ void TerrainUiCore::offerPack (const juce::File& f)
 // to the plugin land here (JUCE focus) and get piped into the page's registered input.
 bool TerrainUiCore::keyPressed (const juce::KeyPress& key)
 {
-    if (! tiEditArmed_.load() || webView == nullptr) return false;
-    const auto k = tiKeyToWebKey (key);
-    if (k.isEmpty()) return false;
-    webView->evaluateJavascript (tiHostKeyJs (k));
-    return true;
+    if (webView == nullptr) return false;
+
+    // An armed inline editor owns every keystroke — fb135's path, unchanged.
+    if (tiEditArmed_.load())
+    {
+        const auto k = tiKeyToWebKey (key);
+        if (k.isEmpty()) return false;
+        webView->evaluateJavascript (tiHostKeyJs (k));
+        return true;
+    }
+
+    /* ══ tp59 — THE CHOP PAGE'S CHORDS ════════════════════════════════════════════════════════
+       ⌘A / Ctrl+A select every chop, Delete/Backspace removes the selection, Escape drops it.
+       ⚠️ THE WHITELIST IS THE POINT. fb514: "NO KEY EVER ACTIVATES A CONTROL — Space must stay
+       the DAW's transport." Returning true tells JUCE the key is consumed and it never reaches
+       the host, so this returns true for EXACTLY the three chords above and false for everything
+       else, which sends the rest straight back up the responder chain. */
+    if (! tiChopOpen_.load()) return false;
+
+    const auto mods  = key.getModifiers();
+    const bool cmd   = mods.isCommandDown();   // ⌘ on macOS, Ctrl on Windows
+    const bool ctrl  = mods.isCtrlDown();
+    const int  code  = key.getKeyCode();
+
+    if ((cmd || ctrl) && (code == 'a' || code == 'A'))
+    {
+        webView->evaluateJavascript (tiHostChordJs ("a", cmd, ctrl));
+        return true;
+    }
+    if (code == juce::KeyPress::escapeKey)
+    {
+        webView->evaluateJavascript (tiHostChordJs ("Escape", false, false));
+        return true;   // Escape on the Chop page drops a selection; hosts do not need it here
+    }
+    if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey)
+    {
+        // Only OUR key when a selection is actually live — otherwise Delete is the host's.
+        if (! tiChopSelLive_.load()) return false;
+        webView->evaluateJavascript (tiHostChordJs (
+            code == juce::KeyPress::deleteKey ? "Delete" : "Backspace", false, false));
+        return true;
+    }
+    return false;
 }
 
 

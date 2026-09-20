@@ -14774,6 +14774,22 @@ window.__tiEditArm = function (on) {
     if (window.__tiEditArmFn) window.__tiEditArmFn(on ? 1 : 0);
   } catch (e) {}
 };
+/* ══ tp59 — A CHORD FROM THE HOST, AS A REAL KEYBOARD EVENT ═══════════════════════════════════
+   __tiHostKey below TYPES into a registered input and drops modifiers entirely — right for an
+   inline editor, useless for ⌘A. This dispatches an actual KeyboardEvent on the document with the
+   modifiers set, so the page's own keydown handlers run EXACTLY as they would if the WKWebView had
+   had focus all along. Nothing downstream has to know where the key came from.
+   ⚠️ This exists because fb135's finding is still true: THE PAGE DOES NOT GET KEYS IN A HOST. Any
+   future shortcut must ride this, not a bare document listener — tp57's ⌘A was a bare listener and
+   it never fired once in a DAW, while its gate dispatched the event straight into the page and
+   went green. */
+window.__tiHostChord = function (key, meta, ctrl) {
+  try {
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: key, code: (key.length === 1 ? 'Key' + key.toUpperCase() : key),
+      metaKey: !!meta, ctrlKey: !!ctrl, bubbles: true, cancelable: true }));
+  } catch (e) {}
+};
 window.__tiActiveInp = null;
 window.__tiHostKey = function (k) {
   var inp = window.__tiActiveInp; if (!inp) return;

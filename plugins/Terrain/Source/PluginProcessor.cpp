@@ -10461,6 +10461,27 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const auto isPopulated = [this] (int li) {
             return li >= 0 && li < 4 && layers[(size_t) li].hasSample();
         };
+        // ══ tp59 — SOLO OWNS THE ROUTING, NOT JUST THE MIX ═══════════════════════════════════
+        //  Max: "make sure every time I press solo on something it actually solos and it plays for
+        //  me. No matter what the mode is on. I don't care if it's on Robin or random or keytrack.
+        //  I should just be able to play, it's soloed, so it needs to be soloed and I gotta play
+        //  it."
+        //
+        //  🚨 SOLO ALREADY WORKED — AND THAT IS EXACTLY WHY IT LOOKED BROKEN. The gate is in the
+        //  SUMMING loop below (`audible = !mute && (!anySolo || solo)`), which silences every
+        //  un-soloed layer correctly. But the trigger mode decides WHICH LAYER GETS THE NOTE, and
+        //  it only ever asked "is this layer populated". So soloing C while Robin handed the note
+        //  to A rendered A, silenced A for not being soloed, and never gave C a note at all:
+        //  press a key, hear nothing. Keytrack and Velocity were worse — they DROP a note whose
+        //  zone matches nothing, so a soloed layer outside the zone could not be played at all.
+        //
+        //  A solo is a monitoring override. While one is live the mode's picker steps aside and
+        //  every soloed populated layer takes the note, which is what "solo" means on any desk and
+        //  exactly what Max described. One early-out, before the switch — so it covers all five
+        //  modes at once and no zone test can swallow the note. With no solo up, nothing changes:
+        //  `anySoloNote` is false and the block below is byte-for-byte the old path.
+        const bool anySoloNote = std::any_of (layers.begin(), layers.end(),
+                                              [](const tw::LayerState& l){ return l.solo.load(); });
 
         for (const auto event : midiMessages)
         {
@@ -10479,6 +10500,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
             // ── Note-on routing per trigger mode ──
             const int vel = msg.getVelocity();
+
+            if (anySoloNote)
+            {
+                // SOLO — the mode steps aside; every soloed, populated layer takes the note.
+                for (int li = 0; li < 4; ++li)
+                    if (isPopulated (li) && layers[(size_t) li].solo.load())
+                        perLayerMidi[(size_t) li].addEvent (msg, pos);
+                continue;
+            }
 
             if (tmode == 0)
             {

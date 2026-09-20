@@ -907,6 +907,21 @@ private:
     // holds keyboard focus and keyPressed pipes every keystroke into the page (__tiHostKey).
     bool keyPressed (const juce::KeyPress& key) override;
     std::atomic<bool> tiEditArmed_ { false };
+    /* ══ tp59 — THE CHOP PAGE'S KEYBOARD ══════════════════════════════════════════════════════
+       Max: "by the way, I cannot control A shit, you fucking liar. You fucking told me I could."
+       He is right and the reason is written two members up. fb135 already established that THE
+       PAGE DOES NOT GET KEYS IN A HOST — "fb134's make-the-WKWebView-first-responder did not
+       survive the host (FL kept the keys)" — which is why every keystroke the plugin handles goes
+       JUCE → keyPressed → the page. tp57 shipped ⌘A as a bare `document.addEventListener
+       ('keydown')`, and its gate dispatched a synthetic KeyboardEvent straight into the page, so
+       it proved the HANDLER and never the ROUTE. The route was never there.
+       While the Chop page is up this component takes keyboard focus the same way an inline editor
+       does, and keyPressed forwards the chop chords. ⚠️ It consumes ONLY what it handles and
+       returns false for everything else, so fb514's law holds and Space stays the DAW's. */
+    std::atomic<bool> tiChopOpen_ { false };
+    // tp59 — pushed by the page whenever the multi-chop selection changes. Delete is only OUR key
+    // while a selection is live; with none up it belongs to the host.
+    std::atomic<bool> tiChopSelLive_ { false };
 
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
