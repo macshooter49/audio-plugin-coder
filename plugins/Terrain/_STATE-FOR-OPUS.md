@@ -1,7 +1,18 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD `9d99853` (tp61)**, pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD `2a66982` (tp62)**, pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp62 (2026-09-20, morning) — MOTION ON/OFF
+Settings → Motion. Off = the fb636 motion envelope (`MOT`) never rises, MIDI or not, so every
+decorative animator (they read `MOT.tau/e` or a `__tiWind` key) holds its rest pose; the Flow
+tiles' keys (`/^card-(gli|chop|arp)/`) are exempt; the waterfall + Patcher node lights read
+`__tiLive()`. C++: `motionEnabled_` (marker `~/Library/Caches/Terrain/motion-off`, read in the
+ctor), `uiStatic()`, `vz()` on 28 audio-driven numbers in the viz builders, `vizReverbBloom/
+vizDelayBloom` = mix × decay / mix × feedback, editor lane at 30 Hz with decorative feeds every
+8th tick (`decoTick`), scope parked, spectrum at half rate. **MEASURED on real editors**
+(`Tests/mac_motion_cpu.mm`): 1 editor 41.2→27.3 % of a core, 4 editors 160.8→91.3 %. DSP
+bit-identical (`Tests/au_motion_null.cpp`). ⚠️ `proc_pid_rusage` times are Mach ticks.
 
 ## tp61 (2026-09-20, early hours)
 
