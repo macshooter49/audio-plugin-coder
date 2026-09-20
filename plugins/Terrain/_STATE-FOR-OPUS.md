@@ -1,6 +1,6 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD `5fcba94` (tp63)**, pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD `43ba776`+ (tp63b)**, pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
 
 ## tp63 (2026-09-20, afternoon) — THE MACHINES, THE FILTER, THE RANDOMIZE MEMORY
@@ -13,8 +13,9 @@ post-filter (flow cards + devices); a card cabled while the osc is in the filter
 **Randomize memory**: `au_lazy_memory.cpp` — MODAL +1,213 MB PER BANK, HARM +55, bank B +298, never
 freed. `releaseIdleEnginesIfUnused()` (timer): unwanted ≥3 s + no voice active → disarm (render guard)
 → +3 audioSeq → release. Measured 2,791→711 MB. ⚠️ `phys_footprint` does not count malloc's reused
-zero pages: a re-arm reads +0; proved by sound. Bank B is NOT released (298 MB). The per-roll growth
-after the cliffs is still under investigation (`mac_dice_memory.mm`, chord released between rolls).
+zero pages: a re-arm reads +0; proved by sound. Bank B is NOT released (298 MB). The per-roll growth was the WAVETABLE BANK (every table
+visited stayed built, +234 MB/6 rounds) — `releaseIdleWavetables()` unpublishes a preset no oscillator names
+for 3 s and frees its storage +3 audioSeq later (voices get the pointer every block). Net +2 MB now.
 **Also**: shaper follows type with motion off (one counter per feed — tp62 nested two); no stem
 caption; capture strip OFF word white; Slices pill fixed width; pitch-bend ink.
 **Not reproduced**: the Patcher LFO right-click "edit as shape" (Chrome opens it, real mouse too) and
