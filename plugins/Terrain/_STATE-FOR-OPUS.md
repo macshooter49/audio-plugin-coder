@@ -29,6 +29,18 @@ when first encoded for a save (`tiWriteSampleSpare`; factory paths and our own f
 **Bank B is released** (`releaseIdleBankBIfUnused`: unwanted 3 s + no voice → `bankB_ = nullptr` →
 +3 audioSeq → `synthEngineB_.reset()`). ⚠️ read it on **malloc size_in_use** — the footprint does not
 move for a release of many small blocks (the harness prints both now).
+**tp66 — ONE WAVEFORM; THE AUDIO PICTURES MOVE WITH MOTION OFF.** Max: "they're not the same thing … they
+look very random … pick something and stick with it." `window.__tiWave` / `__tiWaveGeom` / `__tiWaveSvgHtml`
+(index.html, the early block) is THE sample picture; the Chop hero (`drawWaveform`, ampFrac .70 for its 50 px
+reserve), the per-chop tile (`drawChopWaveform`, `peakRef` = the whole sample's peak), the OSC · Sample slot
+(`drawPeaks`), the noise wave view (`drawNoiseWave`, 220 columns interpolated) and the convolution IR
+(`drawConvWave`, SVG) all call it; the dead `sampDraw` is gone. Law: min/max envelope on a hairline baseline,
+one column per CSS px folding its bins (never nearest-bin), outer envelope held ±1 column + 5-tap smooth,
+ink 16 % body + 92 % 1.25 px contours, no glow; a hot source scaled to 92 %, a quiet one never pumped.
+NOT converted: the granular card's live-ring line (a different picture: grains ride it) and the Flow Chop
+ribbon (synthetic). Motion off: the oscilloscope no longer parks (editor `oscActive`), the noise WAVE view
+follows `act` unscaled by the motion envelope (the particle cloud still rests), the waterfall already moved
+on MIDI. `Tests/_tp66_gate.js` (8), `_shot66.js` renders the three pictures — look at them.
 **tp65 — THE FRONT PAGE IS NEVER SHOWN.** Max: "just make sure I can't go back to it … I just don't want to
 see it." `setActivePanel` hides `#controls` for MOD/EQ/DLY (the Chop page's two close handlers used to restore
 them under MOD: CHOP → MOD showed the hero behind the panel — they now respect `currentActivePanel`);

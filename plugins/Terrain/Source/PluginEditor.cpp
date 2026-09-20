@@ -7308,8 +7308,9 @@ void TerrainUiCore::timerCallback()
         if (seqNow == lastOscScopeSeq_) { if (oscScopeStaleTicks_ < 1000) ++oscScopeStaleTicks_; }
         else                            { oscScopeStaleTicks_ = 0; lastOscScopeSeq_ = seqNow; }
         const bool feedStale = oscScopeStaleTicks_ > 15;   // ~250 ms @ 60 Hz
-        const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed) && ! feedStale
-                            && ! uiStatic;   // tp62 — with motion off the scope parks: the page draws the table's own still cycle
+        const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed) && ! feedStale;
+        // tp66 — the scope is AUDIO, not decoration: it moves with motion off (tp62 parked it; Max: "people
+        //  shouldn't just stop seeing the oscilloscope move when animation loops are turned off").
         if (oscActive && pushScopeW)   // fb486 whale gate (the park-push below is NOT gated)
         {
             // SPSC seqlock READ: snapshot the window into locals, retrying if the audio
@@ -10477,53 +10478,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
 
     if (!state.peaksMin || !state.peaksMax) return;
 
-    var w = rect.width, h = rect.height;
-    var cy = h / 2;
-    var n = state.peaksMin.length;
-    if (n === 0) return;
-    var visibleN = Math.max(1, Math.floor(n * Math.max(0.001, Math.min(1, state.progress))));
-    // Display gain — 0.95 = fixed top/bottom margin; peakScale = peak-aware shrink for
-    // loud samples (1.0 = no change). Quiet samples keep full visual amplitude.
-    var vGain = cy * 0.95 * (state.peakScale || 1.0);
-
-    // Filled body (mirrored around centerline)
-    ctx.fillStyle = 'rgba(245, 243, 255, 0.10)';
-    ctx.beginPath();
-    ctx.moveTo(0, cy);
-    var i;
-    for (i = 0; i < visibleN; i++) {
-      var x = (i / Math.max(1, n - 1)) * w;
-      var yMax = cy - state.peaksMax[i] * vGain;
-      ctx.lineTo(x, yMax);
-    }
-    for (i = visibleN - 1; i >= 0; i--) {
-      var x2 = (i / Math.max(1, n - 1)) * w;
-      var yMin = cy - state.peaksMin[i] * vGain;
-      ctx.lineTo(x2, yMin);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    // Top edge stroke
-    ctx.strokeStyle = 'rgba(245, 243, 255, 0.92)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (i = 0; i < visibleN; i++) {
-      var xx = (i / Math.max(1, n - 1)) * w;
-      var ym = cy - state.peaksMax[i] * vGain;
-      if (i === 0) ctx.moveTo(xx, ym); else ctx.lineTo(xx, ym);
-    }
-    ctx.stroke();
-
-    // Bottom edge stroke
-    ctx.strokeStyle = 'rgba(245, 243, 255, 0.85)';
-    ctx.beginPath();
-    for (i = 0; i < visibleN; i++) {
-      var xx2 = (i / Math.max(1, n - 1)) * w;
-      var ym2 = cy - state.peaksMin[i] * vGain;
-      if (i === 0) ctx.moveTo(xx2, ym2); else ctx.lineTo(xx2, ym2);
-    }
-    ctx.stroke();
+    // tp66 — THE waveform (one law: window.__tiWave, index.html). The hero keeps a 50 px reserve at the bottom
+    // (the chop number row) and the buttons at the top, so it draws at 0.70 of the box; the reveal is the load.
+    window.__tiWave(ctx, rect.width, rect.height, state.peaksMin, state.peaksMax, { ampFrac: 0.70, progress: Math.max(0.001, Math.min(1, state.progress)) });
   }
 
   // ── Slicer helpers ────────────────────────────────────────────────────────
@@ -11143,50 +11100,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     pEnd   = Math.max(pStart + 1, Math.min(n, pEnd));
     var pCount = pEnd - pStart;
 
-    var w  = visualWidthCss, h = visualHeightCss;
-    var cy = h / 2;
-    var i;
-    // Match drawWaveform — peak-aware display gain so loud chops don't slam into the
-    // chop number row / dice button / bottom strip.
-    var vGain = cy * 0.95 * (state.peakScale || 1.0);
-
-    // Filled body (mirrored around centerline).
-    ctx.fillStyle = 'rgba(245, 243, 255, 0.10)';
-    ctx.beginPath();
-    ctx.moveTo(0, cy);
-    for (i = 0; i < pCount; i++) {
-      var x   = (i / Math.max(1, pCount - 1)) * w;
-      var yMax = cy - peaksMax[pStart + i] * vGain;
-      ctx.lineTo(x, yMax);
-    }
-    for (i = pCount - 1; i >= 0; i--) {
-      var x2  = (i / Math.max(1, pCount - 1)) * w;
-      var yMin = cy - peaksMin[pStart + i] * vGain;
-      ctx.lineTo(x2, yMin);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    // Top edge stroke.
-    ctx.strokeStyle = 'rgba(245, 243, 255, 0.92)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (i = 0; i < pCount; i++) {
-      var xx = (i / Math.max(1, pCount - 1)) * w;
-      var ym = cy - peaksMax[pStart + i] * vGain;
-      if (i === 0) ctx.moveTo(xx, ym); else ctx.lineTo(xx, ym);
-    }
-    ctx.stroke();
-
-    // Bottom edge stroke.
-    ctx.strokeStyle = 'rgba(245, 243, 255, 0.85)';
-    ctx.beginPath();
-    for (i = 0; i < pCount; i++) {
-      var xx2 = (i / Math.max(1, pCount - 1)) * w;
-      var ym2 = cy - peaksMin[pStart + i] * vGain;
-      if (i === 0) ctx.moveTo(xx2, ym2); else ctx.lineTo(xx2, ym2);
-    }
-    ctx.stroke();
+    // tp66 — THE waveform (one law: window.__tiWave), the chop's bins stretched across its tile at the hero's
+    // own amplitude and scaled by the WHOLE sample's peak, so a warped chop is the hero's picture, not a louder one.
+    window.__tiWave(ctx, visualWidthCss, visualHeightCss, peaksMin, peaksMax,
+                    { from: pStart, to: pEnd, ampFrac: 0.70, peakRef: window.__tiWavePeak(peaksMin, peaksMax), baseline: false });
   }
 
   // Drag a marker line horizontally to move the boundary between

@@ -92,14 +92,14 @@ const PAGE=process.argv[2]||(process.cwd()+'/Source/ui/public/index.html');
  const deco=['__grnVizPush','__tpeVizPush','__fx3VizPush','__fx4VizPush'].every(k=>new RegExp('if \\(decoTick\\) js << "window\\.'+k).test(ed));
  /* tp63 — the distortion push is ONE counter now (tp62's nested pair de-phased after any quiet spell) */
  const dst=/if \(uiStatic \? decoTick : quarter\) js << "window\.__dstVizPush=/.test(ed) && /if \(quarter\) js << "window\.__fltVizPush=" << audioProcessor\.getFilterVizJson\(\) << ";";\s+\/\/ fb382 — the filter is essential/.test(ed);
- const scope=/&& ! uiStatic;\s+\/\/ tp62 — with motion off the scope parks/.test(ed);
+ const scope=/oscScopeActive\.load\(std::memory_order_relaxed\) && ! feedStale;\n\s+\/\/ tp66 — the scope is AUDIO/.test(ed);   /* tp66 — the scope no longer parks: it is audio */
  const spec=/pushEqW && specTick && wanted && spectrumLive/.test(ed);
  const rate=/int uiHz = audioProcessor\.getMotionEnabled\(\) \? 60 : 30;/.test(ed);
  const vz=(pr.match(/\bvz \(/g)||[]).length;
  const wash=/vizReverbBloom \(int inst0\) const noexcept[\s\S]{0,700}"MIX"[\s\S]{0,200}"DECAY"/.test(pr);
  const ctor=/if \(motionOffMarker\(\)\.existsAsFile\(\)\)\s+motionEnabled_\.store\s+\(false/.test(pr);
  ok(deco && dst && scope && spec && rate && vz>=20 && wash && ctor,
-    '[6] the C++ half: decorative feeds ride decoTick, the filter stays every 4th tick, the scope parks, the spectrum halves, the lane runs 30 Hz, '+vz+' audio-driven numbers rest, the reverb wash is mix × decay, the ctor reads the marker',
+    '[6] the C++ half: decorative feeds ride decoTick, the filter stays every 4th tick, the scope MOVES (tp66: audio, not decoration), the spectrum halves, the lane runs 30 Hz, '+vz+' audio-driven numbers rest, the reverb wash is mix × decay, the ctor reads the marker',
     JSON.stringify({deco,dst,scope,spec,rate,vz,wash,ctor}));
 
  ok(errs.length===0, '[7] the page threw nothing', errs.join(' | '));
