@@ -528,6 +528,13 @@ TerrainAudioProcessor::TerrainAudioProcessor()
         }
     }
 
+    // tp61 — READ THE CAPTURE PREFERENCE BEFORE THE TIMER CAN ARM ANYTHING. tp43 read the marker in
+    //  createEditor, which is late enough for the ~202 MB export ring (nothing can export without a
+    //  UI) and far too late for the STEM rings: timerCallback arms those the moment a layer holds a
+    //  sample, and a patch loaded into a hidden instance does that before any editor exists. An
+    //  instance opened with capture off must never allocate the ~1,058 MB in the first place.
+    if (captureOffMarker().existsAsFile()) captureEnabled_.store (false, std::memory_order_release);
+
     // Spectral-morph rebuild runs on the message thread (the rebuild is ~2.3 ms since fb467,
     // far too heavy for the audio thread). 60Hz polling keeps the morph knob
     // responsive while never touching a buffer the audio thread is reading.
@@ -12995,7 +13002,17 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                              kPhaSendBase, kEqzSendBase, kWidSendBase, kCmpSendBase, kOttSendBase, kBodSendBase,
                                              kUtlSendBase, kSplSendBase,
                                              kChpSendBase, kGliSendBase, kDckSendBase };   // tp20 — pool send base per kind (3..15) · tp30 — 16/17 flow · tp43 — 18 deck
-        auto maskOf = [this] (const ChainEntry& ce) -> uint16_t
+        // tp61 — the device's own 4-bit <device>_CHOPS mask, by chain entry. Mirrors the send-bus
+        //  mapping in the chSend loop exactly; kBaseOf covers kinds 3..18 (the Deck included).
+        auto chopMaskOfEntry = [this] (const ChainEntry& ce) noexcept -> unsigned
+        {
+            if      (ce.kind == 0) return (ce.inst == 1) ? hallChopMask_ : poolChopMask_[(size_t) (2 * kFxExtra + ce.inst - 2)];
+            else if (ce.kind == 1) return (ce.inst == 1) ? dlyChopMask_  : poolChopMask_[(size_t) (ce.inst - 2)];
+            else if (ce.kind == 2) return (ce.inst == 1) ? dstChopMask_  : poolChopMask_[(size_t) (kFxExtra + ce.inst - 2)];
+            else if (ce.kind >= 3 && ce.kind < 19) return poolChopMask_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)];
+            return 0u;
+        };
+        auto maskOf = [this, &chopMaskOfEntry] (const ChainEntry& ce) -> uint16_t
         {
             const float* g = nullptr;
             if      (ce.kind == 0) g = (ce.inst == 1) ? hallRvbG_ : &poolRouteG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
@@ -13034,12 +13051,34 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else if (ce.kind == 2) n2 = (ce.inst == 1) ? dstN2G_  : poolN2G_[(size_t) (kFxExtra + ce.inst - 2)];
             else if (ce.kind >= 3 && ce.kind < 19) n2 = poolN2G_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)];
             if (n2 > 0.0f) m = (uint16_t) (m | (1u << (unsigned) tw::FxChainTopology::kNoise2Bit));
+            // ══ tp61 — THE CHOP LAYERS RIDE THE SAME TABLE (bits 11..14) ════════════════════
+            //  See kChopShift in FxChainTopology.h for why. This is the ONLY place a chop route
+            //  becomes a topology source, and the ONLY place it needed to: entry / feed /
+            //  consumed / eff are all mask arithmetic and do not care which bit is which.
+            m = (uint16_t) (m | (chopMaskOfEntry (ce) << (unsigned) tw::FxChainTopology::kChopShift));
             return m;
         };
         uint16_t masks[(size_t) kChainMax] = {};
         const int n = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
         for (int c = 0; c < n; ++c) masks[c] = maskOf (chainOrder_[(size_t) c]);
         fxTopo_.build (masks, n);
+        // ══ tp61 — WHERE EACH LAYER ACTUALLY ENTERS ═════════════════════════════════════════
+        //  The raw layer is injected at its ENTRY device and nowhere else; every later device
+        //  that shares it eats that device's OUTPUT through fxTopo_.feed, which is the machinery
+        //  the oscillators have used since fb351. Scattered here (not read from the route params)
+        //  so the feed block below can never disagree with the chain the topology just resolved.
+        hallChopEntry_ = dlyChopEntry_ = dstChopEntry_ = 0u;
+        poolChopEntry_.fill (0u);
+        for (int c = 0; c < n; ++c)
+        {
+            const unsigned ec = (unsigned) ((fxTopo_.entry[c] >> (unsigned) tw::FxChainTopology::kChopShift) & 0xFu);
+            if (ec == 0u) continue;
+            const auto& ce = chainOrder_[(size_t) c];
+            if      (ce.kind == 0) { if (ce.inst == 1) hallChopEntry_ = ec; else poolChopEntry_[(size_t) (2 * kFxExtra + ce.inst - 2)] = ec; }
+            else if (ce.kind == 1) { if (ce.inst == 1) dlyChopEntry_  = ec; else poolChopEntry_[(size_t) (ce.inst - 2)] = ec; }
+            else if (ce.kind == 2) { if (ce.inst == 1) dstChopEntry_  = ec; else poolChopEntry_[(size_t) (kFxExtra + ce.inst - 2)] = ec; }
+            else if (ce.kind >= 3 && ce.kind < 19) poolChopEntry_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)] = ec;
+        }
         resolveLanes();   // fb444 — turn the flat card list into Splitter lane ownership
         // tp30 — which chain slot each audio FLOW card landed in this block (-1 = not in the chain).
         //  The deferred pass walks THIS, in chain order, so a flow card fed by an upstream flow card
@@ -13225,11 +13264,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 dst.addFrom (1, 0, src, 1, 0, numSamples, chopGainR_[L]);
             }
         };
-        if (hallRouteActive_) feed (reverbSendBuf_,     hallChopMask_);
-        if (dlyRouteActive_)  feed (delaySendBuf_,      dlyChopMask_);
-        if (dstRouteActive_)  feed (distortionSendBuf_, dstChopMask_);
+        // tp61 — the ENTRY masks, not the route masks. A layer claimed by three devices used to be
+        //  added to all three buses (three dry copies in parallel — Max's "it only glitches half of
+        //  it"); it now enters at the FIRST and travels the chain.
+        if (hallRouteActive_) feed (reverbSendBuf_,     hallChopEntry_);
+        if (dlyRouteActive_)  feed (delaySendBuf_,      dlyChopEntry_);
+        if (dstRouteActive_)  feed (distortionSendBuf_, dstChopEntry_);
         for (int q = 0; q < kPoolSendCount; ++q)
-            if (poolRouteAny_[(size_t) q]) feed (poolSendBuf_[(size_t) q], poolChopMask_[(size_t) q]);
+            if (poolRouteAny_[(size_t) q]) feed (poolSendBuf_[(size_t) q], poolChopEntry_[(size_t) q]);
     }
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
@@ -16130,6 +16172,7 @@ juce::String TerrainAudioProcessor::getLoadedSamplePath() const
 // re-published LAST (release). Everything between is invisible to the writer.
 void TerrainAudioProcessor::allocateStemBuffers (double sampleRate)
 {
+    if (! captureEnabled_.load (std::memory_order_acquire)) return;   // tp61 — a rate change must not re-arm what the setting turned off
     const int totalSamples = juce::jmax (1, (int) (sampleRate * (double) kStemSeconds));
     auto arm = [totalSamples] (StemBuffer& s)
     {
@@ -16166,6 +16209,17 @@ void TerrainAudioProcessor::ensureStemBuffersAllocated()
 void TerrainAudioProcessor::ensureStemLayerAllocated (int layerIdx)
 {
     if (layerIdx < 0 || layerIdx > 3) return;
+    // ══ tp61 — CAPTURE OFF MEANS *NO RINGS*, NOT JUST NO EXPORT RING ═══════════════════════════
+    //  Max: "whenever I have capture off in the settings, the stem capture should be greyed out …
+    //  make sure nothing ghostly is running in the background taking up CPU or memory, especially
+    //  memory. We want people to load up multiple instances."
+    //  tp43 built the setting and released the ~202 MB EXPORT ring. The five STEM rings — four
+    //  layers + the master-FX ring, ~1,058 MB at 44.1 k — were never part of it: they are armed
+    //  from timerCallback the moment a layer receives a sample, whatever the setting said. So
+    //  "capture off" still paid ~1.26 GB per instance with four layers loaded, and a second
+    //  instance paid it again. Off is now off: nothing is armed, and setCaptureEnabled(false)
+    //  gives back whatever was already armed.
+    if (! captureEnabled_.load (std::memory_order_acquire)) return;
     if (stemLayerArmed_[(size_t) layerIdx].load (std::memory_order_acquire)) return;
     const double sr = preparedSampleRate_.load (std::memory_order_acquire);
     if (sr <= 0.0) return;            // not prepared yet — the next tick will catch it
@@ -16199,11 +16253,38 @@ void TerrainAudioProcessor::setCaptureEnabled (bool on)
     captureEnabled_.store (on, std::memory_order_release);
     try { if (on) captureOffMarker().deleteFile(); else { captureOffMarker().getParentDirectory().createDirectory(); captureOffMarker().replaceWithText ("1"); } } catch (...) {}
     const std::lock_guard<std::mutex> prepGuard (prepLock_);
+    // tp61 — back ON: the export ring arms here, and the per-layer stem rings re-arm on the next
+    //  timerCallback tick for exactly the layers that hold a sample (the fb517 law, unchanged).
     if (on) { ensureCaptureBufferAllocated(); return; }
     captureArmRequested_.store (false, std::memory_order_release);  // a later prepareToPlay must not re-arm it
     captureBuffer.unpublish();                                      // the audio thread stops indexing it now
+    releaseStemBuffers();                                           // tp61 — ~1,058 MB back (see below; it un-publishes first too)
     juce::Thread::sleep (30);                                       // a block or two, so a write already inside the ring finishes
     captureBuffer.release();                                        // ~202 MB back
+    // The rings are freed AFTER the same sleep the export ring waits out: totalSize was stored 0
+    //  above, so any writeToStemBuffer already inside one has returned by now.
+    for (auto& b : stemBuffers) b.ring.setSize (0, 0);
+    masterFxBuffer.ring.setSize (0, 0);
+}
+
+// tp61 — un-publish every stem ring (the audio thread's go/no-go is totalSize, so this is the
+//  same protocol allocateStemBuffers uses in reverse) and forget the arms, so the next tick with
+//  capture back ON re-arms from scratch. MESSAGE THREAD ONLY; the memory itself is given back by
+//  the caller after it has waited out a block.
+void TerrainAudioProcessor::releaseStemBuffers()
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        stemBuffers[(size_t) i].totalSize.store (0, std::memory_order_release);
+        stemBuffers[(size_t) i].writeIndex.store (0, std::memory_order_relaxed);
+        stemBuffers[(size_t) i].samplesWritten.store (0, std::memory_order_relaxed);
+        stemLayerArmed_[(size_t) i].store (false, std::memory_order_release);
+        stemCaptureLevel[(size_t) i].store (0.0f, std::memory_order_relaxed);
+    }
+    masterFxBuffer.totalSize.store (0, std::memory_order_release);
+    masterFxBuffer.writeIndex.store (0, std::memory_order_relaxed);
+    masterFxBuffer.samplesWritten.store (0, std::memory_order_relaxed);
+    stemBuffersArmed_.store (false, std::memory_order_release);
 }
 
 void TerrainAudioProcessor::ensureCaptureBufferAllocated()

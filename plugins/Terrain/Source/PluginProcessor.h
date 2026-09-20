@@ -1853,6 +1853,8 @@ public:
     // stemBuffersArmed_ keeps meaning "master armed / any layer armed" for the re-arm path.
     std::array<std::atomic<bool>, 4> stemLayerArmed_ { };
     void ensureStemLayerAllocated (int layerIdx);
+    // tp61 — un-publish and forget every stem ring (DAW capture turned off). MESSAGE THREAD ONLY.
+    void releaseStemBuffers();
     // Latched by ensureCaptureBufferAllocated(). It is a REQUEST, not the arm itself:
     // a host may create the editor BEFORE the first prepareToPlay, and then there is no
     // sample rate to size the ring with yet — prepareToPlay honours the request instead.
@@ -3200,6 +3202,11 @@ private:
     std::atomic<float>* hallChopRef_ = nullptr; std::atomic<float>* dlyChopRef_ = nullptr; std::atomic<float>* dstChopRef_ = nullptr;
     unsigned poolChopMask_[(size_t) kPoolSendCount] {};   // per block, unpacked from the params above
     unsigned hallChopMask_ = 0, dlyChopMask_ = 0, dstChopMask_ = 0;
+    // tp61 — the same four bits AFTER the topology has resolved where each layer ENTERS the chain.
+    //  Only the entry device is handed the raw layer; everything downstream eats its output. Written
+    //  once per block right after fxTopo_.build, read only by the chop-feed block. See kChopShift.
+    unsigned hallChopEntry_ = 0, dlyChopEntry_ = 0, dstChopEntry_ = 0;
+    std::array<unsigned, (size_t) kPoolSendCount> poolChopEntry_ {};
     unsigned chopRoutedMask_ = 0;                // bit L = layer L is cabled somewhere, so it leaves the dry mix
     bool     chopLive_[4] { false, false, false, false };   // this block: layer L rendered and is audible
     float    chopGainL_[4] { 0, 0, 0, 0 }, chopGainR_[4] { 0, 0, 0, 0 };   // its mixer gain + equal-power pan

@@ -259,7 +259,13 @@ const fakeSample = () => { const N = 900, mn = [], mx = [];
     body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
     await new Promise(r => setTimeout(r, 500));
     const still = window.__tiChopSel().length;
-    const head = (document.getElementById('ti-chop-num') || {}).textContent;
+    /* tp61b — the header was "Chop" + a counter slot ("ALL 8"); Max: "why does 'Chop All 16' look
+       weird — just make it say 'All Chops' whenever all is selected." It is one phrase across two
+       spans now, so read the phrase. WHAT THIS BAR PROTECTS IS UNCHANGED: with a global selection
+       live, the header must NOT look like the single-chop header, or a release of 0 reaches eight
+       chops with nothing on screen saying so. */
+    const head = [...document.querySelectorAll('#ti-chop-panel .ov-head .name > span')]
+                   .map(e => e.textContent.trim()).join(' ');
     window.__natLog.length = 0;
     // one drag on the RELEASE row — the thing he actually wants at zero
     const row = [...document.querySelectorAll('#ti-chop-panel .ov-ad-row')].find(r => r.dataset.h === 'R');
@@ -276,7 +282,7 @@ const fakeSample = () => { const N = 900, mn = [], mx = [];
     const idxs = [...new Set(calls.map(e => e[1]))].sort((a, b) => a - b);
     return { still, head, names: [...new Set(calls.map(e => e[0]))], idxs };
   });
-  ok(global.still === 8 && /ALL 8/.test(global.head || '') && global.idxs.length === 8,
+  ok(global.still === 8 && /^(All|8) Chops$/.test(global.head || '') && global.idxs.length === 8,
      '[16] 🚨 ONE DRAG IN THE MENU REACHES ALL EIGHT CHOPS, and the header says so',
      JSON.stringify(global));
 

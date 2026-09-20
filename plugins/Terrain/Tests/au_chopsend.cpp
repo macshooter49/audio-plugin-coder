@@ -231,19 +231,38 @@ int main()
 
     // ── [3] THE PROCESSOR ACTUALLY READS THE MASK, IN BOTH PLACES ────────────────────────────
     //  A perfect parameter nobody consumes is fb435's silent control all over again. Two things
-    //  have to be true in the shipped source: a routed layer LEAVES the dry mix, and its audio is
-    //  ADDED to the buses that claimed it — one without the other is either a double or a silence.
+    //  have to be true in the shipped source: a routed layer LEAVES the dry mix, and its audio
+    //  REACHES the rack — one without the other is either a double or a silence.
+    //
+    //  ⚠️ tp61 CHANGED THE SECOND HALF, AND THIS BAR HAD TO CHANGE WITH IT.
+    //  tp56 fed the raw layer to EVERY bus that claimed it, and this bar asserted exactly that.
+    //  That is a parallel split by construction: claim a layer on a Glitch and on a Delay and each
+    //  gets its own dry copy — Max, 2026-09-20: "when I send it through a glitch it only glitches
+    //  like half of it, the other half is off somewhere ... I want the WHOLE audio taken and
+    //  chopped up and glitched." The layers are topology sources now (FxChainTopology bits 11..14),
+    //  so the raw layer is handed to the ENTRY device only and every later device that shares it
+    //  eats the upstream OUTPUT through fxTopo_.feed — the serial chain the oscillators have had
+    //  since fb351. The entry/feed arithmetic itself is proved exhaustively in Tests/fxtopo_test.cpp
+    //  case 22; what this bar pins is that the processor is wired to the ENTRY masks and not the
+    //  route masks, which is the single line that decides parallel vs serial.
+    //
+    //  🔑 THE ARM STILL READS THE FULL MASK, deliberately: a downstream device needs its bus
+    //  allocated and cleared even though it is fed by the chain rather than by the bus.
     {
         const std::string src = slurp ("Source/PluginProcessor.cpp");
         const bool resolve = src.find ("chopRoutedMask_ = any;")                              != std::string::npos;
         const bool dryOut  = src.find ("if (audible && ! chopRouted)")                        != std::string::npos;
-        const bool feeds   = src.find ("feed (poolSendBuf_[(size_t) q], poolChopMask_[(size_t) q])") != std::string::npos;
+        const bool feeds   = src.find ("feed (poolSendBuf_[(size_t) q], poolChopEntry_[(size_t) q])") != std::string::npos;
         const bool arms    = src.find ("if (poolChopMask_[(size_t) q]) poolRouteAny_[(size_t) q] = true;") != std::string::npos;
-        const bool inst1   = src.find ("feed (reverbSendBuf_,     hallChopMask_)")            != std::string::npos;
-        chk (resolve && dryOut && feeds && arms && inst1,
-             "[3] THE PROCESSOR READS IT IN BOTH PLACES — a routed layer leaves the dry mix AND is added to every bus that claimed it",
-             std::string ("resolve=") + (resolve?"y":"n") + " dryOut=" + (dryOut?"y":"n") + " feed=" + (feeds?"y":"n")
-             + " arm=" + (arms?"y":"n") + " inst1=" + (inst1?"y":"n"));
+        const bool inst1   = src.find ("feed (reverbSendBuf_,     hallChopEntry_)")           != std::string::npos;
+        const bool inTopo  = src.find ("chopMaskOfEntry (ce) << (unsigned) tw::FxChainTopology::kChopShift") != std::string::npos;
+        const bool scatter = src.find ("fxTopo_.entry[c] >> (unsigned) tw::FxChainTopology::kChopShift") != std::string::npos;
+        const bool noOld   = src.find ("feed (poolSendBuf_[(size_t) q], poolChopMask_[(size_t) q])") == std::string::npos;
+        chk (resolve && dryOut && feeds && arms && inst1 && inTopo && scatter && noOld,
+             "[3] THE PROCESSOR READS IT IN BOTH PLACES — a routed layer leaves the dry mix AND enters the chain ONCE, at its entry device (tp61)",
+             std::string ("resolve=") + (resolve?"y":"n") + " dryOut=" + (dryOut?"y":"n") + " entryFeed=" + (feeds?"y":"n")
+             + " arm=" + (arms?"y":"n") + " inst1=" + (inst1?"y":"n") + " inTopology=" + (inTopo?"y":"n")
+             + " entryScatter=" + (scatter?"y":"n") + " noParallelFeedLeft=" + (noOld?"y":"n"));
     }
 
     // ── [4] tp57 — THE BPM LOCK IS A REAL, GLOBAL, AUTOMATABLE PARAMETER ────────────────────

@@ -6296,7 +6296,11 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
   letter-spacing: 1.3px; color: rgba(255,255,255,0.45); padding: 4px 0; margin: 0; border: 1px solid rgba(255,255,255,0.14);
   border-radius: 5px; background: none; cursor: pointer; transition: color .12s, border-color .12s, background .12s; }
 .samp-menu .oscq .oq-sm-btn:hover { color: #fff; border-color: rgba(255,255,255,0.30); background: none; }
-.samp-menu .oscq .oq-sm-btn.on { color: var(--purple-400); border-color: rgba(183,148,255,0.55); background: rgba(183,148,255,0.10); }
+/* tp61 — THE HOUSE TREATMENT, HERE TOO. Max: "we have a very outdated right click menu when it
+   comes to muting and soloing things — it has a fill-in of purple when it should simply match the
+   flow cards: purple outline, white inside." Selected is an OUTLINE everywhere else in Terrain;
+   this menu was the last place still filling a box. */
+.samp-menu .oscq .oq-sm-btn.on { color: #fff; border-color: var(--purple-400); background: none; box-shadow: none; }
 
 /* ── NOISE engine (center column — mirrors the oscillator columns: header / visualizer / knob row) ── */
 #syn-panel .noise { background: transparent; display: flex; flex-direction: column; position: relative; padding: 24px 8px 5px; box-sizing: border-box; }   /* pad-top 24 = viz top aligns with osc-display top; pad-bottom 5 = knobs land exactly on the osc knob row (headless-measured to 0px) */
@@ -19051,7 +19055,8 @@ setTimeout(function wireSynControls () {
             // EXCLUSIVE SOLO (Max 2026-07-09): solo FOLLOWS the click — turning solo on here
             // instantly un-solos the other three oscs. No back-and-forth, no arguments.
             if (suf === 'SOLO' && nv >= 0.5) {
-              ['A','B','C','D'].forEach (function (X) {
+              ['A','B','C','D','E','F','G','H'].forEach (function (X) {   // tp61 — eight oscillators, not four
+
                 if (X === L) return;
                 try { var os = window.Juce.getSliderState ('SYN_OSC_' + X + '_SOLO');
                       if (os && os.getNormalisedValue () >= 0.5) os.setNormalisedValue (0); } catch (e) {}
@@ -19720,7 +19725,15 @@ setTimeout(function wireSynControls () {
       document.querySelectorAll ('#syn-panel .osc-display').forEach (function (disp) {
         var fo = disp.closest ('.front-only');
         var k  = fo ? fo.querySelector ('.knob[data-syn^="SYN_OSC_"]') : null;
-        var mm = k ? String (k.dataset.syn).match (/SYN_OSC_([A-D])_/) : null;
+        /* ══ tp61 — E TO H TOO ═══════════════════════════════════════════════════════════════
+           Max: "I tried to right click on the visualizers of E F G H and once again the menu was
+           gone — E F G H should have a right click menu for me to mute it, solo it, etc., just
+           like oscillators A B C D."  tp20 minted E–H as clones of B's device, parked in
+           #osc-pool-home inside #syn-panel, so this querySelectorAll HAS been reaching them since
+           the pool shipped — it was this regex, written when there were four oscillators, that
+           dropped them on the floor. Every parameter it goes on to use (SYN_OSC_E_*, the
+           osc-e-device id) was cloned with the letter, so widening the class is the whole fix. */
+        var mm = k ? String (k.dataset.syn).match (/SYN_OSC_([A-H])_/) : null;
         var L  = mm ? mm[1].toLowerCase () : null;
         if (! L) return;
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); e.stopPropagation ();
@@ -43313,10 +43326,19 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function addPort(n,kind,i,x,y,t){ var p=document.createElement('div'); p.className='tp-port k-'+kind; p.dataset.kind=kind; p.dataset.i=i; p.dataset.key=n.key; p.dataset.t=t||'a'; p.innerHTML='<i></i>';
     if(kind==='mod'||kind==='rin'){ p.style.left=(x-9)+'px'; } else { p.style.top=(n.h/2-9)+'px'; }
     p.addEventListener('click',function(e){ e.stopPropagation(); }); n.wrap.appendChild(p); n.ports.push({el:p,kind:kind,i:i,x:x,y:y}); return p; }
-  var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a']},noise:{ins:['n'],outs:['a']},filter:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a']},env:{outs:['m']},voice:{},lfo:{outs:['m']},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']},samp:{ins:['a'],outs:['a']}};
-  /* ══ tp58 — THE SAMPLER HAS AN INPUT ══════════════════════════════════════════════════════════
-     Max: "why doesn't the sampler have an INPUT? I want to patch FX THRU IT BRUH CMONNN even FLOW
-     CARDS n SUCH PLEASE ... I need my inputs bro."
+  var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a']},noise:{ins:['n'],outs:['a']},filter:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a']},env:{outs:['m']},voice:{},lfo:{outs:['m']},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']},samp:{outs:['a']}};
+  /* ══ tp61 — AND IT HAS NO INPUT AGAIN, BY HIS OWN READING ═════════════════════════════════════
+     Max, after living with it: "there's nothing that we should be able to run into the sampler, so
+     I don't think it needs an input. That was my bad. It only needs an output — I can run the
+     sampler into many things, but it doesn't need an input. It only leaves us looking stupid."
+     He is right, and tp58's argument below was mine, not his. A cable INTO a sampler never had a
+     meaning in the engine: there is no input stage on a chop layer to write it to, so the only
+     thing tp58's port ever did was let you draw the claim backwards. Dropping a cable ON the
+     module still makes that claim (see connect's `b.kind==='samp'` branch) — the PORT is gone,
+     which is the part that was making a promise the layer cannot keep.
+     ── tp58's reasoning, kept because it is why the port existed ──────────────────────────────
+     Max then: "why doesn't the sampler have an INPUT? I want to patch FX THRU IT BRUH CMONNN even
+     FLOW CARDS n SUCH PLEASE ... I need my inputs bro."
      tp56 gave it an OUT only, on the reasoning that a sampler is a source. True of the signal and
      false of the PATCH: a cable is a relationship, and "Sampler A through the Distortion" is the
      same relationship whichever end you start dragging from. With no input you could only ever
@@ -43469,6 +43491,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      needs to know about them. */
   var FSRC=['SRC_A','SRC_B','SRC_C','SRC_D','SRC_S','SRC_N','SRC_E','SRC_F','SRC_G','SRC_H','SRC_N2'];   /* tp42 — 10 = Noise 2 */
   var NSRC=11;   /* the width of every route mask */
+  /* ══ tp61 — THE TOPOLOGY IS FIFTEEN WIDE, THE ROUTE MASKS ARE STILL ELEVEN ══════════════════
+     The engine gave the four chop layers their own seats in FxChainTopology (bits 11..14) so that
+     Sampler A -> Glitch -> Delay is ONE signal rather than two dry copies. The canvas has to sort
+     by the same rule or it draws a chain the audio is not playing, so the slot masks below are
+     padded to NALL and carry the layers in exactly those four places. NSRC stays 11 because that
+     is the width of the SOURCE PILLS — nothing writes a route at index 11..14. */
+  var NALL=15, NCHOP=4;
   /* The route index of an oscillator letter. 0..3 = A–D, 6..9 = E–H (4 = Sub, 5 = Noise) — the
      same ten-wide numbering the rack's route array uses, so one index serves both. */
   function srcIdx(sub){ var t=String(sub||'').toLowerCase();
@@ -43543,7 +43572,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function setFlowInline(m,on,afterKey){ var ids=flowIds41(m); if(!ids.length) return; track(ids,function(){}); if(!layout.finl) layout.finl={}; if(on){ layout.finl[m]={after:afterKey||null}; setP(flowInlId(m),1); placeInlineFlows(); } else { delete layout.finl[m]; setP(flowInlId(m),0); } saveLayout(); }
   window.__tpAfterRanks=function(){ if(isOpen) placeInlineFlows(); };
   window.__tpSoon=function(){ if(isOpen) soon(); };
-  function masksShare(a,b){ for(var i=0;i<NSRC;i++) if(a[i]&&b[i]) return true; return false; }
+  function masksShare(a,b){ var n=Math.max(a.length,b.length); for(var i=0;i<n;i++) if(a[i]&&b[i]) return true; return false; }   /* tp61 — NALL wide when it is handed slot masks, NSRC wide when it is handed pill masks */
   /* THE OUTPUT CABLE. Cut it and the oscillator reaches Out only through whatever card claims
      it — claimed by nothing, it is silent, which is Max's "if it isn't hooked up to anything it
      has to have no sound". Default on, so a patch that never opens the canvas is untouched. */
@@ -43600,7 +43629,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     oscList().forEach(function(o){ if(!oscDev(o)) return; var on=oscOn(o), n=nodeByKey('osc-'+o); if(on&&!n){ if(adoptOsc(o)) changed=true; } else if(!on&&n){ returnOsc(n); changed=true; } });
     [1,2].forEach(function(i){ if(!noiseEl(i)) return; var on=noiseOn(i), n=nodeByKey(noiseKey(i)); if(on&&!n){ if(adoptNoise(i)) changed=true; } else if(!on&&n){ returnNoise(n); changed=true; } });   /* tp42 */
     var tOn=toggleOn('tape-toggle'), tn=nodeByKey('tape'); if(tOn&&!tn){ if(adoptTape()) changed=true; } else if(!tOn&&tn){ returnTape(tn); changed=true; }
-    if(layout.samp) SAMPL.forEach(function(L){ if(layout.samp[L]&&!nodeByKey(sampKey(L))){ if(adoptSamp(L)) changed=true; } });   /* tp56 — a Sampler the patch put here comes back */
+    /* ══ tp61 — A CABLED SAMPLER IS PRESENT BECAUSE THE PATCH SAYS SO ═══════════════════════════
+       Max: "I had put Sampler A on the patcher, but the ABCD sampler chop engines keep
+       disappearing." Every other module's presence is a PARAMETER — the oscillators' ENABLE, the
+       tape toggle, the flow chain — so it travels with the patch, the DAW project and the preset.
+       The Sampler's was `layout.samp`, a localStorage flag only: one shared key ('tpLayout') for
+       every instance on the machine, wiped by anything that rewrites the layout, and gone the
+       moment the patch is opened anywhere else. So a Sampler that is CABLED is now adopted from
+       its cables — chop claims and flow-card bits are real parameters — and the flag is only what
+       keeps an UNcabled one you dragged out. Cable it and it cannot disappear any more. */
+    SAMPL.forEach(function(L){ if(nodeByKey(sampKey(L))) return;
+      var cabled=chopClaims(L).length>0 || (window.__flowChain?window.__flowChain():[]).some(function(m){ return (flowChopsOf(m)>>sampIdx(L))&1; });
+      if(cabled||(layout.samp&&layout.samp[L])){ if(adoptSamp(L)) changed=true; } });
     nodes.forEach(function(n){ if(n.kind==='samp') sampPaint(n); });
     sampMeters();
     var ch=window.__flowChain?window.__flowChain():[]; ch.forEach(function(m){ if(!nodeByKey('flow-'+m)){ if(adoptFlowNode(m)) changed=true; } });
@@ -43631,40 +43671,53 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
        topology below sorts (that space is the synth's, 21 sources wide, and a chop has no seat in
        it) — its cable is exactly what the engine does with it: into every device whose _CHOPS bit
        it has lit, and to Out when nothing claims it, which is the Chop page's own mixer path. */
-    nodes.filter(function(n){ return n.kind==='samp'; }).forEach(function(sn){
-      var claims=chopClaims(sn.sub);
-      if(!claims.length){ add(sn,'out',0,outN,'in',0,'a',{chopDry:sn.sub},true); return; }
-      claims.forEach(function(c){ var dn=nodeByKey('fx-'+c.dev.core+'-'+c.dev.inst);
-        if(dn) add(sn,'out',0,dn,'in',0,'a',{chop:{dev:c.idx,L:sn.sub}}); }); });
+    /* tp61 — and they are drawn by the SLOT LOOP below, off the same entry/feed table the engine
+       runs, so a layer claimed by a Glitch and a Delay shows ONE cable into the Glitch and the
+       Glitch's own cable onward — which is what it now sounds like. Only the unclaimed case is
+       decided here, because no slot owns it: straight to Out, the Chop page's own mixer. */
     var ins=[]; var tp=nodeByKey('tape'), tl=nodeByKey('tapeloop'); if(tp) ins.push(tp); if(tl&&!deckActive()) ins.push(tl);   /* tp43 — a deck in the chain is a slot, not a fixture */
     for(var ii=0;ii<ins.length;ii++) add(ins[ii],'out',0,ii+1<ins.length?ins[ii+1]:outN,'in',0,'a',null,true);
     var dryHead=ins.length?ins[0]:outN;
     var devs=window.__fxrDevs?window.__fxrDevs():[]; var fxN=devs.map(function(d){ return d?nodeByKey('fx-'+d.core+'-'+d.inst):null; });
     var slots=[];
-    devs.forEach(function(d,i){ if(!d||!fxN[i]) return; slots.push({k:'fx',idx:i,node:fxN[i],mask:(d.route||[]).map(function(v){ return v?1:0; }),rank:devRank(devs,i),ord:slots.length,taps:d.taps|0}); });
-    audioT.forEach(function(m,ci){ var t=nodeByKey('flow-'+m); if(!t) return; var inl=flowInline(m); slots.push({k:'flow',m:m,node:t,mask:flowMaskOf(m),rank:inl?pv(flowRankId(m),0.5):2+0.001*ci,ord:slots.length,inl:inl,taps:flowTaps(m)}); });
-    { var dk=nodeByKey('tapeloop'); if(dk&&deckActive()) slots.push({k:'deck',node:dk,mask:deckMask(),rank:pv('SYN_DCK_RANK',0.5),ord:slots.length,taps:deckTaps()}); }   /* tp43 — the deck in the chain */
-    slots.forEach(function(sl){ while(sl.mask.length<NSRC) sl.mask.push(0); });
+    /* tp61 — every slot mask is NALL wide: eleven source pills, then the four chop layers. */
+    function withChops(mask,bits){ var o=mask.slice(); while(o.length<NSRC) o.push(0); o.length=NSRC;
+      for(var q=0;q<NCHOP;q++) o.push((bits>>q)&1); return o; }
+    devs.forEach(function(d,i){ if(!d||!fxN[i]) return; slots.push({k:'fx',idx:i,node:fxN[i],mask:withChops((d.route||[]).map(function(v){ return v?1:0; }),chopsOf(d)),rank:devRank(devs,i),ord:slots.length,taps:d.taps|0}); });
+    audioT.forEach(function(m,ci){ var t=nodeByKey('flow-'+m); if(!t) return; var inl=flowInline(m); slots.push({k:'flow',m:m,node:t,mask:withChops(flowMaskOf(m),flowChopsOf(m)),rank:inl?pv(flowRankId(m),0.5):2+0.001*ci,ord:slots.length,inl:inl,taps:flowTaps(m)}); });
+    { var dk=nodeByKey('tapeloop'); if(dk&&deckActive()) slots.push({k:'deck',node:dk,mask:withChops(deckMask(),0),rank:pv('SYN_DCK_RANK',0.5),ord:slots.length,taps:deckTaps()}); }   /* tp43 — the deck in the chain */
+    slots.forEach(function(sl){ while(sl.mask.length<NALL) sl.mask.push(0); });
     slots.sort(function(a,b){ return (a.rank-b.rank)||(a.ord-b.ord); });
-    var claimed=[]; for(var ci0=0;ci0<NSRC;ci0++) claimed.push(0);
+    var claimed=[]; for(var ci0=0;ci0<NALL;ci0++) claimed.push(0);
     slots.forEach(function(sl,c){ sl.entry=sl.mask.map(function(v,i){ return v&&!claimed[i]?1:0; }); sl.mask.forEach(function(v,i){ if(v) claimed[i]=1; }); sl.eff=sl.mask.slice(); sl.feed=[]; sl.consumed=false;
-      for(var j=0;j<c;j++){ var u=slots[j]; if(u.consumed) continue; if(masksShare(u.eff,sl.mask)){ sl.feed.push(j); u.consumed=true; for(var q=0;q<NSRC;q++) if(u.eff[q]) sl.eff[q]=1; } } });
+      for(var j=0;j<c;j++){ var u=slots[j]; if(u.consumed) continue; if(masksShare(u.eff,sl.mask)){ sl.feed.push(j); u.consumed=true; for(var q=0;q<NALL;q++) if(u.eff[q]) sl.eff[q]=1; } } });
     var flt=nodeByKey('filter');
     function oscNodeOf(i){ if(i===5) return nodeByKey('noise'); if(i===10) return nodeByKey('noise2'); var L=i<4?'abcd'.charAt(i):(i>=6&&i<10?'efgh'.charAt(i-6):''); return L?nodeByKey('osc-'+L):null; }   /* tp42 — the noise modules are sources 5 and 10 */
     function inFilter(o){ if(o.kind==='noise') return noiseInFilter(); return (pv(OX(o.sub)+'F1MIX')>0.001)||(pv(OX(o.sub)+'F2MIX')>0.001); }
-    var oscClaimed={};
+    var oscClaimed={}, sampClaimed={};
+    /* tp61 — a chop layer enters the chain at ONE slot, exactly like an oscillator. Its cable goes
+       there; everything after it is a feed cable, drawn by the loop below. */
+    slots.forEach(function(sl){ for(var ch=0;ch<NCHOP;ch++){ if(!sl.entry[NSRC+ch]) continue;
+        var L=SAMPL[ch], sn=nodeByKey(sampKey(L)); if(!sn) continue; sampClaimed[L]=1;
+        add(sn,'out',0,sl.node,'in',0,'a', sl.k==='fx'?{chop:{dev:sl.idx,L:L}}:(sl.k==='flow'?{fchop:{m:sl.m,L:L}}:null)); } });
     slots.forEach(function(sl){ for(var i=0;i<NSRC;i++){ if(!sl.entry[i]) continue; var o=oscNodeOf(i); if(!o) continue; oscClaimed[i]=1;
         var direct=((sl.taps>>i)&1)===1, ed=sl.k==='fx'?{route:{dev:sl.idx,osc:i}}:(sl.k==='deck'?{dck:{osc:i}}:{frt:{m:sl.m,osc:i}});
         /* the cable says where the tap is: from the filter = post-filter (the synth's law), from the oscillator = raw (the Patcher's) */
         if(inFilter(o)&&flt&&!direct){ add(o,'out',0,flt,'in',0,'a',{fmix:o.sub}); add(flt,'out',0,sl.node,'in',0,'a',ed); }
         else add(o,'out',0,sl.node,'in',0,'a',ed); } });
+    /* tp61 — the chop layers a feed cable carries, so cutting one takes them off the downstream
+       device instead of leaving it claiming a layer it can no longer reach. */
+    function sharedChops(u,sl){ var o=[]; for(var q=0;q<NCHOP;q++) if(u.eff[NSRC+q]&&sl.mask[NSRC+q]) o.push(SAMPL[q]); return o; }
     slots.forEach(function(sl){ sl.feed.forEach(function(j){ var u=slots[j], ed=null;
         if(u.k==='fx'&&sl.k==='fx') ed={fxorder:1};
-        else if(u.k==='flow'&&sl.k==='fx') ed={finl:{m:u.m}};                                   /* cut = the card leaves the rack order */
-        else if(sl.k==='flow'){ var srcs=[]; for(var q=0;q<NSRC;q++) if(u.eff[q]&&sl.mask[q]) srcs.push(q); ed={frtm:{m:sl.m,srcs:srcs}}; }   /* cut = those sources leave the card */
+        else if(u.k==='flow'&&sl.k==='fx') ed={finl:{m:u.m},chops:{dev:sl.idx,Ls:sharedChops(u,sl)}};   /* cut = the card leaves the rack order, and the device gives the layers back */
+        else if(sl.k==='flow'){ var srcs=[]; for(var q=0;q<NSRC;q++) if(u.eff[q]&&sl.mask[q]) srcs.push(q); ed={frtm:{m:sl.m,srcs:srcs},fchops:{m:sl.m,Ls:sharedChops(u,sl)}}; }   /* cut = those sources leave the card */
         else if(sl.k==='deck'){ var dsr=[]; for(var q2=0;q2<NSRC;q2++) if(u.eff[q2]&&sl.mask[q2]) dsr.push(q2); ed={dckm:{srcs:dsr}}; }   /* tp43 — cut = those sources leave the deck */
         add(u.node,'out',0,sl.node,'in',0,'a',ed,!ed); });
       if(!sl.consumed) add(sl.node,'out',0,sl.k==='flow'?outN:dryHead,'in',0,'a',null,true); });   /* tp30 — the flow cards run BESIDE the tape machines to Out */
+    /* tp61 — a chop layer nothing claims goes to Out, which is the Chop page's own mixer path. */
+    nodes.filter(function(n){ return n.kind==='samp'; }).forEach(function(sn){
+      if(!sampClaimed[sn.sub]) add(sn,'out',0,outN,'in',0,'a',{chopDry:sn.sub},true); });
     /* an oscillator nothing claims: through the filter if it is in one, then Out while its output cable holds — else NO CABLE (silent, and the engine agrees) */
     oscs.forEach(function(o){ var xi=srcIdx(o.sub); if(xi>=0&&oscClaimed[xi]) return; var stage=o;
       if(inFilter(o)&&flt){ add(o,'out',0,flt,'in',0,'a',{fmix:o.sub}); stage=flt; }
@@ -43886,9 +43939,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
           else if(a.kind==='filter'||a.kind==='tape'||a.kind==='tapeloop')
             idxs=oscList().map(srcIdx).filter(function(i){ return i>=0; });
           else if(a.kind==='fx'){ var ad=(window.__fxrDevs?window.__fxrDevs():[])[a.idx]; (ad&&ad.route||[]).forEach(function(v,i){ if(v) idxs.push(i); });   /* tp41 — the card eats what THAT device carries, not the whole instrument */
+            { var dcb=ad?chopsOf(ad):0, dcn=0; for(var dq=0;dq<NCHOP;dq++) if((dcb>>dq)&1){ flowSetChop(b.sub,SAMPL[dq],true); dcn++; }   /* tp61 — a device's chop layers travel into the card as well */
+              if(!idxs.length&&dcn) return true; }
             if(!idxs.length){ toast('Cable something into '+nodeName(a)+' first'); return true; }
             if(flowInline(b.sub)){ var an=(layout.finl||{})[b.sub], devs3=window.__fxrDevs?window.__fxrDevs():[]; var ai=-1; if(an&&an.after) for(var q=0;q<devs3.length;q++) if(fxKeyOf(devs3[q])===an.after) ai=q; if(ai<a.idx) setFlowInline(b.sub,true,fxKeyOf(devs3[a.idx])); } }   /* an inline card must sit AFTER what feeds it */
           else if(a.kind==='flow'){ idxs=flowMaskOf(a.sub).map(function(v,i){ return v?i:-1; }).filter(function(i){ return i>=0; });   /* tp41 — card into card: the second eats the first's sources, and follows it */
+            { var acb=flowChopsOf(a.sub); for(var aq=0;aq<NCHOP;aq++) if((acb>>aq)&1) flowSetChop(b.sub,SAMPL[aq],true); }   /* tp61 — chop layers are sources too */
             var ch3=window.__flowChain?window.__flowChain():[]; var ia=ch3.indexOf(a.sub), ib=ch3.indexOf(b.sub); if(ia>=0&&ib>=0&&ib<ia){ ch3.splice(ib,1); ch3.splice(ch3.indexOf(a.sub)+1,0,b.sub); window.__flowSetChain&&window.__flowSetChain(ch3); }
             if(flowInline(a.sub)&&flowInline(b.sub)){ var ana=(layout.finl||{})[a.sub]; setFlowInline(b.sub,true,ana&&ana.after?ana.after:null); } }
           if(idxs.length){ var fi2=flowSrcIds(b.sub).concat(flowIds41(b.sub)); seedOn(flowSrcIds(b.sub)); track(fi2,function(){}); idxs.forEach(function(i){ flowSetSrc(b.sub,i,1); flowSetTap(b.sub,i,directF); }); }
@@ -43911,20 +43967,46 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* tp41 — A FLOW CARD THROUGH AN EFFECT. The card takes a rank just after the last rack device that feeds it
      (none = before the first), the effect is moved after the card if it sat before, and the effect's pills light
      for the card's sources so the topology hands it the card's output. Undo cuts the cable (INLINE back to 0). */
-  function inlineFlowInto(a,b){ var m=a.sub, k=fKind(m); if(k!=='chop'&&k!=='glitch'){ toast(nodeName(a)+' makes notes, not audio'); return true; }
-    var mask=flowMaskOf(m); if(!mask.some(Boolean)){ toast('Cable an oscillator into '+nodeName(a)+' first'); return true; }
-    var devs=window.__fxrDevs?window.__fxrDevs():[]; var feeders=[]; devs.forEach(function(d,i){ if(d&&i!==b.idx&&d.route&&masksShare(d.route.map(function(v){ return v?1:0; }).concat([0,0,0,0,0,0,0,0,0,0,0]).slice(0,NSRC),mask)) feeders.push(d); });
+  function inlineFlowInto(a,b){ var m=a.sub, k=fKind(m);
+    /* ══ tp61 — AN EFFECT AFTER A NOTE STAGE ══════════════════════════════════════════════════
+       Max: "we wanna make sure we can patch an effect after the flow card, whether there be Arp,
+       so that way we can put a delay on the Arp."  An Arp / Robin makes no audio of its own — it
+       rewrites the note stream the whole instrument plays — so "a delay after the Arp" is a delay
+       fed by everything that note stage drives. That is a real cable, not a refusal: every live
+       oscillator's pill lights on the device. */
+    if(k==='arp'||k==='drift'){ var live=nodes.filter(function(n){ return n.kind==='osc'||n.kind==='noise'; }).map(function(o){ return srcIdx(o.sub); }).filter(function(i){ return i>=0; });
+      if(!live.length){ toast('Turn an oscillator on first — '+nodeName(a)+' has nothing to play'); return true; }
+      var dvA=(window.__fxrDevs?window.__fxrDevs():[])[b.idx]; if(dvA&&dvA.tapsP) track([dvA.tapsP],function(){});
+      live.forEach(function(i){ window.__fxrSetRoute&&window.__fxrSetRoute(b.idx,i,1,0); });
+      toast(nodeName(b)+' takes everything '+flowLabel(m)+' plays'); return true; }
+    if(k!=='chop'&&k!=='glitch'){ toast(nodeName(a)+' makes notes, not audio'); return true; }
+    /* tp61 — a card fed ONLY by chop layers is cabled up; it was the oscillator mask alone that
+       was asked, so Sampler A -> Glitch -> Delay answered "Cable an oscillator into Glitch first". */
+    var mask=flowMaskOf(m), chb=flowChopsOf(m);
+    if(!mask.some(Boolean)&&!chb){ toast('Cable an oscillator or a Sampler into '+nodeName(a)+' first'); return true; }
+    var wide=mask.slice(); while(wide.length<NSRC) wide.push(0); wide.length=NSRC; for(var wq=0;wq<NCHOP;wq++) wide.push((chb>>wq)&1);
+    var devs=window.__fxrDevs?window.__fxrDevs():[]; var feeders=[]; devs.forEach(function(d,i){ if(!d||i===b.idx) return;
+      var dm=(d.route||[]).map(function(v){ return v?1:0; }); while(dm.length<NSRC) dm.push(0); dm.length=NSRC; var dc=chopsOf(d); for(var q=0;q<NCHOP;q++) dm.push((dc>>q)&1);
+      if(masksShare(dm,wide)) feeders.push(d); });
     var last=-1; devs.forEach(function(d,i){ if(feeders.indexOf(d)>=0) last=i; });
     if(b.idx<=last){ var order=[]; for(var i=0;i<devs.length;i++) order.push(i); order.splice(order.indexOf(b.idx),1); order.splice(order.indexOf(last)+1,0,b.idx); window.__fxrReorder&&window.__fxrReorder(order); devs=window.__fxrDevs?window.__fxrDevs():[]; last=-1; devs.forEach(function(d,i){ if(feeders.indexOf(d)>=0) last=i; }); }
     var bd=null; devs.forEach(function(d){ if(d&&fxKeyOf(d)===b.key) bd=d; }); var bIdx=devs.indexOf(bd);
     setFlowInline(m,true,last>=0?fxKeyOf(devs[last]):null);
-    if(bIdx>=0){ if(bd.tapsP) track([bd.tapsP],function(){}); mask.forEach(function(v,i){ if(v) window.__fxrSetRoute&&window.__fxrSetRoute(bIdx,i,1); }); }
+    if(bIdx>=0){ if(bd.tapsP) track([bd.tapsP],function(){}); mask.forEach(function(v,i){ if(v) window.__fxrSetRoute&&window.__fxrSetRoute(bIdx,i,1); });
+      /* tp61 — the device claims the card's chop layers too. The engine's topology hands it the
+         card's OUTPUT for them (the layer enters at the card and travels), so this is what makes
+         "the glitch going into the delay" the delay of the glitched signal and not of a dry copy. */
+      for(var cq=0;cq<NCHOP;cq++) if((chb>>cq)&1) chopSetSrc(bd,SAMPL[cq],true); }
     toast(flowLabel(m)+' → '+nodeName(b)); return true; }
   function cut(c,quiet){ var e=c.edit; if(!e){ if(!quiet) toast('The engine draws that one'); return false; }
     if(e.routes){ e.routes.forEach(function(r){ window.__fxrSetRoute&&window.__fxrSetRoute(r.dev,r.osc,0,0); }); }   /* tp41 — every oscillator on the cable */
     else if(e.frts){ e.frts.forEach(function(r){ var fi4=flowSrcIds(r.m); seedOn(fi4); track(fi4,function(){}); flowSetSrc(r.m,r.osc,0); flowSetTap(r.m,r.osc,false); }); }
-    else if(e.frtm){ var fi5=flowSrcIds(e.frtm.m); seedOn(fi5); track(fi5,function(){}); e.frtm.srcs.forEach(function(i){ flowSetSrc(e.frtm.m,i,0); }); }
-    else if(e.finl){ setFlowInline(e.finl.m,false); if(!quiet) toast(flowLabel(e.finl.m)+' runs after the rack again'); }
+    else if(e.frtm){ var fi5=flowSrcIds(e.frtm.m); seedOn(fi5); track(fi5,function(){}); e.frtm.srcs.forEach(function(i){ flowSetSrc(e.frtm.m,i,0); });
+      if(e.fchops&&e.fchops.Ls) e.fchops.Ls.forEach(function(L){ flowSetChop(e.fchops.m,L,false); }); }   /* tp61 */
+    else if(e.finl){ setFlowInline(e.finl.m,false);
+      if(e.chops&&e.chops.Ls&&e.chops.Ls.length){ var dvI=(window.__fxrDevs?window.__fxrDevs():[])[e.chops.dev]; if(dvI) e.chops.Ls.forEach(function(L){ chopSetSrc(dvI,L,false); }); }   /* tp61 */
+      if(!quiet) toast(flowLabel(e.finl.m)+' runs after the rack again'); }
+    else if(e.fchop){ flowSetChop(e.fchop.m,e.fchop.L,false); }   /* tp61 — a chop layer out of a Chop/Glitch card */
     else if(e.chop){ var dvC=(window.__fxrDevs?window.__fxrDevs():[])[e.chop.dev]; if(dvC) chopSetSrc(dvC,e.chop.L,false); }   /* tp56 */
     else if(e.dck){ deckSetSrc(e.dck.osc,false); }   /* tp43 */
     else if(e.dckm){ e.dckm.srcs.forEach(function(i){ deckSetSrc(i,false); }); }
@@ -44842,6 +44924,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function closePage(){ if(!isOpen) return; isOpen=false; closeMenus(); try{ if(window.__tiFrameUnreg) window.__tiFrameUnreg('tp'); }catch(e){} try{ returnAll(); }catch(e){ try{ console.warn('[tp] return',e); }catch(_){} } if(raf){ cancelAnimationFrame(raf); raf=0; } lastT=0; }
   window.__tpOpen=openPage; window.__tpClose=closePage; window.__tpNodes=function(){ return nodes.map(function(n){ return {key:n.key,x:n.x,y:n.y,w:n.w,h:n.h,ext:!!n.ext}; }); }; window.__tpCables=function(){ return cables.map(function(c){ return c.id; }); }; window.__tpSync=sync; window.__tpDrag=function(){ return drag?{kind:drag.kind,moved:!!drag.moved,ctl:!!drag.ctl}:null; };
   window.__tpConnect=connect; window.__tpNodeByKey=nodeByKey; window.__tpDerive=derive; window.__tpFlowInline=flowInline; window.__tpFlowTaps=flowTaps; window.__tpPlaceInline=placeInlineFlows; window.__tpSetFlowInline=setFlowInline; window.__tpDeckMask=deckMask; window.__tpDeckActive=deckActive; window.__tpCatalog=function(){ return catalog(); }; window.__tpCut=function(id){ var c=cables.filter(function(x){ return x.id===id; })[0]; return c?cut(c):false; };   /* tp41 — gates */ window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpLayout=function(){ return layout; }; window.__tpAdd=function(k,x,y){ addFromList(k,x||200,y||200); }; window.__tpRemove=function(key){ var n=nodeByKey(key); if(n) removeNode(n); }; window.__tpExt=function(key,on){ var n=nodeByKey(key); if(n&&n.kind==='flow') setFlowExt(n,!!on); }; window.__tpTidy=glideTidy; window.__tpRollOsc=rollOscNow; window.__tpOscList=function(){ return nodes.filter(function(n){return n.kind==='osc';}).map(function(n){return n.sub;}); };
+  /* tp61 — THE GATES NEED THE REAL NODES. __tpNodes above is a projection (key/x/y/w/h) and
+     connect() takes the node objects themselves, so a bar that wanted to drive the shipped cable
+     gate had to re-implement it — which is exactly the class of test that has lied here twice. */
+  window.__tpRaw=function(){ return nodes; };
+  window.__tpSyncPresence=syncPresence; window.__tpAdoptSamp=adoptSamp; window.__tpReturnSamp=returnSamp;
+  window.__tpLayout=function(){ return layout; };
+  window.__tpFlowChops=flowChopsOf; window.__tpChopsOf=chopsOf; window.__tpSampKey=sampKey;
   window.__tpView=function(){ return {x:view.x,y:view.y,z:view.z,lod:!!(page&&page.classList.contains('lod')),viz:!!(page&&page.classList.contains('viz'))}; }; window.__tpSetView=function(x,y,z){ view.x=x; view.y=y; view.z=z; applyView(); }; window.__tpViz=setViz; window.__tpFit=fit; window.__tpParam=function(id){ return pv(id); };
   window.__tpRect=function(el){ var r=el.getBoundingClientRect(); if(!isOpen||!page||!page.contains(el)) return r; var z=view.z||1; return {left:r.left,top:r.top,width:r.width/z,height:r.height/z,right:r.right,bottom:r.bottom}; };   /* tp5 — a painter's sizing rect in LAYOUT px while the module sits in the scaled world */
   window.__tpZoomOf=function(el){ try{ return (isOpen&&page&&el&&page.contains(el))?(view.z||1):1; }catch(e){ return 1; } };

@@ -126,6 +126,27 @@ struct FxChainTopology
     static constexpr uint16_t kAllSrc  = 0x7FF;
     static constexpr int      kBank1Shift = 6;   // bit of E
     static constexpr int      kNoise2Bit  = 10;  // Noise 2
+    // ══ tp61 — THE CHOP LAYERS ARE SOURCES TOO: bits 11..14 = layer A B C D ═════════════════
+    //  Max: "I take my sampler A, patch it into a glitch card, and then I take that same glitch
+    //  as it's glitching and patch it into a delay ... I want the WHOLE audio to be taken and
+    //  chopped up and glitched, not just half of it."
+    //
+    //  tp56 gave a chop layer a route mask per device (<device>_CHOPS) and then ADDED that
+    //  layer's audio into EVERY device bus that claimed it. That is a parallel split by
+    //  construction: claim it on a Glitch and on a Delay and each gets its own copy of the raw
+    //  layer, so the Delay was never delaying the glitched signal — it was delaying a second dry
+    //  copy of it alongside. The oscillators never had that problem because they go through THIS
+    //  table, where a source ENTERS at the first device routed to it and every later device
+    //  sharing it eats the upstream OUTPUT instead.
+    //
+    //  So a chop layer is now simply four more bits in the same space, and everything below —
+    //  entry, feed, consumed, eff — applies to them unchanged. There is no new signal path: the
+    //  raw layer is injected at the ENTRY device only, and the serial chain the oscillators have
+    //  always had carries it from there. Sampler A → Glitch → Delay is one signal.
+    //
+    //  ⚠️ FIFTEEN BITS OF SIXTEEN ARE NOW SPENT. entry[] / eff[] are uint16_t; one bit is left.
+    static constexpr int      kChopShift  = 11;  // bit of chop layer A
+    static constexpr uint16_t kAllChop    = 0x7800;
 
     int      count = 0;
     uint16_t entry    [kMaxSlots] = {};       // sources that TAP the oscillators at this slot

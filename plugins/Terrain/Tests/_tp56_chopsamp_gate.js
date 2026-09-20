@@ -42,17 +42,23 @@ const ok = (c, l, d) => { if (c) { pass++; console.log('  PASS  ' + l + (d ? '\n
              letter: w ? (w.querySelector('.tp-samp-l') || {}).textContent : null,
              inDom: !!w, box: w ? [Math.round(w.getBoundingClientRect().width), Math.round(w.getBoundingClientRect().height)] : null };
   });
-  /*  ⚠️ tp58 CHANGED THIS LAW ON PURPOSE, and the bar moved with it rather than being deleted.
-      tp56 asserted `ports === 'out:a'` — a Sampler was a SOURCE and nothing else. Max: "why
-      doesn't the sampler have an INPUT? I want to patch FX THRU IT BRUH CMONNN even FLOW CARDS n
-      SUCH." A cable is a relationship, and "Sampler A through the Distortion" is the same
-      relationship whichever end you drag from; with no input it could only ever be drawn one way.
-      WHAT THE ORIGINAL BAR WAS ACTUALLY PROTECTING STILL HOLDS AND IS STILL CHECKED: the input is
-      AUDIO ('a'), never MIDI ('n'). A chop layer's notes come from the Chop page's own keys, not
-      from the Patcher's MIDI node, and a note cable must still find nowhere to land here. */
+  /*  ⚠️ THIS LAW HAS MOVED TWICE, AND IT IS BACK WHERE tp56 PUT IT.
+      tp56 asserted `ports === 'out:a'` — a Sampler is a SOURCE and nothing else.
+      tp58 reversed it on Max's ask ("why doesn't the sampler have an INPUT? I want to patch FX
+        THRU IT BRUH CMONNN even FLOW CARDS n SUCH"), reading a cable as a relationship you may
+        draw from either end.
+      tp61 reverses it back, on his own reading after living with it: "there's nothing that we
+        should be able to run into the sampler, so I don't think it needs an input. That was my
+        bad. It only needs an output ... It only leaves us looking stupid." He is right about the
+        engine as well as the picture: a chop layer has no input stage to write audio to, so the
+        port was a promise the layer could not keep. Dropping a cable ON the module still makes
+        the claim (connect's `b.kind==='samp'` branch), which is the part tp58 was really after.
+      WHAT THE BAR HAS PROTECTED THROUGHOUT, AND STILL DOES: no MIDI port. A chop layer's notes
+      come from the Chop page's own keys, not from the Patcher's MIDI node, so a note cable must
+      find nowhere to land here whichever way the audio port count goes. */
   ok(node.kind === 'samp' && node.sub === 'b' && node.inDom && node.letter === 'B'
-     && node.ports.slice().sort().join(',') === 'in:a,out:a',
-     '[1] Sampler B IS A MODULE — an AUDIO in and an AUDIO out, and NO MIDI in (its notes come from the Chop page\'s own keys)', JSON.stringify(node));
+     && node.ports.join(',') === 'out:a',
+     '[1] Sampler B IS A MODULE — one AUDIO out, no input and NO MIDI in (tp61 reversed tp58, on Max\'s word)', JSON.stringify(node));
 
   // ── [2] UNCABLED, IT DRAWS TO OUT — the Chop page\'s own mixer path ────────────────────────
   const dry = await p.evaluate(() => (window.__tpDerive() || []).filter(c => c.from && c.from.key === 'samp-b').map(c => c.to.key + (c.edit && c.edit.chopDry ? ' (dry)' : '')));

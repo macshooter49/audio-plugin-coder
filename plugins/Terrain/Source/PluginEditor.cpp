@@ -9201,25 +9201,51 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     padding: 0 18px;
     position: relative; z-index: 1;
   }
+  /* ── tp61b — THE HEADER STOPS SHOUTING, AND STOPS BEING PURPLE ON PURPLE ────────────────────
+        Max: "fix the font and make the 'all 16' white — no purple on purple — and forget all
+        capital letters, use proper stuff, thin white preferably. Same with the All button, no
+        capitals lol."  tp54 already retired the shouting on the hero strip ("slices needs to stop
+        being capital"); this header was the last of it, and its count was #8b5cf6 sitting a few
+        pixels from a purple-outlined pill. Proper case, one thin white weight for both halves,
+        and the count reads as a quantity rather than a second title. */
   #ti-chop-panel .ov-head .name {
-    display: inline-flex; align-items: baseline;   /* baseline-align CHOP + 03 */
-    font: 700 12px/1 -apple-system, sans-serif; letter-spacing: 0.22em;
-    color: rgba(245,243,255,0.92);
+    display: inline-flex; align-items: baseline;   /* baseline-align Chop + 03 */
+    font: 300 12.5px/1 -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    letter-spacing: .02em;
+    color: rgba(255,255,255,0.94);
   }
   #ti-chop-panel .ov-head .name .num {
-    color: #8b5cf6;
-    font: 600 13px/1 -apple-system, sans-serif;     /* same family — kills the "slanted" look */
-    letter-spacing: 0.04em;
-    margin-left: 8px;
+    color: rgba(255,255,255,0.94);
+    font: 300 12.5px/1 -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .02em;
+    margin-left: 7px;
   }
+  /* ── tp61 — ALL IS A PILL, ON THE OTHER SIDE ────────────────────────────────────────────────
+        Max: "you need to redo where it says ALL in the right-click menu of our chop engine,
+        because ALL is right on top of the X button. Could you just make it a small pill just like
+        everything else — I click it and it fades in purple just like how you have it with ARM."
+        tp59 gave it `margin-left:auto` inside a `justify-content:center` header whose close button
+        is ABSOLUTE and therefore out of the flow — so "auto" pushed it to the header's own right
+        edge, which is precisely where the X is drawn. It is anchored on the LEFT now, mirroring
+        the close button, and it wears the page's pill: white outline and dim word, purple outline
+        and white word when it is on, nothing filled and nothing glowing. */
+  /* tp61b — Max, on seeing it: "I want ALL to be a little smaller and right over the left box side
+     of the Off box. It needs to line up from bottom to top."  The head carries the panel's own
+     18 px gutter as padding, so left:0 here IS the left edge every row below starts on — the pill
+     and the Off mode pill under it now share one vertical line, which is this page's alignment law
+     everywhere else. MEASURED: ALL sat at x 243 against Off's 229. */
   #ti-chop-panel .ov-head .ov-all {
-    margin-left: auto; margin-right: 8px; padding: 2px 7px;
-    font: 500 9px/1 inherit; letter-spacing: .12em;
+    position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 15px; padding: 0 7px; box-sizing: border-box;
+    font: 300 9.5px/1 -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif; letter-spacing: .02em;
     color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.45);
-    border-radius: 7px; cursor: pointer; user-select: none;
-    transition: color .15s, border-color .15s;
+    border-radius: 9px; cursor: pointer; user-select: none;
+    background: none; box-shadow: none;
+    transition: color .22s ease, border-color .22s ease;
   }
-  #ti-chop-panel .ov-head .ov-all:hover { color: #fff; border-color: var(--purple-400); }
+  #ti-chop-panel .ov-head .ov-all:hover { color: #fff; }
   #ti-chop-panel.multi .ov-head .ov-all { color: #fff; border-color: var(--purple-400); }
   #ti-chop-panel .ov-head .ov-close {
     position: absolute; right: 14px; top: 50%;
@@ -9679,12 +9705,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     panel.innerHTML =
       // header — CHOP title centered, close button anchored top-right
       '<div class="ov-head">' +
-        '<div class="name">CHOP<span class="num" id="ti-chop-num">01</span></div>' +
+        '<div class="name"><span class="w">Chop</span><span class="num" id="ti-chop-num">1</span></div>' +
         /* tp59 — ⌘A NEEDS A MOUSE TWIN. The chord rides keyPressed now and that is the real fix,
            but a shortcut whose only route is the host's keyboard handling is a feature you can
            lose to a DAW preference. One click here does the same thing, and it is where a right
            click already brought you. */
-        '<div class="ov-all" id="ti-chop-all" title="Select every chop (⌘A)">ALL</div>' +
+        '<div class="ov-all" id="ti-chop-all" title="Select every chop (⌘A)">All</div>' +
         '<div class="ov-close" id="ti-chop-close" title="Close">' +
           '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>' +
         '</div>' +
@@ -9850,9 +9876,41 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
      natives for other chops (the marker drags, the audition), and those must stay surgical. */
   var ovSel = [];                       // chop indices a global edit reaches; [] = the target alone
   function ovSelActive () { return ovSel.length > 1; }
+  /* ══ tp61b — THE HEADER IS A SENTENCE, NOT A FORMULA ═══════════════════════════════════════
+     Max: "why does 'Chop All 16' look weird. Just make it say 'All Chops' whenever all is
+     selected, and just make it say Chop 7 etc. when one is selected."
+     It read that way because the header was built as a fixed noun plus a counter slot — the slot
+     said "01" for one chop and "All 16" for a selection, so the noun in front of it was doing two
+     different jobs. It is written as a whole phrase now, in ONE place, because there are three
+     call sites (the markup, the selection painter, and the per-chop opener) and a phrase assembled
+     in three places is a phrase that disagrees with itself.
+     ⚠️ A PARTIAL SELECTION IS NOT "ALL". ⌘A selects every chop, but a hand-built selection of five
+     out of sixteen is just as live — and calling that "All Chops" while a global release of 0 goes
+     out to five of them is the exact lie tp57 added this header to prevent. It says "5 Chops". */
+  function ovTitleFor (idx) {
+    var total = (state.slices && state.slices.length) ? state.slices.length : 0;
+    if (ovSelActive())
+      return (total > 0 && ovSel.length >= total) ? ['All', 'Chops'] : [String(ovSel.length), 'Chops'];
+    return ['Chop', String((idx | 0) + 1)];
+  }
+  function ovPaintTitle (idx) {
+    /* ⚠️ PITCH MODE OWNS THIS HEADER TOO. targetIdx -1 replaces the whole .name with the words
+       "Pitch mode" and no .w/.num inside it — so a repaint here would rebuild the two spans and
+       silently overwrite it. Nothing below runs in that mode. */
+    if ((idx | 0) < 0) return;
+    var nm = document.querySelector('#ti-chop-panel .ov-head .name');
+    if (! nm) return;
+    var w = nm.querySelector('.w'), n = nm.querySelector('.num');
+    if (! w || ! n) { nm.innerHTML = '<span class="w"></span><span class="num" id="ti-chop-num"></span>';
+                      w = nm.querySelector('.w'); n = nm.querySelector('.num'); }
+    var t = ovTitleFor (idx);
+    if (w.textContent !== t[0]) w.textContent = t[0];
+    if (n.textContent !== t[1]) n.textContent = t[1];
+  }
   function ovSelSet (list) { ovSel = (list || []).slice(); paintSliceSel(); }
   function ovSelClear () { if (! ovSel.length) return; ovSel = []; paintSliceSel(); }
   window.__tiChopSel = function () { return ovSel.slice(); };   /* the gate's hand */
+  window.__tiChopSetSel = function (l) { ovSelSet (l); };       /* tp61b — the gate builds a PARTIAL selection */
   window.__tiChopSelectAll = function () { return ovSelectAll(); };   /* the ALL chip + the gate */
   function paintSliceSel () {
     try {
@@ -9860,8 +9918,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         b.classList.toggle('sel', ovSel.indexOf(parseInt(b.dataset.idx, 10)) >= 0); });
       var pn = document.getElementById('ti-chop-panel');
       if (pn) pn.classList.toggle('multi', ovSelActive());
-      var numEl = document.getElementById('ti-chop-num');
-      if (numEl && ovSelActive()) numEl.textContent = 'ALL ' + ovSel.length;
+      { var pnT = document.getElementById('ti-chop-panel');
+        if (pnT) { var tI = parseInt (pnT.dataset.targetIdx, 10); ovPaintTitle (isNaN (tI) ? 0 : tI); } }
       /* tp59 — the count rides the hero's Slices pill too, because that is the one place that is
          always on screen. The chop MENU's header only says ALL 8 when the menu happens to be
          open, and Max's ⌘A was pressed with no menu up: even when the selection was live there
@@ -11940,7 +11998,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     if (idx === -1) {
       // PITCH MODE: replace "CHOP NN" title with "PITCH MODE"
       var nameEl = numEl ? numEl.parentElement : null;
-      if (nameEl) nameEl.innerHTML = 'PITCH MODE';
+      if (nameEl) nameEl.innerHTML = 'Pitch mode';
       // Hide DELETE button, show REVERSE and RESET
       var delEl = panel.querySelector('.ov-act.danger[data-act="del"]');
       if (delEl) delEl.style.display = 'none';
@@ -11948,13 +12006,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       // Restore normal CHOP header
       var nameEl2 = numEl ? numEl.parentElement : document.querySelector('.ov-head .name');
       if (nameEl2 && !document.getElementById('ti-chop-num')) {
-        nameEl2.innerHTML = 'CHOP<span class="num" id="ti-chop-num">01</span>';
+        nameEl2.innerHTML = '<span class="w">Chop</span><span class="num" id="ti-chop-num">1</span>';
       }
-      var freshNumEl = document.getElementById('ti-chop-num');
       /* tp57 — the header says out loud that an edit is global. Without it the panel looks exactly
-         the way it does for one chop, and a release set to 0 would silently reach all thirty-two. */
-      if (freshNumEl) freshNumEl.textContent = ovSelActive() ? ('ALL ' + ovSel.length)
-                                                             : ((idx + 1 < 10 ? '0' : '') + (idx + 1));
+         the way it does for one chop, and a release set to 0 would silently reach all thirty-two.
+         tp61b — and ovPaintTitle is the one place that decides how it says so. */
+      ovPaintTitle (idx);
       var delEl2 = panel.querySelector('.ov-act.danger[data-act="del"]');
       if (delEl2) delEl2.style.display = '';
     }
@@ -14810,7 +14867,22 @@ body.chop-open #mix-panel { height: 288px !important; }
 #ti-slices-btn.open { border-color: var(--purple-400) !important; color: #fff !important; background: transparent !important; }
 #ti-slices-btn .ti-slices-count { color: var(--purple-400) !important; }
 /* the sample library: no boxes on the arrows, a fixed name box so a long name can never reach SLICES or the BPM */
-#ti-lib .ti-lib-nav { border: none !important; background: transparent !important; color: var(--text-secondary) !important; font-size: 13px !important; }
+/* ── tp61 — THE ARROWS SIT ON THE NAME ───────────────────────────────────────────────────────
+      Max: "bring the arrows a little bit closer to the sample library — I think the arrows are too
+      far out. Space them and bring them closer to the word in the middle, because it still
+      interferes with our slices."  MEASURED at 16 chops with a name loaded: the cluster ran
+      575..715 (140 px) on a 6 px gap and 20 px hit boxes, and the ‹ sat 27 px from the Slices
+      pill's right edge. The gap is 2 and the boxes are 14, so the cluster is 126 px — and because
+      #ti-bottom-right-cluster is RIGHT-anchored (bottom/right only, tp58b's law) every pixel it
+      gives back is a pixel of clearance the pill row gains, without moving the name itself. */
+#ti-lib { gap: 2px !important; }
+#ti-lib .ti-lib-nav { width: 14px !important; min-width: 14px !important; border: none !important; background: transparent !important; color: var(--text-secondary) !important; font-size: 13px !important; }
+/* AND THE BOX HUGS THE WORD. The gap above is measured to the name's BOX, and that box was a fixed
+   96 px — so with "Sample Library" in it (shorter than 96) the arrows sat ~12 px off the text even
+   though they were 2 px off the box. That is the state he screenshotted. The box shrinks to its
+   text now and stops at 96, so a long filename still ellipsizes at exactly the old width and the
+   cluster can never grow past where it already fits. */
+#ti-lib #ti-lib-name { width: auto !important; max-width: 96px !important; }
 #ti-lib .ti-lib-nav:hover { color: #fff !important; }
 #ti-lib #ti-lib-name { width: 124px !important; max-width: 124px !important; text-align: center !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
 /* the chop's right-click panel no longer blurs the plugin behind it */
@@ -15118,12 +15190,18 @@ body.chop-open #controls { display: none !important; }
    select anything"; Max pressed ⌘A with no menu open, where the ring was the ONLY feedback there
    was. The selected chops now carry a purple wash as well, and the hero's Slices count goes
    purple so the state is legible without opening anything. */
-#ti-slice-overlays .ti-slice-body.sel { background: rgba(167,139,250,0.16) !important; }
+/* ── tp61 — AND THE SELECTION IS AN OUTLINE, NOT A WASH ──────────────────────────────────────
+      Max: "the slices number is purple when it should be white ... whenever something is selected
+      it gets a purple outline, white inside, no glow. I don't want boxes purple filled."
+      tp59 read the ring alone as too quiet and answered with a purple wash on the chops and a
+      purple count in the pill. Both are fills, and the house law is older and his: a selected
+      thing in Terrain is a PURPLE OUTLINE and WHITE INK. The ring is 1.5 px rather than 1 so it
+      still carries the news across a bright waveform, which was tp59's real complaint. */
 #ti-slices-btn.sel { border-color: var(--purple-400) !important; color: #fff !important; }
-#ti-slices-btn .ti-slices-count.sel { color: var(--purple-400) !important; }
-#ti-slice-overlays .ti-slice-body.sel { box-shadow: inset 0 0 0 1px var(--purple-400) !important;
-  background: rgba(167,139,250,0.10) !important; }
-#ti-chop-panel .ov-head .name .num { letter-spacing: .04em; }
+#ti-slices-btn .ti-slices-count, #ti-slices-btn .ti-slices-count.sel { color: #FFFFFF !important; }
+#ti-slice-overlays .ti-slice-body.sel { background: none !important;
+  box-shadow: inset 0 0 0 1.5px var(--purple-400) !important; }
+#ti-chop-panel .ov-head .name .num { letter-spacing: .02em; }
 
 /* ── THE TRIGGER PANE FILLS ITS BOX ──
       Max: "make layer, round robin, random, key track, velocity, A B C D and that slider bigger so
@@ -15236,6 +15314,100 @@ body.chop-open #capture-badge, body.chop-open .capture-badge {
   }
   function boot(){ tidy(); setInterval(tidy, 1200); }
   if(document.readyState==='complete') boot(); else window.addEventListener('load',boot);
+})();
+</script>
+)TIHX")
+       + juce::String (R"TIHX(
+<style id="ti-tp61">
+/* ══ tp61 — NOTHING IS FILLED AND NOTHING GLOWS ════════════════════════════════════════════════
+      Max, for the third time and in the plainest words he has used: "I don't want that purple
+      highlight on the inside. No more purple filling with colors — I don't want boxes purple
+      filled. I want the boxes to follow the exact same layout: whenever something is selected it
+      gets a purple outline, white inside, no glow. Please remove the glow from stuff. No glow bro,
+      no glow at all."
+      The house rule already existed (fb-era: "the pill = the flow tile") and already covered the
+      hero strip's pills. What it never covered was the SLICER DRAWER — .ti-grid-pill,
+      .ti-submode-pill and .ti-action-btn all still light with the old 135° gradient, which is the
+      "purple filled box" you meet the moment you open Slices on a loaded one-shot — and the layer
+      pads, which carried BOTH a purple wash and a 7–8 px halo on hover and while playing.
+      Written as ONE rule per shape rather than per state, because the state list is what grows. */
+/* ⚠️ ONE SPECIFICITY PER SHAPE. An earlier draft prefixed half of these with #ti-slicer-drawer and
+   left the purple `.active` rule below on the bare class — so the ID-scoped `border:` shorthand won
+   and a selected pill came out WHITE, which tp54's own bar [3] caught. Every selector here is a
+   bare class, so source order decides and the state rule below always wins. */
+.ti-grid-pill, .ti-grid-pill:hover,
+.ti-submode-pill, .ti-submode-pill:hover,
+.ti-action-btn, .ti-action-btn:hover, .ti-action-btn:active {
+  background: none !important; background-image: none !important;
+  box-shadow: none !important; text-shadow: none !important; filter: none !important;
+  border: 1px solid rgba(255,255,255,0.45) !important; color: var(--text-secondary) !important; }
+.ti-grid-pill:hover, .ti-submode-pill:hover, .ti-action-btn:hover { color: var(--text-primary) !important; }
+.ti-grid-pill.active, .ti-submode-pill.active, .ti-submode-pill.hold-active {
+  background: none !important; background-image: none !important;
+  box-shadow: none !important; text-shadow: none !important; filter: none !important;
+  border: 1px solid var(--purple-400) !important; color: #fff !important; }
+
+/* The layer pads: hover was a purple wash plus a halo, and PLAYING was a second wash plus a
+   second halo. A pad that is sounding lights its OUTLINE — which is the one cue this house has. */
+.ti-layer-pad, .ti-layer-pad:hover, .ti-layer-pad.active, .ti-layer-pad.playing, .ti-layer-pad.active.playing {
+  background: none !important; background-image: none !important;
+  box-shadow: none !important; text-shadow: none !important; filter: none !important; }
+.ti-layer-pad:hover { color: #fff !important; border-color: rgba(255,255,255,0.75) !important; }
+.ti-layer-pad.playing, .ti-layer-pad.active, .ti-layer-pad.active.playing {
+  border-color: var(--purple-400) !important; color: #fff !important; }
+
+/* The slice markers and the pitch bounds are LINES, so their colour is the line itself — but the
+   bloom around them is not, and neither is the blur the slice bodies paint behind themselves. */
+.ti-slice-marker, .ti-slice-marker:hover, .ti-slice-marker.dragging,
+.ti-pitch-bound-marker, .ti-pitch-bound-marker:hover, .ti-pitch-bound-marker.dragging,
+#ti-chop-panel .ov-ad-bar, .ti-seq-sync.active .ti-sync-dot { box-shadow: none !important; }
+.ti-slice-body::before { filter: none !important; }
+#ti-chop-panel .rate-display.mod-active .rate-value { text-shadow: none !important; }
+.ti-slice-body:hover { background: rgba(255,255,255,0.045) !important; }
+.ti-slice-body.dragging { background: none !important; box-shadow: inset 0 0 0 1.5px var(--purple-400) !important; }
+
+/* ── tp61b — THIN MEANS THINNER THAN 500 ─────────────────────────────────────────────────────
+      A blanket `#ti-chop-panel * { font-weight: 500 !important }` sits above this. It was written
+      as a CEILING ("nothing is heavier than 500") and implemented as a fixed value, so it also
+      floors everything at 500 — which is why the header came out mid-weight after being set to
+      300/200. The blanket stays (it is still what stops a stray 700); the header and the All pill
+      are named out of it, because "thin white" is what he asked for and they are the only two
+      places on this panel that are meant to be lighter than the body text. */
+#ti-chop-panel .ov-head .name { font-weight: 300 !important; }
+#ti-chop-panel .ov-head .name .num { font-weight: 300 !important; }   /* tp61b — "All Chops" is ONE phrase; two weights read as two labels */
+#ti-chop-panel .ov-head .ov-all { font-weight: 300 !important; }
+
+/* ══ tp61 — CAPTURE OFF GREYS THE STEMS OUT ════════════════════════════════════════════════════
+      Max: "whenever I have capture off in the settings, the stem capture should just be kind of
+      greyed out and we should just have a layer page ... we just want to make sure we're careful
+      [with memory], because if I duplicate it then it's two times the memory."
+      This is the honest face of the engine change: with capture off there are no stem rings at
+      all (~1,058 MB per instance that is no longer spent), so there is nothing to export and the
+      section says so rather than offering four buttons that would hand back silence. The trigger
+      page above it keeps its whole height — which is the "just have a layer page" half. */
+/* The BUTTONS grey out, not the whole box — the reason has to stay readable, and tp54 deleted the
+   "STEMS" header (Max: "take away where it says STEMS"), so the only place to say it is the status
+   line the section already carries at its foot. That line lives at opacity 0 until something has
+   news; this is news. */
+body.ti-capture-off #mix-panel #mix-stem-area .stem-buttons,
+body.ti-capture-off #mix-panel #mix-stem-area .stem-all-row {
+  opacity: .30 !important; pointer-events: none !important; }
+body.ti-capture-off #mix-panel #mix-stem-area .stem-status {
+  opacity: 1 !important; }
+body.ti-capture-off #mix-panel #mix-stem-area .stem-status::after {
+  content: 'Capture is off — no stems are being recorded'; }
+</style>
+<script>
+/* tp61 — the body class the settings toggle writes is only written once the SETTINGS panel has
+   been built and read the native back. The Chop page can be the first thing a session opens, so
+   the state is read here too, at boot, straight from the same native. One source, two readers. */
+(function(){
+  function nfn(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+  function sync(){ var g=nfn('getCaptureEnabled'); if(!g) return;
+    try{ Promise.resolve(g()).then(function(v){ document.body.classList.toggle('ti-capture-off', !v); }).catch(function(){}); }catch(e){} }
+  window.__tiCaptureSync=sync;   /* the gates */
+  if(document.readyState==='complete') sync(); else window.addEventListener('load',sync);
+  setTimeout(sync,1500);
 })();
 </script>
 )TIHX");

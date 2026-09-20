@@ -114,7 +114,12 @@ line0 = code[:ob + 1].count('\n') + 1
 
 CAP_RE   = r'\bcaptureBuffer\s*\.\s*writeBlock\s*\('
 RING_RE  = r'\bwriteToMasterFxRing\s*\('
-DISP_RE  = r'\b(?:chop|glitch)Stage\s*\(\s*\)\s*;'
+# tp61 — ⚠️ THIS ANCHOR HAD BEEN STALE SINCE tp20 AND THE GATE WAS PROTECTING NOTHING.
+#  It wanted `chopStage();` with EMPTY parentheses; tp20 made the stages per-instance, so the real
+#  dispatch has read `chopStage (ce.inst - 1);` since 2026-09-16 and this file has exited 2 (stale)
+#  on every run since — which is not a failure, so a sweep that only greps for FAIL never saw it.
+#  The argument list is now whatever fits on one line.
+DISP_RE  = r'\b(?:chop|glitch)Stage\s*\([^;\n]*\)\s*;'
 WRITE_RE = (r'getWritePointer\s*\(|\bo[LR]\s*\[[^\]\n]*\]\s*[-+*/]?=(?!=)'
             r'|\b(?:leftChannel|rightChannel)\s*\[[^\]\n]*\]\s*[-+*/]?=(?!=)'
             r'|\bbuffer\s*\.\s*(?:applyGain|applyGainRamp|addFrom|addFromWithRamp|copyFrom|copyFromWithRamp|clear'
@@ -170,9 +175,24 @@ w0 = first.start() if first else 0
 rets = [x.start() for x in re.finditer(r'\breturn\b', blank_lambdas(body)[w0:cs])]
 rule(3, not rets, 'no processBlock-scope return between the first output write and the capture (lambdas excluded)',
      'return @' + ', '.join(str(ln(w0 + r)) for r in rets[:4]))
-between = [x.group(0).strip() for x in re.finditer(WRITE_RE, body[dN:rs])] if rs > dN else []
-rule(4, dN < rs < cs and not between,
+# tp61 — ⚠️ AND THE WINDOW FOR [4] WAS WRONG TOO, WHICH THE STALE ANCHOR HID.
+#  It started at the LAST chopStage/glitchStage CALL, but the deferred-dispatch block continues past
+#  that call: the non-flow slots in the same loop run through applySlot (which writes L[i]/R[i]), and
+#  the claim-sum that follows adds every unconsumed slot back with buffer.addFrom. Those writes ARE
+#  the dispatch — the very thing the WET ring is supposed to be taken after — so measuring from the
+#  call site made the rule red the moment it could run at all. The window starts where that block
+#  ENDS: `juce::ignoreUnused (chopStage, glitchStage, applySlot);`, the line that exists precisely
+#  because those three are the dispatch's whole vocabulary. If it is ever removed this goes STALE
+#  (exit 2) rather than quietly measuring the wrong span again.
+DEND_RE = r'juce::ignoreUnused\s*\(\s*chopStage\s*,\s*glitchStage\s*,\s*applySlot\s*\)\s*;'
+_dend = re.search(DEND_RE, body)
+if _dend is None:
+    print('✗ STALE: the deferred-dispatch end marker '
+          '`juce::ignoreUnused (chopStage, glitchStage, applySlot);` is gone — rule [4] has no window'); sys.exit(2)
+dEnd = _dend.end()
+between = [x.group(0).strip() for x in re.finditer(WRITE_RE, body[dEnd:rs])] if rs > dEnd else []
+rule(4, dN < dEnd < rs < cs and not between,
      'the WET-stem ring is after the FLOW dispatch and before any later output write (the auditions)',
-     f'ring @{ln(rs)}, dispatch ends @{ln(dN)}, capture @{ln(cs)}; output writes before the ring: {between[:3]}')
+     f'ring @{ln(rs)}, dispatch block ends @{ln(dEnd)}, capture @{ln(cs)}; output writes before the ring: {between[:3]}')
 print('capture_last_gate:', 'PASS' if not fails else 'FAIL ' + ' '.join(f'[{f}]' for f in fails))
 sys.exit(0 if not fails else 1)

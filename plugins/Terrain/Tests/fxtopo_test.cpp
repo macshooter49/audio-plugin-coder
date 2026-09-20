@@ -367,6 +367,59 @@ int main()
         check (! tw::SlotMask{}.any(), "a default mask is empty");
     }
 
+    // ══ 22. tp61 — THE CHOP LAYERS ARE SOURCES, AND THEY GO SERIAL ════════════════════════════
+    //  Max: "I take my sampler A, patch it into a glitch card, and then take that same glitch as
+    //  it's glitching and patch it into a delay ... I want the WHOLE audio taken and chopped up
+    //  and glitched, not just half of it."  Before tp61 a chop layer had no seat in this table at
+    //  all: its audio was ADDED to every device bus that claimed it, so claiming it on a Glitch
+    //  and on a Delay produced two dry copies in parallel — the Delay was never delaying the
+    //  glitch. The layers are bits 11..14 now and everything here applies to them unchanged.
+    head ("22. a chop layer enters ONCE and travels the chain");
+    {
+        constexpr uint16_t LA = 1u << tw::FxChainTopology::kChopShift;         // chop layer A
+        constexpr uint16_t LB = LA << 1;                                       // chop layer B
+        // slot 0 = the Glitch (Sampler A cabled in), slot 1 = the Delay (claims the same layer)
+        const uint16_t m[2] = { LA, LA };
+        t.build (m, 2);
+        check (t.entry[0] == LA, "the layer ENTERS at the Glitch");
+        check (t.entry[1] == 0,  "and NOT a second time at the Delay (that was the dry copy)");
+        check (t.feed[1] == FROM (0), "the Delay eats the Glitch's output instead");
+        check (t.consumed[0], "so the Glitch does not ALSO reach the mix");
+        check (! t.consumed[1], "and the Delay does");
+        check (t.eff[1] == LA, "the Delay carries the layer");
+    }
+    head ("22b. an oscillator and a chop layer share one chain");
+    {
+        constexpr uint16_t LA = 1u << tw::FxChainTopology::kChopShift;
+        const uint16_t m[3] = { (uint16_t) (A | LA), LA, A };
+        t.build (m, 3);
+        check (t.entry[0] == (uint16_t) (A | LA), "the first device taps BOTH");
+        check (t.entry[1] == 0 && t.entry[2] == 0, "nothing enters twice");
+        check (t.feed[1] == FROM (0), "slot 1 eats slot 0 for the layer");
+        check (t.feed[2] == FROM (1), "and slot 2 eats slot 1 for the oscillator — one signal, not two");
+        check (! t.consumed[2] && t.consumed[0] && t.consumed[1], "only the tail reaches the mix");
+    }
+    head ("22c. two layers on separate chains do not merge");
+    {
+        constexpr uint16_t LA = 1u << tw::FxChainTopology::kChopShift;
+        constexpr uint16_t LB = LA << 1;
+        const uint16_t m[3] = { LA, LB, LA };
+        t.build (m, 3);
+        check (t.entry[0] == LA && t.entry[1] == LB, "each layer enters at its own device");
+        check (t.feed[2] == FROM (0), "the third eats the FIRST — the layer it shares");
+        check (! t.feed[2].test (1), "and never the one carrying the other layer");
+        check (! t.consumed[1], "layer B's device reaches the mix on its own");
+    }
+    head ("22d. the chop bits do not collide with the eleven source bits");
+    {
+        check ((tw::FxChainTopology::kAllSrc & tw::FxChainTopology::kAllChop) == 0,
+               "kAllSrc and kAllChop are disjoint");
+        check (tw::FxChainTopology::kChopShift > tw::FxChainTopology::kNoise2Bit,
+               "the layers sit ABOVE Noise 2, so no existing mask moved");
+        check ((uint16_t) (tw::FxChainTopology::kAllChop >> tw::FxChainTopology::kChopShift) == 0xF,
+               "kAllChop is exactly four bits at kChopShift");
+    }
+
     std::printf ("\n  %d passed, %d FAILED\n\n", gPass, gFail);
     return gFail == 0 ? 0 : 1;
 }

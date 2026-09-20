@@ -100,12 +100,30 @@ const mids = () => [...document.querySelectorAll('#ti-root-picker, #ti-layer-pad
 
   ok(errs.length === 0, 'no page errors', errs.join(' | '));
 
-  // ── [8] SOURCE BAR — does the stem separator need DAW capture? Max asked; this answers it. ──
+  // ══ [8] SOURCE BAR — REVERSED BY MAX ON 2026-09-20, AND HE IS RIGHT TWICE ══════════════════
+  //  tp54 answered his question "does the stem separator work with the capture off?" with: YES, and
+  //  therefore the panel must not be greyed. That was a true reading of tp43's code — writeToStemBuffer
+  //  sits in the per-layer render with no captureEnabled_ above it, and the STEM rings armed off a
+  //  loaded sample, entirely separately from the ~202 MB DAW-capture ring.
+  //
+  //  What it did not ask is what those rings COST: 600 s x SR x 2ch x float32 x 5 = ~1,058 MB per
+  //  instance, paid whether or not the user has capture on. Max, 2026-09-20: "whenever I have capture
+  //  off in the settings, the stem capture should just be kind of greyed out ... make sure nothing
+  //  ghostly is running in the background taking up memory ... if I duplicate it then it's two times
+  //  the memory." So OFF now means off for both rings (tp61), and the bar reverses with it: the write
+  //  is still ungated in the render — nothing there needed changing, because totalSize == 0 is what
+  //  stops it — and the panel MUST be greyed, because there is no ring behind those buttons.
+  //  The memory side is pinned in Tests/stem_memory_gate.py; this is the UI's half of the same law.
   const proc = fs.readFileSync('Source/PluginProcessor.cpp', 'utf8');
   const call = proc.indexOf('writeToStemBuffer ((int) li');
   const ctx  = proc.slice(Math.max(0, call - 2600), call);
   const gated = /captureEnabled_[\s\S]{0,400}$/.test(ctx);
-  ok(call > 0 && ! gated, '[8] THE STEM SEPARATOR DOES NOT NEED CAPTURE ON — Max: "double check if the stem separator works with the capture off." writeToStemBuffer sits in the per-layer render with no captureEnabled_ between it and the block top; the rings arm off a LOADED SAMPLE (ensureStemLayerAllocated from the timer), and captureEnabled_ gates a different ring (the DAW capture). So the panel must NOT be greyed.', 'call@' + call + ' captureEnabled_ in the 2.6 KB above it: ' + gated);
+  ok(call > 0 && ! gated, '[8] the per-layer stem WRITE is still ungated in the render — totalSize == 0 is what stops it, so the audio path did not move');
+  const armGuard = /ensureStemLayerAllocated \(int layerIdx\)[\s\S]{0,2400}?if \(! captureEnabled_/.test(proc);
+  ok(armGuard, '🚨 [8b] AND THE ARM IS GATED ON CAPTURE (tp61, reversing tp54): capture off allocates no stem ring at all — ~1,058 MB per instance');
+  const ed = fs.readFileSync('Source/PluginEditor.cpp', 'utf8');
+  ok(/body\.ti-capture-off[\s\S]{0,240}stem-buttons/.test(ed),
+     '[8c] and the stem buttons grey out to say so — offering an export with no ring behind it is the lie tp54 was trying to avoid');
 
   await b.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
 })();
