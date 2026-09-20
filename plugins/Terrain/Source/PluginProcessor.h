@@ -2466,6 +2466,9 @@ private:
     void prepareHarmonicEnginesIfNeeded();   // fb517 — HARM's clone of the modal arm (~65 MB/instance)
     // tp63 — the way back (see SynthVoice::disarmModalEngines). Timer-driven, message thread only.
     void releaseIdleEnginesIfUnused();
+    void releaseIdleWavetables();   // tp63 — tables no oscillator names for kEngineIdleMs (see WavetableBank::unpublish)
+    std::array<juce::uint32, (size_t) tw::WavetableBank::kNumPresets> wtUnusedSinceMs_ {};
+    std::array<juce::uint64, (size_t) tw::WavetableBank::kNumPresets> wtUnpubSeq_ {};
     bool anyVoiceActive() const noexcept;
     juce::uint32 modalUnusedSinceMs_ = 0, harmUnusedSinceMs_ = 0;   // 0 = wanted (or never measured)
     juce::uint64 modalDisarmSeq_ = 0, harmDisarmSeq_ = 0;           // audioSeq_ when the voices were disarmed; 0 = armed

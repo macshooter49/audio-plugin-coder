@@ -3070,6 +3070,7 @@ void TerrainAudioProcessor::timerCallback()
     prepareModalEnginesIfNeeded();   // fb498 — arm MODAL's waveguide lines the first time an osc asks for them
     prepareHarmonicEnginesIfNeeded();   // fb517 — same, for HARM's partial banks
     releaseIdleEnginesIfUnused();       // tp63 — and give them back when no oscillator has wanted them for a while
+    releaseIdleWavetables();            // tp63 — and the wavetables the dice visited and left behind
 
     // fb514 — THE CLOSED-EDITOR IDLE GOVERNOR. This timer dispatches on the HOST'S UI thread;
     // seven closed instances at 60 Hz = 420 message-thread dispatches a second competing with
@@ -3246,6 +3247,38 @@ void TerrainAudioProcessor::releaseIdleEnginesIfUnused()
     forEachVoiceAllBanks ([&] (tw::SynthVoice* v, int) { modalArmed = modalArmed || v->modalArmed(); harmArmed = harmArmed || v->harmArmed(); });
     step (wantModal, modalUnusedSinceMs_, modalDisarmSeq_, modalArmed || modalDisarmSeq_ != 0, &tw::SynthVoice::disarmModalEngines,    &tw::SynthVoice::releaseModalEngines);
     step (wantHarm,  harmUnusedSinceMs_,  harmDisarmSeq_,  harmArmed  || harmDisarmSeq_  != 0, &tw::SynthVoice::disarmHarmonicEngines, &tw::SynthVoice::releaseHarmonicEngines);
+}
+
+// tp63 — see WavetableBank::unpublish. A preset that no oscillator (either bank) names for kEngineIdleMs
+//  is unpublished, and freed a few audio blocks later. The LFO-shape and distortion-stack bakes call
+//  ensureBuilt() themselves on this same thread and copy what they read, so a transient use can never be
+//  cut from under them; the morph builder only ever asks for the current presets, which are wanted.
+void TerrainAudioProcessor::releaseIdleWavetables()
+{
+    const auto* WTP = ParameterIDs::kOsc_WT_PRESET;
+    bool wanted[(size_t) tw::WavetableBank::kNumPresets] = {};
+    wanted[0] = true;   // Sine: the fallback every reader is promised
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+    {
+        const int pIdx = (int) rawParam (WTP[o])->load();
+        if (pIdx >= 0 && pIdx < tw::WavetableBank::kNumPresets) wanted[(size_t) pIdx] = true;
+    }
+    const juce::uint32 now = juce::Time::getMillisecondCounter();
+    const juce::uint64 seq = audioSeq_.load (std::memory_order_seq_cst);
+    for (int pIdx = 1; pIdx < tw::WavetableBank::kNumPresets; ++pIdx)
+    {
+        auto& since = wtUnusedSinceMs_[(size_t) pIdx]; auto& unpub = wtUnpubSeq_[(size_t) pIdx];
+        if (wanted[(size_t) pIdx]) { since = 0; unpub = 0; continue; }
+        if (unpub != 0)
+        {
+            if (seq < unpub + 3) continue;                       // the block in flight at the unpublish has not exited yet
+            wavetableBank.freeStorage (pIdx); since = 0; unpub = 0; continue;
+        }
+        if (! wavetableBank.isBuilt (pIdx)) { since = 0; continue; }
+        if (since == 0) { since = now; continue; }
+        if (now - since < kEngineIdleMs) continue;
+        wavetableBank.unpublish (pIdx); unpub = seq;
+    }
 }
 
 void TerrainAudioProcessor::rebuildGeodeIfNeeded (int o)

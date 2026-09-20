@@ -133,6 +133,33 @@ namespace tw
             buildOne (preset);
         }
 
+        // ══ tp63 — THE WAY BACK. Max: "every time I randomize my memory goes up ... it just won't go
+        //  down." Measured (Tests/au_roll_memory.cpp): six rounds of random presets = +234 MB, never
+        //  freed — every table ever visited stayed built. Two steps, MESSAGE THREAD, driven by the
+        //  processor's idle timer (releaseIdleWavetables):
+        //   1. unpublish(p) — built_ goes false. getTable() answers Sine from the next call, and the
+        //      processor pushes the table pointer to EVERY voice EVERY block, so one block later no
+        //      voice holds &tables_[p]. (The object itself never moves; only its storage goes.)
+        //   2. freeStorage(p) — once the audio thread has provably left that block (audioSeq_ +3),
+        //      the page-backed mip storage is released. The next ensureBuilt() rebuilds from empty,
+        //      byte-identical (buildFromSpec assigns from scratch), 2.5 ms on the message thread.
+        //  Sine (preset 0) is the fallback every reader is promised and is never released.
+        void unpublish (int preset)
+        {
+            if (preset <= 0 || preset >= kNumPresets) return;
+            const std::lock_guard<std::mutex> lock (buildLock_);
+            built_[(size_t) preset].store (false, std::memory_order_release);
+        }
+        void freeStorage (int preset)
+        {
+            if (preset <= 0 || preset >= kNumPresets) return;
+            const std::lock_guard<std::mutex> lock (buildLock_);
+            if (built_[(size_t) preset].load (std::memory_order_acquire)) return;   // rebuilt meanwhile: keep it
+            tables_[(size_t) preset].releaseStorage();
+        }
+        bool hasStorage (int preset) const noexcept
+        { return preset >= 0 && preset < kNumPresets && tables_[(size_t) preset].numFramesForTest() > 0 && ! tables_[(size_t) preset].storageEmpty(); }
+
         /** True once `preset` has been built. Wait-free — used to decide whether a prefetch
             still owes work, and by the audio thread to spot a table it must not touch yet. */
         bool isBuilt (int preset) const noexcept

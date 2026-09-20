@@ -759,6 +759,8 @@ namespace tw
          *  from empty and bumps buildEpoch_, so it behaves exactly like a first build — it only has to
          *  fault its pages in again. The blur twin goes with it (always empty today: buildBlurTwin has
          *  no caller), back to "untried". */
+        bool storageEmpty() const noexcept { return mipData_.empty(); }   // tp63 — the bank's idle release asks
+        int  numFramesForTest() const noexcept { return numFrames_; }
         void releaseStorage() noexcept
         {
             twinLive_.store (nullptr, std::memory_order_release);
