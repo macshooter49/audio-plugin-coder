@@ -10087,7 +10087,139 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                have the same DSP as the wire" — plus "I do like the VU meter for studio". So the
                Studio card IS the wire transport (which is what it now sounds like), and it keeps
                the VU pair. The old reel-deck drawing goes with the Harmonic Sculptor it belonged to. */
-            var TDRAW={ 'Studio':drawWire, 'Cassette':drawCassette };
+            /* ══ tp60 — REEL, PORTA AND WIRE GET THEIR OWN PICTURES ══════════════════════════
+               Max: "why is REEl the same visualizer as the STUDIO?"  Because TDRAW held two
+               entries and the lookup below ends `|| drawWire` — so Reel, and anything else not
+               named in the table, drew the Studio card. Three drawings, built from the same
+               helpers the shipped two use (bounds / reel / vu / tA / tP), so they read as the
+               same instrument and not as three imports. */
+
+            /* REEL — the 15 IPS deck. Two BIG reels and a tape path that does not wander, because
+               this is the wide, quiet, stable one (voice S: the least flutter of the five). One
+               wide VU under it. Nothing here is small, which is the whole tell against Studio. */
+            function drawReelDeck(ctx,w,h,V){
+              var B=bounds(w,h), mx=B.mid, lit=0.18+0.82*V.l;
+              ctx.lineJoin='round'; ctx.lineCap='round';
+              /* ⚠️ MEASURED AND MOVED: the first cut sat the transport at 0.42 h with a 0.24 h VU
+                 at 0.78 h, and the head block (which rides the tape path, BELOW the reels) landed
+                 inside the meter. Everything is one band higher now and the meter is shorter. */
+              var TY=h*0.38, sr=Math.min(h*0.30, B.span*0.185), off=B.span*0.27;
+              var ang=-V.sp*6.2832*1.1;                      /* 15 ips: fewer turns per second */
+              var pkL=sr*(0.46+0.34*V.pk), pkR=sr*(0.46+0.34*(1-V.pk));
+              reel(ctx,mx-off,TY,sr,ang,pkL,lit);
+              reel(ctx,mx+off,TY,sr,ang*0.94,pkR,lit);
+              /* the path: supply → guide → head block → guide → take-up, dead straight */
+              var pathY=TY+sr*0.86, aL=mx-off, aR=mx+off;
+              ctx.beginPath(); ctx.moveTo(aL,TY+pkL); ctx.lineTo(aL+off*0.32,pathY);
+              ctx.lineTo(aR-off*0.32,pathY); ctx.lineTo(aR,TY+pkR);
+              ctx.strokeStyle=tA((0.44+0.40*lit).toFixed(2)); ctx.lineWidth=0.9; ctx.stroke();
+              [-1,1].forEach(function(e){ var gx=mx+e*off*0.32;
+                ctx.beginPath(); ctx.arc(gx,pathY,Math.max(1.4,h*0.030),0,6.2832);
+                ctx.strokeStyle=tA(0.38); ctx.lineWidth=0.6; ctx.stroke(); });
+              /* the head block — three heads (erase · record · play), the studio stack */
+              var bw=B.span*0.20, bh=h*0.115, bx=mx-bw/2, by=pathY-bh*0.55;
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(bx,by,bw,bh,1.2); else ctx.rect(bx,by,bw,bh);
+              ctx.strokeStyle=tA(0.34); ctx.lineWidth=0.6; ctx.stroke();
+              for(var q=0;q<3;q++){ var hx=bx+bw*(q+0.5)/3, fl=V.h[q]||0;
+                ctx.beginPath(); ctx.moveTo(hx,by+bh*0.18); ctx.lineTo(hx,by+bh*0.82);
+                ctx.strokeStyle=tP((0.20+0.70*fl).toFixed(2)); ctx.lineWidth=1.3; ctx.stroke(); }
+              /* one wide VU — a mastering deck has one pair of big meters, not two small */
+              var vw=B.span*0.34, vh=h*0.20;
+              vu(ctx,mx-vw/2,h*0.86-vh*0.5,vw,vh,Math.max(V.i,V.l));
+            }
+
+            /* PORTA — the 4-track Portastudio: a cassette shell up top and the thing that makes it
+               a Portastudio underneath, FOUR channel faders. Four is the whole identity; the shell
+               is deliberately small so it never reads as the Cassette card. */
+            function drawPorta(ctx,w,h,V){
+              var B=bounds(w,h), mx=B.mid, lit=0.18+0.82*V.l;
+              ctx.lineJoin='round'; ctx.lineCap='round';
+              /* the shell is capped by its own aspect, so the cap is what sets the size — 2.0 on a
+                 0.38 h shell left a third of the card empty. */
+              var sh=h*0.42, sw=Math.min(B.span*0.62, sh*2.2), sx=mx-sw/2, sy=h*0.05;
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(sx,sy,sw,sh,sh*0.09); else ctx.rect(sx,sy,sw,sh);
+              ctx.strokeStyle=tA((0.46+0.22*lit).toFixed(2)); ctx.lineWidth=0.8; ctx.stroke();
+              var wy=sy+sh*0.34, wh2=sh*0.52, ww=sw*0.74, wx=mx-ww/2;
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(wx,wy,ww,wh2,1.2); else ctx.rect(wx,wy,ww,wh2);
+              ctx.strokeStyle=tA(0.32); ctx.lineWidth=0.5; ctx.stroke();
+              var hy=wy+wh2*0.5, ho=ww*0.28, ang=V.sp*6.2832*1.9;   /* 1-7/8 ips: the hubs race */
+              var pkL=wh2*(0.16+0.20*V.pk), pkR=wh2*(0.16+0.20*(1-V.pk));
+              [[-1,pkL],[1,pkR]].forEach(function(o){ var cx2=mx+o[0]*ho;
+                ctx.beginPath(); ctx.arc(cx2,hy,o[1],0,6.2832);
+                ctx.strokeStyle=tA((0.28+0.34*lit).toFixed(2)); ctx.lineWidth=Math.max(0.8,wh2*0.10); ctx.stroke();
+                for(var q=0;q<6;q++){ var a=ang+q*1.0472, hr=wh2*0.13;
+                  ctx.beginPath(); ctx.moveTo(cx2+Math.cos(a)*hr*0.4,hy+Math.sin(a)*hr*0.4);
+                  ctx.lineTo(cx2+Math.cos(a)*hr,hy+Math.sin(a)*hr);
+                  ctx.strokeStyle=tA((0.26+0.46*lit).toFixed(2)); ctx.lineWidth=0.5; ctx.stroke(); } });
+              /* the tape sags with the wow this transport just applied — a cheap one sags more */
+              var aL=mx-ho+pkL, aR=mx+ho-pkR, sag=wh2*0.14+V.w*wh2*0.62;
+              ctx.beginPath(); ctx.moveTo(aL,hy); ctx.quadraticCurveTo(mx,hy+sag,aR,hy);
+              ctx.strokeStyle=tA((0.44+0.40*lit).toFixed(2)); ctx.lineWidth=0.7; ctx.stroke();
+              /* FOUR channel faders. Track q's cap rides its own head tap, so the four move apart. */
+              var fy=h*0.56, fh=h*0.34, fw=B.span*0.66, fx0=mx-fw/2;
+              for(var t=0;t<4;t++){
+                var cx3=fx0+fw*(t+0.5)/4;
+                ctx.beginPath(); ctx.moveTo(cx3,fy); ctx.lineTo(cx3,fy+fh);
+                ctx.strokeStyle=tA(0.26); ctx.lineWidth=1.0; ctx.stroke();
+                var lv=Math.max(0,Math.min(1,0.30+0.70*(V.h[t]||0)));
+                var cy3=fy+fh*(1-lv), cw=Math.max(5.0,fw*0.075), chh=Math.max(3.0,fh*0.105);
+                ctx.beginPath();
+                if(ctx.roundRect) ctx.roundRect(cx3-cw/2,cy3-chh/2,cw,chh,0.8); else ctx.rect(cx3-cw/2,cy3-chh/2,cw,chh);
+                ctx.strokeStyle=tA(0.40); ctx.lineWidth=0.55; ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx3-cw*0.30,cy3); ctx.lineTo(cx3+cw*0.30,cy3);
+                ctx.strokeStyle=tP((0.30+0.60*lit).toFixed(2)); ctx.lineWidth=1.0; ctx.stroke();
+              }
+            }
+
+            /* WIRE — the 1940s wire recorder. Two small spools and ONE strand that TWISTS: the two
+               strokes are the same wire seen a half-turn apart, which is the thing wire does that
+               tape cannot and the reason its voice has the deepest flutter of the five. A magic
+               eye instead of VUs — this deck predates them. */
+            function drawWireSpool(ctx,w,h,V){
+              var B=bounds(w,h), mx=B.mid, lit=0.18+0.82*V.l;
+              ctx.lineJoin='round'; ctx.lineCap='round';
+              var TY=h*0.46, sr=Math.min(h*0.22, B.span*0.13), off=B.span*0.32;
+              var ang=-V.sp*6.2832*2.4;
+              var pkL=sr*(0.40+0.40*V.pk), pkR=sr*(0.40+0.40*(1-V.pk));
+              reel(ctx,mx-off,TY,sr,ang,pkL,lit);
+              reel(ctx,mx+off,TY,sr,ang*0.9,pkR,lit);
+              var aL=mx-off+pkL, aR=mx+off-pkR, amp=h*0.055*(0.35+V.w*2.2);
+              [0,Math.PI].forEach(function(ph,i){
+                ctx.beginPath();
+                for(var x=aL;x<=aR;x+=2){
+                  var u=(x-aL)/Math.max(0.001,aR-aL);
+                  var y=TY+Math.sin(u*13.5+V.sp*6.2832*2.0+ph)*amp*Math.sin(u*Math.PI);
+                  if(x===aL) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+                ctx.strokeStyle=tA(((i?0.22:0.50)+0.34*lit).toFixed(2)); ctx.lineWidth=i?0.55:0.85; ctx.stroke(); });
+              /* the single head, on the strand */
+              var hw=Math.max(4,B.span*0.045), hh=Math.max(5,h*0.10);
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(mx-hw/2,TY-hh/2,hw,hh,0.8); else ctx.rect(mx-hw/2,TY-hh/2,hw,hh);
+              ctx.strokeStyle=tA((0.38+0.34*(V.h[0]||0)).toFixed(2)); ctx.lineWidth=0.6; ctx.stroke();
+              ctx.beginPath(); ctx.moveTo(mx,TY-hh/2+1); ctx.lineTo(mx,TY+hh/2-1);
+              ctx.strokeStyle=tP((0.20+0.70*(V.h[0]||0)).toFixed(2)); ctx.lineWidth=1.2; ctx.stroke();
+              /* the magic eye — the wedge closes as the level rises */
+              var er=Math.min(h*0.13,B.span*0.075), ey=h*0.13, lv=Math.max(V.i,V.l);
+              ctx.beginPath(); ctx.arc(mx,ey,er,0,6.2832);
+              ctx.strokeStyle=tA(0.34); ctx.lineWidth=0.6; ctx.stroke();
+              /* ⚠️ A MAGIC EYE IS A RING WITH A SHADOW IN IT, not a filled disc. The first cut
+                 filled the arc BETWEEN the gaps, so at any useful level it was a solid purple blob.
+                 The ring glows; the WEDGE is the shadow, and it closes as the level rises. */
+              ctx.beginPath(); ctx.arc(mx,ey,er*0.72,0,6.2832);
+              ctx.strokeStyle=tP((0.30+0.46*lit).toFixed(2)); ctx.lineWidth=Math.max(1.6,er*0.30); ctx.stroke();
+              var half=(1-lv)*1.15+0.10;
+              ctx.beginPath(); ctx.moveTo(mx,ey);
+              ctx.arc(mx,ey,er*0.92,Math.PI/2-half,Math.PI/2+half);
+              ctx.closePath(); ctx.fillStyle='rgba(20,18,34,0.95)'; ctx.fill();
+            }
+
+            /* 🚨 FIVE NAMES, FIVE DRAWINGS. The `|| drawWire` fallback below is a real fallback
+               now and not the reason three of the five looked identical. */
+            var TDRAW={ 'Studio':drawWire, 'Cassette':drawCassette,
+                        'Reel':drawReelDeck, 'Porta':drawPorta, 'Wire':drawWireSpool };
             window.__tpeDraw=TDRAW;
 
             function tick(){
@@ -10721,7 +10853,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                    knobs:[['Center',50,'SYN_PHA_CENTER'],['Stages',35,'SYN_PHA_STAGES'],['Spread',20,'SYN_PHA_SPREAD'],['Stereo',30,'SYN_PHA_STEREO'],
                           ['Touch',50,'SYN_PHA_TOUCH'],['Lag',30,'SYN_PHA_LAG'],['Floor',20,'SYN_PHA_FLOOR'],['Color',0,'SYN_PHA_COLOR']]}},
             {name:'Tape',core:'tape',type:'Studio',
-             types:['Studio','Cassette','Reel'],   /* tp43 — Reel (15 IPS) joins: the three machines, each per cable */
+             types:['Studio','Cassette','Reel','Porta','Wire'],   /* tp43 — Reel (15 IPS) joins · tp60 — Porta and Wire come back, each per cable and each with its own transport */
              preset:'Init',code:'',on:false,pwrP:'SYN_TPE_POWER',tp:'SYN_TPE_TYPE',
              // 🔑🔑 tpN — THE PARAM'S CHOICE COUNT, WHICH IS NOT THE DROPDOWN'S OPTION COUNT.
              // SYN_TPE_TYPE was born choice(8) at fb365 (2 live + 6 reserved, so the live
@@ -43042,7 +43174,11 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var FXNAMES={reverb:'Reverb',delay:'Delay',saturate:'Distortion',granular:'Granular',flt:'Filter',cho:'Chorus',fla:'Flanger',pha:'Phaser',tape:'Tape',eqz:'Equalizer',wid:'Widen',cmp:'Compress',ott:'Multiband',bod:'Bode',utl:'Utility',spl:'Splitter'};
   var FXLIST=['reverb','delay','saturate','granular','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];   /* the Tape card lives in the Tape category */
   var OSC=['a','b','c','d'], FLOWS=['arp','drift','chop','glitch'], FLOWNAME={arp:'Arp',drift:'Robin',chop:'Chop',glitch:'Glitch'}, FLOW_INST_MAX={arp:4,drift:1,chop:4,glitch:4};   /* tp20 — the Flow pool */
-  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette','Reel'];   /* tp43 — the routed tape card carries all three machines; the global machines leave the browser */
+  /* tp60 — FIVE AGAIN. Max: "we literally had 5 total and now it's three, where are the other
+   two?" They were the GLOBAL machines tp43a deleted when it moved tape onto the cables — right
+   call, two casualties. Porta and Wire are routed card types now, each with its own transport
+   (TapeFxEngine::voiceForType) and its own drawing, so nothing in this list is an alias. */
+  var MACHINES=['Reel','Porta','Wire'], TAPEFX=['Studio','Cassette','Reel','Porta','Wire'];
   function oscList(){ try{ if(window.__oscPool&&window.__oscPool.length) return window.__oscPool.slice(); }catch(e){} return OSC; }   /* the oscillator pool (E–Z land here when the engine has them) */
   var IC={ fit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
     tidy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',

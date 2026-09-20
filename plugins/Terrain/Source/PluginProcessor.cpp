@@ -6500,8 +6500,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             // Sculptor — which bypasses wow AND hiss by design and is therefore a distortion —
             // is out of this device entirely. The roster keeps its eight slots (born that way
             // at fb365) so the two live entries never renumber a saved patch.
+            // tp60 — PORTA and WIRE fill two of the reserved slots. Max: "where are the rest of my
+            // TAPE MODES??? we literally had 5 total and now it's three." They were the global
+            // machines tp43a deleted when it moved tape onto the cables; each has its own
+            // transport now (TapeFxEngine::voiceForType) so no two entries sound alike.
+            // ⚠️ APPENDED, NEVER REORDERED — 0..2 keep their indices and every saved patch with a
+            // Tape card on it still loads the type it was saved with.
             const juce::StringArray tpeTypes { "Studio","Cassette",
-                                               "Reel","Reserved 4","Reserved 5",   // tp43 — Reel = the 15 IPS StudioMachine, per cable
+                                               "Reel",                              // tp43 — the 15 IPS StudioMachine, per cable
+                                               "Porta","Wire",                      // tp60
                                                "Reserved 6","Reserved 7","Reserved 8" };
             const juce::StringArray tpeChars { "Fresh","Ferric","Chrome","Vintage","Worn","Chewed","Hot","Cold" };
             const juce::StringArray tpeHeads { "Single","Dual","Triple","Quad","Spread","Swell","Ping","Cascade" };

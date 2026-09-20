@@ -82,7 +82,38 @@ public:
     //   type 0 = Studio  -> machine 2 (Wire)
     //   type 1 = Cassette-> machine 1 (Cassette)
     //   type 2 = Reel    -> machine 0 (Studio, 15 IPS)   — tp43, Max: "we need three tape modes … Reel, Wire and Studio"
-    static int machineFor (int t) noexcept { return (t == 1) ? 1 : (t == 2) ? 0 : 2; }
+    //   type 3 = Porta   -> machine 1 (Cassette), its OWN transport   — tp60
+    //   type 4 = Wire    -> machine 2 (Wire),     its OWN transport   — tp60
+    //
+    // ══ tp60 — THE OTHER TWO CAME BACK ═══════════════════════════════════════════════════════
+    //  Max: "where are the rest of my TAPE MODES??? we literally had 5 total and now it's three."
+    //  He counted right. Before tp43a the Patcher's Tape shelf listed FIVE: the three GLOBAL
+    //  machines (Reel · Porta · Wire) plus the routed card's two types (Studio · Cassette).
+    //  tp43a did what he had asked for — "these tape modes need to stop being global, they should
+    //  actually follow the patcher's cables" — by deleting the three global entries and moving
+    //  Reel onto the card. Right call, two casualties: PORTA and WIRE had only ever existed as
+    //  global machine NAMES and went with them.
+    //  🚨 AND THEY CANNOT COME BACK AS ALIASES. Porta was the CassetteMachine under another name
+    //  and Wire was the WireMachine under another name — re-listing them would put two pairs of
+    //  identical-sounding entries in the browser, which is exactly the complaint in the same
+    //  message ("why is REEL the same visualizer as the STUDIO?"). So each gets its OWN
+    //  TRANSPORT, which is where fb368 already established the machines actually separate: "the
+    //  RAW machines differ by 12.18 dB of spectral distance, but through the transport only 7.66
+    //  survives … the SPEED, the TRACK WIDTH and the HEAD are most of what you hear."
+    //  Tests/tapemodes_cert.cpp measures all ten pairs.
+    //  ⚠️ THE ROSTER WAS BORN WITH EIGHT SLOTS (fb365) and Porta/Wire fill 3 and 4, so no saved
+    //  patch renumbers and types 0-2 are bit-identical to what shipped.
+    static int machineFor (int t) noexcept
+    {
+        switch (t)
+        {
+            case 1:  return 1;   // Cassette
+            case 2:  return 0;   // Reel   — StudioMachine at 15 IPS
+            case 3:  return 1;   // Porta  — CassetteMachine, four-track transport
+            case 4:  return 2;   // Wire   — WireMachine, raw wire transport
+            default: return 2;   // Studio — WireMachine
+        }
+    }
 
     // ═══ fb368 — THE TRANSPORT IS PART OF THE MACHINE ════════════════════════════
     //  Max: "studio is exactly the same as cassette and these need to be different
@@ -148,6 +179,40 @@ public:
         return (mch == 1) ? C : (mch == 0) ? S : W;
     }
 
+    // ══ tp60 — THE VOICE IS THE TYPE'S, NOT THE MACHINE'S ════════════════════════════════════
+    //  Porta shares CassetteMachine with Cassette and Wire shares WireMachine with Studio, so a
+    //  machine-keyed lookup would hand each pair the same transport and ship two duplicates.
+    //  voiceFor(mch) above is kept for any caller that genuinely means the machine; the engine
+    //  asks for the TYPE.
+    //
+    //  PORTA — a 4-track cassette Portastudio. The same shell as a cassette deck and a worse one
+    //    in every measurable way, because four tracks are recorded across a tape width that a
+    //    stereo deck spends on two: HALF the track width. That costs bandwidth (9.5 kHz, not 13),
+    //    headroom (it saturates earlier) and above all SIGNAL-TO-NOISE — a Portastudio hisses,
+    //    which is why they all shipped with noise reduction, and dbx is why they all BREATHE.
+    //    Higher flutter and more drift on a smaller, cheaper transport. Thinner, hissier, pumping.
+    //    ⚠️ THE FIRST CUT WAS TOO POLITE. 9.5 kHz / 48 Hz / a 2-pole head measured only 5.66 dB
+    //    from Cassette — under fb368's own "7.66 dB is a ripple, not a character" number, and
+    //    under the widest gap the three shipped modes already have between them. A 4-track at
+    //    1-7/8 does not shave a cassette, it halves it: 7.6 kHz behind a THREE-pole head, no bass
+    //    under 62 Hz, and a hiss floor a narrow track genuinely has.
+    //
+    //  WIRE — the 1940s wire recorder the WireMachine is named after, now audible under its own
+    //    name. Steel wire at 24 in/s through a single head: 2.1 kHz and nothing above it, NO bass
+    //    at all (190 Hz), a hard boxy honk at 240 Hz. And the thing wire does that tape cannot —
+    //    IT TWISTS. The recorded signal rotates against the head, so the level swims: the deepest
+    //    flutter of the five, at the slowest rates, with the most drift. No compression anywhere;
+    //    a wire deck does not pump, it just breaks up.
+    static const Voice& voiceForType (int t) noexcept
+    {
+        //                     hf      hp     bHz    bQ     bDb  hissK  hissTop  fl1   fl2    fl3  drift  dep   comp lpN mgain
+        static const Voice P {  7600.f, 62.f, 120.f, 2.40f,  8.f, 14.0f, 0.030f, 11.4f, 16.2f, 7.8f, 0.16f, 1.45f, 1.8f, 3, 3.4f };
+        static const Voice R {  2100.f, 190.f, 240.f, 1.60f, 13.f, 1.40f, 0.130f,  4.3f,  6.9f, 2.6f, 0.44f, 2.35f, 0.12f, 4, 6.2f };
+        if (t == 3) return P;
+        if (t == 4) return R;
+        return voiceFor (machineFor (t));   // 0/1/2 land on W/C/S exactly as they always have
+    }
+
     static const CharSpec& charSpec (int c) noexcept
     {
         static const CharSpec T[8] = {
@@ -200,7 +265,7 @@ public:
 
     struct Params
     {
-        int   type      = 0;      // 0 Studio (= WireMachine) · 1 Cassette
+        int   type      = 0;      // 0 Studio · 1 Cassette · 2 Reel · 3 Porta · 4 Wire (tp60)
         int   character = 0;      // 0..7
         int   heads     = 0;      // 0..7
         float p1 = 0.0f, p2 = 0.0f, p3 = 0.0f;   // the machine's own three, 0..1
@@ -331,7 +396,7 @@ public:
         const CharSpec& C = charSpec (pr_.character);
         const HeadSpec& H = headSpec (pr_.heads);
         const int    mch = machineFor (pr_.type);
-        const Voice& V   = voiceFor (mch);
+        const Voice& V   = voiceForType (pr_.type);   // tp60 — Porta and Wire have their own
 
         // ── THE TYPE RE-SEAT (the fb345 deferred-fade law) ──────────────────────────────
         // Measured: the SHIPPED TapeProcessor, on its own with none of this file involved,
