@@ -8677,17 +8677,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   /* tp58 — the loop's own tempo. Same family as .ti-bpm-value so the pair reads as one readout;
      dimmer, because it is the thing being CONVERTED and the session tempo is the destination. */
   .ti-bpm-src {
-    font-size: 15px; font-weight: 200; letter-spacing: .04em;
+    font-size: 12px; font-weight: 200; letter-spacing: .02em;
     color: rgba(255,255,255,0.55); cursor: text; padding: 0 1px;
     border-bottom: 1px dashed rgba(255,255,255,0.18);
   }
   .ti-bpm-src:hover { color: #fff; border-bottom-color: rgba(183,148,255,0.6); }
   .ti-bpm-src.user  { color: #C4B5FD; border-bottom-style: solid; }   /* you typed this one */
   .ti-bpm-src.unknown { color: rgba(255,255,255,0.30); }
-  .ti-bpm-arrow { font-size: 11px; color: rgba(255,255,255,0.32); padding: 0 1px; }
+  /* ⚠️ THE READOUT MUST NOT GROW. The bottom-right cluster is right-anchored with 15 px of slack
+     before it reaches the bottom pills, and the first cut added a number and an arrow to it —
+     which pushed the library's ‹ arrow straight into the Slices pill. The house law is that
+     nothing moves when content changes. So the word BPM stands down while the lock is on: the
+     display says `117 → 120 🔒` in the same box it said `120 BPM 🔒`, and hands the space it was
+     using to the two things that now need it. */
+  #ti-bpm-display.locked .ti-bpm-label { display: none !important; }
+  .ti-bpm-arrow { font-size: 9px; color: rgba(255,255,255,0.32); padding: 0; }
   #ti-bpm-src-in {
-    width: 44px; background: transparent; border: none; outline: none;
-    font-family: inherit; font-size: 15px; font-weight: 200; letter-spacing: .04em;
+    width: 34px; background: transparent; border: none; outline: none;
+    font-family: inherit; font-size: 12px; font-weight: 200; letter-spacing: .02em;
     color: #fff; text-align: right; padding: 0;
   }
 
@@ -14430,7 +14437,15 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
 #mix-panel .morph-handle, #mix-panel .kt-handle, #mix-panel .vel-handle { background: rgb(24,22,37) !important; border: 1.5px solid var(--purple-400) !important; box-shadow: none !important; }
 #ti-root-picker { background: transparent !important; border: none !important; box-shadow: none !important; }
 #ti-root-picker .ti-root-value { color: var(--text-primary) !important; font-family: inherit !important; font-weight: 500 !important; letter-spacing: .04em !important; }
-.ti-bpm-display { background: transparent !important; border: none !important; box-shadow: none !important; display: inline-flex !important; align-items: baseline !important; justify-content: center !important; gap: 5px !important; padding: 0 6px !important; min-width: 74px !important; }
+/* tp58 — the box RESERVES the locked width so toggling the lock moves NOTHING. Measured: the
+   locked content (with `117 →` in it) is 84.5 px and the unlocked is 84.0; 85 covers both, so the
+   box is 85 in either state and the cluster's left edge never moves.
+   ⚠️ AND THE PADDING HAD TO GO WITH IT. The cluster is RIGHT-ANCHORED, so every px the readout
+   gains is a px the sample library slides LEFT — the first cut reserved 91 and pushed the
+   library's ‹ arrow to 7.1 px from the Slices pill, which is tp54's bar [2] (it wants > 12, and it
+   was written because that arrow used to sit 17 px UNDERNEATH the pill). The box is right-aligned
+   now, so its 6 px of left padding was only ever pushing the library around. */
+.ti-bpm-display { background: transparent !important; border: none !important; box-shadow: none !important; display: inline-flex !important; align-items: baseline !important; justify-content: flex-end !important; gap: 4px !important; padding: 0 !important; min-width: 85px !important; }
 .ti-bpm-value, .ti-bpm-label { font-family: inherit !important; letter-spacing: .04em !important; color: var(--text-primary) !important; }
 .ti-bpm-label { color: var(--text-secondary) !important; font-size: 8.5px !important; }
 #ti-bottom-right-cluster { display: flex !important; align-items: center !important; gap: 8px !important; }
@@ -14563,6 +14578,8 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
     if(!el||!ar) return;
     if(document.getElementById('ti-bpm-src-in')) return;        // do not fight an open editor
     var show=bpmLocked;
+    var bd=document.getElementById('ti-bpm-display');
+    if(bd) bd.classList.toggle('locked',show);         // the word BPM stands down, so the box does not grow
     el.style.display=show?'':'none'; ar.style.display=show?'':'none';
     if(!show) return;
     var v=srcBpm[srcLayer]||0, txt=(v>0)?String(Math.round(v*10)/10):'?';

@@ -96,6 +96,25 @@ const fakeSample = () => { const N = 900, mn = [], mx = [];
      '[3] 🚨 THE LOCK SHOWS THE LOOP\'S OWN TEMPO → THE SESSION\'S, and typing one reaches the engine',
      JSON.stringify(lock));
 
+  // ── [3b] AND TOGGLING THE LOCK MOVES NOTHING ────────────────────────────────────────────
+  //  ⚠️ THIS IS A REGRESSION I SHIPPED AND CAUGHT IN A SCREENSHOT, SO IT GETS A BAR. The bottom
+  //  right cluster is RIGHT-ANCHORED: every pixel the readout gains, the sample library loses on
+  //  its left. Adding `117 →` to it pushed the library's ‹ arrow into the Slices pill — the exact
+  //  collision tp54's bar [2] exists to prevent. The box now reserves the locked width.
+  const move = await p.evaluate(async () => {
+    const g = () => { const r = s => { const e = document.querySelector(s); if (!e) return null;
+        const b = e.getBoundingClientRect(); return [+b.x.toFixed(1), +b.width.toFixed(1)]; };
+      return { bpm: r('.ti-bpm-display'), lib: r('#ti-lib'), nav: r('#ti-lib .ti-lib-nav') }; };
+    const lk = document.getElementById('ti-bpm-lock');
+    const on = g(); lk.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 500));
+    const off = g(); lk.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 500));
+    return { on, off, same: JSON.stringify(on) === JSON.stringify(off) }; });
+  ok(move.same,
+     '[3b] TOGGLING THE LOCK MOVES NOTHING — the readout reserves its locked width, so the sample library does not slide',
+     'locked ' + JSON.stringify(move.on) + '  unlocked ' + JSON.stringify(move.off));
+
   // ── [4] NO CHOP RESIDUE ON THE SYNTH PAGE ────────────────────────────────────────────────
   await p.evaluate(() => { const q = document.querySelectorAll('#ti-mode-toggle .ti-mode-pill'); if (q[1]) q[1].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   await sleep(500);
