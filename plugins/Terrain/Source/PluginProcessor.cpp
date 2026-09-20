@@ -2940,17 +2940,33 @@ void TerrainAudioProcessor::timerCallback()
             if (buf == nullptr || buf->getNumSamples() <= 0)
             {
                 if (L.sourceBpm.load() != 0.0f) L.sourceBpm.store (0.0f);
+                if (L.sourceBpmUser.load() != 0.0f) L.sourceBpmUser.store (0.0f);
+                L.bpmReadFor.store (nullptr);
                 L.timeStretchMul.store (1.0f);
                 continue;
             }
-            if (L.sourceBpm.load() <= 0.0f)
+            // A DIFFERENT buffer than the one we read is a new sample, however it got here —
+            // drop, browser, preset restore, either editor path, or a route added next month.
+            if (L.bpmReadFor.load() != (const void*) buf.get())
+            {
+                L.bpmReadFor.store ((const void*) buf.get());
+                L.sourceBpm.store (0.0f);
+                L.sourceBpmUser.store (0.0f);   // a new sample is a new tempo; the old typing is void
+            }
+            if (L.sourceBpm.load() == 0.0f)          // 0 = never analysed · -1 = analysed, unknown
             {
                 const double sr  = L.sampleBuffer.getSampleRate() > 0.0 ? L.sampleBuffer.getSampleRate() : getSampleRate();
                 const double len = (sr > 0.0) ? (double) buf->getNumSamples() / sr : 0.0;
-                const double bpm = tw::looptempo::detect (L.sourceFileName.toRawUTF8(), len, host);
-                L.sourceBpm.store ((float) bpm);   // 0 stays 0 and 0 means "do not stretch"
+                // tp58 — the audio is the third reading, and the one that answers for the files a
+                // name and a length cannot ("Drum Loop.wav", a break with a tail). detectFull runs
+                // ONCE per load, here on the message thread, over at most 30 s of the buffer.
+                const double bpm = tw::looptempo::detectFull (L.sourceFileName.toRawUTF8(), len, host,
+                                                              buf->getNumChannels() > 0 ? buf->getReadPointer (0) : nullptr,
+                                                              buf->getNumSamples(), sr);
+                // ⚠️ -1, NOT 0, when it comes up empty: 0 would re-run the analysis every tick.
+                L.sourceBpm.store (bpm > 0.0 ? (float) bpm : -1.0f);
             }
-            const float sb = L.sourceBpm.load();
+            const float sb = L.effectiveSourceBpm();   // the typed number wins over the reading
             L.timeStretchMul.store (lockOn ? (float) tw::looptempo::stretchTo ((double) sb, host) : 1.0f);
         }
     }
@@ -17054,7 +17070,15 @@ juce::String TerrainAudioProcessor::getDistortionCurveVizJson()
     //  Each entry is self-contained — its own mode, its own axis span, its own curve, its own
     //  occupancy and its own bloom — because fb350's pool law is that a shared scalar makes card 2
     //  flash to card 1's audio.
-    s << ",\"e\":[";
+    /* 🚨 tp58 — THE `]` THAT CLOSES "o". tp57 appended the "e" array straight after the
+       occupancy loop and never closed the array it was sitting inside, so the editor pushed
+       `window.__dstVizPush={...,"o":[0.1,...,0.9,"e":[{...}]]};` — a JavaScript SYNTAX ERROR,
+       not merely wrong data. The statement never executed, `__dstVizPush` stayed undefined,
+       and EVERY distortion card fell through to the native poll fb354 replaced precisely
+       because it dies silently. Instance 1 lost its curve along with the pooled ones, which is
+       why Max saw "no white shaper at all" — a strictly worse picture than the bug tp57 fixed.
+       Tests/json_feed_gate.py now bracket-balances every feed builder in this file. */
+    s << "],\"e\":[";
     {
         bool firstE = true;
         for (int e = 0; e < kFxExtra; ++e)

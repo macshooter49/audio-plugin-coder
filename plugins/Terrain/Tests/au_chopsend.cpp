@@ -292,12 +292,21 @@ int main()
         const bool applies = src.find ("timeStretchMulParam_->load()") != std::string::npos;
         const bool ratio   = src.find ("activeConfig.stretchRatio * m") != std::string::npos;
         const bool warps   = src.find ("activeConfig.warpMode = WarpMode::Beats") != std::string::npos;
+        /* 🚨 tp58 — AND IT MUST USE THE NOTE-ON SETTER. `setStretchRatio` carries fb204's one-pole
+           glide, which is right for the synth's per-BLOCK push and catastrophic here: this voice
+           calls it ONCE, so the pole froze 35 % of the way and a 117 BPM loop locked to 130 played
+           at 121.1 (measured in Tests/bpmlock_cert.cpp bar [3]). Every other bar in this file
+           passed the whole time that was true — a parameter that exists and a voice that reads it
+           prove nothing about the number the engine ends up on. */
+        const bool now     = src.find ("warp.setStretchRatioNow") != std::string::npos
+                          && src.find ("warp.setStretchRatio   (activeConfig.stretchRatio)") == std::string::npos;
         const std::string pr = slurp ("Source/PluginProcessor.cpp");
         const bool detects = pr.find ("tw::looptempo::detect") != std::string::npos;
         const bool feeds   = pr.find ("tw::looptempo::stretchTo") != std::string::npos;
-        chk (applies && ratio && warps && detects && feeds,
-             "[6] THE VOICE APPLIES THE STRETCH *AND* TURNS THE WARP ON — a ratio without a warp mode does nothing at all (the NONE path ignores stretchRatio)",
+        chk (applies && ratio && warps && now && detects && feeds,
+             "[6] THE VOICE APPLIES THE STRETCH, TURNS THE WARP ON, AND SETS THE RATIO WITHOUT GLIDING IT",
              std::string ("load=") + (applies?"y":"n") + " ratio=" + (ratio?"y":"n") + " beats=" + (warps?"y":"n")
+             + " note-on-setter=" + (now?"y":"n")
              + " detect=" + (detects?"y":"n") + " stretchTo=" + (feeds?"y":"n"));
     }
 

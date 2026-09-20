@@ -223,7 +223,12 @@ namespace tw
             // the first non-None setMode, so voices that never warp pay zero
             // memory / CPU cost.
             warp.setMode           (activeConfig.warpMode);
-            warp.setStretchRatio   (activeConfig.stretchRatio);
+            /* 🚨 tp58 — SET, DO NOT GLIDE. setStretchRatio carries fb204's one-pole, which is
+               right for the synth's per-BLOCK push and catastrophic here: this is the only call
+               this voice ever makes, so the pole froze 35 % of the way and the BPM lock landed
+               on 0.965 when it asked for 0.900 — a 117 BPM loop played at 121 in a 130 session.
+               Measured both ways in Tests/bpmlock_cert.cpp. */
+            warp.setStretchRatioNow (activeConfig.stretchRatio);
             warp.setPitchSemitones (activeConfig.pitchSemitones);
             warp.noteOnReset();
             outputSamplesSinceTrigger = 0;

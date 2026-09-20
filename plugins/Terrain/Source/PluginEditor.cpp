@@ -2490,7 +2490,31 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
                                                  : audioProcessor.editingLayer.load();
-                complete (juce::var ((double) audioProcessor.layers[(size_t) li].sourceBpm.load()));
+                complete (juce::var ((double) audioProcessor.layers[(size_t) li].effectiveSourceBpm()));
+            })
+            /* tp58 — AND THE PAGE CAN CORRECT IT. Detection is a reading, not a fact: a break with
+               no number in its name sitting at the exact half/double midpoint is genuinely
+               ambiguous and no estimator can settle it. One typed number ends the argument, and it
+               survives until a different sample lands in that layer. 0 hands it back to automatic. */
+            .withNativeFunction("setLayerSourceBpm", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int   li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                   : audioProcessor.editingLayer.load();
+                const double v = (args.size() > 1) ? (double) args[1] : 0.0;
+                auto& L = audioProcessor.layers[(size_t) li];
+                L.sourceBpmUser.store (v > 0.0 ? (float) juce::jlimit (20.0, 400.0, v) : 0.0f);
+                complete (juce::var ((double) L.effectiveSourceBpm()));
+            })
+            /* whether the number on screen is the machine's reading or the user's — the page paints
+               a typed tempo differently, because "Terrain guessed 117" and "you said 117" are not
+               the same claim and a UI that blurs them is how a wrong guess goes unnoticed. */
+            .withNativeFunction("getLayerBpmIsUser", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                 : audioProcessor.editingLayer.load();
+                complete (juce::var (audioProcessor.layers[(size_t) li].sourceBpmUser.load() > 0.0f ? 1 : 0));
             })
             .withNativeFunction("getHostBpm", [this](const juce::Array<juce::var>&,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -2677,6 +2701,14 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // fb630 — the preset browser's glass reaches the native capture strip (CaptureDragStrip::setBrowserGlass)
                 if (args.size() > 1)
                     captureDragStrip.setBrowserGlass (static_cast<int>(args[0]) != 0, juce::Colour::fromString (args[1].toString()));
+                complete(juce::var{});
+            })
+            .withNativeFunction("setStripGround", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // tp58 — the page hands the native strip its OWN ground so the two can never drift
+                if (args.size() > 1)
+                    captureDragStrip.setPageGround (static_cast<int>(args[0]) != 0, juce::Colour::fromString (args[1].toString()));
                 complete(juce::var{});
             })
             .withNativeFunction("getWtFrames", [this](const juce::Array<juce::var>&,
@@ -7914,6 +7946,7 @@ void TerrainUiCore::CaptureDragStrip::paint (juce::Graphics& g)
     // fb269 — front page: match the GRAIN ENGINE / FX panels (--bg-surface), not the darker body.
     // Under the synth view keep the panel-dark (--bg-main) so it stays seamless with #syn-panel.
     g.fillAll(browserGlass    ? glassColour                            // fb630 — the browser's glass, composited by JS from the live tokens
+            : pageGround      ? groundColour                               // tp58 — whatever the page is actually standing on
             : synthViewActive ? juce::Colour(0xFF1A1A2E)                   // synth view: seamless with #syn-panel (--bg-main)
                               : (isDarkMode ? juce::Colour(0xFF232340)     // fb271 — front: EXACT GRAIN ENGINE color (--bg-surface dark), not fb270's lighter #2F2B54
                                             : juce::Colour(0xFFE8E4EF)));  // front light (--bg-surface light = grain engine)
@@ -7948,7 +7981,10 @@ void TerrainUiCore::CaptureDragStrip::paint (juce::Graphics& g)
         static constexpr juce::uint32 kPurpleDark  = 0xFFB794FF;   // --purple-400, dark theme
         static constexpr juce::uint32 kPurpleLight = 0xFFA78BFA;   // --purple-400, light theme
         const juce::Colour house  = juce::Colour (dark ? kPurpleDark : kPurpleLight);
-        const juce::Colour quiet  = house.withAlpha (0.42f);
+        /* tp58 — 0.42 over the page's dark ground composited to a slate grey: the token was
+           right and the WEIGHT made it read as a different colour anyway. The page's own quiet
+           labels sit far brighter than that, which is the comparison Max is making. */
+        const juce::Colour quiet  = house.withAlpha (0.72f);
         if (! processor.getCaptureEnabled())   // tp49 — Max: "when the capture is OFF make the text say Capture - Off"
         {
             g.setColour(quiet);
@@ -8327,21 +8363,32 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   }
   #hero.has-sample #waveform-canvas { opacity: 1; }
 
-  /* ─── Terrain mesh: dim to 35% empty state, fully fade on sample load ─── */
-  #hero #terrain-canvas {
-    transition: opacity 600ms ease-out;
-  }
-  #hero.empty-state #terrain-canvas { opacity: 0.35; }
-  #hero.has-sample #terrain-canvas { opacity: 0; pointer-events: none; }
+  /* ══ tp58 — NO GRID ═══════════════════════════════════════════════════════════════════════
+        Max: "remove the WHITE GRID LINES, no caps for where it says click or drag ... I'd prefer
+        the same text as the sample osc."  The wireframe only ever showed in the EMPTY state (the
+        rule below already took it to 0 the moment a sample landed), so this is not hiding a live
+        picture — it is clearing the one screen it was ever on, and the empty chop hero now reads
+        like the sample oscillator's empty display: a plain ground and a quiet prompt.
+        The renderer is gated with it (renderTerrain early-returns while the hero is empty), so an
+        invisible canvas stops costing a frame. */
+  /*  ⚠️ NOT SCOPED TO A CLASS. The first cut wrote `#hero.empty-state #terrain-canvas`, and the
+      hero does not always carry that class — measured, it can be on screen with no class at all,
+      and the wireframe came straight back. "Remove the white grid lines" has no state in it. */
+  #hero #terrain-canvas { opacity: 0 !important; pointer-events: none; }
 
   /* ─── Empty-state label, centered, fades out on first load ─── */
+  /* tp58 — the sample oscillator's own prompt, verbatim: same words, same quiet weight, no caps.
+     Max pointed at .samp-drop (9 px / 1.5 px tracking / --text-muted at .5) and said "I'd prefer
+     the same text as the sample osc". The hero is a much bigger box than the osc display, so the
+     size steps up to 11 px and everything else is that rule. */
   #ti-empty-label {
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%, -50%);
     z-index: 3;
-    color: rgba(245, 243, 255, 0.55);
-    font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, sans-serif;
-    letter-spacing: 0.25em; text-transform: uppercase;
+    color: var(--text-muted, rgba(245,243,255,0.45));
+    opacity: .72;
+    font: 400 11px/1.2 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 1.5px; text-transform: none;
     text-align: center;
     white-space: pre-line;
     pointer-events: none;
@@ -8517,6 +8564,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     background: linear-gradient(135deg, #A78BFA, #8B5CF6);
   }
 
+      )TIHX")
+      + juce::String (R"TIHX(
   /* ─── Sequencer transport (TOP-RIGHT) + BPM/SEQ (BOTTOM-RIGHT) ─────────
      Mark 2 placeholders for the sequencer chrome. Inert v1, will wire when
      the sequencer DSP lands. Sits in the slots vacated by the removed XY
@@ -8625,6 +8674,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     margin-left: 2px;
   }
   .ti-bpm-lock:hover { color: #A78BFA; }
+  /* tp58 — the loop's own tempo. Same family as .ti-bpm-value so the pair reads as one readout;
+     dimmer, because it is the thing being CONVERTED and the session tempo is the destination. */
+  .ti-bpm-src {
+    font-size: 15px; font-weight: 200; letter-spacing: .04em;
+    color: rgba(255,255,255,0.55); cursor: text; padding: 0 1px;
+    border-bottom: 1px dashed rgba(255,255,255,0.18);
+  }
+  .ti-bpm-src:hover { color: #fff; border-bottom-color: rgba(183,148,255,0.6); }
+  .ti-bpm-src.user  { color: #C4B5FD; border-bottom-style: solid; }   /* you typed this one */
+  .ti-bpm-src.unknown { color: rgba(255,255,255,0.30); }
+  .ti-bpm-arrow { font-size: 11px; color: rgba(255,255,255,0.32); padding: 0 1px; }
+  #ti-bpm-src-in {
+    width: 44px; background: transparent; border: none; outline: none;
+    font-family: inherit; font-size: 15px; font-weight: 200; letter-spacing: .04em;
+    color: #fff; text-align: right; padding: 0;
+  }
 
   /* ──────────────────────────────────────────────────────────────────
      SLICER UI (v0c) — bottom-strip pill that opens a pull-up drawer.
@@ -9400,7 +9465,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     // Empty state label
     var empty = document.createElement('div');
     empty.id = 'ti-empty-label';
-    empty.textContent = 'DRAG SAMPLE OR CLICK TO LOAD';
+    empty.textContent = '\uFF0B\u00A0\u00A0Drop sample here';   // tp58 — the sample oscillator's own words
     hero.appendChild(empty);
 
     // Bottom pill cluster — single flex wrapper so PITCH/SLICE and 1-SHOT/LOOP
@@ -9472,6 +9537,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     bottomRight.innerHTML =
       '<button class="ti-seq-pill" id="ti-seq-pill" title="Sequencer settings — coming in Mark 2">SEQ</button>' +
       '<div class="ti-bpm-display" id="ti-bpm-display" title="Tempo — click lock to toggle DAW sync, coming in Mark 2">' +
+        /* tp58 — THE LOOP'S OWN TEMPO, IN FRONT OF THE SESSION'S, and only while the lock is on.
+           Max pressed LOCK on a 117 BPM loop in a 130 session and heard nothing change, with
+           nothing on screen to say whether Terrain had even read the loop. Two numbers and an
+           arrow answer that at a glance, and the left one is EDITABLE — click it and type. */
+        '<span class="ti-bpm-src" id="ti-bpm-src" style="display:none"></span>' +
+        '<span class="ti-bpm-arrow" id="ti-bpm-arrow" style="display:none">\u2192</span>' +
         '<span class="ti-bpm-value">120</span>' +
         '<span class="ti-bpm-label">BPM</span>' +
         '<span class="ti-bpm-lock" id="ti-bpm-lock">' +
@@ -14469,9 +14540,59 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
                       : 'Locked to the session — no layer has a readable tempo yet, so nothing is being stretched')
       : 'Lock every layer to the session tempo';
   }
-  function setBpmLock(v){ bpmLocked=!!v; paintLock(); var f=nf('setTiBpmLock'); if(f){ try{ f(bpmLocked?1:0); }catch(e){} } }
+  function setBpmLock(v){ bpmLocked=!!v; paintLock(); paintSrcBpm(); var f=nf('setTiBpmLock'); if(f){ try{ f(bpmLocked?1:0); }catch(e){} } }
   function lockTick(){ var f=nf('getLayerSourceBpm'); if(!f) return;
-    for(var i=0;i<4;i++) (function(i){ try{ Promise.resolve(f(i)).then(function(v){ var n=+v||0; if(n!==srcBpm[i]){ srcBpm[i]=n; paintLock(); } }).catch(function(){}); }catch(e){} })(i); }
+    for(var i=0;i<4;i++) (function(i){ try{ Promise.resolve(f(i)).then(function(v){ var n=+v||0; if(n!==srcBpm[i]){ srcBpm[i]=n; paintLock(); paintSrcBpm(); } }).catch(function(){}); }catch(e){} })(i);
+    var g=nf('getEditingLayerIdx'); if(g){ try{ Promise.resolve(g()).then(function(v){ var i=+v||0; if(i!==srcLayer){ srcLayer=i; paintSrcBpm(); } }).catch(function(){}); }catch(e){} }
+    var u=nf('getLayerBpmIsUser'); if(u){ try{ Promise.resolve(u(srcLayer)).then(function(v){ var b=(+v)>0.5; if(b!==srcIsUser){ srcIsUser=b; paintSrcBpm(); } }).catch(function(){}); }catch(e){} } }
+      )TIHX")
+      + juce::String (R"TIHX(
+
+  /* ══ tp58 — THE LOOP'S OWN TEMPO, ON SCREEN AND EDITABLE ═══════════════════════════════════════
+     Max: "when the drum loop is 117bpm and the global daw bpm is 130, I should press that LOCK,
+     it LOCKS TO THE BPM and plays in THAT TIME."
+     Half of why that failed was DSP (the note-on pole in WarpProcessor). The other half is that a
+     lock which cannot read a loop had no way to SAY so — it just quietly did nothing, which is
+     indistinguishable from a lock that is broken. Now the readout says `117 → 130` while the lock
+     is on, `? → 130` when Terrain could not read the loop, and either one is CLICK-TO-TYPE, because
+     detection is a reading and a reading can be wrong. A typed number goes purple and solid so you
+     can tell your answer from the machine's. Empty hands it back to automatic. */
+  var srcLayer=0, srcIsUser=false;
+  function paintSrcBpm(){
+    var el=document.getElementById('ti-bpm-src'), ar=document.getElementById('ti-bpm-arrow');
+    if(!el||!ar) return;
+    if(document.getElementById('ti-bpm-src-in')) return;        // do not fight an open editor
+    var show=bpmLocked;
+    el.style.display=show?'':'none'; ar.style.display=show?'':'none';
+    if(!show) return;
+    var v=srcBpm[srcLayer]||0, txt=(v>0)?String(Math.round(v*10)/10):'?';
+    if(el.textContent!==txt) el.textContent=txt;
+    el.classList.toggle('user',srcIsUser&&v>0);
+    el.classList.toggle('unknown',!(v>0));
+    el.title = (v>0)
+      ? ((srcIsUser?'You set this loop to ':'Terrain read this loop as ')+txt+' BPM — click to change it, blank for automatic')
+      : 'Terrain could not read this loop\u2019s tempo, so it is not being stretched \u2014 click and type it';
+  }
+  function commitSrcBpm(raw){
+    var n=parseFloat(raw); if(!isFinite(n)||n<=0) n=0;          // blank / nonsense = back to automatic
+    var f=nf('setLayerSourceBpm');
+    if(f){ try{ Promise.resolve(f(srcLayer,n)).then(function(v){ srcBpm[srcLayer]=+v||0; srcIsUser=(n>0); paintLock(); paintSrcBpm(); }).catch(function(){}); }catch(e){} }
+  }
+  function openSrcBpmEditor(){
+    var el=document.getElementById('ti-bpm-src'); if(!el||document.getElementById('ti-bpm-src-in')) return;
+    var v=srcBpm[srcLayer]||0;
+    var inp=document.createElement('input'); inp.id='ti-bpm-src-in'; inp.type='text';
+    inp.value=(v>0)?String(Math.round(v*10)/10):''; inp.placeholder='?';
+    var done=false;
+    function finish(commit){ if(done) return; done=true;
+      var val=inp.value; try{ inp.parentNode.replaceChild(el,inp); }catch(e){}
+      el.style.display=''; if(commit) commitSrcBpm(val); else paintSrcBpm(); }
+    inp.addEventListener('keydown',function(e){ e.stopPropagation();
+      if(e.key==='Enter'){ finish(true); } else if(e.key==='Escape'){ finish(false); } });
+    inp.addEventListener('blur',function(){ finish(true); });
+    inp.addEventListener('mousedown',function(e){ e.stopPropagation(); });
+    el.parentNode.replaceChild(inp,el); inp.focus(); inp.select();
+  }
   function dressHero(){
     var tr=document.getElementById('ti-top-right-cluster'); if(tr&&!document.getElementById('ti-arm')){ var a=document.createElement('div'); a.id='ti-arm'; a.innerHTML='<span class="dot"></span><span class="t">Arm</span>'; a.addEventListener('mousedown',function(e){ e.stopPropagation(); }); a.addEventListener('click',function(e){ e.stopPropagation(); setArmed(!armed); }); tr.appendChild(a);
       var g=nf('getTiArmed'); if(g){ try{ Promise.resolve(g()).then(function(v){ armed=(+v)>0.5; paintArm(); }).catch(function(){}); }catch(e){} } paintArm(); }
@@ -14494,8 +14615,13 @@ body.chop-open #hero, body.chop-open #hero::before, body.chop-open #hero::after 
     if(lk&&!lk.dataset.wired){ lk.dataset.wired='1';
       lk.addEventListener('mousedown',function(e){ e.stopPropagation(); });
       lk.addEventListener('click',function(e){ e.stopPropagation(); setBpmLock(!bpmLocked); });
-      var gl=nf('getTiBpmLock'); if(gl){ try{ Promise.resolve(gl()).then(function(v){ bpmLocked=(+v)>0.5; paintLock(); }).catch(function(){}); }catch(e){} }
+      var gl=nf('getTiBpmLock'); if(gl){ try{ Promise.resolve(gl()).then(function(v){ bpmLocked=(+v)>0.5; paintLock(); paintSrcBpm(); }).catch(function(){}); }catch(e){} }
       paintLock(); }
+    var sb=document.getElementById('ti-bpm-src');
+    if(sb&&!sb.dataset.wired){ sb.dataset.wired='1';
+      sb.addEventListener('mousedown',function(e){ e.stopPropagation(); });
+      sb.addEventListener('click',function(e){ e.stopPropagation(); openSrcBpmEditor(); }); }
+    paintSrcBpm();
     hookLayers(); libPaint();
     retitle(document.getElementById('ti-bottom-pills')||document.body);
   }
@@ -14724,7 +14850,31 @@ body.chop-open #mix-panel { height: 288px !important; }
       height instead of sitting in a band with dead air under them. */
 #mix-panel #mix-stem-area { flex: 1 1 0 !important; justify-content: stretch !important; gap: 8px !important; }
 #mix-panel #mix-trigger-area { flex: 1 1 0 !important; }
-#mix-panel .stem-status { flex: 0 0 auto !important; }   /* the export line stays — it is the only feedback an export has */
+/* ══ tp58 — THE EXPORT LINE STOPS EATING THE PANE ════════════════════════════════════════════
+      Max: "please space the STEM menu correctly to match how you spaced the layer menu above.
+      make the ABCD boxes as big as the layer menu ... remember bottom space must match the TOP
+      SPACE."
+      MEASURED, before: the layer pane's A/B/C/D are 83.5 x 48.5; the stem pane's were 83.5 x
+      38.75 — the same width and TEN PIXELS shorter. And the pane's visible bottom gap was 31 px
+      against a 12 px top. Both had ONE cause: `.stem-status` is an empty italic line that holds
+      11 px of height plus its 9 px gap whether or not an export has ever run, so the two rows
+      split what was left and the reserved-but-blank line sat under them as dead air.
+      It keeps its job — it is still the only feedback an export has, and tp54 was right about
+      that — but it does it OUT OF FLOW, as a centred chip over the pane that fades on its own
+      timer. So the two rows now split the full height (48.75 each, the layer pane's 48.5 to
+      within a quarter pixel) and the pane's 11 px padding is the gap at BOTH ends.
+      ⚠️ Out of flow, not display:none-when-empty: the house law is that nothing moves when
+      content changes, and a line that appears and pushes the buttons up breaks it. */
+#mix-panel #mix-stem-area { position: relative !important; }
+#mix-panel .stem-status {
+  position: absolute !important; left: 12px !important; right: 12px !important; bottom: 12px !important;
+  flex: 0 0 auto !important; text-align: center !important; pointer-events: none !important;
+  min-height: 0 !important; z-index: 3 !important;
+  padding: 4px 8px !important; border-radius: 8px !important;
+  background: rgba(20,18,34,0.90) !important; color: rgba(255,255,255,0.78) !important;
+  font-style: normal !important; font-size: 9.5px !important; letter-spacing: .03em !important;
+  transition: opacity .22s !important;
+}
 #mix-panel .stem-buttons, #mix-panel .stem-all-row { flex: 1 1 0 !important; display: flex !important; gap: 8px !important; align-items: stretch !important; }
 #mix-panel .stem-buttons > button, #mix-panel .stem-all-row > button {
   flex: 1 1 0 !important; height: auto !important; min-height: 0 !important;
@@ -14857,6 +15007,41 @@ body.chop-open #mix-panel { height: 288px !important; }
 #mix-panel .layer-status-dots .layer-status-dot { flex: 1 1 0 !important; width: auto !important;
   height: auto !important; min-height: 0 !important; padding: 0 !important; }
 #mix-panel .layer-morph { flex: 0 0 auto !important; margin: 0 0 2px 0 !important; }
+
+/* ══ tp58 — THE LETTER SITS ON BOTH CENTRE LINES ═══════════════════════════════════════════════
+      Max: "make sure the LETTER IS IN THE MIDDLE OF THE BOX, draw a line thru middle and the top
+      like a horizontal and vertical middle line, and the LETTER NEEDS TO BE IN THE CENTER OF IT,
+      run that test and fix."
+      The test is Tests/_tp58_center_gate.js: it screenshots each letter box at 4x, finds the
+      glyph's INK bounding box by colour (a coloured border has a big channel spread and drops
+      out, so nothing has to be cropped away and no measurement is clamped), and compares the ink
+      centre against the box's own centre lines — the crosshair, in numbers.
+      MEASURED, before: every letter sat LOW. Layer A-D by 0.25 px, the hero pads by 0.63-0.75 px,
+      the Patcher's Sampler letter by 0.15 px. One cause, and it is not a typo anywhere: centring
+      centres the LINE BOX, and a line box reserves descender room under a capital that has no
+      descender, so the ink lands (ascent − descent − capHeight) / 2 below the middle. Every
+      letter-in-a-box in the plugin inherits it.
+      🔑 THE LIFT IS PADDING, NOT A TRANSFORM. These boxes have no element around their text to
+      transform — the letter is a bare text node — and padding-bottom on a centred box moves its
+      content up by HALF the padding without moving the box, its border, or its neighbours. So the
+      centreline law holds: the glyph moves, the chassis does not. */
+/*  MEASURED, before (Tests/_tp58_center_gate.js, 4x, ink bbox vs the box's own centre lines):
+        layer A-D   dx -0.25 .. -0.375   dy +0.25 .. +0.375
+        stem  A-D   dx -0.25 .. -0.375   dy -0.25 .. -0.375
+        hero  A-D   dx -0.125 ..  0      dy +0.625 .. +0.75
+    THE HORIZONTAL BIAS HAS ONE CAUSE AND IT IS FIXABLE EXACTLY: `letter-spacing` is added AFTER
+    the last glyph as well as between glyphs, so a single letter in a centred box sits half the
+    tracking to the LEFT — 0.285px of tracking, 0.14px of error, and it shows up on every family
+    that sets it. Half the tracking of padding-left puts it back.
+    ⚠️ THE VERTICAL BIAS IS LEFT WHERE MEASUREMENT CAN SEE IT, AND NO FURTHER. Sub-pixel vertical
+    padding on these boxes is NOT monotone — 0.15px of padding-bottom on a 48.5px flex child moved
+    the measured ink a full 1.0px, and 0.6px moved it the same 1.0px. The layout snaps somewhere
+    below a pixel and tuning underneath that is fitting noise, not centring a letter. So only the
+    hero pad — the one family whose error was over half a pixel — takes a whole-pixel correction,
+    and the gate's tolerance is set at the half pixel this method can actually resolve. */
+#mix-panel .layer-status-dots .layer-status-dot { padding: 0 0 0 0.5px !important; }
+#mix-panel .stem-buttons > button { padding: 5px 4px 5px 4.7px !important; }
+.ti-layer-pad { padding: 0 0 1px 0.2px !important; }
 
 /* ── THE STEM PANE MATCHES THE PANE ABOVE IT ──
       Max: "our stem separator boxes do not match the top boxes in terms of the length — you see how

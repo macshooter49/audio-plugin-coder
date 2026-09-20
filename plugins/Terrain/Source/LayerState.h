@@ -72,8 +72,33 @@ namespace tw
         //  everything can stay in time."  sourceBpm is what this layer's sample IS (read from its
         //  name, else from its length — Source/LoopTempo.h); timeStretchMul is what the processor
         //  works out from it each block and the voice applies at note-on. 0 / 1.0 = untouched.
-        std::atomic<float> sourceBpm      { 0.0f };   // 0 = unknown, and unknown means do not stretch
+        //  tp58 — THREE STATES, NOT TWO. 0 = "not analysed yet", -1 = "analysed, and it has no
+        //  tempo", > 0 = the reading. The two-state version re-ran the whole analysis on EVERY
+        //  timer tick for any sample it could not read, which the audio-listening detector turns
+        //  from free into a 30 Hz sweep over the buffer.
+        std::atomic<float> sourceBpm      { 0.0f };   // 0 = unread · -1 = read, unknown · >0 = BPM
+        //  tp58 — THE NUMBER THE USER TYPED, and it wins. Detection is a reading, not a fact: a
+        //  break with no number in its name and an odd length is genuinely ambiguous, and at the
+        //  exact half/double midpoint no estimator can know. One editable field is the difference
+        //  between a lock that works on your library and a lock that works on ours.
+        std::atomic<float> sourceBpmUser  { 0.0f };   // 0 = auto (use sourceBpm)
+        //  tp58 — WHICH BUFFER THE READING BELONGS TO. There are five places a sample can land
+        //  and the resolve deliberately knows about none of them; keying the analysis to the
+        //  buffer it analysed means a new sample is re-read whatever route it arrived by, and a
+        //  load site added tomorrow is covered the day it is written. NEVER DEREFERENCED — it is
+        //  compared and nothing else, so it cannot outlive anything.
+        std::atomic<const void*> bpmReadFor { nullptr };
         std::atomic<float> timeStretchMul { 1.0f };   // 1.0 = off
+
+        /** What the lock is actually working from: the typed number if there is one, else the
+         *  reading, else 0 — and 0 still means do not stretch. */
+        float effectiveSourceBpm() const noexcept
+        {
+            const float u = sourceBpmUser.load();
+            if (u > 0.0f) return u;
+            const float d = sourceBpm.load();
+            return (d > 0.0f) ? d : 0.0f;
+        }
 
         // ── Meters — post-volume peak per channel for the strip meter widget ──
         // Audio thread writes after summing into master; UI polls at ~30 Hz.

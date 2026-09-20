@@ -5045,6 +5045,24 @@ body.ti-syn-open #syn-panel { background: transparent; }
 body.ti-syn-open > #plugin > #hero,
 body.ti-syn-open > #plugin > #controls,
 body.ti-syn-open > #plugin > #footer { visibility: hidden; }
+/* ══ tp58 — A PAGE SWITCH IS NOT AN ANIMATION ═══════════════════════════════════════════════════
+      Max: "whenever I switch from syn to chop the SLICES box is faint then disappears after a few
+      seconds ... these pages should never touch each other or leave residue."
+      MEASURED: with the synth page up, every piece of chop chrome computes visibility:hidden by
+      inheritance — except `#ti-slices-btn`, which computes VISIBLE while its own parent is hidden.
+      Nothing sets it. What does it is the pill's `transition: 0.15s`: a shorthand with only a
+      DURATION means `transition-property: all`, and `visibility` is a transitionable property, so
+      the inherited hidden is held back for the length of the transition and the pill paints alone
+      over the synth page — the ghost in Max's screenshot, sitting exactly where it lives on the
+      chop page. Every other pill escaped only because it happened to name its properties.
+      🚨 THE RULE, NOT THE PILL. Killing transitions on the ONE element would leave the next pill
+      that writes `transition: .2s` to reintroduce it, silently, months from now. While a page is
+      COVERED, nothing under the cover animates at all — a covered subtree has nothing to animate
+      FOR, and an instant hide is the only correct reading of "hidden". */
+body.ti-syn-open > #plugin > #hero,          body.ti-syn-open > #plugin > #hero *,
+body.ti-syn-open > #plugin > #controls,      body.ti-syn-open > #plugin > #controls *,
+body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #footer * {
+  transition: none !important; animation: none !important; }
 
 /* ── page tab nav (ported from v12 mockup, skipped in T1) ──
    fb155 — STRIP RETIRED (Max: everything lives on ONE page now; FX will join the
@@ -16971,6 +16989,15 @@ function heroGlowSprite() {
 function renderTerrain(time) {
   const ctx = terrainCtx;
   if (!ctx) return;
+  /* tp58 — the mesh is at opacity 0 in every state now (Max: "remove the WHITE GRID LINES"), so
+     every frame spent on it is drawn under an invisible layer. Gated here rather than by deleting
+     the renderer: the canvas and its height map are what the hero falls back to if a future state
+     ever wants the picture again. The gate is the CANVAS'S OWN computed opacity, re-read a few
+     times a second, so it can never disagree with the stylesheet the way a class check did. */
+  try { if (renderTerrain.__hidden === undefined || performance.now() - renderTerrain.__hidT > 400) {
+          renderTerrain.__hidT = performance.now();
+          renderTerrain.__hidden = (+getComputedStyle(terrainCanvas).opacity || 0) < 0.01; }
+        if (renderTerrain.__hidden) return; } catch (e) {}
   const cw = terrainCanvas.width / DPR;
   const ch = terrainCanvas.height / DPR;
 
@@ -42805,7 +42832,11 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-samp-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 #tp-page .tp-samp-l { flex: none; width: 30px; height: 30px; border-radius: 9px; display: flex;
   align-items: center; justify-content: center; border: 1px solid var(--purple-400);
-  font: 500 13px/1 inherit; letter-spacing: .03em; color: #fff; background: transparent; }
+  font: 500 13px/1 inherit; letter-spacing: .03em; color: #fff; background: transparent;
+  /* tp58 — letter-spacing is added AFTER the last glyph too, so a single letter in a centred box
+     sits half the tracking to the LEFT. The indent puts it back. Vertically this one measured
+     0.148 px off — inside what a 4x ink-bbox read can resolve — so nothing is done to it. */
+  text-indent: .03em; }
 #tp-page .tp-samp-n { flex: 1 1 auto; min-width: 0; font: 500 11px/1.25 inherit; letter-spacing: .02em;
   color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tp-page .tp-samp-mtr { display: flex; flex-direction: column; gap: 4px; }
@@ -42817,6 +42848,25 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
 #tp-page .tp-vglyph svg { width: 70px; height: 46px; }
 
 /* the eye — VISUALIZERS ONLY: every word and knob steps back, the picture is RE-LAID OUT to fill the glass (the painters draw it at that size — crisp, never a stretched bitmap) */
+/* ══ tp58 — THE EYE HIDES INSTANTLY ═══════════════════════════════════════════════════════════
+      Max: "the LFO numbers also do this too on the patcher when we switch emblem mode to non
+      emblem mode."  Same mechanism as the chop page's Slices ghost: a card's chrome carries a
+      `transition: <time>` shorthand, a duration with no property list means `transition-property:
+      all`, and `visibility` IS a transitionable property — so the body's hidden is held back for
+      the length of whatever transition that element happened to declare, and its text paints alone
+      over the emblem that replaced it.
+      🔑 Declaring `transition: none` in the SAME rule that hides is what makes it instant: a
+      transition is computed from the AFTER-change style, so an element told "no transitions" in
+      the very recalculation that hides it has nothing to animate. Leaving the eye is unaffected —
+      visibility interpolates as VISIBLE for a transition's whole length, so the way back is
+      already immediate.
+      ⚠️ THE VISUALIZERS ARE EXEMPT. They are the half that STAYS, and Max's standing rule is that
+      the emblems move ("the four modes are supposed to move"); a blanket kill over the body would
+      freeze the very thing the eye exists to show. Only the chrome being hidden is stilled, and
+      only `transition` — a CSS animation cannot hold back a visibility change, so there is no
+      reason to touch one. */
+#tp-page.viz .tp-node > .tp-body,
+#tp-page.viz .tp-node > .tp-body *:not(.tp-viz):not(.tp-viz *) { transition: none !important; }
 #tp-page.viz .tp-node > .tp-body { visibility: hidden; pointer-events: none; }
 #tp-page.viz .tp-node > .tp-body .tp-viz { visibility: visible; transform: var(--vz, none); transform-origin: 0 0; }
 #tp-page.viz .tp-node > .tp-body .tp-viz * { visibility: visible; }
@@ -43111,7 +43161,22 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function addPort(n,kind,i,x,y,t){ var p=document.createElement('div'); p.className='tp-port k-'+kind; p.dataset.kind=kind; p.dataset.i=i; p.dataset.key=n.key; p.dataset.t=t||'a'; p.innerHTML='<i></i>';
     if(kind==='mod'||kind==='rin'){ p.style.left=(x-9)+'px'; } else { p.style.top=(n.h/2-9)+'px'; }
     p.addEventListener('click',function(e){ e.stopPropagation(); }); n.wrap.appendChild(p); n.ports.push({el:p,kind:kind,i:i,x:x,y:y}); return p; }
-  var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a']},noise:{ins:['n'],outs:['a']},filter:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a']},env:{outs:['m']},voice:{},lfo:{outs:['m']},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']},samp:{outs:['a']}};   /* tp11 — the Randomizer's port · tp56 — a Sampler is a SOURCE: audio out, no in (its notes come from the Chop page's own keys, not the Patcher's MIDI node) */
+  var SIDE={midi:{outs:['n']},out:{ins:['a']},osc:{ins:['n'],outs:['a']},noise:{ins:['n'],outs:['a']},filter:{ins:['a'],outs:['a']},fx:{ins:['a'],outs:['a']},env:{outs:['m']},voice:{},lfo:{outs:['m']},tape:{ins:['a'],outs:['a']},tapeloop:{ins:['a'],outs:['a']},rnd:{outs:['r']},samp:{ins:['a'],outs:['a']}};
+  /* ══ tp58 — THE SAMPLER HAS AN INPUT ══════════════════════════════════════════════════════════
+     Max: "why doesn't the sampler have an INPUT? I want to patch FX THRU IT BRUH CMONNN even FLOW
+     CARDS n SUCH PLEASE ... I need my inputs bro."
+     tp56 gave it an OUT only, on the reasoning that a sampler is a source. True of the signal and
+     false of the PATCH: a cable is a relationship, and "Sampler A through the Distortion" is the
+     same relationship whichever end you start dragging from. With no input you could only ever
+     draw it one way round, and dropping a device on a Sampler did nothing at all.
+     🔑 AND THE FLOW HALF IS NOT NEW DSP — IT WAS ALREADY BUILT AND NEVER REACHABLE. tp56 laid
+     down FLOW_CHOP<n>_CHOPS and FLOW_GLI<n>_CHOPS alongside every device's mask (PluginProcessor
+     wires them into poolChopRef_ at kChpSendBase / kGliSendBase), so the engine has been able to
+     feed a chop layer into a Chop or Glitch card this whole time. The canvas just refused the
+     cable: `a.kind==='samp'` fell through to "cable it into an effect, or to Out". Both directions
+     write that mask now.
+     ⚠️ Arp and Drift take NOTES ('n'), not audio, so they are not offered — a chop layer has no
+     note stream to hand them, and pretending otherwise would be a cable that lights nothing. */
   var RIN={osc:1,filter:1,env:1,lfo:1,fx:1,tape:1,flow:1};   /* tp11 — what a Randomizer cable can land on (a module's top) */
   function sideSpec(n){ if(n.kind==='flow'){ var k=fKind(n.sub); return (k==='arp'||k==='drift')?{ins:['n'],outs:['n']}:{ins:['a'],outs:['a']}; } return SIDE[n.kind]||{}; }
   function addSidePorts(n){ var sp=sideSpec(n); (sp.ins||[]).forEach(function(t,i){ addPort(n,'in',i,0,n.h/2,t); }); (sp.outs||[]).forEach(function(t,i){ addPort(n,'out',i,n.w,n.h/2,t); }); if(RIN[n.kind]) addPort(n,'rin',0,n.w/2,0,'r'); }
@@ -43286,6 +43351,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      Its id is the device's own _TAPS id with the suffix swapped, so there is no second hand-copied
      table to fall out of step (fb435's lesson, which cost a whole pill row that nothing consumed). */
   function chopsIdOf(d){ return (d&&d.tapsP)?String(d.tapsP).replace(/_TAPS$/,'_CHOPS'):null; }
+  /* tp58 — the SAME suffix swap for a flow card, for the same reason: one spelling, derived. */
+  function flowChopsId(m){ var p=flowPfx(m); return p?p+'CHOPS':null; }
+  function flowChopsOf(m){ var id=flowChopsId(m); return id?Math.round(pv(id,0)*15):0; }
+  function flowSetChop(m,L,on){ var id=flowChopsId(m), i=sampIdx(L); if(!id||i<0) return false;
+    seedOn([id]); var b=flowChopsOf(m), k=1<<i, nb=on?(b|k):(b&~k); if(nb===b) return false;
+    track([id],function(){}); setP(id,nb/15); return true; }
   function chopsOf(d){ var id=chopsIdOf(d); return id?Math.round(pv(id,0)*15):0; }
   function chopSetSrc(d,L,on){ var id=chopsIdOf(d), i=sampIdx(L); if(!id||i<0) return false;
     seedOn([id]); var b=chopsOf(d), k=1<<i, nb=on?(b|k):(b&~k); if(nb===b) return false;
@@ -43604,17 +43675,39 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
          Into OUT: every claim is dropped and the layer goes back to the Chop page's own mixer.
          Anywhere else is honest about why not — the synth's main filter and the note-side cards
          are the SYNTH's, and a chop layer has no source slot in them. */
-      if(a.kind==='samp'){
-        if(b.kind==='fx'){ var dvS=(window.__fxrDevs?window.__fxrDevs():[])[b.idx];
+      /* ══ tp58 — A SAMPLER'S CABLE, BOTH WAYS ROUND ═══════════════════════════════════════
+         One helper, called from the samp-is-the-SOURCE branch and from the samp-is-the-TARGET
+         branch below, so the two directions can never mean different things. A cable is a
+         relationship; which end you started dragging from is not part of it. */
+      var sampClaim=function(sn,dn){
+        if(dn.kind==='fx'){ var dvS=(window.__fxrDevs?window.__fxrDevs():[])[dn.idx];
           if(!dvS) return false;
-          if(chopSetSrc(dvS,a.sub,true)) toast(nodeName(a)+' \u2192 '+nodeName(b));
-          else toast(nodeName(a)+' already feeds '+nodeName(b));
+          if(chopSetSrc(dvS,sn.sub,true)) toast(nodeName(sn)+' \u2192 '+nodeName(dn));
+          else toast(nodeName(sn)+' already feeds '+nodeName(dn));
           return true; }
-        if(b.kind==='out'){ var claimsS=chopClaims(a.sub);
-          if(!claimsS.length){ toast('It already reaches Out'); return true; }
-          claimsS.forEach(function(c){ chopSetSrc(c.dev,a.sub,false); });
-          toast(nodeName(a)+' \u2192 Out'); return true; }
-        toast(nodeName(a)+' is a chop layer — cable it into an effect, or to Out');
+        /* the flow half tp56 built and never wired a cable to */
+        if(dn.kind==='flow'){ var kF=fKind(dn.sub);
+          if(kF!=='chop'&&kF!=='glitch'){ toast(nodeName(dn)+' takes notes, not audio — a chop layer has none to give it'); return true; }
+          var chF=window.__flowChain?window.__flowChain():[];
+          if(chF.indexOf(dn.sub)<0){ chF.push(dn.sub); window.__flowSetChain&&window.__flowSetChain(chF); }
+          if(flowSetChop(dn.sub,sn.sub,true)) toast(nodeName(sn)+' \u2192 '+nodeName(dn));
+          else toast(nodeName(sn)+' already feeds '+nodeName(dn));
+          return true; }
+        if(dn.kind==='out'){ var claimsS=chopClaims(sn.sub);
+          var flowsS=(window.__flowChain?window.__flowChain():[]).filter(function(m){ return flowChopsOf(m)&(1<<sampIdx(sn.sub)); });
+          if(!claimsS.length&&!flowsS.length){ toast('It already reaches Out'); return true; }
+          claimsS.forEach(function(c){ chopSetSrc(c.dev,sn.sub,false); });
+          flowsS.forEach(function(m){ flowSetChop(m,sn.sub,false); });
+          toast(nodeName(sn)+' \u2192 Out'); return true; }
+        return false; };
+      if(a.kind==='samp'){
+        if(sampClaim(a,b)) return true;
+        toast(nodeName(a)+' is a chop layer — cable it into an effect, a Chop or Glitch card, or to Out');
+        return true; }
+      /* something dropped ON a Sampler: the same claim, drawn the other way */
+      if(b.kind==='samp'){
+        if(a.kind==='fx'||a.kind==='flow'){ if(sampClaim(b,a)) return true; }
+        toast(nodeName(b)+' takes audio from an effect or a Chop/Glitch card — an oscillator reaches it through those');
         return true; }
       if(b.kind==='filter'&&a.kind==='osc'){ setP(OX(a.sub)+'F'+curFilterSlot()+'MIX',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} return true; }
       if(b.kind==='filter'&&a.kind==='noise'){ setP('SYN_FILTER'+curFilterSlot()+'_SRC_NOISE',1); try{ window.__tiFltBackSync&&window.__tiFltBackSync(); }catch(e){} toast(nodeName(a)+' → the filter (both noises share the filter\'s noise pill)'); return true; }   /* tp42 */
@@ -44601,6 +44694,34 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   window.__tpRect=function(el){ var r=el.getBoundingClientRect(); if(!isOpen||!page||!page.contains(el)) return r; var z=view.z||1; return {left:r.left,top:r.top,width:r.width/z,height:r.height/z,right:r.right,bottom:r.bottom}; };   /* tp5 — a painter's sizing rect in LAYOUT px while the module sits in the scaled world */
   window.__tpZoomOf=function(el){ try{ return (isOpen&&page&&el&&page.contains(el))?(view.z||1):1; }catch(e){ return 1; } };
   (function(){ var o=window.__tiOff; if(!o||o.__tp) return; var w=function(id){ if(id==='fxr-rack'&&isOpen&&adopted&&nodes.some(function(n){ return n.kind==='fx'; })) return false; return o(id); }; w.__tp=1; window.__tiOff=w; })();   /* tp9 — the rack's cards live on the canvas while it is open */
+  /* ══ tp58 — THE CAPTURE STRIP STANDS ON THE PAGE'S OWN GROUND ═══════════════════════════════
+     Max, twice: "the CAPTURE STRIP IS STILL NOT THE SAME COLOR AS EVERYTHING ELSE ON THE CHOP
+     ENGINE."  The strip is a native juce::Component (drag-to-DAW needs a real OS drag) and it only
+     ever knew about the SYNTH panel — `setSynthView`, pushed from applySynPanelOpen and nowhere
+     else. With the Chop page open it filled with the grain-engine surface #232340 while the page
+     stands on #1A1A2E: a lighter blue-grey band across the bottom of a darker page.
+     ⚠️ It cannot simply widen setSynthView — that native doubles as the PEROSC drag guard, and
+     widening it would change where a dropped file lands. So the page pushes its OWN COMPUTED
+     ground, exactly as fb630's browser glass already does, and C++ keeps no literal to drift from.
+     Change-gated: a settled page costs one comparison a second and zero calls. */
+  (function(){
+    var last='', fn=null;
+    function tick(){
+      try{
+        if(!fn) fn=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setStripGround'):null;
+        if(!fn) return;
+        var el=document.getElementById('plugin')||document.body;
+        var m=(getComputedStyle(el).backgroundColor||'').match(/[\d.]+/g);
+        if(!m||m.length<3) return;
+        var hx=function(v){ v=Math.round(+v); return (v<16?'0':'')+v.toString(16); };
+        var c='ff'+hx(m[0])+hx(m[1])+hx(m[2]);
+        if(c===last) return; last=c;
+        fn(1,c);
+      }catch(e){}
+    }
+    if(document.readyState==='complete') { tick(); setInterval(tick,1000); }
+    else window.addEventListener('load',function(){ tick(); setInterval(tick,1000); });
+  })();
   window.__fxrCardsAll=function(rack){ var a=rack?[].slice.call(rack.querySelectorAll('.fxr-dev')):[]; if(isOpen&&nodesEl){ var t=nodesEl.querySelectorAll('.tp-node > .tp-body > .fxr-dev'); for(var i=0;i<t.length;i++) a.push(t[i]); } return a; };
   window.__tpZoomUp=function(el){ var s2=1; try{ if(isOpen&&page&&page.classList.contains('viz')){ var vv=el&&el.closest?el.closest('.tp-viz'):null, mm=vv?/scale\(([\d.]+)\)/.exec(vv.style.getPropertyValue('--vz')||''):null; if(mm) s2=+mm[1]||1; } }catch(e){} return Math.max(1,window.__tpZoomOf(el)*s2); };   /* tp8 — a bitmap grows for zoom-in, never shrinks for zoom-out · tp11 — the eye's own scale counts too (no stretching, Max's HARD RULE) */
   window.addEventListener('tipanelchange',function(e){ var p=e.detail&&e.detail.panel; if(p==='tp') openPage(); else closePage(); });

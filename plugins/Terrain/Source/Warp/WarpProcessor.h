@@ -107,6 +107,34 @@ namespace tw
             if (textureEngine)     textureEngine    ->setStretchRatio (stretchRatio);
         }
 
+        /** ══ tp58 — THE NOTE-ON SETTER, WITH NO POLE IN IT ═══════════════════════════════════
+         *  Max: "the audio in fact does NOT stretch to the bpm whenever I have it on global LOCK.
+         *  When the drum loop is 117bpm and the global daw bpm is 130 ... it LOCKS TO THE BPM and
+         *  plays in THAT TIME."
+         *
+         *  🚨 setStretchRatio ABOVE IS A ONE-POLE GLIDE, AND IT GLIDES PER CALL.  fb204 added it
+         *  for the SYNTH's Sample engine, which pushes the ratio EVERY BLOCK (SynthVoice.h:7983) —
+         *  there the pole converges in ~10 blocks and stops the OLA engines being re-seeded with
+         *  jumps.  The chop voice does not push per block: SamplerVoice calls this exactly ONCE,
+         *  at note-on.  So a lock asking for 0.900 landed on 1.0 + (0.9-1.0)*0.35 = 0.965 and
+         *  STAYED there for the whole note — measured, a 117 BPM loop locked to 130 played at
+         *  121.1 BPM.  Not "close": nine BPM out, which is what Max heard.
+         *
+         *  A note-on is not a modulation. It sets the ratio; it does not travel to it.
+         *  Tests/bpmlock_cert.cpp measures both paths on the shipped engines. */
+        void setStretchRatioNow (float r) noexcept
+        {
+            stretchRatio = juce::jlimit (0.1f, 15.0f, r);
+            if (signalsmithEngine) signalsmithEngine->setStretchRatio (stretchRatio);
+            if (beatsEngine)       beatsEngine      ->setStretchRatio (stretchRatio);
+            if (textureEngine)     textureEngine    ->setStretchRatio (stretchRatio);
+        }
+
+        /** What the engine is ACTUALLY stretching by right now — the glide makes the asked-for
+         *  value and the live one two different numbers, and a gate has to be able to read the
+         *  live one. */
+        float currentStretchRatio() const noexcept { return stretchRatio; }
+
         // SAMPLE-ENGINE-FORMANT — pass-through to the Signalsmith (Tones) engine.
         void setFormantFactor (float f) noexcept
         {

@@ -1015,6 +1015,24 @@ private:
             if (browserGlass != on || glassColour != c) { browserGlass = on; glassColour = c; repaint(); }
         }
 
+        /* ══ tp58 — THE STRIP TAKES ITS GROUND FROM THE PAGE ═══════════════════════════════
+           Max, twice now: "the CAPTURE STRIP IS STILL NOT THE SAME COLOR AS EVERYTHING ELSE ON
+           THE CHOP ENGINE."  tp57 fixed the TEXT (it was a blue-grey nobody picked) and left the
+           real mismatch: the GROUND. The strip only ever knew about the SYNTH panel — the flag is
+           `setSynthViewActive`, pushed from applySynPanelOpen and from nowhere else — so with the
+           Chop page open it filled with the grain-engine surface #232340 while the page's own body
+           is #1A1A2E. A lighter blue-grey band across the bottom of a darker page, which is
+           exactly the screenshot.
+           ⚠️ AND IT MUST NOT REUSE setSynthView TO FIX IT: that native doubles as the PEROSC drag
+           guard (`synthPageActive_`), so widening it would change where a dropped file lands.
+           So the page pushes its OWN COMPUTED ground, the way fb630's browser glass already does,
+           and this class keeps NO literal to drift from. A colour Terrain reads off its own body
+           cannot disagree with the body. */
+        void setPageGround (bool on, juce::Colour c)
+        {
+            if (pageGround != on || groundColour != c) { pageGround = on; groundColour = c; repaint(); }
+        }
+
         void paint (juce::Graphics& g) override;
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent& e) override;
@@ -1030,6 +1048,8 @@ private:
         bool synthViewActive = false;
         bool browserGlass = false;      // fb630
         juce::Colour glassColour;       // fb630 — pushed from JS, never a literal here
+        bool pageGround = false;        // tp58
+        juce::Colour groundColour;      // tp58 — the PAGE's own computed ground, never a literal here
     };
 
     CaptureDragStrip captureDragStrip { audioProcessor };
