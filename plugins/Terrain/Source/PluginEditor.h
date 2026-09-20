@@ -51,6 +51,8 @@ public:
 
 private:
     int dstVizPushCtr_ = 0;   // fb354 — rate-limits the distortion-curve push to ~15 Hz
+    int motionTick_    = 0;   // tp62 — the static lane's own counter (decorative feeds at ~4 Hz, the spectrum at half rate)
+    void applyMotionRate();   // tp62 — 60 Hz with motion on, 30 Hz with it off (TERRAIN_UI_HZ still wins)
     int dstVizQuietCtr_ = 0;        // fb614 — the 2 Hz heartbeat that reaches an IDLE editor
     juce::String lastDstVizQuiet_;  // fb614 — change gate: idle sends ONE push, then nothing
     int crvQuietCtr_ = 0;           // fb636 — the popped curve card's quiet heartbeat (~3 Hz, stamp + change-gated curve)

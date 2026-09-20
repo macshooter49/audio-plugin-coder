@@ -2561,6 +2561,20 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 complete (juce::var (audioProcessor.getCaptureEnabled()));
             })
+            // tp62 — Settings: Motion on/off. The processor keeps the preference (a marker file, every
+            //  instance); this core re-arms its own push lane rate the moment it flips.
+            .withNativeFunction("setMotionEnabled", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1) audioProcessor.setMotionEnabled ((int) args[0] != 0);
+                applyMotionRate();
+                complete (juce::var (audioProcessor.getMotionEnabled()));
+            })
+            .withNativeFunction("getMotionEnabled", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getMotionEnabled()));
+            })
             .withNativeFunction("resetCaptureState", [this](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -6756,6 +6770,18 @@ void TerrainUiCore::timerCallback()
     // the 400 ms stamps; when the hand stops, rest returns exactly as before and idle stays 0.
     const bool uiTouched = (juce::Time::getMillisecondCounterHiRes() - uiGestureAtMs_) < 1500.0;
     const bool uiQuiet   = (eqQuietTicks_ >= 90) && ! uiTouched;
+    // ══ tp62 — THE STATIC LANE. With motion off, a DECORATIVE feed (the blooms, the distortion
+    //  occupancy, the granular grains, the tape machine, the sweeps, the meters) is built on every
+    //  eighth tick instead of every one — ~4 Hz at the 30 Hz this lane runs at — and the numbers in
+    //  it that come from the AUDIO are already constants (PluginProcessor::vz), so what it carries
+    //  is the knobs: turn one and the picture follows on the next static tick, play a note and
+    //  nothing on those cards moves. The ESSENTIAL feeds are untouched on every tick: the mod values
+    //  (LFO / envelope / macro comets — "modulation still counts"), the filter card's live curve,
+    //  the wavetable position, the note flag. The spectrum halves its rate (the page tweens it).
+    const bool uiStatic  = audioProcessor.uiStatic();
+    ++motionTick_;
+    const bool decoTick  = ! uiStatic || (motionTick_ & 7) == 0;
+    const bool specTick  = ! uiStatic || (motionTick_ & 1) == 0;
     // fb636 — THE HERO SCOPE STRING IS GONE. 256 values at "%.4f" (~2 KB) were built here and shipped
     // as window.updateVisualization(grainCount, scope, bpm) on every audible tick, on EVERY page. Its
     // one reader was renderTerrain's height map on the front page, and the front page is now a still
@@ -6919,18 +6945,21 @@ void TerrainUiCore::timerCallback()
         // (each poll = 2 IPC hops + a completion eval on this same message thread — together
         // they were ~half the main window's native traffic). Same source atomics, same 60Hz
         // cadence, so the fb312 instant-attack peak-hold + JS rise/fall smoothing are unchanged.
-        js << "window.__fxBloomRvb=" << SF(audioProcessor.getReverbBloom(), 3)
-           << ";window.__fxBloomDly=" << SF(audioProcessor.getDelayBloom(), 3) << ";";
+        // tp62 — vizReverbBloom / vizDelayBloom: the live wet bloom with motion on, the knob-derived
+        //  wash (mix × decay / mix × feedback) with it off — "a static purple wash that gets higher
+        //  by the mix and of course the decay".
+        js << "window.__fxBloomRvb=" << SF(audioProcessor.vizReverbBloom (0), 3)
+           << ";window.__fxBloomDly=" << SF(audioProcessor.vizDelayBloom (0), 3) << ";";
         // fb350 — one bloom per POOLED delay, so every duplicate's echo timeline lights from ITS
         // own wet instead of instance 1's. Same push, same cadence; five extra numbers per frame.
         js << "window.__fxBloomDlyP=[";
         for (int q = 0; q < ParameterIDs::kFxInstances - 1; ++q)
-            js << (q ? "," : "") << SF (audioProcessor.getDelayBloomPool (q), 3);
+            js << (q ? "," : "") << SF (audioProcessor.vizDelayBloom (q + 1), 3);
         js << "];";
         // fb352 — and one per pooled REVERB, so a duplicate's scatter grid lights from ITS tail.
         js << "window.__fxBloomRvbP=[";
         for (int q = 0; q < ParameterIDs::kFxInstances - 1; ++q)
-            js << (q ? "," : "") << SF (audioProcessor.getReverbBloomPool (q), 3);
+            js << (q ? "," : "") << SF (audioProcessor.vizReverbBloom (q + 1), 3);
         js << "];";
 
         // ── fb354 — THE DISTORTION CURVE RIDES THE PUSH TOO ─────────────────────────────────
@@ -6946,8 +6975,8 @@ void TerrainUiCore::timerCallback()
         if (++dstVizPushCtr_ >= 4)
         {
             dstVizPushCtr_ = 0;
-            js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";
-            js << "window.__fltVizPush=" << audioProcessor.getFilterVizJson() << ";";   // fb382
+            if (decoTick) js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";   // tp62 — decorative cadence with motion off
+            js << "window.__fltVizPush=" << audioProcessor.getFilterVizJson() << ";";   // fb382 — the filter is essential: every fourth tick, always
         }
         // fb363 — THE GRANULAR CARD PUSHES EVERY FRAME, not at the distortion's 15 Hz.
         // Max: "it is not 4K 60 frames per second, and them frames are very very low... that looks
@@ -6956,20 +6985,20 @@ void TerrainUiCore::timerCallback()
         // The payload is small enough to afford it: 64 waveform points + up to 28 grain positions,
         // and ONLY for instances actually in the chain (null otherwise), so the common case of one
         // granular is a few KB/s — far under the 40-80 KB/s fb342 flagged as the frame-drop line.
-        js << "window.__grnVizPush=" << audioProcessor.getGranularVizJson() << ";";
+        if (decoTick) js << "window.__grnVizPush=" << audioProcessor.getGranularVizJson() << ";";   // tp62
         // fb365 — THE TAPE CARDS RIDE THE SAME 60 Hz LANE. Max: "make sure the UI reacts of
         // the audio… the audio has to come through the VU meter at the top." A tape card is a
         // moving machine — reels turning, needles riding, heads firing — so a 15 Hz feed would
         // read as the same sample-and-hold the granular waveform did at fb363. The payload is
         // ~90 bytes per LIVE instance (null otherwise), far under the fb342 frame-drop line.
-        js << "window.__tpeVizPush=" << audioProcessor.getTapeVizJson() << ";";
+        if (decoTick) js << "window.__tpeVizPush=" << audioProcessor.getTapeVizJson() << ";";   // tp62
         // fb413 — the three new cards ride the SAME 60 Hz lane, for the reason the tape does:
         // they are MOVING pictures (a sweeping comb, a breathing ribbon), and fb363 measured
         // that a 15 Hz feed on moving material reads as a sample-and-hold.
-        js << "window.__fx3VizPush=" << audioProcessor.getFx3VizJson() << ";";
+        if (decoTick) js << "window.__fx3VizPush=" << audioProcessor.getFx3VizJson() << ";";   // tp62
         // fb437 — the fx4 four ride the SAME lane: the EQ's curve is change-gated (+1 Hz keepalive),
         // the rest is a handful of numbers per live instance. See getFx4VizJson.
-        js << "window.__fx4VizPush=" << audioProcessor.getFx4VizJson() << ";";
+        if (decoTick) js << "window.__fx4VizPush=" << audioProcessor.getFx4VizJson() << ";";   // tp62
         js << "window.__fxModEff=" << audioProcessor.getFxModEffJson() << ";";   // fb457 — OVERPASS 1
         js << "window.__wtFrameEff=[" << SF (audioProcessor.wtFrameVis (0), 4) << "," << SF (audioProcessor.wtFrameVis (1), 4)
            << "," << SF (audioProcessor.wtFrameVis (2), 4) << "," << SF (audioProcessor.wtFrameVis (3), 4) << "];";   // fb457
@@ -7276,7 +7305,8 @@ void TerrainUiCore::timerCallback()
         if (seqNow == lastOscScopeSeq_) { if (oscScopeStaleTicks_ < 1000) ++oscScopeStaleTicks_; }
         else                            { oscScopeStaleTicks_ = 0; lastOscScopeSeq_ = seqNow; }
         const bool feedStale = oscScopeStaleTicks_ > 15;   // ~250 ms @ 60 Hz
-        const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed) && ! feedStale;
+        const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed) && ! feedStale
+                            && ! uiStatic;   // tp62 — with motion off the scope parks: the page draws the table's own still cycle
         if (oscActive && pushScopeW)   // fb486 whale gate (the park-push below is NOT gated)
         {
             // SPSC seqlock READ: snapshot the window into locals, retrying if the audio
@@ -7514,7 +7544,7 @@ void TerrainUiCore::timerCallback()
         const float* outBins  = audioProcessor.analyzerOut.readLatest();
         const bool   haveEq   = needEq  && preBins != nullptr && postBins != nullptr;
         const bool   haveOut  = needOut && outBins != nullptr;
-        if (pushEqW && wanted && spectrumLive && fresh && (haveEq || haveOut) && webView != nullptr)   // fb486 whale gate + fb507 silence gate
+        if (pushEqW && specTick && wanted && spectrumLive && fresh && (haveEq || haveOut) && webView != nullptr)   // fb486 whale gate + fb507 silence gate · tp62 half rate with motion off
         {
             eqPushSeqPre_ = seqPre; eqPushSeqPost_ = seqPost; eqPushSeqOut_ = seqOut;
             // fb509 — THE WHALE WAS THE FORMATTING, NOT THE FFT AND NOT THE CADENCE. The
@@ -16487,6 +16517,22 @@ int TerrainUiCore::bootWidth() const
     return w0;
 }
 
+// ══ tp62 — THE PUSH LANE'S RATE FOLLOWS THE MOTION SETTING ═════════════════════════════════════
+//  fb501 measured this timer at 11.8 % of a core on Windows — more than the audio thread — and every
+//  tick it runs is a build plus a cross-process hop. With motion off the decorative feeds are gone
+//  from the frame (below), and what is left (the mod values, the filter, the spectrum) is lerped
+//  by the page (fb498 / fb487), so 30 Hz reads the same and costs half. Max: "you make the call."
+void TerrainUiCore::applyMotionRate()
+{
+    int uiHz = audioProcessor.getMotionEnabled() ? 60 : 30;
+    if (const char* e = std::getenv ("TERRAIN_UI_HZ"))
+    {
+        const int v = juce::String (e).getIntValue();
+        if (v >= 5 && v <= 120) uiHz = v;
+    }
+    startTimerHz (uiHz);
+}
+
 void TerrainUiCore::attach (TerrainAudioProcessorEditor* shell)
 {
     shell_ = shell;
@@ -16502,15 +16548,7 @@ void TerrainUiCore::attach (TerrainAudioProcessorEditor* shell)
     // which never run again for a kept-alive page (pageReady stays true); theme changes reach a
     // live page through the normal push lanes.
     audioProcessor.uiClients_.fetch_add (1, std::memory_order_relaxed);   // fb148 -- viz census
-    {
-        int uiHz = 60;
-        if (const char* e = std::getenv ("TERRAIN_UI_HZ"))
-        {
-            const int v = juce::String (e).getIntValue();
-            if (v >= 5 && v <= 120) uiHz = v;
-        }
-        startTimerHz (uiHz);
-    }
+    applyMotionRate();   // tp62 — 60 Hz with motion on, 30 with it off (TERRAIN_UI_HZ still wins)
     // fb636 (M3) — back from parked: the polls resume and the parked front loops are kicked
     if (webView != nullptr) webView->evaluateJavascript ("window.__uiParked=0;try{window.dispatchEvent(new Event('tiactive'));}catch(e){}", nullptr);
     resyncAfterReattach();   // typeof-guarded no-ops on a first (pre-ready) attach; the real payload on reopen

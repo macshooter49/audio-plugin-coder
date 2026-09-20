@@ -534,6 +534,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     //  sample, and a patch loaded into a hidden instance does that before any editor exists. An
     //  instance opened with capture off must never allocate the ~1,058 MB in the first place.
     if (captureOffMarker().existsAsFile()) captureEnabled_.store (false, std::memory_order_release);
+    if (motionOffMarker().existsAsFile())  motionEnabled_.store  (false, std::memory_order_release);   // tp62
 
     // Spectral-morph rebuild runs on the message thread (the rebuild is ~2.3 ms since fb467,
     // far too heavy for the audio thread). 60Hz polling keeps the morph knob
@@ -7787,15 +7788,15 @@ juce::String TerrainAudioProcessor::getGranularVizJson()
         // through." So each live grain reports where it is in the window and how open its envelope
         // is; the card draws exactly those, so a dot IS a grain and its brightness IS its envelope.
         float gp[28], ga[28];
-        const int gn = e->grainViz (gp, ga, 28);
+        const int gn = uiStatic() ? 0 : e->grainViz (gp, ga, 28);   // tp62 — no grains on the picture with motion off
         out << "],\"gp\":[";
         for (int k = 0; k < gn; ++k) { if (k) out << ","; out << juce::String (gp[k], 3); }
         out << "],\"ga\":[";
         for (int k = 0; k < gn; ++k) { if (k) out << ","; out << juce::String (ga[k], 2); }
-        out << "],\"h\":" << juce::String (juce::jlimit (0.0f, 1.0f, e->scanAge01()), 3)
-            << ",\"g\":" << e->liveGrains()
-            << ",\"b\":" << juce::String (juce::jlimit (0.0f, 1.5f,
-                   grnBloomViz_[(size_t) i].load (std::memory_order_relaxed)), 3) << "}";
+        out << "],\"h\":" << juce::String (vz (juce::jlimit (0.0f, 1.0f, e->scanAge01())), 3)
+            << ",\"g\":" << (uiStatic() ? 0 : e->liveGrains())
+            << ",\"b\":" << juce::String (vz (juce::jlimit (0.0f, 1.5f,
+                   grnBloomViz_[(size_t) i].load (std::memory_order_relaxed))), 3) << "}";
     }
     out << "]";
     return out;
@@ -7941,12 +7942,12 @@ juce::String TerrainAudioProcessor::getFx3VizJson()
     // every chorus (a chorus has no notches) — 6 instances x 8 numbers x 60 Hz of nothing. This
     // feed rides the same lane fb342 measured a 40-80 KB/s frame-drop threshold on, so dead
     // payload is not free. Inactive instances were already `null`.
-    auto emit = [] (juce::String& out, bool live, float lfo, float lvl, float dep,
-                    const float* nt)
+    auto emit = [this] (juce::String& out, bool live, float lfo, float lvl, float dep,
+                        const float* nt)
     {
         if (! live) { out << "null"; return; }
-        out << "{\"lfo\":" << juce::String (lfo, 4)
-            << ",\"lvl\":" << juce::String (lvl, 4)
+        out << "{\"lfo\":" << juce::String (vz (lfo), 4)   // tp62 — the sweep holds and the level rests with motion off; dep is the knob
+            << ",\"lvl\":" << juce::String (vz (lvl), 4)
             << ",\"dep\":" << juce::String (dep, 4);
         bool anyNotch = false;
         if (nt != nullptr) for (int k = 0; k < 8; ++k) if (nt[k] > 1.0f) { anyNotch = true; break; }
@@ -8121,10 +8122,10 @@ juce::String TerrainAudioProcessor::getFx4VizJson()
         if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; cmpKneeSent_[(size_t) i] = -1.0e9f; continue; }
         const auto& E = cmpPool_[(size_t) i]; const auto& z = E.viz();
         const float ratio = E.ratio();
-        j << "{\"gr\":" << N (z.grDb, 2) << ",\"in\":" << N (z.inDb, 1) << ",\"out\":" << N (z.outDb, 1)
+        j << "{\"gr\":" << N (vz (z.grDb), 2) << ",\"in\":" << N (vz (z.inDb), 1) << ",\"out\":" << N (vz (z.outDb), 1)   // tp62 — meters rest with motion off
           << ",\"thr\":" << N (E.thresholdDbp(), 2) << ",\"ratio\":" << (ratio > 1.0e6f ? juce::String ("-1") : N (ratio, 2))
           << ",\"atk\":" << N (E.attackMs(), 2) << ",\"rel\":" << N (E.releaseMs(), 1)
-          << ",\"kneeDb\":" << N (E.kneeDb(), 1) << ",\"lvl\":" << N (z.lvl, 3);
+          << ",\"kneeDb\":" << N (E.kneeDb(), 1) << ",\"lvl\":" << N (vz (z.lvl), 3);
         float ks = 0.0f;
         for (int k = 0; k < tw::TerrainCompressFx::kKnee; ++k) ks += z.knee[k] * (1.0f + 0.01f * (float) k);
         if (keepalive || std::fabs (ks - cmpKneeSent_[(size_t) i]) > 0.02f)
@@ -8144,10 +8145,10 @@ juce::String TerrainAudioProcessor::getFx4VizJson()
         const auto& V = ottRefs_[(size_t) i];
         if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; continue; }
         const auto& E = ottPool_[(size_t) i]; const auto& z = E.viz();
-        j << "{\"nb\":" << E.bands() << ",\"lvl\":" << N (z.lvl, 3) << ",\"x\":[" << N (z.xoverHz[0], 1) << "," << N (z.xoverHz[1], 1) << "],\"gr\":[";
-        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (z.grDb[b], 2); }
+        j << "{\"nb\":" << E.bands() << ",\"lvl\":" << N (vz (z.lvl), 3) << ",\"x\":[" << N (z.xoverHz[0], 1) << "," << N (z.xoverHz[1], 1) << "],\"gr\":[";
+        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (vz (z.grDb[b]), 2); }
         j << "],\"lv\":[";
-        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (z.bandDb[b], 1); }
+        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (vz (z.bandDb[b]), 1); }
         j << "],\"tdn\":[";
         for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (E.thresholdDn (b), 1); }
         j << "],\"tup\":[";
@@ -8163,10 +8164,10 @@ juce::String TerrainAudioProcessor::getFx4VizJson()
         const auto& V = utlRefs_[(size_t) i];
         if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; continue; }
         const auto& E = utlPool_[(size_t) i];
-        const float pl = E.meterPeakL(), pr = E.meterPeakR();
+        const float pl = vz (E.meterPeakL()), pr = vz (E.meterPeakR());   // tp62
         j << "{\"pkL\":" << N (pl, 4) << ",\"pkR\":" << N (pr, 4)
-          << ",\"corr\":" << N (E.meterCorr(), 3)
-          << ",\"img\":" << N (E.meterImageW(), 3) << ",\"lvl\":" << N (0.5f * (pl + pr), 4) << "}";
+          << ",\"corr\":" << N (vz (E.meterCorr()), 3)
+          << ",\"img\":" << N (vz (E.meterImageW()), 3) << ",\"lvl\":" << N (0.5f * (pl + pr), 4) << "}";
     }
     // ── SPLITTER: { nl, hz[3], pk[4], gate[4] }. The lane bar on the card is LIVE energy, so a
     //    band that is muted, soloed away, or simply empty reads as empty at a glance — which is
@@ -8181,9 +8182,9 @@ juce::String TerrainAudioProcessor::getFx4VizJson()
         j << "{\"nl\":" << E.laneCount() << ",\"hz\":[";
         for (int k = 0; k < 3; ++k) { if (k) j << ","; j << N (E.meterXoverHz (k), 1); }
         j << "],\"pk\":[";
-        for (int k = 0; k < 4; ++k) { if (k) j << ","; j << N (E.meterLanePeak (k), 4); }
+        for (int k = 0; k < 4; ++k) { if (k) j << ","; j << N (vz (E.meterLanePeak (k)), 4); }   // tp62
         j << "],\"gt\":[";
-        for (int k = 0; k < 4; ++k) { if (k) j << ","; j << N (E.meterLaneGate (k), 2); }
+        for (int k = 0; k < 4; ++k) { if (k) j << ","; j << N (vz (E.meterLaneGate (k)), 2); }
         j << "]}";
     }
     return j + "]}";
@@ -9281,16 +9282,17 @@ juce::String TerrainAudioProcessor::getTapeVizJson()
                        && tpeRefs_[(size_t) i].active->load() > 0.5f;
         if (! live) { out << "null"; continue; }
         const auto v = e->viz();
-        out << "{\"sp\":" << juce::String (v.spin, 3)
+        // tp62 — with motion off the machine stands: reels still, needles at rest, heads dark.
+        out << "{\"sp\":" << juce::String (vz (v.spin), 3)
             << ",\"pk\":" << juce::String (v.pack, 3)
-            << ",\"sd\":" << juce::String (v.speed, 3)
-            << ",\"w\":"  << juce::String (v.wow,  3)
-            << ",\"l\":"  << juce::String (v.lvl,  3)
-            << ",\"i\":"  << juce::String (v.in,   3)
-            << ",\"hs\":" << juce::String (v.hiss, 3)
+            << ",\"sd\":" << juce::String (vz (v.speed), 3)
+            << ",\"w\":"  << juce::String (vz (v.wow),  3)
+            << ",\"l\":"  << juce::String (vz (v.lvl),  3)
+            << ",\"i\":"  << juce::String (vz (v.in),   3)
+            << ",\"hs\":" << juce::String (vz (v.hiss), 3)
             << ",\"h\":[";
         for (int k = 0; k < tw::TapeFxEngine::kHeads; ++k)
-        { if (k) out << ","; out << juce::String (v.head[k], 2); }
+        { if (k) out << ","; out << juce::String (vz (v.head[k]), 2); }
         out << "]}";
     }
     out << "]";
@@ -16248,6 +16250,43 @@ juce::File TerrainAudioProcessor::captureOffMarker()
     return juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile ("Library/Caches/Terrain/capture-off");
 }
 
+// ══ tp62 — MOTION ON/OFF ═══════════════════════════════════════════════════════════════════════
+juce::File TerrainAudioProcessor::motionOffMarker()
+{
+    return juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile ("Library/Caches/Terrain/motion-off");
+}
+
+void TerrainAudioProcessor::setMotionEnabled (bool on)
+{
+    motionEnabled_.store (on, std::memory_order_release);
+    try { if (on) motionOffMarker().deleteFile(); else { motionOffMarker().getParentDirectory().createDirectory(); motionOffMarker().replaceWithText ("1"); } } catch (...) {}
+}
+
+// The static wash. Max: "the reverb will now be like a static purple wash that gets higher by the
+// mix and of course the decay". Mix carries most of it (no wet, no wash); decay lifts it. The delay's
+// echo timeline reads mix × feedback the same way. Scaled to land where a healthy live bloom sits
+// (~0.35 at half mix / half decay), so the picture with motion off looks like a held pose of the
+// picture with motion on, not a dimmer version of it.
+float TerrainAudioProcessor::vizReverbBloom (int inst0) const noexcept
+{
+    if (! uiStatic()) return inst0 <= 0 ? getReverbBloom() : getReverbBloomPool (inst0 - 1);
+    const juce::String pfx = inst0 <= 0 ? juce::String ("SYN_RVB_") : ("SYN_RVB" + juce::String (inst0 + 1) + "_");
+    const auto* mix = apvts.getRawParameterValue (pfx + "MIX");
+    const auto* dec = apvts.getRawParameterValue (pfx + "DECAY");
+    const float m = mix != nullptr ? mix->load() : 0.0f, d = dec != nullptr ? dec->load() : 0.5f;
+    return juce::jlimit (0.0f, 1.0f, 0.55f * m * (0.35f + 0.65f * d));
+}
+
+float TerrainAudioProcessor::vizDelayBloom (int inst0) const noexcept
+{
+    if (! uiStatic()) return inst0 <= 0 ? getDelayBloom() : getDelayBloomPool (inst0 - 1);
+    const juce::String pfx = inst0 <= 0 ? juce::String ("SYN_DLY_") : ("SYN_DLY" + juce::String (inst0 + 1) + "_");
+    const auto* mix = apvts.getRawParameterValue (pfx + "MIX");
+    const auto* fb  = apvts.getRawParameterValue (pfx + "FEEDBACK");
+    const float m = mix != nullptr ? mix->load() : 0.0f, f = fb != nullptr ? fb->load() : 0.3f;
+    return juce::jlimit (0.0f, 1.0f, 0.55f * m * (0.35f + 0.65f * f));
+}
+
 void TerrainAudioProcessor::setCaptureEnabled (bool on)
 {
     captureEnabled_.store (on, std::memory_order_release);
@@ -17170,11 +17209,11 @@ juce::String TerrainAudioProcessor::getDistortionCurveVizJson()
        it drew a reference diagonal implying an x-axis of +/-1 under a curve plotted over +/-4.5 —
        Max: "make sure everything is scaled properly". One number closes it. */
     s << "{\"m\":" << (int) *rawParam (ParameterIDs::SYN_DST_TYPE) << ",\"b\":"
-      << juce::String (dstBloomViz_.load (std::memory_order_relaxed), 3)
+      << juce::String (vz (dstBloomViz_.load (std::memory_order_relaxed)), 3)   // tp62
       << ",\"x\":" << juce::String (distortionEngine.vizSpan(), 3) << ",\"c\":[";
     for (int i = 0; i < 128; ++i) { if (i) s << ','; s << juce::String (cv[i], 3); }
     s << "],\"o\":[";
-    for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (oc[i], 3); }
+    for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (vz (oc[i]), 3); }   // tp62 — the occupancy is audio; the curve is the knobs
 
     // ══ tp57 — EVERY DISTORTION'S CURVE, NOT JUST INSTANCE 1'S ═══════════════════════════════════
     //  Max: "every time I just loaded up a second distortion the shaper is gone — the distortion
@@ -17211,11 +17250,11 @@ juce::String TerrainAudioProcessor::getDistortionCurveVizJson()
             firstE = false;
             s << "{\"i\":" << (e + 2)
               << ",\"m\":" << (R.type != nullptr ? (int) R.type->load() : 0)
-              << ",\"b\":" << juce::String (poolDstBloomViz_[(size_t) e].load (std::memory_order_relaxed), 3)
+              << ",\"b\":" << juce::String (vz (poolDstBloomViz_[(size_t) e].load (std::memory_order_relaxed)), 3)
               << ",\"x\":" << juce::String (eng.vizSpan(), 3) << ",\"c\":[";
             for (int i = 0; i < 128; ++i) { if (i) s << ','; s << juce::String (cv2[i], 3); }
             s << "],\"o\":[";
-            for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (oc2[i], 3); }
+            for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (vz (oc2[i]), 3); }   // tp62
             s << "]}";
         }
     }

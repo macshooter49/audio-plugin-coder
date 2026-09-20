@@ -1868,6 +1868,25 @@ public:
     static juce::File   captureOffMarker();
     bool getCaptureEnabled() const noexcept { return captureEnabled_.load (std::memory_order_acquire); }
     void setCaptureEnabled (bool on);   // message thread
+    // ══ tp62 — MOTION ON/OFF (Max: "give people the setting to turn off animations except for LFO
+    //  and envelope ... the UI just doesn't animate whenever MIDI is coming in ... every time you move a
+    //  knob it still moves, but no bloom for the reverb — a static purple wash that gets higher by the
+    //  mix and the decay ... animation loops stop"). A global preference like DAW capture: a marker
+    //  file (~/Library/Caches/Terrain/motion-off), read in the constructor, shared by every instance.
+    //  ⚠️ THE AUDIO NEVER READS IT. It is consumed by the editor's push lane (which feeds are built,
+    //  how often, the timer's rate) and by the viz JSON builders (the audio-driven numbers in a
+    //  decorative feed become constants). Tests/au_motion_null.cpp pins the render bit-identical.
+    std::atomic<bool>   motionEnabled_ { true };
+    static juce::File   motionOffMarker();
+    bool getMotionEnabled() const noexcept { return motionEnabled_.load (std::memory_order_acquire); }
+    void setMotionEnabled (bool on);    // message thread
+    bool uiStatic() const noexcept { return ! motionEnabled_.load (std::memory_order_relaxed); }
+    // a decorative feed's AUDIO-DRIVEN number: itself while motion is on, a constant rest while off
+    float vz (float v) const noexcept { return uiStatic() ? 0.0f : v; }
+    // the reverb / delay card's light: the live wet bloom while motion is on; with motion off, the
+    // knob-derived wash Max asked for (mix × decay / mix × feedback), so a knob still changes it
+    float vizReverbBloom (int inst0) const noexcept;   // 0 = Reverb 1, 1..5 = the pool
+    float vizDelayBloom  (int inst0) const noexcept;
     // The sample rate the host last prepared us at — the rate a lazy arm must use.
     // 0 until the first prepareToPlay; arming before that is deferred, not guessed.
     std::atomic<double> preparedSampleRate_ { 0.0 };

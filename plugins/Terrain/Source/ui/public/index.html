@@ -523,6 +523,18 @@
        · html.ti-still  the CSS breathers' rest (THE BREATHERS, below). */
   var K = {}, MOT = { m: 0, e: 0, tau: 0, dt: 0, ts: 0, live: false, pass: 0, offPass: -1 }, wTail = 0, wdT = 0, lastRunAt = 0;
   window.__tiMot = MOT;
+  /* ══ tp62 — MOTION ON / OFF (Max: "give people the setting to turn off animations except for LFO and
+     envelope ... it only moves when I move a knob ... animation loops stop"). THIS clock is the switch.
+     Every decorative animator already reads MOT (tau / e) or a __tiWind key instead of the wall clock —
+     that was fb636's whole point — so with motion off the envelope simply never rises: tau holds its
+     pose with MIDI playing exactly as it does at rest, and everything that reads it holds with it. The
+     ESSENTIAL painters never read this: the LFO scope and the envelope paint their pushed values, the
+     filter paints its pushed curve, the trackers paint their positions, the four Flow tiles keep their
+     own exempt keys (below) because "we need the four modes to have movement on the MIDI".
+     The setting is a native preference (a marker file, every instance); body.ti-motion-off is the page's
+     copy of it and __tiMotionOn() is the one question everything asks. Default ON. */
+  window.__tiMotionOn = function(){ try { return ! document.body.classList.contains('ti-motion-off'); } catch (e) { return true; } };
+  var WIND_ESSENTIAL = /^card-(gli|chop|arp)\b/;   /* the Flow tiles' keys: they move on MIDI whatever the setting says */
   function sstep(x){ return x * x * (3 - 2 * x); }
   function isstep(y){ y = y < 0 ? 0 : (y > 1 ? 1 : y); return 0.5 - Math.sin(Math.asin(1 - 2 * y) / 3); }   /* smoothstep's inverse */
   window.__tiLive = function(){ var t = window.__notesActiveT; return !! window.__notesActive && !! t && (Date.now() - t) < 700; };
@@ -532,7 +544,7 @@
      closed, its page hidden) and is not resumed with no MIDI — it lands at once (__tiWind / __tiEnv, below). */
   function kdt(st){ var t = nowMs(), d = st.ts ? (t - st.ts) / 1000 : 0; st.ts = t; st.lapse = d; return d < 0 ? 0 : (d > 0.1 ? 1 / 60 : d); }
   function motionStep(){
-    var dt = kdt(MOT), live = window.__tiLive(); MOT.pass++;
+    var dt = kdt(MOT), live = window.__tiMotionOn() && window.__tiLive(); MOT.pass++;   /* tp62 — with motion off the decorative envelope is never live */
     MOT.m = live ? Math.min(1, MOT.m + dt / 0.25) : Math.max(0, MOT.m - dt / 0.70);
     MOT.e = sstep(MOT.m); MOT.tau += dt * MOT.e; MOT.dt = dt;
     if (live !== MOT.live){ MOT.live = live; if (live) { brEdge(true); tiActive(); } else { MOT.offPass = MOT.pass; tailKick(true); brEdge(false); } }
@@ -581,6 +593,7 @@
      home pose (the ARP tile's dots even and still, the fan solid) and land on it EXACTLY, whatever the stop point. */
   window.__tiWind = function(key, P, B, on, rate, own, vmax){
     rate = rate > 0 ? rate : 1;
+    if (on && ! WIND_ESSENTIAL.test(key) && ! window.__tiMotionOn()) on = false;   /* tp62 — decoration rests; the Flow tiles do not */
     var st = K[key] || (K[key] = { w: own ? 0 : 1, m: 0, ts: 0, on: false, tau: B[0][0], park: null, r: 1, P: P, B: B });
     var dt = kdt(st), was = st.on; st.on = !! on; st.P = P; st.B = B; st.snap = false;
     if (on){
@@ -627,6 +640,13 @@
     st.on = !! on; st.snap = ! on && st.lapse > 0.25;
     st.m = st.snap ? 0 : (on ? Math.min(1, st.m + dt / 0.25) : Math.max(0, st.m - dt / 0.70)); return sstep(st.m); };
   window.__tiWindState = function(key){ return K[key] || null; };   /* the gate reads it */
+  /* tp62 — the setting flipped OFF while something was winding: land it on its home NOW (the fb636 law — a loop
+     is never left mid-frame), and put the decorative envelope to rest so the very next frame is the still one. */
+  window.__tiWindSnap = function(){ try { windSnap(); } catch (e) {} };
+  /* tp62 — AND THE BREATHERS REST NOW. The still edge normally lets each breather finish its cycle (up to the
+     3.6 s cap) so a NOTE ending never freezes one mid-breath. A user flipping Motion off is not a note ending:
+     he asked for stillness and should see it on the next frame, on the designed pose (brHomeAll). */
+  window.__tiMotionRest = function(){ try { windSnap(); clearTimeout(brCap); brCap = 0; brEnding = false; brStill(true); brRelease(); brHomeAll(); } catch (e) {} };
   window.__tiWindBusy = windBusy;
 
   /* ═══ THE BREATHERS (Mac: #env-line, the header's mod button, the rack's distortion curve and granular wave; Windows
@@ -7016,6 +7036,18 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           <div class="settings-theme-btns">
             <button class="theme-btn active" id="capture-on-btn">On</button>
             <button class="theme-btn" id="capture-off-btn">Off</button>
+          </div>
+        </div>
+        <!-- tp62 — MOTION. Max: "give people the setting to turn off animations ... the UI just doesn't animate
+             whenever MIDI is coming in ... every time you move a knob it still moves". Off = no animation loops
+             anywhere: the reverb is a wash set by mix and decay, the tape stands, the meters rest, the lane runs
+             at 30 Hz. LFO, envelope, filter, trackers and the four Flow tiles keep moving. A global preference
+             (a marker file), like DAW capture. -->
+        <div class="settings-row" id="motion-row" title="Animation loops. Off: nothing moves on its own — knobs still redraw what they change, LFO / envelope / filter / trackers still move, and the UI costs less CPU.">
+          <span class="settings-label">Motion</span>
+          <div class="settings-theme-btns">
+            <button class="theme-btn active" id="motion-on-btn">On</button>
+            <button class="theme-btn" id="motion-off-btn">Off</button>
           </div>
         </div>
         <div class="settings-row" id="rr-bend-row" title="Pitch bend range in semitones — drag the number, double-click for 2">
@@ -15250,6 +15282,17 @@ function initSettingsPanel() {
     onB.addEventListener('click',function(){ set(true); }); offB.addEventListener('click',function(){ set(false); });
     var g=nfn('getCaptureEnabled'); if(g){ try{ Promise.resolve(g()).then(function(v){ paint(!!v); }).catch(function(){}); }catch(e){} }
     window.__tiCaptureSet=set;   /* the gates */
+  })();
+  /* tp62 — Motion on/off: the same shape as DAW capture. paint() writes body.ti-motion-off, which is what
+     __tiMotionOn() (the motion clock's switch) reads; the native keeps the preference and re-arms the push lane. */
+  (function(){ var onB=document.getElementById('motion-on-btn'), offB=document.getElementById('motion-off-btn'); if(!onB||!offB) return;
+    function paint(on){ onB.classList.toggle('active',!!on); offB.classList.toggle('active',!on); try{ document.body.classList.toggle('ti-motion-off',!on); }catch(e){}
+      try{ if(!on && window.__tiMotionRest) window.__tiMotionRest(); }catch(e){} }
+    function nfn(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+    function set(on){ paint(on); var f=nfn('setMotionEnabled'); if(f){ try{ f(on?1:0); }catch(e){} } try{ if(window.__tiRepaint) window.__tiRepaint(); }catch(e){} }
+    onB.addEventListener('click',function(){ set(true); }); offB.addEventListener('click',function(){ set(false); });
+    var g=nfn('getMotionEnabled'); if(g){ try{ Promise.resolve(g()).then(function(v){ paint(!!v); }).catch(function(){}); }catch(e){} }
+    window.__tiMotionSet=set;   /* the gates */
   })();
   // Sync button state with current theme (may have been injected by C++ at page serve time)
   lightBtn.classList.toggle('active', currentTheme.name === 'light');
@@ -38872,7 +38915,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
        'wtfall' painter nudges it on every pass), on a knob's own event (wireLive), and on kick (a table landing, a
        view turned on, a reveal). */
     loop:function(){ wtWaterfall.raf=0; var any=false, now=(window.performance&&performance.now)?performance.now():Date.now();
-      var force=wtWaterfall.force, M=window.__tiMot, wind=!!(M&&(M.live||M.m>0)), hand=!!(window.__tiGestureLive&&window.__tiGestureLive());
+      var force=wtWaterfall.force, M=window.__tiMot, wind=!!(M&&(M.live||M.m>0))||!!(window.__tiLive&&window.__tiLive()), hand=!!(window.__tiGestureLive&&window.__tiGestureLive());   /* tp62 — the waterfall is the wavetable's own picture: it scrolls on MIDI with motion off too */
       wtWaterfall.force=false;
       for(var k=0;k<OSC_IDS.length;k++){ var o=OSC_IDS[k]; var cv=document.getElementById('osc-wave-'+o);
         /* fb590 — AND THE LOOP OBEYS THE ENGINE TOO. canWaterfall() gated only the CLICK, so a
@@ -44617,7 +44660,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 
   /* ── the frame — the purple spike on every cable that carries signal ── */
   var lastT=0; function frame(ts){ if(!isOpen) return; var t=ts/1000, dt=lastT?Math.min(0.05,t-lastT):0.016; lastT=t;
-    try{ var M=window.__tiMot||null, live=!!(M&&M.live), e=M?(M.e==null?(live?1:0):M.e):0, aud=Math.max(0,Math.min(1,live?Math.max(0.15,e):e));   /* tp9 — winds down with the motion energy, never snaps */
+    try{ var M=window.__tiMot||null, live=!!(window.__tiLive&&window.__tiLive()), e=M?(M.e==null?(live?1:0):M.e):0, aud=Math.max(0,Math.min(1,live?Math.max(0.15,e):e));   /* tp62 — a node lights on a NOTE, not on the decorative envelope (Max: "the nodes light up on the patcher") */   /* tp9 — winds down with the motion energy, never snaps */
       cables.forEach(function(c){ var L=0; if(c.t==='a') L=aud; else if(c.t==='n') L=live?1:0; else if(c.t==='r') L=(nowR()<rFlash)?1:0; else { var mm=/^lfo(\d+)$/.exec((c.edit&&c.edit.mod)||''); if(mm){ var v=window.__mvLfoValAt?window.__mvLfoValAt(+mm[1]-1):0; L=live?0.35+0.65*Math.abs(v||0):0; } else L=live?e:0; }
         c.lvl+=(L-c.lvl)*(L>c.lvl?0.45:0.1); var Lv=c.lvl, on=Lv>0.04; c.el.classList.toggle('hot',Lv>0.08);   /* the spike fades with the level */
         if(c.s==null) c.s=-16-Math.random()*(c.len||100); if(on) c.s+=dt*(c.t==='m'?70+40*Lv:150+280*Lv); if(c.s>(c.len||100)+16) c.s=-16-(c.t==='m'?50:0);
