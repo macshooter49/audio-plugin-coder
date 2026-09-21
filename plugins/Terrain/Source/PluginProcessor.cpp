@@ -535,6 +535,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     //  instance opened with capture off must never allocate the ~1,058 MB in the first place.
     if (captureOffMarker().existsAsFile()) captureEnabled_.store (false, std::memory_order_release);
     if (motionOffMarker().existsAsFile())  motionEnabled_.store  (false, std::memory_order_release);   // tp62
+    masterGuard_ = (wrapperType == wrapperType_Standalone);   // tp69 — the limiter + soft clip guard a D/A, never a host's float path
 
     // Spectral-morph rebuild runs on the message thread (the rebuild is ~2.3 ms since fb467,
     // far too heavy for the audio thread). 60Hz polling keeps the morph knob
@@ -15581,28 +15582,42 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         //  the bit rather than to "inaudibly close".
         const float dL = leftChannel[i] * kInstrumentMakeup;
         const float dR = (rightChannel != nullptr) ? rightChannel[i] * kInstrumentMakeup : dL;
-        const float mL = (leftChannel[i] + fSumL) * kInstrumentMakeup;
-        const float mR = (rightChannel != nullptr) ? (rightChannel[i] + fSumR) * kInstrumentMakeup : mL;
-        // Stereo-linked peak detector — one shared gain preserves the stereo image.
-        const float mPeak = juce::jmax (std::abs (mL), std::abs (mR));
-        limEnv_ = mPeak + (mPeak > limEnv_ ? limAtkCoef_ : limRelCoef_) * (limEnv_ - mPeak);
-        const float limTarget = (limEnv_ <= kLimiterThresh) ? 1.0f : (kLimiterThresh / limEnv_);
-        // Fast attack (pull down now), slow release (recover smoothly — click-free per the declick rule).
-        limGain_ = (limTarget < limGain_) ? (limAtkCoef_ * limGain_ + (1.0f - limAtkCoef_) * limTarget)
-                                          : (limRelCoef_ * limGain_ + (1.0f - limRelCoef_) * limTarget);
+        // ══ tp69 — THE MASTER IS LINEAR IN A HOST, LIKE SERUM'S. Max: "play a C minor 11th … you can hear the
+        //  clipping … do the same thing in Serum 2, nothing clips." Measured (Tests/au_chord_beating*.cpp, the
+        //  installed AUs, Serum 2's own sub sine at the SAME -15.14 dBFS per note): a 7-note Cm11 through this stage
+        //  carried distortion 46 dB under the notes, a 9-note chord 29 dB under — the limiter's 0.8 ms attack cannot
+        //  hold a sine's peak, so the soft clip squared every beat peak between 0.90 and 0.966. Serum's output on
+        //  the same chords: +0.74 / +1.65 dBFS, and NOTHING added (-285 dB). Serum has no limiter; fb264's premise
+        //  ("Serum's output stage is a limiter") was wrong. The RMS was identical either way — the stage never made
+        //  the chord quieter, only dirtier. So in a host the master is a wire: the DAW's float path carries the
+        //  peaks exactly as it carries Serum's. The limiter + soft clip stay ONLY for the standalone app, where
+        //  the next thing after this float is a D/A converter.
+        if (masterGuard_)
+        {
+            const float mL = (leftChannel[i] + fSumL) * kInstrumentMakeup;
+            const float mR = (rightChannel != nullptr) ? (rightChannel[i] + fSumR) * kInstrumentMakeup : mL;
+            // Stereo-linked peak detector — one shared gain preserves the stereo image.
+            const float mPeak = juce::jmax (std::abs (mL), std::abs (mR));
+            limEnv_ = mPeak + (mPeak > limEnv_ ? limAtkCoef_ : limRelCoef_) * (limEnv_ - mPeak);
+            const float limTarget = (limEnv_ <= kLimiterThresh) ? 1.0f : (kLimiterThresh / limEnv_);
+            // Fast attack (pull down now), slow release (recover smoothly — click-free per the declick rule).
+            limGain_ = (limTarget < limGain_) ? (limAtkCoef_ * limGain_ + (1.0f - limAtkCoef_) * limTarget)
+                                              : (limRelCoef_ * limGain_ + (1.0f - limRelCoef_) * limTarget);
+        }
+        else limGain_ = 1.0f;
         // tp51 — THE MASTER TRIM, LAST. Every path that reaches the output is scaled here and nowhere else:
         // the mix, and (below) each flow-card capture and deferred rack capture, which leave by their own
         // buffers. At the default 0 dB this multiplies by exactly 1.0, so every existing patch is unchanged.
-        leftChannel[i]  = masterSoftClip (dL * limGain_) * outputGain;
+        leftChannel[i]  = (masterGuard_ ? masterSoftClip (dL * limGain_) : dL) * outputGain;
         if (rightChannel != nullptr)
-            rightChannel[i] = masterSoftClip (dR * limGain_) * outputGain;
+            rightChannel[i] = (masterGuard_ ? masterSoftClip (dR * limGain_) : dR) * outputGain;
         float fClipL = 0.0f, fClipR = 0.0f;
         if (flowAnyRouted_)
             for (int fk = 0; fk < kFlowSlots; ++fk)
             {
                 if (fInL[(size_t) fk] == nullptr) continue;
-                const float a = masterSoftClip (fInL[(size_t) fk][i] * kInstrumentMakeup * limGain_) * outputGain;   // tp51
-                const float b = masterSoftClip (fInR[(size_t) fk][i] * kInstrumentMakeup * limGain_) * outputGain;
+                const float a = (masterGuard_ ? masterSoftClip (fInL[(size_t) fk][i] * kInstrumentMakeup * limGain_) : fInL[(size_t) fk][i] * kInstrumentMakeup) * outputGain;   // tp51 · tp69
+                const float b = (masterGuard_ ? masterSoftClip (fInR[(size_t) fk][i] * kInstrumentMakeup * limGain_) : fInR[(size_t) fk][i] * kInstrumentMakeup) * outputGain;
                 fInL[(size_t) fk][i] = a; fInR[(size_t) fk][i] = b;
                 fClipL += a; fClipR += b;
             }
@@ -15611,8 +15626,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             {
                 const int c = defRackSlots_[(size_t) d];
                 if (dInL[(size_t) c] == nullptr) continue;
-                const float a = masterSoftClip (dInL[(size_t) c][i] * kInstrumentMakeup * limGain_) * outputGain;   // tp51
-                const float b = masterSoftClip (dInR[(size_t) c][i] * kInstrumentMakeup * limGain_) * outputGain;
+                const float a = (masterGuard_ ? masterSoftClip (dInL[(size_t) c][i] * kInstrumentMakeup * limGain_) : dInL[(size_t) c][i] * kInstrumentMakeup) * outputGain;   // tp51 · tp69
+                const float b = (masterGuard_ ? masterSoftClip (dInR[(size_t) c][i] * kInstrumentMakeup * limGain_) : dInR[(size_t) c][i] * kInstrumentMakeup) * outputGain;
                 dInL[(size_t) c][i] = a; dInR[(size_t) c][i] = b;
                 fClipL += a; fClipR += b;
             }

@@ -1877,6 +1877,7 @@ public:
     //  how often, the timer's rate) and by the viz JSON builders (the audio-driven numbers in a
     //  decorative feed become constants). Tests/au_motion_null.cpp pins the render bit-identical.
     std::atomic<bool>   motionEnabled_ { true };
+    bool                masterGuard_ = false;   // tp69 — standalone only: the master limiter + soft clip; a host gets a linear master (Serum's law)
     static juce::File   motionOffMarker();
     bool getMotionEnabled() const noexcept { return motionEnabled_.load (std::memory_order_acquire); }
     void setMotionEnabled (bool on);    // message thread

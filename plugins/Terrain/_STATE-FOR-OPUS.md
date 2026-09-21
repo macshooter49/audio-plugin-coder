@@ -29,6 +29,14 @@ when first encoded for a save (`tiWriteSampleSpare`; factory paths and our own f
 **Bank B is released** (`releaseIdleBankBIfUnused`: unwanted 3 s + no voice → `bankB_ = nullptr` →
 +3 audioSeq → `synthEngineB_.reset()`). ⚠️ read it on **malloc size_in_use** — the footprint does not
 move for a release of many small blocks (the harness prints both now).
+**tp69 — THE MASTER IS LINEAR IN A HOST (the sine-chord "clipping").** Measured against Serum 2's own sine
+(`Tests/au_chord_*.cpp`): same per-note level (-15.14 dBFS), Terrain's Sine pure, the beating identical — but a
+7-note Cm11 through the limiter + soft clip carried distortion 46 dB under the notes (9 notes: 29 dB) while Serum
+added nothing and simply passed +0.74 / +1.65 dBFS. The limiter (0.8 ms) cannot hold a sine peak; the clip did
+the work. `masterGuard_` (ctor: `wrapperType == wrapperType_Standalone`) keeps the limiter + soft clip for the
+standalone D/A only; a host gets a wire. After: 81 / 79 dB under, peaks like Serum's. ⚠️ -80 dB second-order
+residual between the voice sum and the output trim (gone at half OSC Level, present at half Output Gain) — inaudible,
+unlocated. Phase Mode Manual (all voices start together) left as is; Serum ships random phase.
 **tp68 — THE GLITCH'S ANCHOR IS ON THE GRID.** `FlowGlitch::process`: the first clock latched `curStepP` (a
 boundary BEHIND p → a mid-step play fired at once, off-grid) and every re-anchor latched `curStepP + 1` (a loop
 wrap landing exactly on a boundary — every DAW loop — missed the downbeat, a step late every pass). One `anchor()`
