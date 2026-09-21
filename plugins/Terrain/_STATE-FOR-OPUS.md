@@ -1,6 +1,6 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp71** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp71 — `0d714de`** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
 
 ## tp71 (2026-09-21) — THE TERRAIN SHAPER
