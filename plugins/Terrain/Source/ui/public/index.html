@@ -3684,12 +3684,12 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
   --ghost:rgba(255,255,255,0.55);--ghost-dim:rgba(255,255,255,0.34);--gray:#9b93a8;}
 #mod-engine .mv-scope{position:absolute;inset:0;}
 #mod-engine .mv-scope svg{position:absolute;inset:0;width:100%;height:100%;}
-#mod-engine .mv-grid line{stroke:rgba(139,92,246,.14);stroke-width:.5;}
-#mod-engine .mv-grid line.mid{stroke:rgba(139,92,246,.22);}
+#mod-engine .mv-grid line{stroke:rgba(255,255,255,.065);stroke-width:.46;}   /* tp76 — ONE GRID (Max): the stock shapes' grid is the custom shape's — white, thin, the Shaper's */
+#mod-engine .mv-grid line.mid{stroke:rgba(255,255,255,.14);}
 #mod-engine .mv-play{stroke:rgba(236,232,242,.42);stroke-width:1;}
 #mod-engine .mv-fill{fill:rgba(224,216,245,0.07);}
 /* WHITE wave with a purple glow blended in + a slow breathing pulse so the LFO feels alive on its own. */
-#mod-engine .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.7;
+#mod-engine .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.3;   /* tp76 — ONE LINE (Max: 'that thin white line … I want those on the LFOs'): the Shaper draws 1.7 units at 0.75 scale ≈ 1.07 px; the pane is ~0.98 scale, so 1.3 */
   filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));
   animation:mvBreathe 3.2s ease-in-out infinite;}
 #mod-engine .mv-foll{fill:#FFFFFF;filter:drop-shadow(0 0 2px rgba(167,139,250,0.95)) drop-shadow(0 0 5px rgba(167,139,250,0.6));}
@@ -3724,10 +3724,10 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
 #mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
 #mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-0.6px;height:1px;background:rgba(255,255,255,.075);}   /* fb211 — THE RULER, re-measured collinear after the footer lift (env 711.5 vs overlay 712.1) */
 /* fb212 — the LFO right-click moved to the CANONICAL syn-ctx menu (white rows, fb69 house sliders, clamped) */
-#mod-engine .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
+#mod-engine .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.46;}
 #mod-engine .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
-#mod-engine .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
-#mod-engine .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
+#mod-engine .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.6;pointer-events:none;r:2;}   /* tp76 — the Shaper's node, at the pane's scale (CSS r: the SVG2 geometry property) */
+#mod-engine .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;r:1.4;}
 #mod-engine .sh-hit{fill:transparent;cursor:grab;}
 #mod-engine .sh-hit.cdh{cursor:ns-resize;}
 #mod-engine .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
@@ -3768,9 +3768,9 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
 #mod-engine.mv-idle #mv-shape .ic .ic-live{opacity:0;transition:opacity .35s ease;}
 #mod-engine.mv-idle #mv-shape .ic .ic-home{opacity:1;transition:opacity .35s ease;}
 /* Extender scope = the same live glowing LFO (body-level, so it needs its own copy of the styling). */
-.mv-ext .es .mv-grid line{stroke:rgba(139,92,246,.14);stroke-width:.5;} .mv-ext .es .mv-grid line.mid{stroke:rgba(139,92,246,.22);}
+.mv-ext .es .mv-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;} .mv-ext .es .mv-grid line.mid{stroke:rgba(255,255,255,.14);}   /* tp76 — one grid */
 .mv-ext .es .mv-fill{fill:rgba(224,216,245,0.07);}
-.mv-ext .es .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.8;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));animation:mvBreathe 3.2s ease-in-out infinite;}
+.mv-ext .es .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.7;   /* tp76 — one line (the Shaper's 1.7 units at the same ~0.64 scale) */filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));animation:mvBreathe 3.2s ease-in-out infinite;}
 .mv-ext .es .mv-play{stroke:rgba(236,232,242,.42);stroke-width:1;}
 .mv-ext .es .mv-foll{fill:#FFFFFF;filter:drop-shadow(0 0 5px rgba(167,139,250,0.7));}
 
@@ -3806,12 +3806,13 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope svg{display:block;width:100%;height:auto;aspect-ratio:456/76;}   /* fb235 — the pane's exact band, uniform scale: same graph, same grid */
 .lfo-ext .card-scope svg line,.lfo-ext .card-scope svg path,.lfo-ext .card-scope svg circle{vector-effect:non-scaling-stroke;}   /* fb232 — stroke weights render at authored px: the pane's exact line grammar at any card zoom */
 .lfo-ext .lbmark{stroke:rgba(183,148,255,.55);stroke-width:1;stroke-dasharray:3 3;}
-#syn-panel .syn-ctx-menu.act{z-index:2147483646;}   /* fb231 — the canonical menu must beat the floating card (z 2147483645) */
+:is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).act{z-index:2147483646;}   /* fb231 — the canonical menu must beat the floating card (z 2147483645) */
+body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — portaled to the body while a floating card is open: #syn-panel is a stacking context (z 30), so INSIDE it no z-index can ever beat a body-level card — Max: "the right click menu pops behind my shaper" */
 /* fb230 — THE CSS-SCOPE LAW strikes: the shaper skin is scoped #mod-engine; the card lives at body level.
    The hero needs its own copy or hit-circles render default-BLACK (the blob monster). */
-.lfo-ext .card-scope .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
+.lfo-ext .card-scope .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.4;}   /* tp76 — non-scaling: .4 px = the Shaper's .6 units at 0.63 */
 .lfo-ext .card-scope .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
-.lfo-ext .card-scope .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
+.lfo-ext .card-scope .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.5;pointer-events:none;}
 .lfo-ext .card-scope .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
 .lfo-ext .card-scope .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb238 */
 .lfo-ext .card-scope .sh-ghost{fill:none;stroke:rgba(183,148,255,.55);stroke-width:1;pointer-events:none;}   /* fb238 */
@@ -3902,7 +3903,7 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .sh-hit{fill:transparent;cursor:grab;}
 .lfo-ext .card-scope .sh-hit.cdh{cursor:ns-resize;}
 .lfo-ext .card-scope .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
-.lfo-ext .card-scope .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.8;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));}
+.lfo-ext .card-scope .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.1;   /* tp76 — one line: this scope's strokes are non-scaling (fb232), so 1.1 PX = the Shaper's 1.7 units at 0.63 */filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));}
 .lfo-ext .card-scope .mv-fill{fill:rgba(224,216,245,0.07);}
 .lfo-ext .card-scope .mv-play{stroke:rgba(236,232,242,.42);stroke-width:1;}
 .lfo-ext .card-scope .mv-foll{fill:#FFFFFF;filter:drop-shadow(0 0 5px rgba(167,139,250,0.7));}
@@ -3977,7 +3978,8 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .shp-ext .screen.idle .mv-play,.shp-ext .screen.idle .mv-foll{opacity:0;transition:opacity .35s ease;}
 /* the bar: the LFO's chip grammar (.mv-ov.bot / .mv-c) at the mockup's size — small, seamless, no glyphs; each chip is a native dropdown */
 .shp-ext .screen .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
-.shp-ext .screen .mv-ov.bot{bottom:0;height:18px;padding:0 10px 2px;justify-content:space-between;}
+.shp-ext .screen .mv-ov.bot{bottom:0;height:17px;padding:0 10px 0;justify-content:space-between;align-items:flex-end;}   /* tp76 — Max: 'drop them down a pixel or two … close to the bottom' */
+.shp-ext .screen .mv-c{padding-bottom:2px;}
 .shp-ext .screen .mv-c{position:relative;display:flex;align-items:center;gap:3px;font-size:7px;letter-spacing:.9px;font-weight:300;color:rgba(255,255,255,0.5);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;line-height:1;}
 .shp-ext .screen .mv-c:hover{color:#fff;}
 .shp-ext .screen .mv-c .chev{width:7px;height:7px;opacity:.55;flex:none;}
@@ -3985,6 +3987,8 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .shp-ext .screen .mv-c select{position:absolute;inset:-3px -2px;width:auto;height:auto;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}
 .shp-ext .screen .mv-c.browser select{display:none;}
 .shp-ext .screen .sh-ghost{fill:none;stroke:rgba(236,232,242,.17);stroke-width:1;pointer-events:none;}
+.shp-ext .screen .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
+.shp-ext .screen .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}   /* the LFO's rubber-band */
 /* the Glitch's tiles and dots */
 .shp-ext .fx{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;}
 .shp-ext .fxb{aspect-ratio:1;font-size:6.5px;letter-spacing:.3px;}
@@ -6773,7 +6777,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 #syn-panel .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
 
             /* Phase 11g — right-click context menu */
-            #syn-panel .syn-ctx-menu {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) {
               position: absolute;
               z-index: 100;
               min-width: 140px;
@@ -6797,12 +6801,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               overscroll-behavior: contain;
               -webkit-overflow-scrolling: touch;
             }
-            #syn-panel .syn-ctx-menu::-webkit-scrollbar { width: 0; height: 0; display: none; }
-            #syn-panel .syn-ctx-menu .bp-lfo-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
-            #syn-panel .syn-ctx-menu .bp-lfo-scroll { scrollbar-width: none; -ms-overflow-style: none; }
-            #syn-panel .syn-ctx-menu { scrollbar-width: none; -ms-overflow-style: none; }
-            #syn-panel .syn-ctx-menu.act { display: block; }
-            #syn-panel .syn-ctx-menu .syn-ctx-header {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu)::-webkit-scrollbar { width: 0; height: 0; display: none; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .bp-lfo-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .bp-lfo-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) { scrollbar-width: none; -ms-overflow-style: none; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).act { display: block; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-header {
               padding: 4px 12px 6px;
               font-size: 8px;
               letter-spacing: 1.4px;
@@ -6811,21 +6815,21 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               border-bottom: 1px solid var(--border);
               margin-bottom: 4px;
             }
-            #syn-panel .syn-ctx-menu .syn-ctx-item {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item {
               padding: 5px 12px;
               cursor: pointer;
               display: flex;
               align-items: center;
               gap: 8px;
             }
-            #syn-panel .syn-ctx-menu .syn-ctx-item:hover {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item:hover {
               background: rgba(139,92,246,0.18);
               color: #FFFFFF;
             }
-            #syn-panel .syn-ctx-menu .syn-ctx-item.checked {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item.checked {
               color: var(--purple-400);
             }
-            #syn-panel .syn-ctx-menu .syn-ctx-item.checked::before {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item.checked::before {
               content: "•";
               color: var(--purple-500);
               margin-right: -2px;
@@ -6833,17 +6837,17 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             /* fb66 — pure-WHITE selection (Max: "if we select it make it pure white, like the headphone").
                Opt-in per item via {white:true}; carried as .wsel alongside .checked so only the noise menu
                (and any future caller that asks) turns white — the rest of the app keeps the purple dot. */
-            #syn-panel .syn-ctx-menu .syn-ctx-item.wsel { color: #FFFFFF; }
-            #syn-panel .syn-ctx-menu .syn-ctx-item.wsel::before { content: "•"; color: #FFFFFF; margin-right: -2px; }
-            #syn-panel .syn-ctx-menu .syn-ctx-item:not(.checked)::before {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item.wsel { color: #FFFFFF; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item.wsel::before { content: "•"; color: #FFFFFF; margin-right: -2px; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item:not(.checked)::before {
               content: "";
               width: 6px;
               display: inline-block;
             }
-            #syn-panel .syn-ctx-menu .syn-ctx-sep { border-top: 1px solid var(--border); margin: 4px 0 4px; }   /* fb186 — replaces the blank-row spacer */
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-sep { border-top: 1px solid var(--border); margin: 4px 0 4px; }   /* fb186 — replaces the blank-row spacer */
             /* Batch 1 Filter — section header (per-category in a long menu),
                disabled "soon" items, and trailing badge. */
-            #syn-panel .syn-ctx-menu .syn-ctx-section {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-section {
               /* WC-section: small muted SF Pro, no caps box */
               padding: 8px 14px 3px;
               font-size: 9px;
@@ -6854,17 +6858,17 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             }
             /* fb68 — headerless menu (the noise right-click): pull the FIRST section tight to the top so there's no
                phantom gap where a title header would sit. Menus WITH a header keep their normal section spacing. */
-            #syn-panel .syn-ctx-menu .syn-ctx-section:first-child { padding-top: 2px; margin-top: 0; }
-            #syn-panel .syn-ctx-menu .syn-ctx-item.disabled {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-section:first-child { padding-top: 2px; margin-top: 0; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item.disabled {
               color: var(--text-muted);
               opacity: 0.55;
               cursor: default;
             }
-            #syn-panel .syn-ctx-menu .syn-ctx-item.disabled:hover {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-item.disabled:hover {
               background: transparent;
               color: var(--text-muted);
             }
-            #syn-panel .syn-ctx-menu .syn-ctx-badge {
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-badge {
               /* WC-badge: clean thin SF Pro, no box, no caps. fb187: route names cap with
                  an ellipsis so a long destination can never stretch or collide. */
               margin-left: auto;
@@ -6888,27 +6892,27 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                lands to the pixel, 24 px rows all the way down, no rules between the groups.
                Scoped to .ctl so the classic list (mode pickers, the noise menu, the envelope hub)
                does not move by a pixel. */
-            #syn-panel .syn-ctx-menu.ctl { min-width: 200px; padding: 6px 0; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item { display: grid; grid-template-columns: minmax(0,1fr) auto 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item::before { content: none; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item .syn-ctx-lab { grid-column: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item .syn-ctx-badge { grid-column: 2; margin-left: 0; padding-left: 0; max-width: 112px; text-align: right; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-arrow,
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-ck { grid-column: 3; width: 16px; height: 16px; display: grid; place-items: center; color: rgba(255,255,255,0.45); }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item:hover .syn-ctx-arrow { color: #FFFFFF; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-ck { color: var(--purple-400); }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route { display: grid; grid-template-columns: minmax(0,1fr) 36px 16px 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; cursor: pointer; color: var(--text-primary); }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route:hover { background: rgba(139,92,246,0.18); color: #FFFFFF; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route.byp .ctl-name { opacity: .45; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-val { text-align: right; font-variant-numeric: tabular-nums; font-size: 10px; letter-spacing: .2px; color: rgba(255,255,255,0.45); cursor: ns-resize; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-val:hover,
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-val.drag { color: #FFFFFF; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-crv,
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-rx { width: 16px; height: 16px; display: grid; place-items: center; color: rgba(255,255,255,0.45); cursor: pointer; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-crv.on { color: rgba(255,255,255,0.92); }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-crv:hover { color: #FFFFFF; }
-            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-rx:hover { color: #EF4444; }   /* Max: "whenever we hover over the X button, it's red" */
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl { min-width: 200px; padding: 6px 0; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item { display: grid; grid-template-columns: minmax(0,1fr) auto 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item::before { content: none; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item .syn-ctx-lab { grid-column: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item .syn-ctx-badge { grid-column: 2; margin-left: 0; padding-left: 0; max-width: 112px; text-align: right; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-arrow,
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-ck { grid-column: 3; width: 16px; height: 16px; display: grid; place-items: center; color: rgba(255,255,255,0.45); }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item:hover .syn-ctx-arrow { color: #FFFFFF; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-ck { color: var(--purple-400); }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route { display: grid; grid-template-columns: minmax(0,1fr) 36px 16px 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; cursor: pointer; color: var(--text-primary); }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route:hover { background: rgba(139,92,246,0.18); color: #FFFFFF; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route.byp .ctl-name { opacity: .45; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-val { text-align: right; font-variant-numeric: tabular-nums; font-size: 10px; letter-spacing: .2px; color: rgba(255,255,255,0.45); cursor: ns-resize; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-val:hover,
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-val.drag { color: #FFFFFF; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-crv,
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-rx { width: 16px; height: 16px; display: grid; place-items: center; color: rgba(255,255,255,0.45); cursor: pointer; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-crv.on { color: rgba(255,255,255,0.92); }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-crv:hover { color: #FFFFFF; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-route .ctl-rx:hover { color: #EF4444; }   /* Max: "whenever we hover over the X button, it's red" */
             /* TwoFilters — 1/2 slot tabs: small, semi-transparent until active, aligned with the + swap button */
             #syn-panel .filter-toggle .ft-pill {
               width: 16px; height: 14px; font-size: 8.5px;
@@ -23444,6 +23448,19 @@ setTimeout(function wireSynControls () {
         const localY = Math.max(0, Math.min(bh - mh, (y - pw.top ) / z));
         menuEl.style.left = localX + 'px';
         menuEl.style.top = localY + 'px';
+        /* tp76 — THE PORTAL. #syn-panel (position:absolute, z-index 30) is a stacking context, so a menu inside it sits UNDER every
+           body-level card (z 2147483645) whatever its own z-index says — Max: "the right click menu pops behind my shaper". While a
+           floating card is open the menu moves to the body as position:fixed (the same local px, offset by the panel's origin in
+           unzoomed px — the fb368 law, one space only) and hideMenu brings it home. The .syn-ctx-menu rules match either home. */
+        try {
+          const floating = document.querySelector('.ti-card.open, .mv-ext.open, .ti-popcard');
+          if (floating && synPanel && menuEl.parentElement !== document.body) {
+            menuEl.__home = menuEl.parentElement;
+            document.body.appendChild(menuEl);
+            menuEl.style.left = (pw.left / z + localX) + 'px';
+            menuEl.style.top  = (pw.top  / z + localY) + 'px';
+          }
+        } catch (e) {}
         // Belt-and-suspenders wheel handler for the rare case JUCE WKWebView
         // swallows wheel on overflow:scroll. Idempotent via dataset flag.
         if (! menuEl.dataset.wheelBound) {
@@ -23461,6 +23478,7 @@ setTimeout(function wireSynControls () {
         menuEl.classList.remove('act');
         menuEl.setAttribute('aria-hidden', 'true');
         menuEl.innerHTML = '';
+        try { if (menuEl.__home && menuEl.parentElement === document.body) { menuEl.__home.appendChild(menuEl); menuEl.__home = null; menuEl.style.left = '0px'; menuEl.style.top = '0px'; } } catch (e) {}   /* tp76 — home from the portal */
       };
       window.__synShowMenu = showMenu; window.__synHideMenu = hideMenu;
 
@@ -34325,7 +34343,7 @@ restoreThemeFromBackend();
   /* fb195 — hub rows drag out as env sources (Max: put an envelope on ANOTHER envelope's
      params — open the hub, pull the 'Env 1' row onto Env 2's Atk chip). Same machinery as
      the chip drag; the menu hides the moment the pull starts. */
-  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel .syn-ctx-menu [data-drag-env]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest(':is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) [data-drag-env]'); if(!t)return;
     var en=+t.getAttribute('data-drag-env')||1; var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         if(window.__synHideMenu)window.__synHideMenu();
@@ -37100,12 +37118,43 @@ restoreThemeFromBackend();
       var ROSTER={ filt:1, drive:1, phase:1, crush:1 };   /* the lanes whose type is a roster: the screen's type chip */
       var RATES=['1/16','1/8','1/4','1/2','1 bar','2 bars','4 bars','8 bars'], RATEB=[.25,.5,1,2,4,8,16,32], GRIDS=[2,3,4,6,8,12,16,24,32], LGRIDS=[1,2,3,4,6,8], TRIGS=['Sync','Free','Audio','MIDI'];
       /* the shape chip's list: [key, label, LFO icon index (-1 = the custom glyph)] */
-      var STOCK=[['sine','Sine',0],['tri','Tri',1],['saw','Saw',2],['sawdn','Saw↓',3],['square','Sqr',4],['gate','Gate',-1],['stairs','Stairs',-1],['flat','Flat',-1]];
-      var TIMEP=[['unity','Unity',2],['half','Half',-1],['stut16','Stutter',-1],['stut8','Stutter ⅛',-1],['reverse','Reverse',3],['tape','Tape stop',-1]];
+      /* the SHAPE LIBRARY (Max: "ShaperBox has a whole bunch of different custom preset shapes … I need to find some presets"):
+         groups in the native dropdown; every entry is a generator, so nothing is stored but the points it makes */
+      var STOCK=[['sine','Sine','Basic'],['tri','Triangle','Basic'],['saw','Saw','Basic'],['sawdn','Saw down','Basic'],['square','Square','Basic'],['flat','Flat','Basic'],
+                 ['gate8','Gate 1/8','Gates'],['gate','Gate 1/16','Gates'],['gate32','Gate 1/32','Gates'],['trance1','Trance 1','Gates'],['trance2','Trance 2','Gates'],['trance3','Trance 3','Gates'],['offbeat','Offbeat','Gates'],
+                 ['expup','Exp up','Curves'],['expdn','Exp down','Curves'],['swell','Swell','Curves'],['pluck','Pluck','Curves'],['sidechain','Sidechain','Curves'],['bounce','Bounce','Curves'],['pump','Pump 1/4','Curves'],['breath','Breath','Curves'],
+                 ['stairs','Stairs up','Steps'],['stairsdn','Stairs down','Steps'],['steps4','4 steps','Steps'],['randsteps','Random steps','Steps'],['randcurve','Random curve','Steps'],['randgate','Random gate','Steps']];
+      var TIMEP=[['unity','Unity','Basic'],['half','Half time','Basic'],['reverse','Reverse','Basic'],['stut8','Stutter 1/8','Stutter'],['stut16','Stutter 1/16','Stutter'],['stut32','Stutter 1/32','Stutter'],['stutbuild','Stutter build','Stutter'],
+                 ['tape','Tape stop','Tape'],['tapestart','Tape start','Tape'],['scratch','Scratch','Tape'],['rewind','Rewind','Tape'],['halfback','Half + back','Tape']];
       var DEFSHAPE={vol:'gate',time:'unity',filt:'sine',pan:'sine',rep:'flat',drive:'saw',phase:'sine',crush:'stairs'};
       var TOOLS=[['Point',0],['Line',1],['Ramp up',2],['Ramp down',3],['Square',4],['Triangle',5],['Sine',6],['Free draw',7]];
       function stepsPts(n,fn){ var p=[]; for(var i=0;i<n;i++){ var y=fn(i); p.push([i/n,y,0]); p.push([(i+1)/n-1e-4,y,0]); } p[p.length-1][0]=1; return p; }
-      function stock(k){ switch(k){
+      function stock(k){ var i,p; switch(k){
+        case 'gate8': return stepsPts(8,function(i){ return (i&1)?0:1; });
+        case 'gate32': return stepsPts(32,function(i){ return (i&1)?0:1; });
+        case 'trance1': return stepsPts(16,function(i){ return [1,0,1,1,0,1,0,1,1,0,1,0,1,1,0,1][i]; });
+        case 'trance2': return stepsPts(16,function(i){ return [1,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0][i]; });
+        case 'trance3': return stepsPts(16,function(i){ return [1,0,0,1,0,1,0,0,1,0,1,0,0,1,0,1][i]; });
+        case 'offbeat': return stepsPts(8,function(i){ return (i&1)?1:0; });
+        case 'expup': return [[0,0,0.75],[1,1,0]];
+        case 'expdn': return [[0,1,-0.75],[1,0,0]];
+        case 'swell': return [[0,0,0.5],[.8,1,-0.5],[1,0,0]];
+        case 'pluck': return [[0,1,-0.7],[.35,0.15,-0.3],[1,0,0]];
+        case 'sidechain': return [[0,0,0.6],[.12,0.05,0.4],[.7,1,0],[1-1e-4,1,0],[1,0,0]];
+        case 'bounce': p=[]; for(i=0;i<4;i++){ var h=1-i*0.25, x0=i/4; p.push([x0,0,0.55]); p.push([x0+0.125,h,-0.55]); } p.push([1,0,0]); return p;
+        case 'pump': p=[]; for(i=0;i<4;i++){ var x=i/4; p.push([x,0,0.6]); p.push([x+0.25-1e-4,1,0]); } p[p.length-1][0]=1; return p;
+        case 'breath': return [[0,.2,0.4],[.5,1,-0.4],[1,.2,0]];
+        case 'stairsdn': return stepsPts(8,function(i){ return 1-i/7; });
+        case 'steps4': return stepsPts(4,function(i){ return [0.25,0.75,0.5,1][i]; });
+        case 'randsteps': return stepsPts(16,function(){ return Math.random(); });
+        case 'randcurve': p=[]; for(i=0;i<=8;i++) p.push([i/8,Math.random(),(Math.random()*2-1)*.8]); return p;
+        case 'randgate': return stepsPts(16,function(){ return Math.random()<.5?0:1; });
+        case 'stut32': p=[]; for(i=0;i<32;i++){ p.push([i/32,0,0]); p.push([(i+1)/32-1e-4,1/32,0]); } p[p.length-1][0]=1; return p;
+        case 'stutbuild': p=[]; var segs=[[0,.5,8],[.5,.75,8],[.75,.875,8],[.875,1,8]]; segs.forEach(function(sg){ var n=sg[2], w=(sg[1]-sg[0])/n; for(var q=0;q<n;q++){ p.push([sg[0]+q*w,0,0]); p.push([sg[0]+(q+1)*w-1e-4,w,0]); } }); p[p.length-1][0]=1; return p;
+        case 'tapestart': return [[0,0,-0.85],[1,1,0]];
+        case 'scratch': p=[]; for(i=0;i<8;i++){ p.push([i/8,(i&1)?0.25:0,0]); } p.push([1,0,0]); return p;
+        case 'rewind': p=[]; for(i=0;i<4;i++){ p.push([i/4,0.25,0]); p.push([(i+1)/4-1e-4,0,0]); } p[p.length-1][0]=1; return p;
+        case 'halfback': return [[0,0,0],[.5,.25,0],[1,0,0]];
         case 'sine': return [[0,0,-0.62],[.5,1,.62],[1,0,0]];
         case 'tri': return [[0,0,0],[.5,1,0],[1,0,0]];
         case 'saw': case 'unity': return [[0,0,0],[1,1,0]];
@@ -37172,7 +37221,9 @@ restoreThemeFromBackend();
           +'<span class="mv-c ch-shape"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span>'
           +'<span class="mv-c ch-type"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span></div></div>');
         var field=scr.querySelector('.field'), chBrush=scr.querySelector('.ch-brush'), chShape=scr.querySelector('.ch-shape'), chType=scr.querySelector('.ch-type');
-        function fillSel(chip,names,cur){ var se=chip.querySelector('select'); se.innerHTML=''; names.forEach(function(n,k){ var o=document.createElement('option'); o.value=String(k); o.textContent=n; se.appendChild(o); }); se.value=String(cur); }
+        function fillSel(chip,names,cur,groups){ var se=chip.querySelector('select'); se.innerHTML=''; var host=se, lastG=null;
+          names.forEach(function(n,k){ var g=groups?groups[k]:null; if(g!==lastG){ lastG=g; if(g){ host=document.createElement('optgroup'); host.label=g; se.appendChild(host); } else host=se; }
+            var o=document.createElement('option'); o.value=String(k); o.textContent=n; host.appendChild(o); }); se.value=String(cur); }
         function X01(px){ var r=field.getBoundingClientRect(); var u=(px-r.left)/Math.max(1,r.width)*456; return Math.max(0,Math.min(1,(u-LF.SH.L)/(LF.SH.R-LF.SH.L))); }
         function Y01(py){ var r=field.getBoundingClientRect(); var u=(py-r.top)/Math.max(1,r.height)*GEO.H; return Math.max(0,Math.min(1,(GEO.B-u)/(GEO.B-GEO.T))); }
         /* THE LINE THE DSP READS, as breakpoints (FlowShaper::readShape): the lane's Phase slides the points, Swing warps their time,
@@ -37202,7 +37253,7 @@ restoreThemeFromBackend();
              spliced into the markup before it lands (insertAdjacentHTML into an svg births HTML-namespace paths that never paint) */
           var gh=''; LN.forEach(function(l,j){ if(j===i||!S.v['on'+j])return; gh+='<path class="sh-ghost" d="'+LF.pathD(dispPts(j),456,GEO)+'"/>'; });
           if(gh) html=html.replace('<path class="mv-stroke"',gh+'<path class="mv-stroke"');
-          field.innerHTML=html;
+          field.innerHTML=html; if(sel.length) selPaint();
           scr.classList.toggle('off',!S.v['on'+i]);
           paintChips(); }
         /* ── the bar: the brush chip, the shape chip (the LFO's own icons), the type chip on the roster lanes ── */
@@ -37210,7 +37261,7 @@ restoreThemeFromBackend();
         function paintChips(){ var i=lane(), l=lkey(); var ti=0; for(var k=0;k<TOOLS.length;k++) if(TOOLS[k][1]===(S.v.tool|0)) ti=k;
           chBrush.querySelector('.t').textContent=TOOLS[ti][0]; fillSel(chBrush,TOOLS.map(function(t){ return t[0]; }),ti);
           var key=S.v['shape'+i]||'custom', L=shapeList(), cur=-1; for(var q=0;q<L.length;q++) if(L[q][0]===key) cur=q;
-          chShape.querySelector('.t').textContent=cur>=0?L[cur][1]:'Custom'; fillSel(chShape,L.map(function(e){ return e[1]; }).concat(['Custom']),cur>=0?cur:L.length);
+          chShape.querySelector('.t').textContent=cur>=0?L[cur][1]:'Custom'; fillSel(chShape,L.map(function(e){ return e[1]; }).concat(['Custom']),cur>=0?cur:L.length,L.map(function(e){ return e[2]; }).concat([null]));
           chType.style.display=ROSTER[l]?'':'none'; chType.classList.toggle('browser',l==='filt');
           if(ROSTER[l]){ var M=LNMODE(l), mi=S.v['mode'+i]|0; chType.querySelector('.t').textContent=M[mi]||M[0]||'—'; if(l!=='filt') fillSel(chType,M,mi); else chType.querySelector('select').innerHTML=''; } }
         chBrush.querySelector('select').addEventListener('change',function(){ var k=parseInt(this.value,10)||0; S.set('tool',TOOLS[k][1]); paintChips(); });
@@ -37241,25 +37292,46 @@ restoreThemeFromBackend();
           if(x0<=1e-6&&add.length) add[0][0]=0;
           var out=keep.concat(add); if(!out.some(function(q){ return q[0]<=1e-6; })) out.push([0,evalPts(pts,0),0]); if(!out.some(function(q){ return q[0]>=1-1e-6; })) out.push([1,evalPts(pts,1),0]);
           return out; }
-        var drag=null, ctxAt=0;
+        var drag=null, ctxAt=0, sel=[];   /* sel: RAW point indices (the LFO's multi-select) */
         /* while the lane's Phase / Swing move the points, the raw breakpoints are edited through the display's index: the node
            list the LFO drew came from dispPts, whose order matches ptsOf only when nothing is shifted — so a shifted lane edits
            by nearest raw point in x */
         function rawIndexFor(i,dispIdx){ var ph=S.v['phase'+i]||0, sw=S.v['swing'+i]||0; if(Math.abs(ph)<1e-4&&sw<1e-4) return dispIdx;
           var D=dispPts(i), raw=ptsOf(i), dp=D[dispIdx]; if(!dp)return -1; var u=swingFwd(dp[0],sw)+ph; u-=Math.floor(u); var best=-1, bd=1; raw.forEach(function(p,k){ var d=Math.abs(p[0]-u); if(d<bd){ bd=d; best=k; } }); return bd<0.01?best:-1; }
+        function selPaint(){ var i=lane(); TIC.EA(field.querySelectorAll('.sh-nd'),function(c){ var ri=rawIndexFor(i,+c.getAttribute('data-i')); c.classList.toggle('sel',ri>=0&&sel.indexOf(ri)>=0); }); }
+        function selClear(){ if(!sel.length)return; sel=[]; selPaint(); }
+        /* THE SERUM GRAB (the LFO's fb210): the closest node / curve dot within ~13 units wins — no pixel-perfect aiming */
+        function near(e){ var i=lane(), D=dispPts(i), r=field.getBoundingClientRect(); var ux=(e.clientX-r.left)/Math.max(1,r.width)*456, uy=(e.clientY-r.top)/Math.max(1,r.height)*GEO.H, best=null, bd=169;
+          D.forEach(function(q,k){ var dx=LF.x(q[0])-ux, dy=LF.y(q[1],GEO)-uy, d=dx*dx+dy*dy; if(d<bd){ bd=d; best={t:'nd',i:k}; } });
+          D.forEach(function(q,k){ if(k>=D.length-1)return; var rr=D[k+1]; if(rr[0]-q[0]<=0.02)return; var mx=LF.x((q[0]+rr[0])/2), my=LF.y(LF.evalPts(D,(q[0]+rr[0])/2),GEO), dx=mx-ux, dy=my-uy, d=dx*dx+dy*dy; if(d<bd){ bd=d; best={t:'cd',i:k}; } });
+          return best; }
+        function hitOf(e){ var t=e.target; if(t&&t.classList&&t.classList.contains('sh-hit')) return { t:t.classList.contains('cdh')?'cd':'nd', i:+t.getAttribute('data-i') }; return near(e); }
+        function grpBounds(pts,org){ var n=pts.length,dx0=-2,dx1=2,dy0=-2,dy1=2,i,j;
+          for(i=0;i<n;i++){ if(sel.indexOf(i)<0)continue; dy0=Math.max(dy0,-org[i][1]); dy1=Math.min(dy1,1-org[i][1]); if(i===0||i===n-1)continue;
+            var lo=0,hi=1; for(j=i-1;j>=0;j--)if(sel.indexOf(j)<0){lo=org[j][0];break;} for(j=i+1;j<n;j++)if(sel.indexOf(j)<0){hi=org[j][0];break;}
+            dx0=Math.max(dx0,lo-org[i][0]); dx1=Math.min(dx1,hi-org[i][0]); }
+          return {x0:Math.min(dx0,0),x1:Math.max(dx1,0),y0:Math.min(dy0,0),y1:Math.max(dy1,0)}; }
+        function band(e){   /* the LFO's rubber-band (fb221): drag empty ground; the points inside wear the select purple LIVE */
+          var i=lane(), r=field.getBoundingClientRect(), svg=field.querySelector('svg'); if(!svg)return; var cx0=e.clientX, cy0=e.clientY, did=false, box=null;
+          var vx=function(ev){ return (ev.clientX-r.left)/Math.max(1,r.width)*456; }, vy=function(ev){ return (ev.clientY-r.top)/Math.max(1,r.height)*GEO.H; }; var ax=vx(e), ay=vy(e);
+          drag={kind:'band',mv:function(ev){ if(!did){ if(Math.abs(ev.clientX-cx0)+Math.abs(ev.clientY-cy0)<3)return; did=true; box=document.createElementNS('http://www.w3.org/2000/svg','rect'); box.setAttribute('class','sh-selbox'); svg.appendChild(box); }
+              var bx=vx(ev),by=vy(ev),x=Math.min(ax,bx),y=Math.min(ay,by),w2=Math.abs(bx-ax),h2=Math.abs(by-ay);
+              box.setAttribute('x',x.toFixed(1)); box.setAttribute('y',y.toFixed(1)); box.setAttribute('width',w2.toFixed(1)); box.setAttribute('height',h2.toFixed(1));
+              var D=dispPts(i); sel=[]; D.forEach(function(q,k){ var px=LF.x(q[0]),py=LF.y(q[1],GEO); if(px>=x-0.5&&px<=x+w2+0.5&&py>=y-0.5&&py<=y+h2+0.5){ var ri=rawIndexFor(i,k); if(ri>=0) sel.push(ri); } }); selPaint(); },
+            up:function(){ if(box&&box.parentNode)box.parentNode.removeChild(box); if(!did) selClear(); }}; }
         field.addEventListener('pointerdown',function(e){
-          if(e.button===2){ ctxAt=Date.now(); e.preventDefault(); e.stopPropagation(); menu(e); return; }
+          if(e.button===2){ ctxAt=Date.now(); e.preventDefault(); e.stopPropagation(); menu(e); return; }   /* macOS opens menus on the right pointer-DOWN (the EQ's law); the contextmenu belt below swallows the pair */
           if(e.button!==0)return; e.preventDefault(); e.stopPropagation(); var i=lane(), pts=ptsOf(i), p=pos(e), tool=S.v.tool|0;
           try{ field.setPointerCapture(e.pointerId); }catch(_){}
-          if(tool===0){ var h=hitOf(e);
-            if(h&&h.t==='nd'){ var ri=rawIndexFor(i,h.i); if(ri>=0){ drag={kind:'pt',k:ri,pts:pts}; } return; }
-            if(h&&h.t==='cd'){ var rs=rawIndexFor(i,h.i); if(rs>=0){ drag={kind:'seg',k:rs,pts:pts,y0:e.clientY,c0:pts[rs][2]||0}; } return; }
-            var nx=snapX(p.x); pts.push([nx,p.y,0]); pts.sort(function(a,b){ return a[0]-b[0]; }); var ni=-1; for(var q=0;q<pts.length;q++) if(pts[q][0]===nx&&pts[q][1]===p.y){ ni=q; break; }
-            drag={kind:'pt',k:ni,pts:pts}; S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); return; }
-          if(tool===7){ drag={kind:'free',pts:pts,raw:[],lo:p.x,hi:p.x}; freeAt(i,drag,p); return; }
-          drag={kind:'stamp',pts:pts,cell:-1}; stampAt(i,drag,p,tool); });
-        /* FREE DRAW, like water (Max): every pointer sample is a breakpoint at its exact x — nothing snaps, nothing quantises; the
-           stroke replaces whatever it passes over (its x range) and the rest of the lane stays. On release only collinear points go. */
+          if(tool===7){ selClear(); drag={kind:'free',pts:pts,raw:[],lo:p.x,hi:p.x}; freeAt(i,drag,p); return; }
+          if(tool!==0){ selClear(); drag={kind:'stamp',pts:pts,cell:-1}; stampAt(i,drag,p,tool); return; }
+          /* the Point tool = the LFO's grammar: grab a node or a curve dot (near counts), empty ground = the rubber-band; a plain click never adds */
+          var h=hitOf(e); if(!h){ band(e); return; }
+          var ri=rawIndexFor(i,h.i); if(ri<0){ band(e); return; }
+          if(h.t==='cd'){ selClear(); drag={kind:'seg',k:ri,pts:pts,y0:e.clientY,c0:pts[ri][2]||0,x0:e.clientX,did:false}; return; }
+          var grp=sel.length>1&&sel.indexOf(ri)>=0; if(!grp&&sel.length) selClear();
+          drag={kind:'pt',k:ri,pts:pts,x0:e.clientX,y0:e.clientY,did:false,grp:grp,org:grp?pts.map(function(q){ return [q[0],q[1]]; }):null,bnd:null};
+          if(grp) drag.bnd=grpBounds(pts,drag.org); });
         function freeAt(i,d,p){ var x=p.x, y=p.y; if(x<d.lo)d.lo=x; if(x>d.hi)d.hi=x;
           d.raw=d.raw.filter(function(t){ return Math.abs(t[0]-x)>0.0012; }); d.raw.push([x,y,0]);
           var pts=d.pts.filter(function(t){ return t[0]<d.lo-1e-9||t[0]>d.hi+1e-9; }).concat(d.raw); pts.sort(function(a,b){ return a[0]-b[0]; });
@@ -37267,15 +37339,35 @@ restoreThemeFromBackend();
           S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); }
         function stampAt(i,d,p,tool){ var g=gridOf(i), c=Math.floor(p.x*g); if(c===d.cell)return; d.cell=c; d.pts=stampCell(i,d.pts,p.x,p.y,tool); d.pts.sort(function(a,b){ return a[0]-b[0]; }); S.set('pts'+i,JSON.stringify(d.pts)); S.set('shape'+i,'custom'); paint(); }
         field.addEventListener('pointermove',function(e){ if(!drag)return; e.preventDefault(); var i=lane(), p=pos(e);
-          if(drag.kind==='pt'){ var pts=drag.pts, k=drag.k; if(k<0)return; if(k>0&&k<pts.length-1) pts[k][0]=Math.max(pts[k-1][0],Math.min(pts[k+1][0],snapX(p.x))); pts[k][1]=p.y; S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); }
-          else if(drag.kind==='seg'){ var c=Math.max(-1,Math.min(1,drag.c0+(drag.y0-e.clientY)/60)); drag.pts[drag.k][2]=+c.toFixed(3); S.set('pts'+i,JSON.stringify(drag.pts)); S.set('shape'+i,'custom'); paint(); }
+          if(drag.kind==='band'){ drag.mv(e); return; }
+          if(drag.kind==='pt'){ if(!drag.did&&Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)<3)return; drag.did=true;   /* the LFO's 3 px threshold: a click cannot nudge a point */
+            var pts=drag.pts, k=drag.k;
+            if(drag.grp){ var org=drag.org, bnd=drag.bnd, ax=(k===0||k===pts.length-1)?org[k][0]:snapX(p.x), ay=p.y;
+              var gdx=Math.max(bnd.x0,Math.min(bnd.x1,ax-org[k][0])), gdy=Math.max(bnd.y0,Math.min(bnd.y1,ay-org[k][1]));
+              sel.forEach(function(si){ var ep=(si===0||si===pts.length-1); pts[si][0]=ep?org[si][0]:org[si][0]+gdx; pts[si][1]=org[si][1]+gdy; }); }
+            else { if(k>0&&k<pts.length-1) pts[k][0]=Math.max(pts[k-1][0],Math.min(pts[k+1][0],snapX(p.x))); pts[k][1]=p.y; }
+            S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); selPaint(); }
+          else if(drag.kind==='seg'){ if(!drag.did&&Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)<3)return; drag.did=true;
+            var q=drag.pts, kk=drag.k, dir=(q[kk+1][1]>=q[kk][1])?1:-1; var c=Math.max(-1,Math.min(1,drag.c0+(drag.y0-e.clientY)*0.012*dir)); if(Math.abs(c)<0.06)c=0;   /* the LFO's zero detent */
+            q[kk][2]=+c.toFixed(3); S.set('pts'+i,JSON.stringify(q)); S.set('shape'+i,'custom'); paint(); }
           else if(drag.kind==='free'){ freeAt(i,drag,p); }
           else if(drag.kind==='stamp'){ stampAt(i,drag,p,S.v.tool|0); } });
         function up(e){ if(!drag)return; var d=drag; drag=null; try{ field.releasePointerCapture(e.pointerId); }catch(_){} var i=lane();
+          if(d.kind==='band'){ d.up(); return; }
           if(d.kind==='free'){ var simp=rdp(ptsOf(i),0.003); if(simp.length>400) simp=rdp(simp,0.006); setPts(i,simp.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; })); return; }
-          setPts(i,ptsOf(i)); }
+          if(d.kind==='pt'&&!d.did){ if(!d.grp){ sel=[d.k]; selPaint(); } return; }   /* a plain click SELECTS the point (the LFO's fb222) */
+          if(d.kind==='seg'&&!d.did) return;
+          setPts(i,ptsOf(i)); selPaint(); }
         field.addEventListener('pointerup',up); field.addEventListener('pointercancel',up);
-        field.addEventListener('dblclick',function(e){ e.preventDefault(); e.stopPropagation(); var i=lane(), pts=ptsOf(i), h=hitOf(e); if(h&&h.t==='nd'){ var ri=rawIndexFor(i,h.i); if(ri>0&&ri<pts.length-1){ pts.splice(ri,1); setPts(i,pts); } } });
+        /* double-click: empty ground ADDS a point (snapped when Snap is on), a node DELETES it (never the ends), a curve dot STRAIGHTENS its segment */
+        field.addEventListener('dblclick',function(e){ e.preventDefault(); e.stopPropagation(); if((S.v.tool|0)!==0)return; var i=lane(), pts=ptsOf(i), h=hitOf(e);
+          if(h){ var ri=rawIndexFor(i,h.i); if(ri<0)return;
+            if(h.t==='cd'){ if((pts[ri][2]||0)!==0){ pts[ri][2]=0; setPts(i,pts); } return; }
+            if(ri>0&&ri<pts.length-1&&pts.length>2){ selClear(); pts.splice(ri,1); setPts(i,pts); } return; }
+          if(pts.length>=160)return; var p=pos(e); var nx=snapX(p.x), ny=S.v.snap?Math.round(p.y*lgridOf())/lgridOf():p.y;
+          /* the point lands where the read is: undo the lane's phase / swing so it sits under the pointer */
+          var ph=S.v['phase'+i]||0, sw=S.v['swing'+i]||0; if(Math.abs(ph)>1e-4||sw>1e-4){ var u=swingFwd(nx,sw)+ph; u-=Math.floor(u); nx=u; }
+          selClear(); pts.push([nx,ny,0]); setPts(i,pts); });
         field.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); if(Date.now()-ctxAt<150)return; menu(e); });
         /* ── the right-click menu — the LFO's rows, on this lane (everything but Extend) ── */
         function sliderNode(lbl,key,LIST,onChange){ var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
@@ -37300,7 +37392,7 @@ restoreThemeFromBackend();
             var simp=rdp(raw,0.015); if(simp.length>110) simp=rdp(raw,0.03); if(simp.length>170) simp=rdp(raw,0.055);
             setPts(i,simp.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; })); }catch(e2){} }).catch(function(){}); }catch(e3){} }
         function menu(e){ if(!window.__synShowMenu)return; var i=lane(), l=lkey();
-          function tool(lbl,t){ return { label:lbl, isChecked:(S.v.tool|0)===t, white:true, onPick:function(){ S.set('tool',t); paintChips(); } }; }
+          /* the LFO's rows, trimmed (Max: "it's a pretty big menu"): the brushes and the shapes live in the bar's dropdowns now */
           var rows=[ { node:sliderNode('Grid','grid'+i,GRIDS,function(){ push(); paint(); paintClock(); }) },
             { node:sliderNode('Level','lgrid',LGRIDS,function(){ paint(); }) },
             { label:'Snap', isChecked:!!S.v.snap, white:true, onPick:function(){ S.set('snap',S.v.snap?0:1); } },
@@ -37310,14 +37402,13 @@ restoreThemeFromBackend();
             { label:'Random flat', white:true, keepOpen:true, onPick:function(){ var g=gridOf(i); setPts(i,stepsPts(g,function(){ return Math.random(); })); } },
             { label:'Random curve', white:true, keepOpen:true, onPick:function(){ var g=Math.max(2,gridOf(i)/2), p=[]; for(var k=0;k<=g;k++) p.push([k/g,Math.random(),(Math.random()*2-1)*.8]); setPts(i,p); } },
             { label:'Random both', white:true, keepOpen:true, onPick:function(){ var g=gridOf(i), p=[]; for(var k=0;k<=g;k++) p.push([k/g,Math.random(),Math.random()<.5?0:(Math.random()*2-1)*.8]); setPts(i,p); } },
-            { isHeader:true, label:'Shape' },
-            tool('Point · edit',0), tool('Straight line',1), tool('Ramp up',2), tool('Ramp down',3), tool('Square',4), tool('Triangle',5), tool('Sine',6), tool('Free draw',7),
             { isHeader:true, label:'Wavetable → Shape' },
             { label:'Oscillator A', white:true, onPick:function(){ wtToShape(0); } }, { label:'Oscillator B', white:true, onPick:function(){ wtToShape(1); } },
-            { label:'Oscillator C', white:true, onPick:function(){ wtToShape(2); } }, { label:'Oscillator D', white:true, onPick:function(){ wtToShape(3); } },
-            { isHeader:true, label:l==='time'?'Time':'Stock' } ];
-          (l==='time'?TIMEP:STOCK).forEach(function(it){ rows.push({ label:it[1], white:true, onPick:function(){ setPts(i,stock(it[0]),it[0]); } }); });
-          rows.push({ label:'Clear', white:true, onPick:function(){ setPts(i,stock(l==='time'?'unity':'flat'),l==='time'?'unity':'flat'); } });
+            { label:'Oscillator C', white:true, onPick:function(){ wtToShape(2); } }, { label:'Oscillator D', white:true, onPick:function(){ wtToShape(3); } } ];
+          if(sel.length){ rows.push({ isHeader:true, label:sel.length>1?sel.length+' points':'The point' });
+            rows.push({ label:'Remove selected', white:true, onPick:function(){ var pts=ptsOf(i), keep=pts.filter(function(q,k){ return k===0||k===pts.length-1||sel.indexOf(k)<0; }); sel=[]; setPts(i,keep); } });
+            rows.push({ label:'Straighten selected', white:true, onPick:function(){ var pts=ptsOf(i); sel.forEach(function(k){ if(pts[k]) pts[k][2]=0; }); setPts(i,pts); } }); }
+          rows.push({ label:'Clear', white:true, onPick:function(){ sel=[]; setPts(i,stock(l==='time'?'unity':'flat'),l==='time'?'unity':'flat'); } });
           window.__synShowMenu('', rows, e.clientX, e.clientY); }
 
         /* ── the eight targets — the Glitch's tiles: the text, the dot ── */
@@ -37326,7 +37417,7 @@ restoreThemeFromBackend();
         LN.forEach(function(l,i){ var b=TIC.el('<div class="fxb" data-l="'+i+'">'+l[1]+'</div>'); var t0=0;
           b.addEventListener('click',function(){ var now=Date.now(); if(lane()===i&&now-t0<380){ S.set('on'+i,S.v['on'+i]?0:1); } t0=now; S.set('lane',i); });
           fxEl.appendChild(b); });
-        function paintBank(){ var i=lane(); TIC.EA(fxEl.querySelectorAll('.fxb'),function(b,k){ b.classList.toggle('cur',k===i); }); TIC.EA(leds,function(d,k){ d.classList.toggle('on',!!S.v['on'+k]); }); }
+        function paintBank(){ var i=lane(); TIC.EA(fxEl.querySelectorAll('.fxb'),function(b,k){ b.classList.toggle('cur',k===i); b.classList.toggle('on',!!S.v['on'+k]); }); TIC.EA(leds,function(d,k){ d.classList.toggle('on',!!S.v['on'+k]); }); }   /* tp76 — a lit lane FILLS white like the LFO's and the Glitch's buttons (Max) */
 
         /* ── the three tabs — the Glitch's two boxes side by side ── */
         var tp=TIC.tabsPanes([['shape','Shape'],['target','Target'],['clock','Clock']]);
@@ -37359,7 +37450,7 @@ restoreThemeFromBackend();
           paintBank(); TIC.applyTips(sh.card,TIPS); paint(); }
 
         /* ── S → paint / push ── */
-        S.on(function(k,v){ if(k==='lane'){ fillLane(); return; }
+        S.on(function(k,v){ if(k==='lane'){ sel=[]; fillLane(); return; }
           var m=/^sk_(k[0-5])_(\d)$/.exec(k); if(m){ var sd=(LNS[LN[+m[2]][0]]||[]).filter(function(x){ return x[0]===m[1]; })[0]; if(sd){ S.set(m[1]+'_'+m[2],(v|0)/Math.max(1,sd[2].length-1)); } return; }
           if(/^(smooth|phase|tension|floor|blend|swing|grid|k[0-5]_)\d$/.test(k)){ push(); paint(); return; }
           if(k==='sense'){ push(); return; }
@@ -40264,7 +40355,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
        Max: "delete + locate folder is behind the menu AKA impossible to get to lol."
 
        MEASURED, not guessed. `.tpb-panel` (this browser, :3-digit z below) and
-       `#syn-panel .syn-ctx-menu.act` (the menu it used to open) BOTH carry
+       `:is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).act` (the menu it used to open) BOTH carry
        `z-index: 2147483646`, and at EQUAL z-index the later DOM node wins. The panel is
        `document.body.appendChild`ed at open time; `#syn-panel` is markup near the top of <body>.
        So the panel is always the later sibling and the menu always loses.

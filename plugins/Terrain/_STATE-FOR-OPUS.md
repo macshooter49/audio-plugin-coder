@@ -1,7 +1,21 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp75** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp76** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp76 (2026-09-21) — ONE LINE, ONE GRID; THE LFO'S GRAMMAR IN THE SHAPER; THE MENU ON TOP
+Max (a beat made on the Shaper — "if I can make a beat with it, it's a go"): consistency — "three different grid lines …
+I want the shaper's thin white line to be our new LFO … the LFO's functionality on the shaper … the point is glitchy …
+the right click menu pops behind my shaper … fill in white like the LFO / glitch … a whole list of shapes".
+**One line / one grid:** the LFO pane's stroke 1.3 units (≈ the Shaper's 1.07 px), the LFO card 1.1 px (non-scaling),
+the expanded pane 1.7; the pane's nodes via CSS `r`; every grid white .065 / .14 (the stock grid was purple).
+**The LFO's grammar on the field:** click selects, rubber-band, group drag, double-click adds / deletes / straightens,
+3 px threshold, near-grab, zero detent. **The menu:** `#syn-panel` is a stacking context (z 30) — the menu is PORTALED
+to the body (fixed, the panel's origin + local px) while a card floats and comes home on hide; the 44 rules are
+`:is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu)`; trimmed to Grid / Level / Snap / flips / Random / Wavetable /
+selection rows / Clear. **The library:** grouped shape dropdown (Basic · Gates · Curves · Steps; Time: Basic ·
+Stutter · Tape), generators. Lit lanes fill white; chips on the floor. `_tp76_gate.js` 20/20, sweep green,
+`au_shaper_lock.cpp` 9/9. ⚠️ the popped-window browser growth (tp74) is still unproven in a real second window.
 
 ## tp75 (2026-09-21) — THE SHAPER'S EMBLEM IS A SAWTOOTH
 Max: "I think I want the Shaper emblem to be a sawtooth wave." `path.shpWave` on the Flow tile: two saw periods (rise, a
@@ -235,7 +249,7 @@ they disappeared); E–H right-click menu (`/SYN_OSC_([A-D])_/`); exclusive solo
 or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chops", thin white).
 
 ## GATES
-`Tests/_tp74_gate.js` (17, supersedes tp73's), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
+`Tests/_tp76_gate.js` (20, supersedes tp74's), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
 window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record.)

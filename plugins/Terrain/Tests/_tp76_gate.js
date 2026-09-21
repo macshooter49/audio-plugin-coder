@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  tp74 — THE SHAPER, COMPACTED: the taller screen, the small native-dropdown bar, no On, three knobs a target, ghost lanes, fluid free draw, no caps (tp73's bars re-aimed + the new ones).
+//  tp76 — ONE LINE, ONE GRID, THE LFO'S GRAMMAR IN THE SHAPER (tp74's bars re-aimed + the new ones). Was tp74: the taller screen, the small native-dropdown bar, no On, three knobs a target, ghost lanes, fluid free draw, no caps (tp73's bars re-aimed + the new ones).
 //
-//    node Tests/_tp74_gate.js
+//    node Tests/_tp76_gate.js
 //
 //  [0] the Chop slot builds the Shaper: the card shell (title Shaper, the Mix header), the screen (svg), eight
 //      target tiles with status dots, three tabs, the chain foot; the tile's emblem is one sine path; FLOWNAME says Shaper
@@ -28,7 +28,7 @@ const fs=require('fs'),path=require('path');
 const sim=fs.readFileSync(process.cwd()+'/Tests/_ui_lockin_sim.js','utf8');
 const stubSrc=sim.slice(sim.indexOf('const stub = () => {'),sim.indexOf('// ── the instruments'));
 const src=fs.readFileSync('Source/ui/public/index.html','utf8');
-const PAGE=path.join(require('os').tmpdir(),'tp74.html'); fs.writeFileSync(PAGE,src);
+const PAGE=path.join(require('os').tmpdir(),'tp76.html'); fs.writeFileSync(PAGE,src);
 let pass=0,fail=0;
 const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''));} else {fail++;console.log('  FAIL  '+l+(d?'\n        '+d:''));} };
 (async()=>{
@@ -52,8 +52,8 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
      rows:[...card.querySelectorAll('.pane .gboxrow')].length, boxes:[...card.querySelectorAll('.pane.on .gbox .gbl')].map(e=>e.textContent),
      tilePaths:tile?tile.querySelectorAll('svg path').length:-1, tileCircles:tile?tile.querySelectorAll('svg circle').length:-1, tileTitle:tile?tile.getAttribute('title'):null, tileAnim:tile?!!tile.querySelector('animateTransform, animate'):false, tileSine:tile?!!tile.querySelector('path.shpWave'):false, tileClip:tile?!!tile.querySelector('clipPath'):false,
      caps:[...scr.querySelectorAll('div:not(.mv-ov):not(.mv-c):not(.field)')].map(e=>e.textContent.trim()).filter(t=>t&&!/Point|Gate|Ladder/.test(t)) }; });
- ok(!r0.err && r0.boot && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===124 && r0.field && r0.lent && r0.chips.join('|')==='Point|Gate|' && r0.chevs===3 && r0.icons===0 && r0.selects===3 && r0.chipPx<=7.5 && r0.barH<=18 && r0.togs===0 && r0.tabCaps==='none' && r0.ttCaps==='none' && r0.lbCaps==='none' && r0.tileCaps==='uppercase' && r0.curInk==='rgb(255, 255, 255)' && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
-    '🚨 [0] the page BOOTED whole (the frame dispatcher, the wind clock and the filter roster are all there — a parse error in any script block fails here); the Glitch chassis (316 wide, the screen now 124 px, eight tiles with dots, Shape / Target / Clock, two boxes a row, the chain) with the LFO\'s field in the screen and a small bar (≤ 7.5 px chips, ≤ 18 px tall, three NATIVE dropdowns, no glyphs); no On toggle anywhere; no caps but the tiles; the lit tile\'s ink is white', JSON.stringify(r0));
+ ok(!r0.err && r0.boot && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===124 && r0.field && r0.lent && r0.chips.join('|')==='Point|Gate 1/16|' && r0.chevs===3 && r0.icons===0 && r0.selects===3 && r0.chipPx<=7.5 && r0.barH<=18 && r0.togs===0 && r0.tabCaps==='none' && r0.ttCaps==='none' && r0.lbCaps==='none' && r0.tileCaps==='uppercase' && r0.curInk==='rgb(26, 26, 46)' && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
+    '🚨 [0] the page BOOTED whole (the frame dispatcher, the wind clock and the filter roster are all there — a parse error in any script block fails here); the Glitch chassis (316 wide, the screen now 124 px, eight tiles with dots, Shape / Target / Clock, two boxes a row, the chain) with the LFO\'s field in the screen and a small bar (≤ 7.5 px chips, ≤ 18 px tall, three NATIVE dropdowns, no glyphs); no On toggle anywhere; no caps but the tiles; the lit + selected Volume tile is white-filled with dark ink', JSON.stringify(r0));
  ok(r0.tilePaths===1 && r0.tileCircles===0 && r0.tileTitle==='Shaper' && !r0.tileAnim && r0.tileSine && !r0.tileClip, '[0b] the tile\'s emblem is ONE sawtooth path between fixed ends — no clip, no SMIL, nothing else on it', JSON.stringify({paths:r0.tilePaths,circles:r0.tileCircles,title:r0.tileTitle,anim:r0.tileAnim,sine:r0.tileSine,clip:r0.tileClip}));
  const nm=await p.evaluate(()=>{ try{ return (function(){ const s=document.documentElement.outerHTML; return /FLOWNAME=\{arp:'Arp',drift:'Robin',chop:'Shaper'/.test(s); })(); }catch(e){ return false; } });
  ok(nm, '[0c] FLOWNAME.chop is Shaper (the Patcher, the browser and the pills say so)');
@@ -93,7 +93,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  ok(r2.filt==='Ladder LP 24' && r2.filtVis && r2.filtCats && r2.filtCats[0]==='Ladder' && r2.filtN===118 && r2.filtAfter==='Acid 303' && Math.abs((r2.filtParam||0)-4/117)<0.002
     && r2.drive==='Soft Clip' && r2.driveOpts===23 && r2.driveAfter==='Hard Clip' && Math.abs((r2.driveParam||0)-6/22)<0.01
     && r2.ph==='Phaser' && r2.phOpts===28 && r2.cr==='Bits + Rate' && r2.crOpts===10 && r2.filtSelHidden
-    && r2.timeShape==='Unity' && !r2.timeTypeVis && r2.menuRows && r2.menuRows.join('|')==='Unity|Half|Stutter|Stutter ⅛|Reverse|Tape stop|Custom' && r2.timeAfter==='Half' && r2.restamped && r2.volShape==='Gate' && !r2.volTypeVis,
+    && r2.timeShape==='Unity' && !r2.timeTypeVis && r2.menuRows && r2.menuRows.indexOf('Unity')===0 && r2.menuRows.indexOf('Half time')===1 && r2.menuRows.indexOf('Custom')===r2.menuRows.length-1 && r2.menuRows.length>=12 && r2.timeAfter==='Half time' && r2.restamped && r2.volShape==='Gate 1/16' && !r2.volTypeVis,
     '🚨 [2] the Filter\'s type chip opens the RACK\'S two-pane browser (118 in the filter\'s categories) and picking writes the MODE parameter; Drive (23) / Phaser (28) / Crush (10) are native dropdowns writing theirs; the shape chip is a native dropdown (Time: the presets + Custom) and restamps; Volume / Time carry no type chip', JSON.stringify(r2));
 
  // ── [3] brushes: the brush chip\'s dropdown; the LFO field takes the strokes ──
@@ -106,9 +106,11 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    field.dispatchEvent(new PointerEvent('pointerup',{clientX:px,clientY:py,bubbles:true,pointerId:1,button:0})); await w(200);
    const pts=JSON.parse(window.__shpJson[window.__shpJson.length-1][1]).lanes[0].pts;
    const inCell=pts.filter(q=>q[0]>=0.25-1e-6&&q[0]<=0.3125+1e-6); const flat25=inCell.length>=2&&inCell.every(q=>Math.abs(q[1]-0.25)<0.03);
-   await pick('Point'); const n0=pts.length; const px2=sx(0.61), py2=sy(0.4);
+   await pick('Point'); const n0=pts.length; const px2=sx(0.61), py2=sy(0.4); const pushes0=window.__shpJson.length;
    field.dispatchEvent(new PointerEvent('pointerdown',{clientX:px2,clientY:py2,bubbles:true,pointerId:2,button:0})); await w(30);
    field.dispatchEvent(new PointerEvent('pointerup',{clientX:px2,clientY:py2,bubbles:true,pointerId:2,button:0})); await w(250);
+   const clickAdded=window.__shpJson.length!==pushes0;   /* the LFO's law: a plain click on empty ground adds NOTHING */
+   field.dispatchEvent(new MouseEvent('dblclick',{clientX:px2,clientY:py2,bubbles:true,cancelable:true})); await w(250);
    const pts2=JSON.parse(window.__shpJson[window.__shpJson.length-1][1]).lanes[0].pts; const added=pts2.find(q=>Math.abs(q[0]-0.625)<1e-6);
    await pick('Free draw');
    field.dispatchEvent(new PointerEvent('pointerdown',{clientX:sx(0.05),clientY:sy(0.2),bubbles:true,pointerId:3,button:0}));
@@ -117,9 +119,9 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    const pts3=JSON.parse(window.__shpJson[window.__shpJson.length-1][1]).lanes[0].pts; const shapeChip=card.querySelector('.screen .mv-c.ch-shape .t').textContent;
    const inStroke=pts3.filter(q=>q[0]>0.06&&q[0]<0.94); const unquantised=inStroke.filter(q=>Math.abs(q[0]*128-Math.round(q[0]*128))>0.02).length; const faithful=inStroke.every(q=>Math.abs(q[1]-(0.2+0.6*Math.abs(Math.sin(q[0]*6))))<0.06);
    await pick('Point');
-   return {okLine,chipT,flat25,inCell:inCell.length,n0,n1:pts2.length,snapped:!!added,free:pts3.length,inStroke:inStroke.length,unquantised,faithful,shapeChip,pushes:window.__shpJson.length}; });
- ok(r3.okLine && r3.chipT==='Line' && r3.flat25 && r3.n1===r3.n0+1 && r3.snapped && r3.free>=20 && r3.unquantised>=10 && r3.faithful && r3.shapeChip==='Custom',
-    '[3] the brush dropdown: Line stamps a flat at the pointer\'s height into its grid cell; Point adds a point and Snap lands it on the grid (0.625 = 10/16); Free draw is water — the stroke\'s points sit at their own x (not on any grid) and on the curve that was drawn, and only the collinear ones go; the shape chip then reads Custom', JSON.stringify(r3));
+   return {okLine,chipT,flat25,inCell:inCell.length,n0,n1:pts2.length,clickAdded,snapped:!!added,free:pts3.length,inStroke:inStroke.length,unquantised,faithful,shapeChip,pushes:window.__shpJson.length}; });
+ ok(r3.okLine && r3.chipT==='Line' && r3.flat25 && !r3.clickAdded && r3.n1===r3.n0+1 && r3.snapped && r3.free>=20 && r3.unquantised>=10 && r3.faithful && r3.shapeChip==='Custom',
+    '[3] the brush dropdown: Line stamps a flat at the pointer\'s height into its grid cell; with Point a plain click adds NOTHING and a DOUBLE-click adds a point that Snap lands on the grid (0.625 = 10/16); Free draw is water — the stroke\'s points sit at their own x (not on any grid) and on the curve that was drawn, and only the collinear ones go; the shape chip then reads Custom', JSON.stringify(r3));
  // ── [4] the push ──
  const r4=await p.evaluate(()=>{ const last=window.__shpJson[window.__shpJson.length-1]; const o=JSON.parse(last[1]); return {inst:last[0],lanes:o.lanes.length,sense:o.sense,keys:Object.keys(o.lanes[2]).sort().join(','),k:o.lanes[2].k.length,kf:o.lanes[2].k.join(','),pts:o.lanes.every(L=>L.pts.length>=2&&L.pts[0][0]===0&&L.pts[L.pts.length-1][0]===1)}; });
  ok(r4.inst===0 && r4.lanes===8 && r4.sense===0.5 && r4.keys==='blend,floor,grid,k,phase,pts,smooth,swing,tension' && r4.k===6 && r4.kf==='0.3,0,1,0,0,0.5' && r4.pts,
@@ -140,11 +142,14 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    let shows=0; const orig=window.__synShowMenu; window.__synShowMenu=function(){ shows++; return orig.apply(this,arguments); };
    svg.dispatchEvent(new PointerEvent('pointerdown',{clientX:r.left+80,clientY:r.top+60,bubbles:true,cancelable:true,pointerId:9,button:2}));
    svg.dispatchEvent(new MouseEvent('contextmenu',{clientX:r.left+80,clientY:r.top+60,bubbles:true,cancelable:true})); await new Promise(r=>setTimeout(r,300));
-   const m=document.getElementById('syn-ctx-menu')||document.querySelector('.syn-menu, .pmenu.act, [class*="menu"].act'); const txt=m?m.textContent:''; const vis=m?getComputedStyle(m).display!=='none':false;
-   window.__synShowMenu=orig;
-   return {vis, shows, hasGrid:/Grid/.test(txt), level:/Level/.test(txt), snap:/Snap/.test(txt), flips:/Flip vertical/.test(txt)&&/Flip horizontal/.test(txt), random:/Random flat/.test(txt)&&/Random both/.test(txt), tools:/Point · edit/.test(txt)&&/Free draw/.test(txt)&&/Sine/.test(txt), wt:/Wavetable → Shape/.test(txt)&&/Oscillator D/.test(txt), stock:/Stairs/.test(txt)&&/Gate/.test(txt), clear:/Clear/.test(txt), noExtend:!/Extend/.test(txt)}; });
- ok(r6.vis && r6.shows===1 && r6.hasGrid && r6.level && r6.snap && r6.flips && r6.random && r6.tools && r6.wt && r6.stock && r6.clear && r6.noExtend,
-    '🚨 [6] the right pointer-DOWN opens the LFO\'s menu ONCE (the gesture\'s contextmenu is swallowed): Grid + Level sliders, Snap, the flips, Random ×3, the eight tools, Wavetable → Shape (Osc A–D), the stock shapes, Clear — and no Extend', JSON.stringify(r6));
+   const m=document.getElementById('syn-ctx-menu'); const txt=m?m.textContent:''; const vis=m?getComputedStyle(m).display!=='none':false;
+   const inBody=m&&m.parentElement===document.body, mr=m.getBoundingClientRect(); const cr=card.getBoundingClientRect(); const overlap=mr.left<cr.right&&mr.right>cr.left&&mr.top<cr.bottom&&mr.bottom>cr.top;
+   const rowEl=[...m.querySelectorAll('*')].find(el=>/Flip vertical/.test(el.textContent)&&el.children.length===0)||m; const rr=rowEl.getBoundingClientRect(); const hit=document.elementFromPoint(rr.left+rr.width/2, rr.top+rr.height/2); const onTop=!!(hit&&m.contains(hit));
+   const rows=m.querySelectorAll('.syn-ctx-item, [role="menuitem"]').length||m.children.length;
+   window.__synShowMenu=orig; try{ window.__synHideMenu(); }catch(e){} await new Promise(r=>setTimeout(r,60)); const home=m.parentElement&&m.parentElement.id==='syn-panel';
+   return {vis, shows, inBody, overlap, onTop, rows, home, hasGrid:/Grid/.test(txt), level:/Level/.test(txt), snap:/Snap/.test(txt), flips:/Flip vertical/.test(txt)&&/Flip horizontal/.test(txt), random:/Random flat/.test(txt)&&/Random both/.test(txt), noTools:!/Point · edit/.test(txt)&&!/Free draw/.test(txt), wt:/Wavetable → Shape/.test(txt)&&/Oscillator D/.test(txt), noStock:!/Stairs/.test(txt), clear:/Clear/.test(txt), noExtend:!/Extend/.test(txt)}; });
+ ok(r6.vis && r6.shows===1 && r6.inBody && r6.overlap && r6.onTop && r6.home && r6.rows<20 && r6.hasGrid && r6.level && r6.snap && r6.flips && r6.random && r6.noTools && r6.wt && r6.noStock && r6.clear && r6.noExtend,
+    '🚨 [6] the right pointer-DOWN opens the menu ONCE, and it paints ON TOP of the card (portaled to the body while a card floats — elementFromPoint over the card lands in the menu; home in the panel after it closes), trimmed: Grid + Level, Snap, the flips, Random ×3, Wavetable → Shape, Clear — no tools, no stock list, no Extend', JSON.stringify(r6));
 
 
  // ── [7] presets ──
@@ -220,6 +225,49 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
     '🚨 [11] the follower (the LFO\'s head and dot) rides the push and ADVANCES on the tempo between pushes (never backwards), snaps to a jump (0.10 → 0.50), the dot rides the head, and both fade when the lane is idle', JSON.stringify(r11));
 
 
+
+ // ── [15] the LFO's grammar: click selects, band-select takes many, the group drags as one, double-click on a node deletes ──
+ const r15=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const S=window.__tiDice.chop.S; const w=(ms)=>new Promise(r=>setTimeout(r,ms)); const field=card.querySelector('.screen .field'); const r=field.getBoundingClientRect();
+   card.querySelectorAll('.fx .fxb')[3].click(); await w(150);   // Pan: a 3-point sine
+   S.set('pts3',JSON.stringify([[0,0,0],[.25,.6,0],[.5,1,0],[.75,.6,0],[1,0,0]])); await w(100); const sx=(x)=>r.left+r.width*x, sy=(y)=>r.top+r.height*(168-y*158)/196;
+   const nodes=()=>card.querySelectorAll('.screen .field svg .sh-nd').length, selN=()=>card.querySelectorAll('.screen .field svg .sh-nd.sel').length;
+   // a plain click on a node SELECTS it (no move)
+   field.dispatchEvent(new PointerEvent('pointerdown',{clientX:sx(.5),clientY:sy(1),bubbles:true,pointerId:1,button:0})); await w(30); field.dispatchEvent(new PointerEvent('pointerup',{clientX:sx(.5),clientY:sy(1),bubbles:true,pointerId:1,button:0})); await w(100);
+   const sel1=selN(); const ptsA=JSON.parse(S.v.pts3);
+   // the rubber-band over the two middle-left points
+   field.dispatchEvent(new PointerEvent('pointerdown',{clientX:sx(.15),clientY:sy(1.02),bubbles:true,pointerId:2,button:0})); await w(20);
+   for(let k=1;k<=8;k++){ field.dispatchEvent(new PointerEvent('pointermove',{clientX:sx(.15+.4*k/8),clientY:sy(1.02-0.6*k/8),bubbles:true,pointerId:2,button:0})); await w(12); }
+   const boxLive=!!card.querySelector('.screen .field svg .sh-selbox'); field.dispatchEvent(new PointerEvent('pointerup',{clientX:sx(.55),clientY:sy(.42),bubbles:true,pointerId:2,button:0})); await w(100);
+   const selBand=selN(), boxGone=!card.querySelector('.screen .field svg .sh-selbox');
+   // drag one of the selected: the WHOLE selection rides
+   field.dispatchEvent(new PointerEvent('pointerdown',{clientX:sx(.25),clientY:sy(.6),bubbles:true,pointerId:3,button:0})); await w(20);
+   for(let k=1;k<=6;k++){ field.dispatchEvent(new PointerEvent('pointermove',{clientX:sx(.25),clientY:sy(.6-0.3*k/6),bubbles:true,pointerId:3,button:0})); await w(12); }
+   field.dispatchEvent(new PointerEvent('pointerup',{clientX:sx(.25),clientY:sy(.3),bubbles:true,pointerId:3,button:0})); await w(250);
+   const ptsB=JSON.parse(S.v.pts3); const moved=[1,2].every(k=>ptsB[k][1]<ptsA[k][1]-0.2), others=[0,3,4].every(k=>Math.abs(ptsB[k][1]-ptsA[k][1])<1e-6);
+   // double-click a node: gone
+   const n0=nodes(); field.dispatchEvent(new MouseEvent('dblclick',{clientX:sx(.75),clientY:sy(.6),bubbles:true,cancelable:true})); await w(250); const n1=nodes();
+   card.querySelectorAll('.fx .fxb')[0].click(); await w(100);
+   return {sel1, boxLive, selBand, boxGone, moved, others, n0, n1}; });
+ ok(r15.sel1===1 && r15.boxLive && r15.selBand===2 && r15.boxGone && r15.moved && r15.others && r15.n1===r15.n0-1,
+    '🚨 [15] the LFO\'s grammar: a click SELECTS a node, dragging empty ground rubber-bands a selection (2 of 5), grabbing one selected node drags the whole selection (the other three stay), a double-click on a node deletes it', JSON.stringify(r15));
+
+ // ── [16] a lit lane FILLS white (the LFO / Glitch button); the selected lane wears the purple ring ──
+ const r16=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const w=(ms)=>new Promise(r=>setTimeout(r,ms)); const t=card.querySelectorAll('.fx .fxb');
+   const cs0=getComputedStyle(t[0]); const on0={bg:cs0.backgroundColor,ink:cs0.color}; const cs3=getComputedStyle(t[3]); const off3={bg:cs3.backgroundColor};
+   t[3].click(); await w(80); t[3].click(); await w(400); const cs3b=getComputedStyle(t[3]); const on3={bg:cs3b.backgroundColor,ink:cs3b.color,border:cs3b.borderColor,cur:t[3].classList.contains('cur'),on:t[3].classList.contains('on')};
+   t[3].click(); await w(80); t[3].click(); await w(400); const cs3c=getComputedStyle(t[3]); const off3b={bg:cs3c.backgroundColor}; t[0].click();
+   return {on0, off3, on3, off3b}; });
+ ok(/rgba\(255, 255, 255, 0\.9/.test(r16.on0.bg) && r16.off3.bg==='rgba(0, 0, 0, 0)' && /rgba\(255, 255, 255, 0\.9/.test(r16.on3.bg) && r16.on3.on && r16.on3.cur && r16.off3b.bg==='rgba(0, 0, 0, 0)',
+    '[16] Volume (on) is filled white at boot; a double-tap lights Pan white with the purple ring; another double-tap empties it', JSON.stringify(r16));
+
+ // ── [17] ONE LINE, ONE GRID: the LFO pane and the LFO card draw the Shaper\'s line (≈1.07 px), the white .065 grid, the small nodes ──
+ const r17=await p.evaluate(()=>{ const zf=parseFloat(getComputedStyle(document.documentElement).zoom)||1;
+   const pane=document.querySelector('#mod-engine .mv-scope svg'); const shp=document.querySelector('.ti-card.shp-ext .screen .field svg');
+   const px=(svg,sel,prop)=>{ const el=svg&&svg.querySelector(sel); if(!el) return null; const v=parseFloat(getComputedStyle(el)[prop]); const vb=svg.getAttribute('viewBox').split(' '); const scale=svg.getBoundingClientRect().width/zf/parseFloat(vb[2]); return +(v*scale).toFixed(2); };
+   const gridInk=(svg)=>{ const el=svg&&svg.querySelector('.sh-grid line, .mv-grid line'); return el?getComputedStyle(el).stroke:null; };
+   return { paneStroke:px(pane,'.mv-stroke','strokeWidth'), shpStroke:px(shp,'.mv-stroke','strokeWidth'), paneGrid:gridInk(pane), shpGrid:gridInk(shp), paneNode:px(pane,'.sh-nd','r'), shpNode:px(shp,'.sh-nd','r'), paneHasNodes:!!(pane&&pane.querySelector('.sh-nd')) }; });
+ ok(r17.paneStroke!=null && r17.shpStroke!=null && Math.abs(r17.paneStroke-r17.shpStroke)<0.25 && /rgba\(255, 255, 255, 0\.06/.test(r17.paneGrid) && /rgba\(255, 255, 255, 0\.06/.test(r17.shpGrid) && (!r17.paneHasNodes || Math.abs(r17.paneNode-r17.shpNode)<0.4),
+    '🚨 [17] ONE LINE, ONE GRID: the LFO pane\'s stroke lands within a quarter pixel of the Shaper\'s, both grids are the white .065 ink, the nodes match', JSON.stringify(r17));
  // ── [12] the other lit lanes ghost behind the line ──
  const r12=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const S=window.__tiDice.chop.S; const w=(ms)=>new Promise(r=>setTimeout(r,ms));
    S.set('on2',0); await w(80); const n0=card.querySelectorAll('.screen .field svg .sh-ghost').length; S.set('on3',1); await w(80); const n1=card.querySelectorAll('.screen .field svg .sh-ghost').length; const g=card.querySelector('.screen .field svg .sh-ghost');

@@ -1,0 +1,12 @@
+const puppeteer=require('puppeteer-core'); const fs=require('fs'),path=require('path'); const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const sim=fs.readFileSync(process.cwd()+'/Tests/_ui_lockin_sim.js','utf8'); const stubSrc=sim.slice(sim.indexOf('const stub = () => {'),sim.indexOf('// ── the instruments'));
+const src=fs.readFileSync('Source/ui/public/index.html','utf8'); const PAGE=path.join(require('os').tmpdir(),'s76.html'); fs.writeFileSync(PAGE,src);
+(async()=>{ const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--no-sandbox']});
+ const p=await b.newPage(); await p.setViewport({width:1200,height:900,deviceScaleFactor:2}); await p.evaluateOnNewDocument(stubSrc+'\nstub(); ["VOL","TIME","FILT","PAN","REP","DRIVE","PHASE","CRUSH"].forEach(function(L,i){ window.__params["FLOW_CHOP_"+L+"_ON"]=i?0:1; window.__params["FLOW_CHOP_"+L+"_DEPTH"]=1; window.__params["FLOW_CHOP_"+L+"_RATE"]=4/7; window.__params["FLOW_CHOP_"+L+"_MODE"]=(L==="DRIVE"?5/22:0); window.__params["FLOW_CHOP_"+L+"_TRIG"]=0; });');
+ await p.goto('file://'+PAGE,{waitUntil:'load'}); await sleep(2000); await p.evaluate(()=>{ document.documentElement.setAttribute('data-theme','dark'); window.setActivePanel('syn'); }); await sleep(500);
+ const pane=await p.$('#mod-engine'); if(pane) await pane.screenshot({path:'/tmp/s76_pane.png'});
+ await p.evaluate(async()=>{ const c=window.__flowCardOf('chop',1); c.open(); await new Promise(r=>setTimeout(r,600)); const S=window.__tiDice.chop.S; S.set('on3',1); S.set('lane',3); S.set('pts3',JSON.stringify([[0,0,0],[.25,.6,0],[.5,1,0],[.75,.6,0],[1,0,0]])); });
+ await sleep(300); const card=await p.$('.ti-card.shp-ext'); await card.screenshot({path:'/tmp/s76_card.png'});
+ await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const field=card.querySelector('.screen .field'); const fr=field.getBoundingClientRect(); field.dispatchEvent(new PointerEvent('pointerdown',{clientX:fr.left+60,clientY:fr.top+40,bubbles:true,cancelable:true,pointerId:9,button:2})); }); await sleep(300);
+ await p.screenshot({path:'/tmp/s76_menu.png', clip:{x:380,y:80,width:640,height:620}});
+ await b.close(); console.log('shots'); })();
