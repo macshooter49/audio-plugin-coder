@@ -702,6 +702,48 @@ int main()
         check (jSnap < 0.045f, buf);
     }
 
+    // ── T35 (tp68): THE ANCHOR IS ON THE GRID ─────────────────────────────────────
+    //  Max: "as soon as you press play you get it right there … sometimes it waits a bar and a half."
+    //  Three plays through the card's own path (ext, Sync, Repeat on, chance 1, rate 0.6111 = 1/16):
+    //   (a) from a bar line: the first fire is in the FIRST block;
+    //   (b) from mid-step (a quarter of the way in): NO fire until the next boundary, then one there;
+    //   (c) a loop wrap ONTO a boundary (ppq jumps 1.03 → 8.0): the fire lands in the wrap's own block,
+    //       not a step later (it used to latch curStepP + 1 on every re-anchor).
+    {
+        auto play = [&] (double ppq0, int nBlocks, int jumpAt, double jumpTo, std::vector<int>& firesPerBlock)
+        {
+            FlowGlitch g; g.prepare (SR, 4.0); g.setMix (1.0f);
+            GlitchExtParams p; p.sync = true; p.en[(int) GlitchFx::Repeat] = true; g.setExt (p);
+            std::vector<float> L (512), R (512); long long gc = 0; double ppq = ppq0; const double pps = (BPM / 60.0) / SR;
+            int last = 0;
+            for (int b = 0; b < nBlocks; ++b)
+            {
+                if (b == jumpAt) ppq = jumpTo;
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                g.process (0.6111f, 0.55f, 1.0f, 0.0f, 0.0f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                const int c = (int) g.vizFireCount(); firesPerBlock.push_back (c - last); last = c;
+                gc += 512; ppq += pps * 512.0;
+            }
+        };
+        const double stepB = (double) arpBeatsPerStepRich (0.6111f);   // the ladder's own step, in beats
+        std::vector<int> a, bmid, c;
+        play (0.0, 40, -1, 0.0, a);
+        play (stepB * 0.25, 40, -1, 0.0, bmid);            // a quarter of a step in
+        play (0.0, 60, 30, 8.0, c);                        // wrap at block 30 onto beat 8 (a boundary)
+        const int wantB = (int) std::floor (0.75 * stepB * (SR * 60.0 / BPM) / 512.0);   // the next boundary's block
+        int firstA = -1, firstB = -1, firstC = -1;
+        for (size_t i = 0; i < a.size(); ++i)    if (a[i]    > 0) { firstA = (int) i; break; }
+        for (size_t i = 0; i < bmid.size(); ++i) if (bmid[i] > 0) { firstB = (int) i; break; }
+        for (size_t i = 30; i < c.size(); ++i)   if (c[i]    > 0) { firstC = (int) i; break; }
+        char buf[160];
+        std::snprintf (buf, sizeof buf, "T35a play from a bar line: the first fire is in block %d (want 0)", firstA);
+        check (firstA == 0, buf);
+        std::snprintf (buf, sizeof buf, "T35b play from a quarter-step in: first fire in block %d (want the next boundary's block %d, not 0)", firstB, wantB);
+        check (firstB >= wantB && firstB <= wantB + 1, buf);
+        std::snprintf (buf, sizeof buf, "T35c a loop wrap ONTO a boundary fires in the wrap's block %d (want 30; a step late was 41-42)", firstC);
+        check (firstC == 30, buf);
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

@@ -20,7 +20,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
 
 const t0={ def:/ParameterIDs::FLOW_GLI_SYNC, 1 \}, "Glitch Clock",\s+juce::StringArray \{ "Free", "Sync" \}, 1\)\)/.test(cpp),
   clone:/A clone carries the source's type, range\/choices, default and label/.test(cpp),
-  init:/syncf:1, seed:0 \};/.test(src), rx:/var DICE_TIME_RX=\{ gli:\/\^\(syncf\|grate\|quant\)\$\|_otrg\$\|_ogrd\$\/ \};/.test(src),
+  init:/syncf:1, seed:0 \};/.test(src), rx:/var DICE_TIME_RX=\{ gli:\/\^\(syncf\|grate\|quant\|swing\|chaos\)\$\|_otrg\$\|_ogrd\$\|\^gate_phase\$\|\^rep_driftk\$\|\^sct_jitter\$\/ \};/.test(src),
   sync:/var DICE_SYNC   =\{ gli:function\(d\)\{ try\{ d\.S\.set\('syncf',1\);/.test(src), grids:!/if\(id==='gli'\) diceGrids\(\/\^FLOW_GLI_\[A-Z\]\+_GRID\$\/\);\n/.test(src) };
 ok(Object.values(t0).every(Boolean), '[0] the Clock defaults to Sync (clones carry the default), the card\'s Init is Sync, the dice has the time law and no longer re-deals the modules\' grids', JSON.stringify(t0));
 
@@ -33,11 +33,11 @@ ok(Object.values(t0).every(Boolean), '[0] the Clock defaults to Sync (clones car
    try{ if(window.__tiEnsure&&window.__tiEnsure.gli) window.__tiEnsure.gli(); }catch(e){}
    await new Promise(r=>setTimeout(r,400));
    const d=window.__tiDice&&window.__tiDice.gli; if(!d) return {err:'no glitch dice object'};
-   const timeKeys=Object.keys(d.DEF).filter(k=>/^(grate|quant)$|_ogrd$/.test(k)), trigKeys=Object.keys(d.DEF).filter(k=>/_otrg$/.test(k));
+   const timeKeys=Object.keys(d.DEF).filter(k=>/^(grate|quant|swing|chaos)$|_ogrd$|^gate_phase$|^rep_driftk$|^sct_jitter$/.test(k)), trigKeys=Object.keys(d.DEF).filter(k=>/_otrg$/.test(k));
    const gridNames=((window.__JUCE__&&window.__JUCE__.initialisationData&&window.__JUCE__.initialisationData.__juce__sliders)||[]).filter(n=>/^FLOW_GLI_[A-Z]+_GRID$/.test(n));
    const gridRead=()=>gridNames.map(n=>{ try{ return +window.Juce.getSliderState(n).getNormalisedValue().toFixed(4); }catch(e){ return null; } });
    /* a hand takes it to Free, and one module's Trig to Free, and moves the fire grid */
-   d.S.set('syncf',0); if(trigKeys[0]) d.S.set(trigKeys[0],1); d.S.set('grate',7);
+   d.S.set('syncf',0); if(trigKeys[0]) d.S.set(trigKeys[0],1); d.S.set('grate',7); d.S.set('swing',0.3); d.S.set('gate_phase',0.2);
    const before={}; timeKeys.forEach(k=>before[k]=d.S.v[k]); const gridsBefore=gridRead();
    const rolls=[]; let others=0;
    for(let i=0;i<12;i++){ const snap=JSON.stringify(d.S.v); window.__tiDiceMode('gli', i%2===1); await new Promise(r=>setTimeout(r,60));

@@ -230,7 +230,18 @@ public:
         const bool useHost = playing && (! extOn_ || ext_.sync);      // ext Free-run ignores host pos
         double p = useHost ? hostPpq : freePpq_;
         const long long curStepP = (long long) std::floor (p / (double) beats);
-        if (! haveClock_) { nextStep_ = curStepP; nextBoundary_ = boundaryTime (nextStep_, beats, sw); haveClock_ = true; lastBeats_ = beats; }
+        // ══ tp68 — THE ANCHOR IS ON THE GRID. Max: "as soon as you press play you get it right there on the spot …
+        //  whatever the DAW says goes … sometimes it might wait a bar and a half or half a bar." Two anchors, two
+        //  faults: the FIRST clock latched `curStepP` — a boundary already BEHIND p — so a play pressed mid-step fired
+        //  at the first sample, off the grid by however far into the step the DAW was; and every RE-anchor (a loop
+        //  wrap, a relocate, a grid change) latched `curStepP + 1` — so a wrap that lands EXACTLY on a boundary (every
+        //  DAW loop does) missed that downbeat and fired a whole step late, every pass. One rule now, both places and
+        //  the fire groups: land ON a boundary (within a few samples / 2 % of a step) → fire there; otherwise the NEXT
+        //  boundary, never a stale one. A play from a bar line fires on its first sample.
+        const double eps = std::max (0.02 * (double) beats, pps * 32.0);
+        auto anchor = [] (double ref, double gb, double e) noexcept -> long long
+        { const long long c = (long long) std::floor (ref / gb); return (ref - (double) c * gb <= e) ? c : c + 1; };
+        if (! haveClock_) { nextStep_ = anchor (p, (double) beats, eps); nextBoundary_ = boundaryTime (nextStep_, beats, sw); haveClock_ = true; lastBeats_ = beats; }
         else if (beats != lastBeats_ || nextStep_ > curStepP + 2 || nextStep_ < curStepP - 2)
         {
             // fb116/fb128 — THE STRANDED-CLOCK LAW (fb107 class, chop's fb109 window):
@@ -240,7 +251,7 @@ public:
             // Re-anchor whenever the step counter drifts outside a sane window of the
             // ppq-derived truth, exactly like FlowChop has done since fb109.
             lastBeats_ = beats;
-            nextStep_ = curStepP + 1;
+            nextStep_ = anchor (p, (double) beats, eps);   // tp68 — a wrap ONTO a boundary fires there
             nextBoundary_ = boundaryTime (nextStep_, beats, sw);
             rollArmed_ = false;                       // a stale Roll boundary is meaningless now
         }
@@ -271,7 +282,7 @@ public:
                 {   // STRANDED-CLOCK LAW (fb107/116/122/128): (re)anchor on first use, any
                     // grid change, or any transport jump (DAW loop wraps, relocates)
                     t.beats = gb;
-                    t.step  = curG + 1;
+                    t.step  = anchor (ref - off, (double) gb, std::max (0.02 * (double) gb, pps * 32.0));   // tp68 — on the grid, never a step late
                     t.bnd   = (double) t.step * (double) gb + off;
                     t.have  = true;
                 }

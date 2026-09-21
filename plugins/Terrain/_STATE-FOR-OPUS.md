@@ -29,6 +29,15 @@ when first encoded for a save (`tiWriteSampleSpare`; factory paths and our own f
 **Bank B is released** (`releaseIdleBankBIfUnused`: unwanted 3 s + no voice → `bankB_ = nullptr` →
 +3 audioSeq → `synthEngineB_.reset()`). ⚠️ read it on **malloc size_in_use** — the footprint does not
 move for a release of many small blocks (the harness prints both now).
+**tp68 — THE GLITCH'S ANCHOR IS ON THE GRID.** `FlowGlitch::process`: the first clock latched `curStepP` (a
+boundary BEHIND p → a mid-step play fired at once, off-grid) and every re-anchor latched `curStepP + 1` (a loop
+wrap landing exactly on a boundary — every DAW loop — missed the downbeat, a step late every pass). One `anchor()`
+now (main tracker + every fire group): on a boundary within max(2 % of a step, 32 samples) → that step, else the
+next. "Main" on a module's grid already meant "follow the master grid" (`fxGrid 0`), and the Clock default was
+always Sync — what he saw was the card's dice (tp67) plus these anchors plus Swing/Chaos/Nudge/Vary rolled by the
+dice (now in `DICE_TIME_RX`). `FlowGlitch_test.cpp` T35a-c. ⚠️ Max's Terrain Shaper (ShaperBox-style card
+replacing Chop: LFO-shaper-driven volume / filter / drive / pan / width / "liquid", DAW-locked) — his brief is
+next; see the tp68 reply for the design position.
 **tp67 — THE GLITCH IS ALWAYS IN TIME.** `FLOW_GLI_SYNC` ("Glitch Clock") has defaulted to Sync since birth and
 instances 2..4 clone it; the card's Init is Sync. What put cards on Free was the CARD's own dice (`diceMode('gli')`,
 index.html ~16440): `syncf` and every module's `_otrg` (Trig, Sync/Free) are binaries the dice coin-flipped, and

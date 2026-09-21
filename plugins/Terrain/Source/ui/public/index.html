@@ -16434,7 +16434,9 @@ window.__synArc = function (ring, n, bipolar) {
        binary → a coin flip) and every module's Trig (<fx>_otrg, the same coin), and diceGrids re-dealt every module's GRID.
        Now a roll never touches a clock or a grid — and SNAPS the clock and every Trig back to Sync, so a roll repairs a
        card that drifted. Free is the hand's alone. */
-    var DICE_TIME_RX={ gli:/^(syncf|grate|quant)$|_otrg$|_ogrd$/ };
+    /* tp68 — and the knobs that BEND time: Swing (the grid's odd boundaries), Chaos (slice lengths, jumps), the Gate's
+       Nudge ("slide it off the beat"), the Repeat's and Scatter's Vary. The dice never rolls a way off the grid. */
+    var DICE_TIME_RX={ gli:/^(syncf|grate|quant|swing|chaos)$|_otrg$|_ogrd$|^gate_phase$|^rep_driftk$|^sct_jitter$/ };
     var DICE_SYNC   ={ gli:function(d){ try{ d.S.set('syncf',1); Object.keys(d.DEF).forEach(function(k){ if(/_otrg$/.test(k)) d.S.set(k,0); }); }catch(e){} } };
     var DICE_LADDER={ gli:{grate:19}, chop:{time:16,slices:6,loop:6} };
     /* tp39f — the chop's TIME never rolls the bar-long grids: index 0 (1/1) … 4 (1/2T) leave the oscillators behind the card silent
