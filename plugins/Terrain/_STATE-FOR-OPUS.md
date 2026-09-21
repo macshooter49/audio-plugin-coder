@@ -29,6 +29,12 @@ when first encoded for a save (`tiWriteSampleSpare`; factory paths and our own f
 **Bank B is released** (`releaseIdleBankBIfUnused`: unwanted 3 s + no voice → `bankB_ = nullptr` →
 +3 audioSeq → `synthEngineB_.reset()`). ⚠️ read it on **malloc size_in_use** — the footprint does not
 move for a release of many small blocks (the harness prints both now).
+**tp67 — THE GLITCH IS ALWAYS IN TIME.** `FLOW_GLI_SYNC` ("Glitch Clock") has defaulted to Sync since birth and
+instances 2..4 clone it; the card's Init is Sync. What put cards on Free was the CARD's own dice (`diceMode('gli')`,
+index.html ~16440): `syncf` and every module's `_otrg` (Trig, Sync/Free) are binaries the dice coin-flipped, and
+`diceGrids` re-dealt every `FLOW_GLI_*_GRID`. `DICE_TIME_RX.gli` (syncf / grate / quant / *_otrg / *_ogrd) is
+never rolled, `DICE_SYNC.gli` snaps the Clock and every Trig to Sync on every roll, the grid re-deal is gone.
+Free stays the hand's. Max's item 3 ("we're replacing Chop") is pending his brief. `Tests/_tp67_gate.js` (4).
 **tp66 — ONE WAVEFORM; THE AUDIO PICTURES MOVE WITH MOTION OFF.** Max: "they're not the same thing … they
 look very random … pick something and stick with it." `window.__tiWave` / `__tiWaveGeom` / `__tiWaveSvgHtml`
 (index.html, the early block) is THE sample picture; the Chop hero (`drawWaveform`, ampFrac .70 for its 50 px

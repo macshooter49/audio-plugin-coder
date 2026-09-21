@@ -16428,6 +16428,14 @@ window.__synArc = function (ring, n, bipolar) {
        ladder is NOT linear — a float here is garbage, which is why TIME "never moved").
        Unknown integer enums are left alone. Glitch's per-effect Out GRIDs roll too. */
     var DICE_SKIP  ={ gli:{drop:1,bend:1} };
+    /* ══ tp67 — THE GLITCH IS ALWAYS IN TIME. Max: "I want it to always be on sync … give the people a chance to use it on
+       free but it has to only be selectable … do not randomize the sync ever to free … do not randomize the time of each of
+       the modules … why are some of these modules off? They're on free." The card's own dice rolled the Clock (syncf, a
+       binary → a coin flip) and every module's Trig (<fx>_otrg, the same coin), and diceGrids re-dealt every module's GRID.
+       Now a roll never touches a clock or a grid — and SNAPS the clock and every Trig back to Sync, so a roll repairs a
+       card that drifted. Free is the hand's alone. */
+    var DICE_TIME_RX={ gli:/^(syncf|grate|quant)$|_otrg$|_ogrd$/ };
+    var DICE_SYNC   ={ gli:function(d){ try{ d.S.set('syncf',1); Object.keys(d.DEF).forEach(function(k){ if(/_otrg$/.test(k)) d.S.set(k,0); }); }catch(e){} } };
     var DICE_LADDER={ gli:{grate:19}, chop:{time:16,slices:6,loop:6} };
     /* tp39f — the chop's TIME never rolls the bar-long grids: index 0 (1/1) … 4 (1/2T) leave the oscillators behind the card silent
        for most of a bar (measured: a Modal pluck at −99.6 dBFS for 0.6 s), and 17-18 (1/128, 1/256) are a buzz. 5 = 1/4 … 16 = 1/64. */
@@ -16435,9 +16443,11 @@ window.__synArc = function (ring, n, bipolar) {
     function diceMode(id,wide){
       try{ if(window.__tiEnsure&&window.__tiEnsure[id]) window.__tiEnsure[id](); }catch(e){}
       var d=window.__tiDice&&window.__tiDice[id]; if(!d) return;
-      var skip=DICE_SKIP[id]||{}, lad=DICE_LADDER[id]||{};
+      var skip=DICE_SKIP[id]||{}, lad=DICE_LADDER[id]||{}, timeRx=DICE_TIME_RX[id]||null;
+      if(DICE_SYNC[id]) DICE_SYNC[id](d);   /* tp67 — Sync, before and whatever the roll */
       Object.keys(d.DEF).forEach(function(k){
         if(skip[k]) return;
+        if(timeRx&&timeRx.test(k)) return;   /* tp67 — the clock and the grids are never the dice's */
         if(k==='latch'){ d.S.set(k,0); return; }   /* tp39f — Max: "stop modulating latch … it just plays without me playing": the dice never rolls it, and turns it OFF */
         var dv=d.DEF[k]; if(typeof dv!=='number') return;   // lanes/tiles/strings keep their shape
         var cur=d.S.v[k];
@@ -16454,7 +16464,7 @@ window.__synArc = function (ring, n, bipolar) {
         //  0.08..0.72 so every rolled preset is audibly different AND still plays.
         d.S.set(k, wide ? (0.03 + Math.random() * 0.94) : (0.08 + Math.random() * 0.64));   /* tp7 — heavy / wild reach the whole range */
       });
-      if(id==='gli') diceGrids(/^FLOW_GLI_[A-Z]+_GRID$/);
+      /* tp67 — `if(id==='gli') diceGrids(/^FLOW_GLI_[A-Z]+_GRID$/);` is gone: the modules' grids are the hand's */
     }
     window.__tiDiceMode = diceMode;   /* tp7 — the Patcher's dice re-rolls Glitch whole */
     function diceGrids(rx){
