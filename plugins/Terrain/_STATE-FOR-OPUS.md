@@ -137,8 +137,7 @@ or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chop
 `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
-window were both wrong). ⚠️ `Tests/_tp10.js` is a stale PROBE — it throws at HEAD too, not a tp61
-regression, not chased.
+window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record.)
 
 ## OPEN
 The mod matrix clean-up (Max: "we can move onto the mod matrix tomorrow"), and everything still
