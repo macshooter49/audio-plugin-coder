@@ -249,10 +249,10 @@ they disappeared); E–H right-click menu (`/SYN_OSC_([A-D])_/`); exclusive solo
 or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chops", thin white).
 
 ## GATES
-`Tests/_tp76_gate.js` (20, supersedes tp74's), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
+`Tests/_tp76_gate.js` (20 — the ONE Shaper page gate; tp71–tp74's were each renamed into the next and tp71's deleted at the tp76 cleanup), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (25), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
-window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record.)
+window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record. tp76 cleanup: `_tp71_gate.js` deleted for the same reason.)
 
 ## OPEN
 The mod matrix clean-up (Max: "we can move onto the mod matrix tomorrow"), and everything still
