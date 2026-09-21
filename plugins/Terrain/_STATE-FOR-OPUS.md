@@ -1,7 +1,14 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp74** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp75** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp75 (2026-09-21) — THE SHAPER'S EMBLEM IS A SAWTOOTH
+Max: "I think I want the Shaper emblem to be a sawtooth wave." `path.shpWave` on the Flow tile: two saw periods (rise, a
+straight drop at x = 8 + 13·phase and 13 further, rise), phase 0 = the drop mid-tile = the home (one period read as a plain
+line at rest); ⚠️ a `//` comment inside a one-line loop swallowed its brace and the frame dispatcher's whole script block died —
+`_tp74_gate.js` [0] now asserts the page booted whole; the flowTiles painter's `sawD(tau)`
+replaces `sineD`. One period per beat of `__hostBpm`, wind-up / wind-down, still with Motion off — `_tp74_gate.js` [0b] / [13].
 
 ## tp74 (2026-09-21) — THE SHAPER, COMPACTED
 Max on tp73: the bar "way smaller … no emblems", "increase the height of the screen", "no on and off button in Target

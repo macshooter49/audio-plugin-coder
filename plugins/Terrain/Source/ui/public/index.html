@@ -797,7 +797,7 @@
         try { if (sv && (sv.getElementsByTagName('animate').length || sv.getElementsByTagName('animateTransform').length)){
                 if (! sv.animationsPaused()) sv.pauseAnimations(); smil = sv; } } catch (e) {}
         out.push({ el: el, mode: m, smil: smil, notes: el.querySelectorAll('.arpNote'), lines: el.querySelectorAll('.arpLine'),
-                   holds: el.querySelectorAll('.arpHold'), sqs: el.querySelectorAll('.sq'), wind: el.querySelectorAll('.rbnWind'), sine: el.querySelector('.shpSine'),
+                   holds: el.querySelectorAll('.arpHold'), sqs: el.querySelectorAll('.sq'), wind: el.querySelectorAll('.rbnWind'), sine: el.querySelector('.shpWave'),
                    last: NaN, lastR: NaN }); } } catch (e) {}
     return out; }
   /* fb509b — THE ARP TILE'S PULSES (and CHOP's four dots), byte-faithful to the killed CSS:
@@ -813,14 +813,17 @@
   /* r — the key's REST WEIGHT (0 playing, 1 at rest, __tiWind): every value is blended onto its home, so the ending
      lands on the organised pose exactly, and a wind-up leaves it as the motion comes up to speed. */
   function mix(a, b, r){ return r >= 1 ? b : a + (b - a) * r; }
-  /* tp71b — the Shaper's sine at phase ph (loop units): 33 points across x 8..34, amplitude 8.5 about y 21 — the wave
-     travels through a fixed window, its ends ride up and down, nothing is clipped. One 330-byte string a frame, only
-     while the clock moves (flowTiles skips a tile whose tau did not change). */
-  function sineD(ph){ var N = 32, o = '', i, x, y; for (i = 0; i <= N; i++){ x = 8 + 26 * i / N; y = 21 - 8.5 * Math.sin(6.283185307 * (i / N - ph));
-      o += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + (i < N ? ' ' : ''); } return o; }
+  /* tp75 — the Shaper's SAWTOOTH at phase ph (loop units): TWO periods across x 8..34 (13 wide each), 17 tall about y 21 — a
+     ramp rises to the top, drops straight down, rises again; at phase 0 the drop sits mid-tile (the home reads as a saw at
+     rest). The wave travels through a fixed window, nothing is clipped. A few points a frame, only while the clock moves. */
+  function sawD(ph){ ph = ph - Math.floor(ph); var top = 12.5, bot = 29.5, yL = ph < 1e-4 ? bot : bot - 17 * (1 - ph), yR = ph < 1e-4 ? top : yL;
+      var o = 'M8.0 ' + yL.toFixed(1), lastX = 8, lastY = yL;
+      for (var xd = 8 + 13 * ph; xd < 34 - 1e-4; xd += 13){ if (xd < 8 + 1e-4) continue;   /* a drop ON an edge is the next cycle's, not this picture's */ o += ' L' + xd.toFixed(1) + ' ' + top + ' L' + xd.toFixed(1) + ' ' + bot; lastX = xd; lastY = bot; }
+      if (lastX < 34 - 1e-4 || Math.abs(lastY - yR) > 1e-4) o += ' L34.0 ' + yR.toFixed(1);
+      return o; }
   function tilePaint(tl, tau, r){
     if (tl.smil){ try { tl.smil.setCurrentTime(tau); } catch (e) {} }
-    if (tl.sine){ try { tl.sine.setAttribute('d', sineD(tau - Math.floor(tau))); } catch (e) {} }
+    if (tl.sine){ try { tl.sine.setAttribute('d', sawD(tau)); } catch (e) {} }
     var i, el, ph, dash;
     for (i = 0; i < tl.notes.length; i++){ el = tl.notes[i]; ph = ((tau - i * 0.2) / 1.9 % 1 + 1) % 1;
       try { el.style.opacity = mix(arpAt(ph, 0.08, 0.34, 1, 0.4, 1, 0.4), 0.75, r).toFixed(3);
@@ -9182,11 +9185,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               <div class="flow-mode" data-mode="chop" title="Shaper">
                 <span class="clip"><span class="orbit"></span></span>
                 <svg class="emb" viewBox="0 0 42 42">
-                  <!-- tp71b — the Shaper's emblem: ONE full sine, dead centre, between FIXED ends (nothing clipped); the frame
+                  <!-- tp75 — the Shaper's emblem: ONE sawtooth, dead centre, between FIXED ends (nothing clipped); the frame
                        dispatcher's flowTiles painter rewrites its phase on the motion clock — one period per beat of the host's
-                       BPM (window.__hostBpm), wind-up / wind-down like every tile, still with motion off. Home = phase 0. -->
-                  <path class="shpSine" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"
-                    d="M8.0 21.0 L8.8 19.3 L9.6 17.7 L10.4 16.3 L11.2 15.0 L12.1 13.9 L12.9 13.1 L13.7 12.7 L14.5 12.5 L15.3 12.7 L16.1 13.1 L16.9 13.9 L17.8 15.0 L18.6 16.3 L19.4 17.7 L20.2 19.3 L21.0 21.0 L21.8 22.7 L22.6 24.3 L23.4 25.7 L24.2 27.0 L25.1 28.1 L25.9 28.9 L26.7 29.3 L27.5 29.5 L28.3 29.3 L29.1 28.9 L29.9 28.1 L30.8 27.0 L31.6 25.7 L32.4 24.3 L33.2 22.7 L34.0 21.0"/>
+                       BPM (window.__hostBpm), wind-up / wind-down like every tile, still with motion off. Home = phase 0 (a plain ramp). -->
+                  <path class="shpWave" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"
+                    d="M8.0 29.5 L21.0 12.5 L21.0 29.5 L34.0 12.5"/>
                 </svg>
               </div>
               <!-- GLITCH -->
