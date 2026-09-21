@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  tp73 — THE SHAPER IS THE GLITCH CARD WITH THE LFO IN ITS SCREEN — page half (tp72's bars, re-aimed at the Glitch chassis + the lent LFO field).
+//  tp74 — THE SHAPER, COMPACTED: the taller screen, the small native-dropdown bar, no On, three knobs a target, ghost lanes, fluid free draw, no caps (tp73's bars re-aimed + the new ones).
 //
-//    node Tests/_tp73_gate.js
+//    node Tests/_tp74_gate.js
 //
 //  [0] the Chop slot builds the Shaper: the card shell (title Shaper, the Mix header), the screen (svg), eight
 //      target tiles with status dots, three tabs, the chain foot; the tile's emblem is one sine path; FLOWNAME says Shaper
@@ -28,7 +28,7 @@ const fs=require('fs'),path=require('path');
 const sim=fs.readFileSync(process.cwd()+'/Tests/_ui_lockin_sim.js','utf8');
 const stubSrc=sim.slice(sim.indexOf('const stub = () => {'),sim.indexOf('// ── the instruments'));
 const src=fs.readFileSync('Source/ui/public/index.html','utf8');
-const PAGE=path.join(require('os').tmpdir(),'tp73.html'); fs.writeFileSync(PAGE,src);
+const PAGE=path.join(require('os').tmpdir(),'tp74.html'); fs.writeFileSync(PAGE,src);
 let pass=0,fail=0;
 const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''));} else {fail++;console.log('  FAIL  '+l+(d?'\n        '+d:''));} };
 (async()=>{
@@ -47,13 +47,13 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    const tile=document.querySelector('.flow-mode[data-mode="chop"]'); const scr=card.querySelector('.screen');
    return { open:card.classList.contains('open'), title:card.querySelector('.h .tt').textContent, mix:!!card.querySelector('.h .mix'), width:Math.round(parseFloat(getComputedStyle(card).width)), scrH:Math.round(parseFloat(getComputedStyle(scr).height)),
      field:!!scr.querySelector('.field svg .sh-grid')&&!!scr.querySelector('.field svg .mv-stroke')&&!!scr.querySelector('.field svg .mv-fill')&&!!scr.querySelector('.field svg .mv-play')&&!!scr.querySelector('.field svg .mv-foll'),
-     lent:!!window.__lfoField&&typeof window.__lfoField.svg==='function'&&window.__lfoField.pathD===undefined?false:true, chips:[...scr.querySelectorAll('.mv-ov.bot .mv-c')].map(e=>e.querySelector('.t').textContent), chevs:scr.querySelectorAll('.mv-ov.bot .mv-c svg.chev').length, icons:scr.querySelectorAll('.mv-ov.bot .mv-c .ic svg').length,
+     lent:!!window.__lfoField&&typeof window.__lfoField.svg==='function', chips:[...scr.querySelectorAll('.mv-ov.bot .mv-c')].map(e=>e.querySelector('.t').textContent), chevs:scr.querySelectorAll('.mv-ov.bot .mv-c svg.chev').length, icons:scr.querySelectorAll('.mv-ov.bot .mv-c .ic').length, selects:scr.querySelectorAll('.mv-ov.bot .mv-c select').length, chipPx:Math.round(parseFloat(getComputedStyle(scr.querySelector('.mv-c .t')).fontSize)*10)/10, barH:Math.round(parseFloat(getComputedStyle(scr.querySelector('.mv-ov.bot')).height)), togs:card.querySelectorAll('.pane .tog').length, tabCaps:getComputedStyle(card.querySelector('.tab')).textTransform, ttCaps:getComputedStyle(card.querySelector('.h .tt')).textTransform, lbCaps:getComputedStyle(card.querySelector('.cell .lb')).textTransform, tileCaps:getComputedStyle(card.querySelector('.fx .fxb')).textTransform, curInk:getComputedStyle(card.querySelector('.fx .fxb.cur')).color,
      tiles:card.querySelectorAll('.fx .fxb').length, cur:[...card.querySelectorAll('.fx .fxb')].map(b=>b.classList.contains('cur')).join(''), leds:card.querySelectorAll('.fleds i').length, tabs:[...card.querySelectorAll('.tab')].map(t=>t.textContent), chain:!!card.querySelector('.slotrow'),
      rows:[...card.querySelectorAll('.pane .gboxrow')].length, boxes:[...card.querySelectorAll('.pane.on .gbox .gbl')].map(e=>e.textContent),
      tilePaths:tile?tile.querySelectorAll('svg path').length:-1, tileCircles:tile?tile.querySelectorAll('svg circle').length:-1, tileTitle:tile?tile.getAttribute('title'):null, tileAnim:tile?!!tile.querySelector('animateTransform, animate'):false, tileSine:tile?!!tile.querySelector('path.shpSine'):false, tileClip:tile?!!tile.querySelector('clipPath'):false,
      caps:[...scr.querySelectorAll('div:not(.mv-ov):not(.mv-c):not(.field)')].map(e=>e.textContent.trim()).filter(t=>t&&!/Point|Gate|Ladder/.test(t)) }; });
- ok(!r0.err && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===96 && r0.field && r0.lent && r0.chips.join('|')==='Point|Gate|' && r0.chevs===3 && r0.icons===2 && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
-    '🚨 [0] the Glitch chassis (316 wide, the 96 px screen, eight tiles with dots, Shape / Target / Clock, two boxes a row, the chain) with the LFO\'s field in the screen (sh-grid, mv-fill, mv-stroke, mv-play, mv-foll) and its bar: the brush chip, the shape chip (Gate, the LFO\'s glyph), the type chip hidden on Volume; no other caption', JSON.stringify(r0));
+ ok(!r0.err && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===124 && r0.field && r0.lent && r0.chips.join('|')==='Point|Gate|' && r0.chevs===3 && r0.icons===0 && r0.selects===3 && r0.chipPx<=7.5 && r0.barH<=18 && r0.togs===0 && r0.tabCaps==='none' && r0.ttCaps==='none' && r0.lbCaps==='none' && r0.tileCaps==='uppercase' && r0.curInk==='rgb(255, 255, 255)' && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
+    '🚨 [0] the Glitch chassis (316 wide, the screen now 124 px, eight tiles with dots, Shape / Target / Clock, two boxes a row, the chain) with the LFO\'s field in the screen and a small bar (≤ 7.5 px chips, ≤ 18 px tall, three NATIVE dropdowns, no glyphs); no On toggle anywhere; no caps but the tiles; the lit tile\'s ink is white', JSON.stringify(r0));
  ok(r0.tilePaths===1 && r0.tileCircles===0 && r0.tileTitle==='Shaper' && !r0.tileAnim && r0.tileSine && !r0.tileClip, '[0b] the tile\'s emblem is ONE full sine path between fixed ends — no clip, no SMIL, nothing else on it', JSON.stringify({paths:r0.tilePaths,circles:r0.tileCircles,title:r0.tileTitle,anim:r0.tileAnim,sine:r0.tileSine,clip:r0.tileClip}));
  const nm=await p.evaluate(()=>{ try{ return (function(){ const s=document.documentElement.outerHTML; return /FLOWNAME=\{arp:'Arp',drift:'Robin',chop:'Shaper'/.test(s); })(); }catch(e){ return false; } });
  ok(nm, '[0c] FLOWNAME.chop is Shaper (the Patcher, the browser and the pills say so)');
@@ -62,7 +62,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  const r1=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const svg=()=>card.querySelector('.screen .field svg'); const eff=()=>svg().querySelector('.mv-stroke').getAttribute('d');
    const d0=eff(); const ptsVol=svg().querySelectorAll('.sh-nd').length, cdVol=svg().querySelectorAll('.sh-cd').length, hits=svg().querySelectorAll('.sh-hit').length;
    // byte-faithful: the field's stroke is the LFO's shPathD of the same points at the same geometry
-   const S=window.__tiDice.chop.S; const pts=JSON.parse(S.v.pts0); const LF=window.__lfoField; const same=LF.pathD(pts,456,{H:152,T:13,B:111})===d0;
+   const S=window.__tiDice.chop.S; const pts=JSON.parse(S.v.pts0); const LF=window.__lfoField; const same=LF.pathD(pts,456,{H:196,T:10,B:168})===d0;
    const vb=svg().getAttribute('viewBox');
    card.querySelectorAll('.fx .fxb')[1].click(); await new Promise(r=>setTimeout(r,200));
    const d1=eff(); const ptsTime=svg().querySelectorAll('.sh-nd').length;
@@ -71,8 +71,8 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    const cs=getComputedStyle(svg().querySelector('.sh-grid line')); const gridInk={stroke:cs.stroke,w:cs.strokeWidth};
    card.querySelectorAll('.fx .fxb')[0].click(); await new Promise(r=>setTimeout(r,200));
    return {ptsVol,cdVol,hits,same,vb,ptsTime,mono,changed:d0!==d1,grid,gridInk}; });
- ok(r1.ptsVol===32 && r1.cdVol===16 && r1.hits===48 && r1.same && r1.vb==='0 0 456 152' && r1.ptsTime===2 && r1.mono && r1.grid.v===20 && r1.grid.maj===2 && /^rgba\(255, 255, 255, 0\.06[0-9]?\)$/.test(r1.gridInk.stroke) && r1.gridInk.w==='0.6px',
-    '🚨 [1] the stroke IS the LFO\'s shPathD of the lane\'s points (byte-equal), the LFO\'s 456-unit field, its nodes / curve dots / hit targets, its grid ink (white .065, .6 wide); Volume boots as a 1/16 gate (32 nodes), Time as a unity ramp (2 nodes, monotone)', JSON.stringify(r1));
+ ok(r1.ptsVol===32 && r1.cdVol===16 && r1.hits===48 && r1.same && r1.vb==='0 0 456 196' && r1.ptsTime===2 && r1.mono && r1.grid.v===20 && r1.grid.maj===2 && /^rgba\(255, 255, 255, 0\.06[0-9]?\)$/.test(r1.gridInk.stroke) && r1.gridInk.w==='0.6px',
+    '🚨 [1] the stroke IS the LFO\'s shPathD of the lane\'s points (byte-equal), the LFO\'s 456 × 196 field, its nodes / curve dots / hit targets, its grid ink (white .065, .6 wide); Volume boots as a 1/16 gate (32 nodes), Time as a unity ramp (2 nodes, monotone)', JSON.stringify(r1));
 
  // ── [2] the bar: the type chip = the rosters through the rack\'s browser; the shape chip = the LFO\'s dropdown ──
  const r2=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const T=card.querySelectorAll('.fx .fxb'); const w=(ms)=>new Promise(r=>setTimeout(r,ms));
@@ -81,26 +81,25 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    let browsed=null; const orig=window.openTwoPaneBrowser; window.openTwoPaneBrowser=function(ev,cfg){ browsed=cfg; };
    T[2].click(); await w(150); out.filt=chip('type'); out.filtVis=vis('type'); card.querySelector('.screen .mv-c.ch-type').click(); await w(100); out.filtCats=browsed?browsed.cats.map(c=>c.label):null; out.filtN=browsed?browsed.cats.reduce((a,c)=>a+c.items.length,0):0;
    const acid=browsed&&browsed.cats.flatMap(c=>c.items).find(it=>it.name==='Acid 303'); if(acid) acid.pick(); await w(300); out.filtAfter=chip('type'); out.filtParam=window.__params['FLOW_CHOP_FILT_MODE'];
-   T[5].click(); await w(150); out.drive=chip('type'); browsed=null; card.querySelector('.screen .mv-c.ch-type').click(); await w(100); out.driveCats=browsed?browsed.cats.map(c=>c.label):null;
-   const hard=browsed&&browsed.cats.flatMap(c=>c.items).find(it=>it.name==='Hard Clip'); if(hard) hard.pick(); await w(300); out.driveAfter=chip('type'); out.driveParam=window.__params['FLOW_CHOP_DRIVE_MODE'];
-   T[6].click(); await w(150); out.ph=chip('type'); browsed=null; card.querySelector('.screen .mv-c.ch-type').click(); await w(100); out.phCats=browsed?browsed.cats.map(c=>c.label):null;
-   T[7].click(); await w(150); out.cr=chip('type'); browsed=null; card.querySelector('.screen .mv-c.ch-type').click(); await w(100); out.crCats=browsed?browsed.cats.map(c=>c.label):null;
+   const sel=(n)=>card.querySelector('.screen .mv-c.ch-'+n+' select'); const opts=(n)=>[...sel(n).options].map(o=>o.textContent);
+   T[5].click(); await w(150); out.drive=chip('type'); out.driveOpts=opts('type').length; sel('type').value='6'; sel('type').dispatchEvent(new Event('change')); await w(300); out.driveAfter=chip('type'); out.driveParam=window.__params['FLOW_CHOP_DRIVE_MODE'];
+   T[6].click(); await w(150); out.ph=chip('type'); out.phOpts=opts('type').length;
+   T[7].click(); await w(150); out.cr=chip('type'); out.crOpts=opts('type').length; out.filtSelHidden=false; T[2].click(); await w(150); out.filtSelHidden=getComputedStyle(sel('type')).display==='none';
    window.openTwoPaneBrowser=orig;
-   T[1].click(); await w(150); out.timeShape=chip('shape'); out.timeTypeVis=vis('type');
-   card.querySelector('.screen .mv-c.ch-shape').click(); await w(150); const m=document.querySelector('.mv-menu.open'); out.menuRows=m?[...m.querySelectorAll('div[data-i] span')].map(e=>e.textContent):null;
-   const half=m&&[...m.querySelectorAll('div[data-i]')].find(d=>/Half/.test(d.textContent)); const dA=card.querySelector('.screen .field svg .mv-stroke').getAttribute('d'); if(half) half.click(); await w(250); out.timeAfter=chip('shape'); out.restamped=card.querySelector('.screen .field svg .mv-stroke').getAttribute('d')!==dA;
+   T[1].click(); await w(150); out.timeShape=chip('shape'); out.timeTypeVis=vis('type'); out.menuRows=opts('shape');
+   const dA=card.querySelector('.screen .field svg .mv-stroke').getAttribute('d'); sel('shape').value='1'; sel('shape').dispatchEvent(new Event('change')); await w(250); out.timeAfter=chip('shape'); out.restamped=card.querySelector('.screen .field svg .mv-stroke').getAttribute('d')!==dA;
    T[0].click(); await w(150); out.volShape=chip('shape'); out.volTypeVis=vis('type');
    S.set('mode2',0); S.set('mode5',5); return out; });
  ok(r2.filt==='Ladder LP 24' && r2.filtVis && r2.filtCats && r2.filtCats[0]==='Ladder' && r2.filtN===118 && r2.filtAfter==='Acid 303' && Math.abs((r2.filtParam||0)-4/117)<0.002
-    && r2.drive==='Soft Clip' && r2.driveCats && r2.driveCats.join()==='Analog,Clip,Diode,Fold,Shaper,Digital' && r2.driveAfter==='Hard Clip' && Math.abs((r2.driveParam||0)-6/22)<0.01
-    && r2.ph==='Phaser' && r2.phCats && r2.phCats.join()==='Built in,Phasers,Flangers & combs' && r2.cr==='Bits + Rate' && r2.crCats && r2.crCats.join()==='Built in,The rack’s crushers,Digital'
+    && r2.drive==='Soft Clip' && r2.driveOpts===23 && r2.driveAfter==='Hard Clip' && Math.abs((r2.driveParam||0)-6/22)<0.01
+    && r2.ph==='Phaser' && r2.phOpts===28 && r2.cr==='Bits + Rate' && r2.crOpts===10 && r2.filtSelHidden
     && r2.timeShape==='Unity' && !r2.timeTypeVis && r2.menuRows && r2.menuRows.join('|')==='Unity|Half|Stutter|Stutter ⅛|Reverse|Tape stop|Custom' && r2.timeAfter==='Half' && r2.restamped && r2.volShape==='Gate' && !r2.volTypeVis,
-    '🚨 [2] the type chip opens the RACK\'S two-pane browser (the filter\'s 118 in the filter\'s categories, the distortion\'s six families, the phaser / crusher groups) and picking writes the MODE parameter; the shape chip opens the LFO\'s own dropdown (Time: the time presets) and restamps; Volume / Time carry no type chip', JSON.stringify(r2));
+    '🚨 [2] the Filter\'s type chip opens the RACK\'S two-pane browser (118 in the filter\'s categories) and picking writes the MODE parameter; Drive (23) / Phaser (28) / Crush (10) are native dropdowns writing theirs; the shape chip is a native dropdown (Time: the presets + Custom) and restamps; Volume / Time carry no type chip', JSON.stringify(r2));
 
  // ── [3] brushes: the brush chip\'s dropdown; the LFO field takes the strokes ──
  const r3=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const field=card.querySelector('.screen .field'); const r=field.getBoundingClientRect(); const w=(ms)=>new Promise(r=>setTimeout(r,ms));
-   const pick=async(name)=>{ card.querySelector('.screen .mv-c.ch-brush').click(); await w(120); const m=document.querySelector('.mv-menu.open'); const d=m&&[...m.querySelectorAll('div[data-i]')].find(x=>x.textContent.trim()===name); if(d) d.click(); await w(80); return !!d; };
-   const sx=(x)=>r.left+r.width*x, sy=(y)=>r.top+r.height*(111-y*98)/152;
+   const pick=async(name)=>{ const se=card.querySelector('.screen .mv-c.ch-brush select'); const o=[...se.options].find(x=>x.textContent===name); if(!o) return false; se.value=o.value; se.dispatchEvent(new Event('change')); await w(80); return true; };
+   const sx=(x)=>r.left+r.width*x, sy=(y)=>r.top+r.height*(168-y*158)/196;
    const okLine=await pick('Line'); const chipT=card.querySelector('.screen .mv-c.ch-brush .t').textContent;
    const px=sx(0.30), py=sy(0.25);
    field.dispatchEvent(new PointerEvent('pointerdown',{clientX:px,clientY:py,bubbles:true,pointerId:1,button:0})); await w(30);
@@ -116,14 +115,15 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    for(let k=1;k<=40;k++){ const x=0.05+0.9*k/40; field.dispatchEvent(new PointerEvent('pointermove',{clientX:sx(x),clientY:sy(0.2+0.6*Math.abs(Math.sin(x*6))),bubbles:true,pointerId:3,button:0})); await w(4); }
    field.dispatchEvent(new PointerEvent('pointerup',{clientX:sx(0.95),clientY:sy(0.3),bubbles:true,pointerId:3,button:0})); await w(250);
    const pts3=JSON.parse(window.__shpJson[window.__shpJson.length-1][1]).lanes[0].pts; const shapeChip=card.querySelector('.screen .mv-c.ch-shape .t').textContent;
+   const inStroke=pts3.filter(q=>q[0]>0.06&&q[0]<0.94); const unquantised=inStroke.filter(q=>Math.abs(q[0]*128-Math.round(q[0]*128))>0.02).length; const faithful=inStroke.every(q=>Math.abs(q[1]-(0.2+0.6*Math.abs(Math.sin(q[0]*6))))<0.06);
    await pick('Point');
-   return {okLine,chipT,flat25,inCell:inCell.length,n0,n1:pts2.length,snapped:!!added,free:pts3.length,shapeChip,pushes:window.__shpJson.length}; });
- ok(r3.okLine && r3.chipT==='Line' && r3.flat25 && r3.n1===r3.n0+1 && r3.snapped && r3.free>=6 && r3.free<=60 && r3.shapeChip==='Custom',
-    '[3] the brush chip\'s dropdown: Line stamps a flat at the pointer\'s height into its grid cell; Point adds a point and Snap lands it on the grid (0.625 = 10/16); Free draw keeps its breakpoints; the shape chip then reads Custom', JSON.stringify(r3));
+   return {okLine,chipT,flat25,inCell:inCell.length,n0,n1:pts2.length,snapped:!!added,free:pts3.length,inStroke:inStroke.length,unquantised,faithful,shapeChip,pushes:window.__shpJson.length}; });
+ ok(r3.okLine && r3.chipT==='Line' && r3.flat25 && r3.n1===r3.n0+1 && r3.snapped && r3.free>=20 && r3.unquantised>=10 && r3.faithful && r3.shapeChip==='Custom',
+    '[3] the brush dropdown: Line stamps a flat at the pointer\'s height into its grid cell; Point adds a point and Snap lands it on the grid (0.625 = 10/16); Free draw is water — the stroke\'s points sit at their own x (not on any grid) and on the curve that was drawn, and only the collinear ones go; the shape chip then reads Custom', JSON.stringify(r3));
  // ── [4] the push ──
  const r4=await p.evaluate(()=>{ const last=window.__shpJson[window.__shpJson.length-1]; const o=JSON.parse(last[1]); return {inst:last[0],lanes:o.lanes.length,sense:o.sense,keys:Object.keys(o.lanes[2]).sort().join(','),k:o.lanes[2].k.length,kf:o.lanes[2].k.join(','),pts:o.lanes.every(L=>L.pts.length>=2&&L.pts[0][0]===0&&L.pts[L.pts.length-1][0]===1)}; });
- ok(r4.inst===0 && r4.lanes===8 && r4.sense===0.5 && r4.keys==='blend,floor,grid,k,phase,pts,smooth,swing,tension' && r4.k===4 && r4.kf==='0.3,0,1,0' && r4.pts,
-    '🚨 [4] every edit pushes setShaperJson(inst, {sense, lanes:[8 × {pts (pinned 0..1), smooth, phase, tension, floor, blend, swing, grid, k[4]}]}); the Filter lane\'s k boots Reso .3 / Drive 0 / Poles 24 dB / Tube', JSON.stringify(r4));
+ ok(r4.inst===0 && r4.lanes===8 && r4.sense===0.5 && r4.keys==='blend,floor,grid,k,phase,pts,smooth,swing,tension' && r4.k===6 && r4.kf==='0.3,0,1,0,0,0.5' && r4.pts,
+    '🚨 [4] every edit pushes setShaperJson(inst, {sense, lanes:[8 × {pts (pinned 0..1), smooth, phase, tension, floor, blend, swing, grid, k[6]}]}); the Filter lane\'s k boots Reso .3 / Drive 0 / Poles 24 dB / Tube / Spread 0', JSON.stringify(r4));
 
  // ── [5] parameters + the dice ──
  const r5=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const t=card.querySelectorAll('.fx .fxb'); const out={};
@@ -183,16 +183,16 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    S.set('k0_2',0.3); S.set('k2_2',1); S.set('sk_k2_2',3); T[0].click(); [...card.querySelectorAll('.tab')].find(t=>t.textContent==='Shape').click();
    return {lanes:out, k0:k[0], k2:k2[2]}; });
  const L9=r9.lanes;
- ok(L9[0].title==='Volume' && L9[0].on && L9[0].knobs.join()==='Attack,Release' && L9[0].steps.join()==='Mode' && L9[0].stepVals.join()==='Gain'
-    && L9[1].title==='Time' && L9[1].knobs.join()==='Fade,Glide' && L9[1].steps.join()==='Range'
-    && L9[2].title==='Filter' && L9[2].knobs.join()==='Reso,Drive' && L9[2].steps.join()==='Poles,Char' && L9[2].stepVals.join()==='24 dB,Tube'
-    && L9[3].title==='Pan' && L9[3].knobs.join()==='Width,Bass' && L9[3].steps.join()==='Law'
+ ok(L9[0].title==='Volume' && !L9[0].on && L9[0].knobs.join()==='Attack,Release,Punch' && L9[0].steps.join()==='Mode' && L9[0].stepVals.join()==='Gain'
+    && L9[1].title==='Time' && L9[1].knobs.join()==='Fade,Glide,Range' && !L9[1].rightShown
+    && L9[2].title==='Filter' && L9[2].knobs.join()==='Reso,Drive,Spread' && L9[2].steps.join()==='Poles,Char' && L9[2].stepVals.join()==='24 dB,Tube'
+    && L9[3].title==='Pan' && L9[3].knobs.join()==='Width,Bass,Haas' && L9[3].steps.join()==='Law'
     && L9[4].title==='Repeat' && L9[4].knobs.join()==='Seam,Decay,Pitch' && L9[4].steps.join()==='Mode'
     && L9[5].title==='Drive' && L9[5].knobs.join()==='Tone,Makeup,Bias' && L9[5].steps.join()==='Char'
     && L9[6].title==='Phaser' && L9[6].knobs.join()==='Feedbk,Stereo,Drive' && !L9[6].rightShown
     && L9[7].title==='Crush' && L9[7].knobs.join()==='Bits,Rate,Tone' && !L9[7].rightShown
     && Math.abs(r9.k0-0.8)<1e-6 && Math.abs(r9.k2-1/3)<1e-6,
-    '🚨 [9] the Target tab is the lane\'s back panel in the Glitch\'s boxes: the knobs on the left with On, the steps (dropdowns) on the right, per lane (Volume Attack/Release + Mode · Time Fade/Glide + Range · Filter Reso/Drive + Poles/Char · Pan Width/Bass + Law · Repeat Seam/Decay/Pitch + Mode · Drive Tone/Makeup/Bias + Char · Phaser / Crush knobs only); a knob or a step writes the lane\'s k', JSON.stringify({f:L9[2],k0:r9.k0,k2:r9.k2}));
+    '🚨 [9] the Target tab: THREE knobs a lane, no On (Volume Attack/Release/Punch + Mode · Time Fade/Glide/Range · Filter Reso/Drive/Spread + Poles/Char · Pan Width/Bass/Haas + Law · Repeat Seam/Decay/Pitch + Mode · Drive Tone/Makeup/Bias + Char · Phaser Feedbk/Stereo/Drive · Crush Bits/Rate/Tone); a knob or a step writes the lane\'s k', JSON.stringify({f:L9[2],k0:r9.k0,k2:r9.k2}));
 
  // ── [10] the Clock tab: Rate / Grid / Trigger as the Glitch\'s OUT-style dropdowns; Sense beside them ──
  const r10=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const w=(ms)=>new Promise(r=>setTimeout(r,ms));
@@ -219,6 +219,15 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  ok(!r11.idle0 && r11.mono && r11.moved && r11.near && r11.dotOnHead && r11.idle1,
     '🚨 [11] the follower (the LFO\'s head and dot) rides the push and ADVANCES on the tempo between pushes (never backwards), snaps to a jump (0.10 → 0.50), the dot rides the head, and both fade when the lane is idle', JSON.stringify(r11));
 
+
+ // ── [12] the other lit lanes ghost behind the line ──
+ const r12=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const S=window.__tiDice.chop.S; const w=(ms)=>new Promise(r=>setTimeout(r,ms));
+   S.set('on2',0); await w(80); const n0=card.querySelectorAll('.screen .field svg .sh-ghost').length; S.set('on3',1); await w(80); const n1=card.querySelectorAll('.screen .field svg .sh-ghost').length; const g=card.querySelector('.screen .field svg .sh-ghost');
+   const cs0=g?getComputedStyle(g):null, cs=cs0?{stroke:cs0.stroke,fill:cs0.fill}:null;   /* a SNAPSHOT — the style is live and the field is rebuilt below */ const before=g&&g.previousElementSibling&&g.previousElementSibling.classList.contains('mv-fill'), under=g&&g.nextElementSibling&&g.nextElementSibling.classList.contains('mv-stroke');
+   S.set('on3',0); await w(80); const n2=card.querySelectorAll('.screen .field svg .sh-ghost').length;
+   return {n0,n1,n2,faint:cs?cs.stroke:null,fill:cs?cs.fill:null,before,under}; });
+ ok(r12.n0===0 && r12.n1===1 && r12.n2===0 && /rgba\(236, 232, 242, 0\.1[5-9]\)/.test(r12.faint) && r12.fill==='none' && r12.before && r12.under,
+    '[12] a second lit lane draws as a faint ghost behind the line (after the fill, before the stroke) and leaves when it is unlit', JSON.stringify(r12));
  // ── [13] tp71b — the tile's sine rides the motion clock: one period per beat of the host BPM, winds up on MIDI, winds down
  //        onto its home (phase 0 — the same picture every time), and with Motion off it never moves ──
  const r13=await p.evaluate(async()=>{ try{ const c=window.__flowCardOf('chop',1); if(c&&c.close) c.close(); }catch(e){}

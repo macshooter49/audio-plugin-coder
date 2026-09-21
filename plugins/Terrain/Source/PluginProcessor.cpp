@@ -17570,11 +17570,11 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
         bool havePts = false;
         if (lv.isObject())
         {
-            L.smooth  = (float) (double) lv.getProperty ("smooth",  0.25); L.phase = (float) (double) lv.getProperty ("phase", 0.0);
+            L.smooth  = (float) (double) lv.getProperty ("smooth",  0.2); L.phase = (float) (double) lv.getProperty ("phase", 0.0);
             L.tension = (float) (double) lv.getProperty ("tension", 0.5);  L.floor_ = (float) (double) lv.getProperty ("floor", 0.0);
             L.blend   = (float) (double) lv.getProperty ("blend",   1.0);  L.swing = (float) (double) lv.getProperty ("swing", 0.0);
             L.grid    = (int) lv.getProperty ("grid", 16);
-            const juce::var kv = lv.getProperty ("k", juce::var()); if (kv.isArray()) for (int q = 0; q < 4 && q < kv.size(); ++q) L.k[q] = (float) (double) kv[q];
+            const juce::var kv = lv.getProperty ("k", juce::var()); if (kv.isArray()) for (int q = 0; q < 6 && q < kv.size(); ++q) L.k[q] = (float) (double) kv[q];
             const juce::var pv = lv.getProperty ("pts", juce::var());
             if (pv.isArray() && pv.size() >= 2)
             {

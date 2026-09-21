@@ -1,7 +1,20 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp73** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp74** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp74 (2026-09-21) — THE SHAPER, COMPACTED
+Max on tp73: the bar "way smaller … no emblems", "increase the height of the screen", "no on and off button in Target
+— three buttons", "Filt is purple instead of white", "a regular Apple default drop-down menu (only the filters need
+the browser)", "the browser menu gets cut off when popped out", "draw mode … free-flowing like water", "see the shaper
+lines in the background", "stay away from the all capitals", "Smooth and Tension overlap", "am I really hearing it?".
+Screen 124 px, bar 18 px of 7 px chips = native `<select>`s (Filter keeps the rack's browser), no glyphs, no caps but
+the tiles, lit tile white. Target: three knobs a lane, no On — new in the DSP: Volume **Punch**, Time **Range** knob,
+Filter **Spread** (`FilterFxEngine::Params.spread`), Pan **Haas**; `k[6]`; Smooth to 250 ms. Ghost lanes behind the
+line. Free draw = every pointer sample, unsnapped. **Popped browser:** `openTwoPaneBrowser` grows the native card
+window (`resizeCardWindow`) to hold the panel, the size push restores it on close — ⚠️ NOT proven in a real popped
+window (no harness drives a second WKWebView); the law is in the code, Max's DAW is the test. `_tp74_gate.js` 17/17,
+`FlowShaper_test.cpp` 25/25, sweep green, `au_shaper_lock.cpp` 9/9.
 
 ## tp73 (2026-09-21) — THE SHAPER IS THE GLITCH CARD WITH THE LFO IN ITS SCREEN
 Max on tp72: "does not look anything like the LFO … why are you not taking the code from the LFO and pasting it here …
@@ -215,7 +228,7 @@ they disappeared); E–H right-click menu (`/SYN_OSC_([A-D])_/`); exclusive solo
 or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chops", thin white).
 
 ## GATES
-`Tests/_tp73_gate.js` (16, supersedes tp72's), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
+`Tests/_tp74_gate.js` (17, supersedes tp73's), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
 window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record.)

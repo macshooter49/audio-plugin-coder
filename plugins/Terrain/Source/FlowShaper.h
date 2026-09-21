@@ -65,7 +65,7 @@ enum class ShaperTrig : int { Sync = 0, Free, Audio, Midi };
 struct ShaperExt
 {
     virtual ~ShaperExt() = default;
-    virtual bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, bool wide, float& l, float& r) noexcept = 0;
+    virtual bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, float spread, float& l, float& r) noexcept = 0;
     /** mix: the lane's wet/dry — the rack's distortion delays its wet by its resampler and aligns the dry INSIDE, so the
         engine owns the mix and the lane replaces (a crossfade outside would comb). The lane passes blend × fade-in. */
     virtual bool drive  (int which, int mode, float drive01, float tone, int character, float bias, float mix, float& l, float& r) noexcept = 0;
@@ -84,7 +84,7 @@ struct ShaperLane
 {
     bool  on      = false;
     float depth   = 1.0f;     // how much of the shape's range the target gets
-    float smooth  = 0.25f;    // 0.2 → 40 ms one-pole on the read value
+    float smooth  = 0.2f;     // 0.2 + 250·s² ms one-pole on the read value (0.2 = 10 ms, the gate's edge)
     float phase   = 0.0f;     // cycles, 0..1
     float tension = 0.5f;     // the curve between shape points: 0 = dip early, 1 = late
     float floor_  = 0.0f;     // the shape never reads below this
@@ -94,25 +94,26 @@ struct ShaperLane
     int   grid    = 16;
     int   mode    = 0;        // target mode (filter engine, pan law, distortion type, phaser roster entry, time range)
     int   trig    = 0;        // ShaperTrig
-    float k[4]    = { 0.5f, 0.5f, 0.5f, 0.5f };   // the target's own knobs (the Target tab — the lane's back panel)
+    float k[6]    = { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f };   // the target's own knobs (the Target tab — the lane's back panel)
     // the shape, BAKED from the editor's breakpoints (the LFO's own law: pinned ends, per-segment tension) on the
     // message thread. table[0] is the value at phase 0, table[kShaperT] the value at phase 1 — a unity ramp for the
     // Time lane reads 0 → 1 exactly, and a grid step sits exactly on its grid line.
     float table[kShaperT + 1] = {};
     void fill (float (*f) (double)) { for (int i = 0; i <= kShaperT; ++i) table[i] = f ((double) i / kShaperT); }
 };
-// tp72 — the Target tab's knobs, per lane, at rest: [k0, k1, k2, k3]
-//   Volume  Attack · Release          Time    Fade · Glide             Filter  Reso · Drive · Poles · Character
-//   Pan     Width · Bass mono         Repeat  Seam · Decay · Pitch     Drive   Tone · Makeup · Character · Bias
-//   Phaser  Feedback · Stereo · Drive Crush   Bits · Rate · Tone
-static constexpr float kShaperKDefault[kShaperLanes][4] = {
-    { 0.5f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 0.5f, 0.5f }, { 0.3f, 0.0f, 1.0f, 0.0f }, { 0.5f, 0.0f, 0.5f, 0.5f },
-    { 0.3f, 0.0f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.5f } };
+// tp72/tp74 — the Target tab's knobs, per lane, at rest: [k0 .. k5] (three knobs a lane, Max: "every target should have three
+// parameters"; the steps ride k2/k3 on the Filter and k2 on Drive)
+//   Volume  Attack · Release · Punch            Time    Fade · Glide · Range          Filter  Reso · Drive · Spread(k4) · Poles(k2) · Char(k3)
+//   Pan     Width · Bass · Haas                 Repeat  Seam · Decay · Pitch          Drive   Tone · Makeup · Bias(k3) · Char(k2)
+//   Phaser  Feedback · Stereo · Drive           Crush   Bits · Rate · Tone
+static constexpr float kShaperKDefault[kShaperLanes][6] = {
+    { 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f }, { 0.5f, 0.0f, 0.0f, 0.5f, 0.5f, 0.5f },
+    { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 0.5f } };
 struct ShaperState
 {
     ShaperLane lanes[kShaperLanes];
     float sense = 0.5f;   // the Audio trigger's sensitivity
-    ShaperState() { for (int ln = 0; ln < kShaperLanes; ++ln) for (int q = 0; q < 4; ++q) lanes[ln].k[q] = kShaperKDefault[ln][q]; }
+    ShaperState() { for (int ln = 0; ln < kShaperLanes; ++ln) for (int q = 0; q < 6; ++q) lanes[ln].k[q] = kShaperKDefault[ln][q]; }
 };
 
 class FlowShaper
@@ -127,7 +128,8 @@ public:
         repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0; repRead_ = 0.0; tsSlew_ = -1.0;
         ringW_ = 0; ringFilled_ = 0;
         for (auto& f : freePh_) f = 0.0; envFast_ = envSlow_ = 0.0f; refr_ = 0; noteAt_ = -1;
-        for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f;
+        for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f; volPrev_ = 1.0f; punchEnv_ = 0.0f; punchRefr_ = 0;
+        for (auto& h : haasL_) h = 0.0f; for (auto& h : haasR_) h = 0.0f; haasW_ = 0;
     }
     /** The processor lends the rack's engines (may be null: every lane then runs its built-in). Set once, before processing. */
     void setExt (ShaperExt* e) noexcept { ext_.store (e, std::memory_order_release); }
@@ -158,7 +160,7 @@ public:
     float smoothed (int ln, float v, float smooth) noexcept
     {
         if (smooth <= 0.005f) { smooth_[ln] = v; return v; }
-        const float ms = 0.2f + 40.0f * smooth; const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));
+        const float ms = 0.2f + 250.0f * smooth * smooth; const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));   // tp74 — up to 250 ms: heard, not implied
         smooth_[ln] = v + (smooth_[ln] - v) * a; return smooth_[ln];
     }
     // ── the shape reader: a lane's shape at a phase, with its phase offset, swing and tension ──
@@ -241,7 +243,7 @@ public:
                 const double cyc = kShaperRateBeats[TL.rate & 7];
                 const double p = lanePhase (TL, 1, beat);
                 const float s = readShape (*TL.L, p);
-                const float rangeMul = TL.mode == 1 ? 0.5f : TL.mode == 2 ? 2.0f : 1.0f;   // Range: 1 cycle · ½ · 2
+                const float rangeMul = (TL.mode == 1 ? 0.5f : TL.mode == 2 ? 2.0f : 1.0f) * std::pow (4.0f, (TL.L->k[2] - 0.5f) * 2.0f);   // Range: the step × the knob (k2: ¼ … ×4, 0.5 = ×1)
                 const double shapedBeats = (double) s * cyc * rangeMul;                 // where in the cycle the shape reads
                 const double nowBeats    = p * cyc;                                     // where the cycle is
                 double behind = (nowBeats - shapedBeats) * (double) TL.depth;           // can only read the PAST
@@ -372,7 +374,7 @@ public:
                 const float s = smoothed (7, readShape (*CR.L, p), CR.L->smooth) * CR.depth;
                 float wl = l, wr = r; bool done = false;
                 if (CR.mode >= 3 && CR.mode <= 6 && ext != nullptr)
-                    done = ext->filter (2, kShaperCrushRoster[CR.mode - 3], 1.0f - 0.9f * s, 0.3f + 0.6f * CR.L->k[0], 0.0f, 1.0f, 0, false, wl, wr);
+                    done = ext->filter (2, kShaperCrushRoster[CR.mode - 3], 1.0f - 0.9f * s, 0.3f + 0.6f * CR.L->k[0], 0.0f, 1.0f, 0, 0.0f, wl, wr);
                 else if (CR.mode >= 7 && CR.mode <= 9 && ext != nullptr)
                 {
                     done = ext->drive (1, kShaperCrushDist[CR.mode - 7], s, 0.5f + 0.5f * CR.L->k[1], (int) (CR.L->k[0] * 7.99f), 0.5f, CR.L->blend * (s < 0.25f ? s * 4.0f : 1.0f), wl, wr);
@@ -406,7 +408,7 @@ public:
                 const float s = smoothed (2, readShape (*FL.L, p), FL.L->smooth);
                 const float cut01 = 1.0f - 0.9f * FL.depth * (1.0f - s);   // 20·1000^cut01 Hz: 1 = 20 kHz, 0.1 = 40 Hz
                 float wl = l, wr = r;
-                if (! (ext != nullptr && ext->filter (0, FL.mode, cut01, FL.L->k[0], FL.L->k[1], FL.L->k[2], (int) (FL.L->k[3] * 5.99f), false, wl, wr)))
+                if (! (ext != nullptr && ext->filter (0, FL.mode, cut01, FL.L->k[0], FL.L->k[1], FL.L->k[2], (int) (FL.L->k[3] * 5.99f), FL.L->k[4], wl, wr)))
                 {
                     const float fc = 20.0f * std::pow (1000.0f, cut01);
                     const float g = std::tan (3.14159265f * std::min (fc, (float) sr_ * 0.45f) / (float) sr_);
@@ -434,7 +436,7 @@ public:
                 const float s = smoothed (6, readShape (*PH.L, p), PH.L->smooth);
                 float wl = l, wr = r;
                 const int ri = PH.mode - 2 < kShaperPhaserRosterN ? PH.mode - 2 : 0;
-                if (ext != nullptr && ext->filter (1, kShaperPhaserRoster[ri], 0.2f + 0.7f * s * PH.depth, 0.15f + 0.8f * PH.L->k[0], PH.L->k[2], 1.0f, 0, PH.L->k[1] > 0.3f, wl, wr))
+                if (ext != nullptr && ext->filter (1, kShaperPhaserRoster[ri], 0.2f + 0.7f * s * PH.depth, 0.15f + 0.8f * PH.L->k[0], PH.L->k[2], 1.0f, 0, PH.L->k[1], wl, wr))
                 { l = l + (wl - l) * PH.L->blend; r = r + (wr - r) * PH.L->blend; phDone = true; }
                 vizPh_[6] = (float) p; vizV_[6] = s;
             }
@@ -494,6 +496,16 @@ public:
                     else { const float th = (pan + 1.0f) * 0.78539816f; gl = std::cos (th) * 1.41421356f; gr = std::sin (th) * 1.41421356f; }
                     wl *= gl; wr *= gr;
                 }
+                // tp74 — Haas (k2): the side the pan leaves is delayed up to 15 ms × the pan, so a swing has depth as well as level
+                haasL_[haasW_] = wl; haasR_[haasW_] = wr;
+                if (PN.L->k[2] > 0.01f && PN.mode != 2)
+                {
+                    const float pan = (s * 2.0f - 1.0f) * PN.depth; const float d = PN.L->k[2] * std::fabs (pan) * 0.015f * (float) sr_;
+                    const float dd = d > 1000.0f ? 1000.0f : d; const float rp = (float) haasW_ - dd; const int i0 = (int) std::floor (rp); const float f = rp - (float) i0;
+                    if (pan > 0) wl = haasL_[(i0 + 2048) & 1023] * (1 - f) + haasL_[(i0 + 1 + 2048) & 1023] * f;
+                    else         wr = haasR_[(i0 + 2048) & 1023] * (1 - f) + haasR_[(i0 + 1 + 2048) & 1023] * f;
+                }
+                haasW_ = (haasW_ + 1) & 1023;
                 if (PN.L->k[1] > 0.01f)
                 {   // bass mono: below 40..300 Hz the two sides share one centre
                     const float fc = 40.0f + 260.0f * PN.L->k[1]; const float a = 1.0f - std::exp (-6.2831853f * fc / (float) sr_);
@@ -510,10 +522,15 @@ public:
                 const double p = lanePhase (VL, 0, beat);
                 float s = readShape (*VL.L, p); if (VL.mode == 1) s = 1.0f - s;
                 const float gRaw = 1.0f - VL.depth * (1.0f - s);
-                const float base = 0.2f + 40.0f * VL.L->smooth;
+                const float base = 0.2f + 250.0f * VL.L->smooth * VL.L->smooth;
                 const float ms = base * (0.1f + 1.9f * (gRaw > smooth_[0] ? VL.L->k[0] : VL.L->k[1]));
                 const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));
-                smooth_[0] = gRaw + (smooth_[0] - gRaw) * a; const float g = 1.0f + (smooth_[0] - 1.0f) * VL.L->blend;
+                smooth_[0] = gRaw + (smooth_[0] - gRaw) * a; float g = 1.0f + (smooth_[0] - 1.0f) * VL.L->blend;
+                // tp74 — Punch (k2): every opening of the gate gets a 12 ms overshoot, up to +150 % — the transient a gate is for
+                // (a step in the shape is a ramp of one table cell — ~47 samples at a bar — so the edge is read against a 5 ms lag, 20 ms refractory)
+                volPrev_ += (gRaw - volPrev_) * (1.0f - std::exp (-1.0f / ((float) sr_ * 0.005f)));
+                if (punchRefr_ > 0) --punchRefr_; else if (gRaw - volPrev_ > 0.25f) { punchEnv_ = 1.0f; punchRefr_ = (int) (sr_ * 0.02); }
+                if (VL.L->k[2] > 0.01f) { punchEnv_ *= std::exp (-1.0f / ((float) sr_ * 0.012f)); g *= 1.0f + 1.5f * VL.L->k[2] * punchEnv_ * VL.L->blend; } else punchEnv_ = 0.0f;
                 l *= g; r *= g;
                 vizPh_[0] = (float) p; vizV_[0] = s;
             }
@@ -546,7 +563,8 @@ private:
     std::atomic<ShaperExt*> ext_ { nullptr };    // tp72 — the rack's engines, lent by the processor
     double freePh_[8] = {};                      // tp72 — the Free / MIDI / Audio lanes' own clocks
     float envFast_ = 0, envSlow_ = 0; int refr_ = 0, noteAt_ = -1;
-    float crushLp_[2] = {}, bassLp_[2] = {}, volEnv_ = 1.0f;
+    float crushLp_[2] = {}, bassLp_[2] = {}, volEnv_ = 1.0f, volPrev_ = 1.0f, punchEnv_ = 0.0f; int punchRefr_ = 0;
+    float haasL_[1024] = {}, haasR_[1024] = {}; int haasW_ = 0;   // tp74 — the Pan lane's Haas delay
     float vizPh_[8] = {}, vizV_[8] = {};
 };
 } // namespace wc

@@ -209,7 +209,7 @@ int main()
         struct FakeExt : ShaperExt
         {
             int fCalls[3] = { 0, 0, 0 }, fEng[3] = { -1, -1, -1 }, dCalls[2] = { 0, 0 }, dMode[2] = { -1, -1 }; float lastCut = -1;
-            bool filter (int which, int engine, float cut01, float, float, float, int, bool, float& l, float& r) noexcept override { ++fCalls[which]; fEng[which] = engine; lastCut = cut01; l *= 0.5f; r *= 0.5f; return true; }
+            bool filter (int which, int engine, float cut01, float, float, float, int, float, float& l, float& r) noexcept override { ++fCalls[which]; fEng[which] = engine; lastCut = cut01; l *= 0.5f; r *= 0.5f; return true; }
             bool drive  (int which, int mode, float, float, int, float, float, float& l, float& r) noexcept override { ++dCalls[which]; dMode[which] = mode; l *= 0.25f; r *= 0.25f; return true; }
         } ext;
         FlowShaper g; g.prepare (SR); g.setExt (&ext); auto st = state();
@@ -238,6 +238,25 @@ int main()
         auto a = run (g, st, 0.0, 2.0, sig440);
         char buf[160]; std::snprintf (buf, sizeof buf, "T18 TIME glide: worst sample step %.3f through a 1/16 stutter (a cut would step ~%.2f), level %.1f dB", maxJump (a.L, 12000, 90000), 0.5, db (rms (a.L, 12000, 90000)));
         check (maxJump (a.L, 12000, 90000) < 0.07 && db (rms (a.L, 12000, 90000)) > -12, buf);
+    }
+    // ── T19: VOLUME Punch — a 1/16 gate's openings carry a transient overshoot ──
+    {
+        FlowShaper g; g.prepare (SR); auto st = state(); auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.smooth = 0.1f; V.k[2] = 1.0f; fill (V, gate16);
+        auto a = run (g, st, 0.0, 1.0, [] (long long) { return 0.5f; });
+        FlowShaper g2; g2.prepare (SR); V.k[2] = 0.0f; auto b = run (g2, st, 0.0, 1.0, [] (long long) { return 0.5f; });
+        // the second opening (step 2 begins at sample 12000): its first 6 ms vs the settled level
+        const double punched = rms (a.L, 12000 + 100, 12000 + 400), settled = rms (a.L, 12000 + 3000, 12000 + 5500), plain = rms (b.L, 12000 + 100, 12000 + 400);
+        char buf[160]; std::snprintf (buf, sizeof buf, "T19 VOLUME Punch: the gate's opening reads %.2f (settled %.2f) with Punch, %.2f without", punched, settled, plain);
+        check (punched > settled * 1.3 && plain < settled * 1.15, buf);
+    }
+    // ── T20: PAN Haas — panned right, the left side arrives late (cross-correlation peaks at a lag) ──
+    {
+        FlowShaper g; g.prepare (SR); auto st = state(); auto& P = st->lanes[3]; P.on = true; P.depth = 1; P.mode = 1; P.k[2] = 1.0f; fill (P, one);   // Linear law: full right = L 0 ⇒ use 0.9
+        fill (P, [] (double) { return 0.9f; });
+        auto a = run (g, st, 0.0, 0.5, chirp);
+        int bestLag = 0; double best = -1; for (int lag = 0; lag <= 900; lag += 5) { double c = 0; for (size_t i = 6000; i + 900 < a.L.size(); ++i) c += (double) a.L[i + (size_t) lag] * a.R[i]; if (c > best) { best = c; bestLag = lag; } }
+        char buf[160]; std::snprintf (buf, sizeof buf, "T20 PAN Haas: with the pan 80 %% right the left side lags the right by %d samples (%.1f ms)", bestLag, bestLag / SR * 1000.0);
+        check (bestLag >= 400 && bestLag <= 700, buf);
     }
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);

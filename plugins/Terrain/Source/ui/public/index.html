@@ -3956,7 +3956,7 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 /* ══ tp73 — THE TERRAIN SHAPER card = THE GLITCH CARD WITH THE LFO IN ITS SCREEN (.shp-ext rides .chop-ext's chassis; the
    numbers below are the Glitch's and the LFO pane's, copied). Max: "take the exact same glitch and just replace everything
    there with the LFO at the screen". 316 wide, the 96 px screen, the eight text tiles with their dots, two boxes a row. */
-.shp-ext .screen{position:relative;height:96px;border-radius:10px;background:#0F0F1C;border:1px solid rgba(255,255,255,.06);overflow:hidden;touch-action:none;}
+.shp-ext .screen{position:relative;height:124px;border-radius:10px;background:#0F0F1C;border:1px solid rgba(255,255,255,.06);overflow:hidden;touch-action:none;}
 .shp-ext .screen .field{position:absolute;inset:0;cursor:crosshair;}
 .shp-ext .screen .field svg{position:absolute;inset:0;width:100%;height:100%;display:block;}
 /* the LFO pane's field, verbatim (#mod-engine .sh-grid / .mv-fill / .mv-stroke / .sh-nd / .sh-cd / .sh-hit / .mv-play / .mv-foll) */
@@ -3972,28 +3972,33 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .shp-ext .screen .mv-play{stroke:rgba(236,232,242,.42);stroke-width:1;transition:opacity .12s ease;}
 .shp-ext .screen .mv-foll{fill:#FFFFFF;filter:drop-shadow(0 0 2px rgba(167,139,250,0.95)) drop-shadow(0 0 5px rgba(167,139,250,0.6));transition:opacity .12s ease;}
 .shp-ext .screen.idle .mv-play,.shp-ext .screen.idle .mv-foll{opacity:0;transition:opacity .35s ease;}
-/* the LFO's bottom bar and chips (#mod-engine .mv-ov.bot / .mv-c), verbatim */
+/* the bar: the LFO's chip grammar (.mv-ov.bot / .mv-c) at the mockup's size — small, seamless, no glyphs; each chip is a native dropdown */
 .shp-ext .screen .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
-.shp-ext .screen .mv-ov.bot{bottom:0;padding:0 11px 5px;justify-content:space-between;}
-.shp-ext .screen .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:rgba(255,255,255,0.55);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;position:relative;top:1px;}
+.shp-ext .screen .mv-ov.bot{bottom:0;height:18px;padding:0 10px 2px;justify-content:space-between;}
+.shp-ext .screen .mv-c{position:relative;display:flex;align-items:center;gap:3px;font-size:7px;letter-spacing:.9px;font-weight:300;color:rgba(255,255,255,0.5);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;line-height:1;}
 .shp-ext .screen .mv-c:hover{color:#fff;}
-.shp-ext .screen .mv-c .ic{display:inline-flex;width:20px;height:11px;}
-.shp-ext .screen .mv-c .ic svg{width:20px;height:11px;}
-.shp-ext .screen .mv-c .chev{width:9px;height:9px;opacity:.55;}
-.shp-ext .screen .mv-c .t{white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis;}
+.shp-ext .screen .mv-c .chev{width:7px;height:7px;opacity:.55;flex:none;}
+.shp-ext .screen .mv-c .t{white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;}
+.shp-ext .screen .mv-c select{position:absolute;inset:-3px -2px;width:auto;height:auto;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}
+.shp-ext .screen .mv-c.browser select{display:none;}
+.shp-ext .screen .sh-ghost{fill:none;stroke:rgba(236,232,242,.17);stroke-width:1;pointer-events:none;}
 /* the Glitch's tiles and dots */
 .shp-ext .fx{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;}
 .shp-ext .fxb{aspect-ratio:1;font-size:6.5px;letter-spacing:.3px;}
-.shp-ext .fxb.cur{border-color:#B794FF;color:#fff;box-shadow:none;}   /* the lane on the screen: purple outline, white ink, no glow (Max) */
+.ti-card.shp-ext .fxb.cur{border-color:#B794FF;color:#fff;box-shadow:none;}   /* the lane on the screen: purple outline, WHITE ink, no glow (Max) — .ti-card .fxb.cur (0,3,0) paints it purple, so this carries four classes */
 .shp-ext .fleds{display:grid;grid-template-columns:repeat(8,1fr);margin-top:4px;}
 .shp-ext .fleds i.on.live{background:#D9C8FF;}
 /* the Glitch's boxes: two a row, the left one wider; steps in the right one */
 .shp-ext .pane .gboxrow{grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);}
 .shp-ext .pane .gboxrow.one{grid-template-columns:minmax(0,1fr);}
 .shp-ext .pane .gboxrow.one .gbox:last-child{display:none;}
-.ti-card.shp-ext .gbox .kin{display:grid;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:end;gap:4px;padding:12px 6px 8px;}
-.ti-card.shp-ext .gbox.outg .kin{gap:8px 7px;padding:12px 6px 8px;}
-.shp-ext .gbox .kin .cell .lb{white-space:nowrap;letter-spacing:.8px;}
+.ti-card.shp-ext .gbox .kin{display:grid;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:end;gap:4px;padding:9px 5px 6px;}
+.ti-card.shp-ext .gbox.outg .kin{gap:8px 6px;padding:9px 5px 6px;}
+.shp-ext .gbox .kin .cell .lb{white-space:nowrap;letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+/* tp74 — NO ALL-CAPS on this card but the eight lane tiles (Max): the header, tabs, box titles, knob labels, values, the bar */
+.ti-card.shp-ext .h .tt,.ti-card.shp-ext .tab,.ti-card.shp-ext .gbl,.ti-card.shp-ext .cell .lb,.ti-card.shp-ext .tog,.ti-card.shp-ext .h .pop,.ti-card.shp-ext .mix,.ti-card.shp-ext .step em,.ti-card.shp-ext .foot .lb,.ti-card.shp-ext .chain .lb{text-transform:none;}
+.ti-card.shp-ext .h .tt{letter-spacing:1.2px;font-size:10px;} .ti-card.shp-ext .tab{letter-spacing:1px;font-size:8.5px;} .ti-card.shp-ext .gbl{letter-spacing:.9px;font-size:6.5px;} .ti-card.shp-ext .cell .lb{letter-spacing:.5px;font-size:6.8px;}
+.ti-card.shp-ext .fx .fxb{text-transform:uppercase;}
 .shp-ext .oncell{justify-content:center;align-self:center;}
 .shp-ext .oncell .tog{min-width:34px;}
 .shp-ext .k svg{width:32px;height:32px;display:block;}
@@ -37070,14 +37075,15 @@ restoreThemeFromBackend();
       var built=null;
       var LN=[['vol','Vol','Volume'],['time','Time','Time'],['filt','Filt','Filter'],['pan','Pan','Pan'],['rep','Rep','Repeat'],['drive','Drive','Drive'],['phase','Phase','Phaser'],['crush','Crush','Crush']];
       var LNP=['VOL','TIME','FILT','PAN','REP','DRIVE','PHASE','CRUSH'];
-      var KDEF={ vol:[.5,.5,.5,.5], time:[.3,0,.5,.5], filt:[.3,0,1,0], pan:[.5,0,.5,.5], rep:[.3,0,.5,.5], drive:[.5,.5,.5,.5], phase:[.5,.5,0,.5], crush:[.5,.5,1,.5] };
+      var KDEF={ vol:[.5,.5,0,.5,.5,.5], time:[.3,0,.5,.5,.5,.5], filt:[.3,0,1,0,0,.5], pan:[.5,0,0,.5,.5,.5], rep:[.3,0,.5,.5,.5,.5], drive:[.5,.5,.5,.5,.5,.5], phase:[.5,.5,0,.5,.5,.5], crush:[.5,.5,1,.5,.5,.5] };   /* wc::kShaperKDefault */
       /* the Target tab: the left box = On + the lane's knobs; the right box = its steps (a dropdown each, the Glitch's OUT box) */
-      var LNK={ vol:[['k0','Attack'],['k1','Release']], time:[['k0','Fade'],['k1','Glide']], filt:[['k0','Reso'],['k1','Drive']],
-                pan:[['k0','Width'],['k1','Bass']], rep:[['k0','Seam'],['k1','Decay'],['k2','Pitch']], drive:[['k0','Tone'],['k1','Makeup'],['k3','Bias']],
+      /* three knobs a target (Max: "every target should have three parameters … no on and off button — double click the tile") */
+      var LNK={ vol:[['k0','Attack'],['k1','Release'],['k2','Punch']], time:[['k0','Fade'],['k1','Glide'],['k2','Range']], filt:[['k0','Reso'],['k1','Drive'],['k4','Spread']],
+                pan:[['k0','Width'],['k1','Bass'],['k2','Haas']], rep:[['k0','Seam'],['k1','Decay'],['k2','Pitch']], drive:[['k0','Tone'],['k1','Makeup'],['k3','Bias']],
                 phase:[['k0','Feedbk'],['k1','Stereo'],['k2','Drive']], crush:[['k0','Bits'],['k1','Rate'],['k2','Tone']] };
-      var LNS={ vol:[['mode','Mode',['Gain','Duck']]], time:[['mode','Range',['1 cycle','½ cycle','2 cycles']]], filt:[['k2','Poles',['6 dB','12 dB','18 dB','24 dB']],['k3','Char',['Tube','Diode','Fold','Hard','Crush','Fuzz']]],
+      var LNS={ vol:[['mode','Mode',['Gain','Duck']]], time:[], filt:[['k2','Poles',['6 dB','12 dB','18 dB','24 dB']],['k3','Char',['Tube','Diode','Fold','Hard','Crush','Fuzz']]],
                 pan:[['mode','Law',['Power','Linear','Width']]], rep:[['mode','Mode',['Slice','Reverse']]], drive:[['k2','Char',['1','2','3','4','5','6','7','8']]], phase:[], crush:[] };
-      var KFMT={ 'rep:k2':function(n){ return (n>=.5?'+':'')+((n-.5)*12).toFixed(1); }, 'drive:k3':function(n){ return (n>=.5?'+':'')+Math.round((n-.5)*200); } };
+      var KFMT={ 'rep:k2':function(n){ return (n>=.5?'+':'')+((n-.5)*12).toFixed(1); }, 'drive:k3':function(n){ return (n>=.5?'+':'')+Math.round((n-.5)*200); }, 'time:k2':function(n){ var m=Math.pow(4,(n-.5)*2); return (m>=1?'×'+m.toFixed(1):'÷'+(1/m).toFixed(1)); } };
       var DST=['Tube','Tape','Transformer','Stomp Box','Overdrive','Soft Clip','Hard Clip','Zero-Square','Slew Clip','Diode 1','Diode 2','Asym','Rectify','Linear Fold','Sine Fold','West Coast','Shaper','Shaper Asym','Harmonics','Table','Downsample','Bitcrush','Overflow'];
       var DSTFAM=function(i){ return i<=4?'Analog':i<=8?'Clip':i<=12?'Diode':i<=15?'Fold':i<=19?'Shaper':'Digital'; };
       var PHR=[19,72,20,73,74,99,101,103,94,95,96,97,98,100,102,104,111,112,10,11,62,63,64,65,12,75];   /* wc::kShaperPhaserRoster */
@@ -37124,8 +37130,8 @@ restoreThemeFromBackend();
         var sh=TIC.shell({cls:'chop-ext shp-ext'+(SFX?' ti-inst ti-inst'+SFX:''),id:'chop'+SFX,kind:'chop',title:'Shaper'+(SFX?' '+SFX:''),mixId:PFX+'BLEND',mixDef:1.0});
         var init={ lane:0, tool:0, snap:1, lgrid:3, sense:.5 };
         LN.forEach(function(l,i){ init['on'+i]=i===0?1:0; init['depth'+i]=1; init['rate'+i]=4; init['mode'+i]=MODEDEF[l[0]]; init['trig'+i]=0;
-          init['smooth'+i]=.25; init['phase'+i]=0; init['tension'+i]=.5; init['floor'+i]=0; init['blend'+i]=1; init['swing'+i]=0; init['grid'+i]=6;
-          for(var q=0;q<4;q++) init['k'+q+'_'+i]=KDEF[l[0]][q];
+          init['smooth'+i]=.2; init['phase'+i]=0; init['tension'+i]=.5; init['floor'+i]=0; init['blend'+i]=1; init['swing'+i]=0; init['grid'+i]=6;
+          for(var q=0;q<6;q++) init['k'+q+'_'+i]=KDEF[l[0]][q];
           init['pts'+i]=JSON.stringify(stock(DEFSHAPE[l[0]])); init['shape'+i]=DEFSHAPE[l[0]]; });
         var DEF=JSON.parse(JSON.stringify(init));
         var S=TIC.mkState(init); S_=S;
@@ -37138,7 +37144,7 @@ restoreThemeFromBackend();
         var pushT=null, pushT2=null, touched=false, natSet=null, natGet=null;
         try{ if(window.Juce&&window.Juce.getNativeFunction){ natSet=window.Juce.getNativeFunction('setShaperJson'); natGet=window.Juce.getNativeFunction('getShaperJson'); } }catch(e){}
         function lanesJson(){ var o={lanes:[],sense:S.v.sense}; LN.forEach(function(l,i){ var pts; try{ pts=JSON.parse(S.v['pts'+i]); }catch(e){ pts=stock(DEFSHAPE[l[0]]); }
-          o.lanes.push({ pts:pts, smooth:S.v['smooth'+i], phase:S.v['phase'+i], tension:S.v['tension'+i], floor:S.v['floor'+i], blend:S.v['blend'+i], swing:S.v['swing'+i], grid:gridOf(i), k:[S.v['k0_'+i],S.v['k1_'+i],S.v['k2_'+i],S.v['k3_'+i]] }); });
+          o.lanes.push({ pts:pts, smooth:S.v['smooth'+i], phase:S.v['phase'+i], tension:S.v['tension'+i], floor:S.v['floor'+i], blend:S.v['blend'+i], swing:S.v['swing'+i], grid:gridOf(i), k:[S.v['k0_'+i],S.v['k1_'+i],S.v['k2_'+i],S.v['k3_'+i],S.v['k4_'+i],S.v['k5_'+i]] }); });
           return JSON.stringify(o); }
         function pushNow(){ if(!natSet)return; try{ natSet(INST, lanesJson()); }catch(e){} }
         function push(){ touched=true; clearTimeout(pushT); pushT=setTimeout(pushNow,90); clearTimeout(pushT2); pushT2=setTimeout(pushNow,130); }
@@ -37146,7 +37152,7 @@ restoreThemeFromBackend();
           if(o.sense!=null) S.set('sense',+o.sense);
           o.lanes.forEach(function(L,i){ if(!L)return; if(L.pts&&L.pts.length>=2){ S.set('pts'+i,JSON.stringify(L.pts)); S.set('shape'+i,'custom'); }
             ['smooth','phase','tension','floor','blend','swing'].forEach(function(k){ if(L[k]!=null) S.set(k+i,L[k]); }); if(L.grid!=null){ var gi=GRIDS.indexOf(L.grid|0); if(gi>=0) S.set('grid'+i,gi); }
-            if(L.k){ for(var q=0;q<4;q++) if(L.k[q]!=null) S.set('k'+q+'_'+i,L.k[q]); } });
+            if(L.k){ for(var q=0;q<6;q++) if(L.k[q]!=null) S.set('k'+q+'_'+i,L.k[q]); } });
           fillLane(); paint(); }).catch(function(){}); }catch(e){} }
         function lane(){ return S.v.lane|0; }
         function lkey(){ return LN[lane()][0]; }
@@ -37155,13 +37161,15 @@ restoreThemeFromBackend();
 
         /* ── THE SCREEN — the LFO editor's field (window.__lfoField, the pane's own renderer) in the Glitch's screen ── */
         var LF=window.__lfoField;
-        var GEO={ H:152, T:13, B:111 };   /* 456 × 152 units into 288 × 96 px: the same scale both ways, so the LFO's circles stay circles; the bar owns the bottom 41 units */
+        var GEO={ H:196, T:10, B:168 };   /* 456 × 196 units into 288 × 124 px: the same scale both ways, so the LFO's circles stay circles; the bar owns the bottom 28 units (18 px) */
+        /* the bar: three small chips, each a NATIVE dropdown (Max: "a regular Apple default drop-down menu … the only thing that needs a
+           browser is the filters"); no glyphs (Max: "I don't fuck with the emblems") */
         var scr=TIC.el('<div class="screen"><div class="field"></div>'
-          +'<div class="mv-ov bot"><span class="mv-c ch-brush"><span class="ic"></span><span class="t"></span>'+(LF?LF.CHEV:'')+'</span>'
-          +'<span class="mv-c ch-shape"><span class="ic"></span><span class="t"></span>'+(LF?LF.CHEV:'')+'</span>'
-          +'<span class="mv-c ch-type"><span class="t"></span>'+(LF?LF.CHEV:'')+'</span></div></div>');
+          +'<div class="mv-ov bot"><span class="mv-c ch-brush"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span>'
+          +'<span class="mv-c ch-shape"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span>'
+          +'<span class="mv-c ch-type"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span></div></div>');
         var field=scr.querySelector('.field'), chBrush=scr.querySelector('.ch-brush'), chShape=scr.querySelector('.ch-shape'), chType=scr.querySelector('.ch-type');
-        var ICON_BRUSH='<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 L13 2 L15 4 L5 11 Z M13 2 L15 4"/></svg>';
+        function fillSel(chip,names,cur){ var se=chip.querySelector('select'); se.innerHTML=''; names.forEach(function(n,k){ var o=document.createElement('option'); o.value=String(k); o.textContent=n; se.appendChild(o); }); se.value=String(cur); }
         function X01(px){ var r=field.getBoundingClientRect(); var u=(px-r.left)/Math.max(1,r.width)*456; return Math.max(0,Math.min(1,(u-LF.SH.L)/(LF.SH.R-LF.SH.L))); }
         function Y01(py){ var r=field.getBoundingClientRect(); var u=(py-r.top)/Math.max(1,r.height)*GEO.H; return Math.max(0,Math.min(1,(GEO.B-u)/(GEO.B-GEO.T))); }
         /* THE LINE THE DSP READS, as breakpoints (FlowShaper::readShape): the lane's Phase slides the points, Swing warps their time,
@@ -37186,33 +37194,32 @@ restoreThemeFromBackend();
           out.sort(function(a,b){ return a[0]-b[0]; });
           return out.map(function(p){ return [p[0],yMap(i,p[1]),cOf(p[2])]; }); }
         function paint(){ if(!LF){ field.innerHTML=''; return; } var i=lane();
-          field.innerHTML=LF.svg(dispPts(i),gridOf(i),lgridOf(),GEO);
+          var html=LF.svg(dispPts(i),gridOf(i),lgridOf(),GEO);
+          /* the other lit lanes, faint, behind the line (Max: "see the shaper lines in the background, like ShaperBox, very faintly") —
+             spliced into the markup before it lands (insertAdjacentHTML into an svg births HTML-namespace paths that never paint) */
+          var gh=''; LN.forEach(function(l,j){ if(j===i||!S.v['on'+j])return; gh+='<path class="sh-ghost" d="'+LF.pathD(dispPts(j),456,GEO)+'"/>'; });
+          if(gh) html=html.replace('<path class="mv-stroke"',gh+'<path class="mv-stroke"');
+          field.innerHTML=html;
           scr.classList.toggle('off',!S.v['on'+i]);
           paintChips(); }
         /* ── the bar: the brush chip, the shape chip (the LFO's own icons), the type chip on the roster lanes ── */
         function shapeList(){ return lkey()==='time'?TIMEP:STOCK; }
-        function shapeIcon(entry){ if(!LF)return ''; return entry&&entry[2]>=0?LF.icon(entry[2]):LF.ICON_CUSTOM; }
-        function paintChips(){ var i=lane(), l=lkey(); var t=TOOLS[Math.max(0,Math.min(TOOLS.length-1,S.v.tool|0))];
-          chBrush.querySelector('.ic').innerHTML=ICON_BRUSH; chBrush.querySelector('.t').textContent=(S.v.tool|0)===0?'Point':t[0];
-          var key=S.v['shape'+i]||'custom', L=shapeList(), e=null; for(var q=0;q<L.length;q++) if(L[q][0]===key){ e=L[q]; break; }
-          chShape.querySelector('.ic').innerHTML=shapeIcon(e); chShape.querySelector('.t').textContent=e?e[1]:'Custom';
-          chType.style.display=ROSTER[l]?'':'none'; if(ROSTER[l]){ var M=LNMODE(l); chType.querySelector('.t').textContent=M[S.v['mode'+i]|0]||M[0]||'—'; } }
-        function lfoMenu(items,cur,at,cb){ if(LF&&LF.menu){ LF.menu(items,cur,at,cb,true); return; }
-          if(window.__synShowMenu){ var r=at.getBoundingClientRect(); window.__synShowMenu('',items.map(function(it,k){ return { label:it.t, isChecked:k===cur, white:true, onPick:function(){ cb(k); } }; }),r.left,r.top); } }
-        chBrush.addEventListener('click',function(e){ e.stopPropagation(); var cur=0; for(var k=0;k<TOOLS.length;k++) if(TOOLS[k][1]===(S.v.tool|0)) cur=k;
-          var items=TOOLS.map(function(t){ return {t:t[0]}; }); items.push({t:(S.v.snap?'Snap ✓':'Snap')});
-          lfoMenu(items,cur,chBrush,function(k){ if(k===TOOLS.length){ S.set('snap',S.v.snap?0:1); } else S.set('tool',TOOLS[k][1]); paintChips(); }); });
-        chShape.addEventListener('click',function(e){ e.stopPropagation(); var i=lane(), L=shapeList(), key=S.v['shape'+i]||'custom', cur=-1; for(var k=0;k<L.length;k++) if(L[k][0]===key) cur=k;
-          var items=L.map(function(en){ return {t:en[1], ic:shapeIcon(en)}; }); items.push({t:'Custom', ic:LF?LF.ICON_CUSTOM:''}); if(cur<0) cur=L.length;
-          lfoMenu(items,cur,chShape,function(k){ if(k<L.length) setPts(i,stock(L[k][0]),L[k][0]); }); });
-        chType.addEventListener('click',function(e){ e.stopPropagation(); var i=lane(), l=lkey(), M=LNMODE(l), cur=S.v['mode'+i]|0;
-          /* the rack's own two-pane browser (fb603) — the filter's categories, the distortion's families, the roster's phasers / crushers */
-          var cats=[], byG={}, grp=function(k){ if(l==='filt'){ var G=window.__FLT_ENGGRP||[], GN=window.__FLT_GRPNAMES||[]; return GN[G[k]]||'Other'; }
-            if(l==='drive') return DSTFAM(k); if(l==='phase') return k<2?'Built in':k<18?'Phasers':'Flangers & combs'; return k<3?'Built in':k<7?'The rack’s crushers':'Digital'; };
-          for(var k=0;k<M.length;k++){ var g=grp(k); if(!byG[g]){ byG[g]={label:g,items:[]}; cats.push(byG[g]); } (function(idx){ byG[g].items.push({ name:M[idx], sel:idx===cur, pick:function(){ S.set('mode'+i,idx); paintChips(); } }); })(k); }
+        function paintChips(){ var i=lane(), l=lkey(); var ti=0; for(var k=0;k<TOOLS.length;k++) if(TOOLS[k][1]===(S.v.tool|0)) ti=k;
+          chBrush.querySelector('.t').textContent=TOOLS[ti][0]; fillSel(chBrush,TOOLS.map(function(t){ return t[0]; }),ti);
+          var key=S.v['shape'+i]||'custom', L=shapeList(), cur=-1; for(var q=0;q<L.length;q++) if(L[q][0]===key) cur=q;
+          chShape.querySelector('.t').textContent=cur>=0?L[cur][1]:'Custom'; fillSel(chShape,L.map(function(e){ return e[1]; }).concat(['Custom']),cur>=0?cur:L.length);
+          chType.style.display=ROSTER[l]?'':'none'; chType.classList.toggle('browser',l==='filt');
+          if(ROSTER[l]){ var M=LNMODE(l), mi=S.v['mode'+i]|0; chType.querySelector('.t').textContent=M[mi]||M[0]||'—'; if(l!=='filt') fillSel(chType,M,mi); else chType.querySelector('select').innerHTML=''; } }
+        chBrush.querySelector('select').addEventListener('change',function(){ var k=parseInt(this.value,10)||0; S.set('tool',TOOLS[k][1]); paintChips(); });
+        chShape.querySelector('select').addEventListener('change',function(){ var i=lane(), L=shapeList(), k=parseInt(this.value,10)||0; if(k<L.length) setPts(i,stock(L[k][0]),L[k][0]); else paintChips(); });
+        chType.querySelector('select').addEventListener('change',function(){ var i=lane(); S.set('mode'+i,parseInt(this.value,10)||0); paintChips(); });
+        TIC.EA(scr.querySelectorAll('.mv-c select'),function(se){ se.addEventListener('pointerdown',function(e){ e.stopPropagation(); }); });
+        chType.addEventListener('click',function(e){ if(lkey()!=='filt')return; e.stopPropagation(); var i=lane(), M=LNMODE('filt'), cur=S.v['mode'+i]|0;
+          /* the filter's 118: the rack's own two-pane browser (fb603), its categories */
+          var G=window.__FLT_ENGGRP||[], GN=window.__FLT_GRPNAMES||[], cats=[], byG={};
+          for(var k=0;k<M.length;k++){ var g=GN[G[k]]||'Other'; if(!byG[g]){ byG[g]={label:g,items:[]}; cats.push(byG[g]); } (function(idx){ byG[g].items.push({ name:M[idx], sel:idx===cur, pick:function(){ S.set('mode'+i,idx); paintChips(); } }); })(k); }
           var openCat=0; for(var c=0;c<cats.length;c++) if(cats[c].items.some(function(it){ return it.sel; })){ openCat=c; break; }
-          if(window.openTwoPaneBrowser){ try{ window.openTwoPaneBrowser(e,{cats:cats,openCat:openCat,searchPlaceholder:'Search '+M.length+' types'}); }catch(err){} }
-          else lfoMenu(M.map(function(n){ return {t:n}; }),cur,chType,function(k){ S.set('mode'+i,k); paintChips(); }); });
+          if(window.openTwoPaneBrowser){ try{ window.openTwoPaneBrowser(e,{cats:cats,openCat:openCat,searchPlaceholder:'Search '+M.length+' filters'}); }catch(err){} } });
 
         /* ── drawing on the field: the LFO's grammar ── */
         function pos(e){ return { x:X01(e.clientX), y:Y01(e.clientY) }; }
@@ -37246,11 +37253,15 @@ restoreThemeFromBackend();
             if(h&&h.t==='cd'){ var rs=rawIndexFor(i,h.i); if(rs>=0){ drag={kind:'seg',k:rs,pts:pts,y0:e.clientY,c0:pts[rs][2]||0}; } return; }
             var nx=snapX(p.x); pts.push([nx,p.y,0]); pts.sort(function(a,b){ return a[0]-b[0]; }); var ni=-1; for(var q=0;q<pts.length;q++) if(pts[q][0]===nx&&pts[q][1]===p.y){ ni=q; break; }
             drag={kind:'pt',k:ni,pts:pts}; S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); return; }
-          if(tool===7){ drag={kind:'free',pts:pts,last:-1}; freeAt(i,drag,p); return; }
+          if(tool===7){ drag={kind:'free',pts:pts,raw:[],lo:p.x,hi:p.x}; freeAt(i,drag,p); return; }
           drag={kind:'stamp',pts:pts,cell:-1}; stampAt(i,drag,p,tool); });
-        function freeAt(i,d,p){ var g=Math.max(64,gridOf(i)*8), q=Math.round(p.x*g)/g; if(d.last===q)return; d.last=q;
-          var pts=d.pts.filter(function(t){ return Math.abs(t[0]-q)>0.5/g-1e-9; }); pts.push([q,p.y,0]); pts.sort(function(a,b){ return a[0]-b[0]; });
-          if(pts[0][0]>1e-6) pts.unshift([0,p.y,0]); if(pts[pts.length-1][0]<1-1e-6) pts.push([1,p.y,0]); pts[0][0]=0; pts[pts.length-1][0]=1; d.pts=pts; S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); }
+        /* FREE DRAW, like water (Max): every pointer sample is a breakpoint at its exact x — nothing snaps, nothing quantises; the
+           stroke replaces whatever it passes over (its x range) and the rest of the lane stays. On release only collinear points go. */
+        function freeAt(i,d,p){ var x=p.x, y=p.y; if(x<d.lo)d.lo=x; if(x>d.hi)d.hi=x;
+          d.raw=d.raw.filter(function(t){ return Math.abs(t[0]-x)>0.0012; }); d.raw.push([x,y,0]);
+          var pts=d.pts.filter(function(t){ return t[0]<d.lo-1e-9||t[0]>d.hi+1e-9; }).concat(d.raw); pts.sort(function(a,b){ return a[0]-b[0]; });
+          if(pts[0][0]>1e-6) pts.unshift([0,pts[0][1],0]); if(pts[pts.length-1][0]<1-1e-6) pts.push([1,pts[pts.length-1][1],0]); pts[0][0]=0; pts[pts.length-1][0]=1;
+          S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); }
         function stampAt(i,d,p,tool){ var g=gridOf(i), c=Math.floor(p.x*g); if(c===d.cell)return; d.cell=c; d.pts=stampCell(i,d.pts,p.x,p.y,tool); d.pts.sort(function(a,b){ return a[0]-b[0]; }); S.set('pts'+i,JSON.stringify(d.pts)); S.set('shape'+i,'custom'); paint(); }
         field.addEventListener('pointermove',function(e){ if(!drag)return; e.preventDefault(); var i=lane(), p=pos(e);
           if(drag.kind==='pt'){ var pts=drag.pts, k=drag.k; if(k<0)return; if(k>0&&k<pts.length-1) pts[k][0]=Math.max(pts[k-1][0],Math.min(pts[k+1][0],snapX(p.x))); pts[k][1]=p.y; S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); }
@@ -37258,7 +37269,7 @@ restoreThemeFromBackend();
           else if(drag.kind==='free'){ freeAt(i,drag,p); }
           else if(drag.kind==='stamp'){ stampAt(i,drag,p,S.v.tool|0); } });
         function up(e){ if(!drag)return; var d=drag; drag=null; try{ field.releasePointerCapture(e.pointerId); }catch(_){} var i=lane();
-          if(d.kind==='free'){ var simp=rdp(ptsOf(i),0.012); setPts(i,simp.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; })); return; }
+          if(d.kind==='free'){ var simp=rdp(ptsOf(i),0.003); if(simp.length>400) simp=rdp(simp,0.006); setPts(i,simp.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; })); return; }
           setPts(i,ptsOf(i)); }
         field.addEventListener('pointerup',up); field.addEventListener('pointercancel',up);
         field.addEventListener('dblclick',function(e){ e.preventDefault(); e.stopPropagation(); var i=lane(), pts=ptsOf(i), h=hitOf(e); if(h&&h.t==='nd'){ var ri=rawIndexFor(i,h.i); if(ri>0&&ri<pts.length-1){ pts.splice(ri,1); setPts(i,pts); } } });
@@ -37326,13 +37337,12 @@ restoreThemeFromBackend();
         function paintClock(){}
         function fillLane(){ var i=lane(), l=lkey(), nm=LN[i][2];
           laneBox.querySelector('.gbl').textContent=nm; var g=laneBox.querySelector('.kin'); g.innerHTML='';
-          g.appendChild(TIC.knobCell(S,'depth'+i,'Depth',TIC.inum(0,100),1)); g.appendChild(TIC.knobCell(S,'smooth'+i,'Smooth',TIC.inum(0,100),.25));
+          g.appendChild(TIC.knobCell(S,'depth'+i,'Depth',TIC.inum(0,100),1)); g.appendChild(TIC.knobCell(S,'smooth'+i,'Smooth',TIC.inum(0,100),.2));
           g.appendChild(TIC.knobCell(S,'tension'+i,'Tension',TIC.inum(0,100),.5)); g.appendChild(TIC.knobCell(S,'floor'+i,'Floor',TIC.inum(0,100),0));
           var cy=cycBox.querySelector('.kin'); cy.innerHTML='';
           cy.appendChild(TIC.knobCell(S,'phase'+i,'Phase',TIC.inum(0,100),0)); cy.appendChild(TIC.knobCell(S,'swing'+i,'Swing',TIC.inum(0,100),0)); cy.appendChild(TIC.knobCell(S,'blend'+i,'Blend',TIC.inum(0,100),1));
           /* TARGET — the lane's back panel: On + its knobs on the left, its steps on the right (none: the left box fills the row) */
           tgtBox.querySelector('.gbl').textContent=nm; var t=tgtBox.querySelector('.kin'); t.innerHTML='';
-          var onC=TIC.el('<div class="cell oncell"></div>'); onC.appendChild(TIC.togEl(S,'on'+i,'On')); t.appendChild(onC);
           (LNK[l]||[]).forEach(function(k){ t.appendChild(TIC.knobCell(S,k[0]+'_'+i,k[1],kfmt(l,k[0]),KDEF[l][+k[0].slice(1)])); });
           var st=tgtSteps.querySelector('.kin'); st.innerHTML=''; var steps=LNS[l]||[];
           steps.forEach(function(sd){ var key=sd[0]==='mode'?('mode'+i):(sd[0]+'_'+i);
@@ -37347,8 +37357,8 @@ restoreThemeFromBackend();
 
         /* ── S → paint / push ── */
         S.on(function(k,v){ if(k==='lane'){ fillLane(); return; }
-          var m=/^sk_(k[0-3])_(\d)$/.exec(k); if(m){ var sd=(LNS[LN[+m[2]][0]]||[]).filter(function(x){ return x[0]===m[1]; })[0]; if(sd){ S.set(m[1]+'_'+m[2],(v|0)/Math.max(1,sd[2].length-1)); } return; }
-          if(/^(smooth|phase|tension|floor|blend|swing|grid|k[0-3]_)\d$/.test(k)){ push(); paint(); return; }
+          var m=/^sk_(k[0-5])_(\d)$/.exec(k); if(m){ var sd=(LNS[LN[+m[2]][0]]||[]).filter(function(x){ return x[0]===m[1]; })[0]; if(sd){ S.set(m[1]+'_'+m[2],(v|0)/Math.max(1,sd[2].length-1)); } return; }
+          if(/^(smooth|phase|tension|floor|blend|swing|grid|k[0-5]_)\d$/.test(k)){ push(); paint(); return; }
           if(k==='sense'){ push(); return; }
           if(/^(on|mode|rate)\d$/.test(k)){ paintBank(); paint(); return; } });
 
@@ -40798,9 +40808,22 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       document.body.appendChild (panel);
       var pw = panel.offsetWidth || 384, ph = panel.offsetHeight || PANEL_H;
       var ex = (ev && ev.clientX) || 120, ey = (ev && ev.clientY) || 120;
-      panel.style.left = Math.max (6, Math.min (ex, window.__vw() - pw - 6)) + 'px';
-      panel.style.top  = Math.max (6, Math.min (ey, window.__vh() - ph - 6)) + 'px';
+      /* tp74 — A POPPED CARD'S BROWSER LEAVES THE CARD. Max: "when it's popped out the browser menu gets cut off … it needs to work
+         the exact same way … overlaying on top of the DAW". A popped card is its own native window sized to the card, so a fixed
+         panel can only clip against it. The card-only page asks the native window to GROW to hold the browser (resizeCardWindow),
+         places the panel once the view has resized, and the card's own size-push (the ResizeObserver) restores it on close. */
+      var grew = false;
+      function place () {
+        panel.style.left = Math.max (6, Math.min (ex, window.__vw() - pw - 6)) + 'px';
+        panel.style.top  = Math.max (6, Math.min (ey, window.__vh() - ph - 6)) + 'px'; }
+      if (window.__cardOnly) {
+        try { var rs = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('resizeCardWindow') : null; var cardEl = document.querySelector ('.ti-popcard');
+          if (rs && cardEl) { var cr = cardEl.getBoundingClientRect(); var needW = Math.max (Math.ceil (cr.width), pw + 24), needH = Math.max (Math.ceil (cr.height), ph + 24);
+            if (needW > cr.width + 1 || needH > cr.height + 1) { grew = true; rs (needW, needH); panel.style.left = '6px'; panel.style.top = '6px'; ex = 6; ey = 6; setTimeout (place, 90); } else place (); }
+          else place (); } catch (e) { place (); } }
+      else place ();
       function close () { clearTimeout (window[G('__tpbPrevT')]);
+        if (grew) { try { if (window.__tiPushCardSize) setTimeout (window.__tiPushCardSize, 30); } catch (e) {} }
         if (window[G('__tpbMenuClose')]) { try { window[G('__tpbMenuClose')] (); } catch (e) {} }   /* fb606 — the folder menu never outlives its browser */
         try { var sf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('stopPreview') : null; if (sf) sf (); } catch (e) {}   // silence any active audition (Max: it kept playing)
         if (panel.parentNode) panel.parentNode.removeChild (panel); document.removeEventListener ('pointerdown', onDown, true); window[G('__tpbClose')] = null; }

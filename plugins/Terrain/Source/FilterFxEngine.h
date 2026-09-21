@@ -80,6 +80,7 @@ public:
         float rate     = 0.368f; // stepped over the 20-entry sync list
         float sweep    = 0.0f;   // LFO depth 0..±60 semis
         bool  wide     = false;  // stereo L/R cutoff split
+        float spread   = -1.0f;  // tp74 — a continuous L/R split (0..1) when >= 0; -1 = follow `wide` (the rack's law, unchanged)
         bool  punch    = false;  // follower becomes a transient detector
     };
 
@@ -211,7 +212,7 @@ public:
         drvSm_ += (p.drive  - drvSm_) * kc15ms_;
 
         slot_.setPoles ((int) std::lround (p.poles * 3.0f));
-        slot_.setSpread (p.wide ? 0.5f : 0.0f);
+        slot_.setSpread (p.spread >= 0.0f ? p.spread * 0.5f : (p.wide ? 0.5f : 0.0f));
 
         // 8. BUS LIFT — the FX bus program sits at ~-26 dBFS while the cores were voiced at
         //    about -12. +14 dB in, -14 dB out.

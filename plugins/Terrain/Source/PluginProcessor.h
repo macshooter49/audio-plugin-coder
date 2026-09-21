@@ -2086,10 +2086,10 @@ private:
         void prepare (double sampleRate) { sr = sampleRate; for (auto& f : flt) if (f) { f->prepare (sr, 512); } for (auto& d : dst) if (d) d->prepare (sr); }
         void armFilter (int w) { if (w < 0 || w > 2 || flt[w]) return; auto e = std::make_unique<tw::FilterFxEngine>(); e->prepare (sr, 512); flt[w] = std::move (e); fltLive[w].store (flt[w].get(), std::memory_order_release); }
         void armDist   (int w) { if (w < 0 || w > 1 || dst[w]) return; auto e = std::make_unique<tw::DistortionEngine>(); e->prepare (sr); e->setMix (1.0f); dst[w] = std::move (e); dstLive[w].store (dst[w].get(), std::memory_order_release); }
-        bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, bool wide, float& l, float& r) noexcept override
+        bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, float spread, float& l, float& r) noexcept override
         {
             auto* e = fltLive[which & 3].load (std::memory_order_acquire); if (e == nullptr) return false;
-            tw::FilterFxEngine::Params p; p.engine = engine; p.cut = cut01; p.res = res; p.drive = drive; p.poles = poles; p.charIdx = charIdx; p.wide = wide;
+            tw::FilterFxEngine::Params p; p.engine = engine; p.cut = cut01; p.res = res; p.drive = drive; p.poles = poles; p.charIdx = charIdx; p.spread = spread; p.wide = false;
             p.env = 0.5f; p.sweep = 0.0f; p.track = 0.0f; p.mix = 1.0f;   // the shape IS the motion: no follower, no LFO, no key
             e->processSample (l, r, p); return true;
         }
