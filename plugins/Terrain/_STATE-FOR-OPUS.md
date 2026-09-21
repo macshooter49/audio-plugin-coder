@@ -1,7 +1,20 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp72** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp73** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp73 (2026-09-21) — THE SHAPER IS THE GLITCH CARD WITH THE LFO IN ITS SCREEN
+Max on tp72: "does not look anything like the LFO … why are you not taking the code from the LFO and pasting it here …
+way too big … take the exact same glitch and just replace everything there with the LFO at the screen". Done literally:
+the Glitch chassis (316 wide, 96 px screen, the eight text tiles + dots, Shape / Target / Clock, two boxes a row, the
+chain), and the screen calls `window.__lfoField` — the LFO pane's own renderer, lent from its IIFE (shX / shY / shPathD /
+shEvalPts, the node / curve-dot / hit markup, icons, chevron, dropdown). `_tp73_gate.js` [1] proves the stroke is
+byte-equal to the LFO's `shPathD`. The bar is the LFO's: brush chip, shape chip (LFO glyphs + dropdown; Time = its
+presets), type chip (roster lanes) → the RACK'S two-pane browser, normal case. Phase / Swing / Tension / Floor / Duck move
+the breakpoints the LFO draws (nodes on the line); no display smoothing, no dashed raw line. Target = two Glitch boxes
+(knobs + On | steps as dropdowns: Poles / Char, Range, Law, Mode). Clock = the OUT box (Rate · Grid · Trigger
+dropdowns) + Sense. DSP unchanged from tp72. `_tp73_gate.js` 16/16, the sweep green, `au_shaper_lock.cpp` 9/9.
+⚠️ lend `CHEV` / `ICON_CUSTOM` through getters (declared after the lend point). ⚠️ the shifted lane's seam law.
 
 ## tp72 (2026-09-21) — THE SHAPER, TO THE BRIEF
 Max on tp71: "looks nothing like the mock-up … the grid to literally be the same thing as the LFO … the follower is
@@ -202,7 +215,7 @@ they disappeared); E–H right-click menu (`/SYN_OSC_([A-D])_/`); exclusive solo
 or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chops", thin white).
 
 ## GATES
-`Tests/_tp72_gate.js` (16), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
+`Tests/_tp73_gate.js` (16, supersedes tp72's), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
 window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record.)
