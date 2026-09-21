@@ -3077,6 +3077,16 @@ void TerrainAudioProcessor::timerCallback()
     {
         const auto& T = shpRefs_[i][1]; const auto& R = shpRefs_[i][4];
         if (((T.on != nullptr && T.on->load() > 0.5f) || (R.on != nullptr && R.on->load() > 0.5f)) && ! shapers_[i].ringArmed()) shapers_[i].armRing();
+        // tp72 — the rosters, armed the first time a lane asks for one (a lane with a built-in type never pays for an engine)
+        const auto& F = shpRefs_[i][2]; const auto& D = shpRefs_[i][5]; const auto& P = shpRefs_[i][6]; const auto& C = shpRefs_[i][7];
+        auto lit = [] (const ShpLaneRefs& r) { return r.on != nullptr && r.on->load() > 0.5f; };
+        auto modeOf = [] (const ShpLaneRefs& r) { return r.mode != nullptr ? (int) r.mode->load() : 0; };
+        auto& ro = shpRoster_[i];
+        if (lit (F)) ro.armFilter (0);
+        if (lit (P) && modeOf (P) >= 2) ro.armFilter (1);
+        if (lit (C) && modeOf (C) >= 3 && modeOf (C) <= 6) ro.armFilter (2);
+        if (lit (D)) ro.armDist (0);
+        if (lit (C) && modeOf (C) >= 7) ro.armDist (1);
     }
 
     // fb514 — THE CLOSED-EDITOR IDLE GOVERNOR. This timer dispatches on the HOST'S UI thread;
@@ -7312,23 +7322,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     {
         static const char* const kLn[8]  = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH" };
         static const char* const kLnN[8] = { "Volume", "Time", "Filter", "Pan", "Repeat", "Drive", "Phaser", "Crush" };
-        static const juce::StringArray kModes[8] = {
-            juce::StringArray { "Gain", "Reserved" },
-            juce::StringArray { "1 cycle", "1/2 cycle", "2 cycles", "Reserved" },
-            juce::StringArray { "Low", "High", "Band", "Notch", "Reserved 5", "Reserved 6" },
-            juce::StringArray { "Power", "Linear" },
-            juce::StringArray { "Slice", "Reserved" },
-            juce::StringArray { "Soft", "Hard", "Fold", "Tube", "Reserved 5", "Reserved 6" },
-            juce::StringArray { "Phaser", "Flanger" },
-            juce::StringArray { "Bits + Rate", "Bits", "Rate" } };
+        // tp72 — THE TYPES ARE THE ROSTERS. Filter = the rack's 118 engines (terrainFilterEngineNames, index = tw::filters::Type);
+        //        Drive = the rack's 23 distortions (index = DistortionEngine::Mode); Phaser = the two built-ins then the roster's
+        //        phasers / flangers / combs (wc::kShaperPhaserRoster); Crush = three built-ins, the roster's crushers, the
+        //        distortion's digital family. Volume adds Duck, Pan adds Width, Repeat adds Reverse. Plus TRIG per lane.
+        const juce::StringArray fltNames = terrainFilterEngineNames();
+        juce::StringArray phaserModes { "Phaser", "Flanger" }; for (int q = 0; q < wc::kShaperPhaserRosterN; ++q) phaserModes.add (fltNames[wc::kShaperPhaserRoster[q]]);
+        const juce::StringArray kModes[8] = {
+            juce::StringArray { "Gain", "Duck" },
+            juce::StringArray { "1 cycle", "1/2 cycle", "2 cycles" },
+            fltNames,
+            juce::StringArray { "Power", "Linear", "Width" },
+            juce::StringArray { "Slice", "Reverse" },
+            juce::StringArray { "Tube","Tape","Transformer","Stomp Box","Overdrive", "Soft Clip","Hard Clip","Zero-Square","Slew Clip", "Diode 1","Diode 2","Asym","Rectify",
+                                "Linear Fold","Sine Fold","West Coast", "Shaper","Shaper Asym","Harmonics","Table", "Downsample","Bitcrush","Overflow" },   // INDEX-ALIGNED with SYN_DST_TYPE
+            phaserModes,
+            juce::StringArray { "Bits + Rate", "Bits", "Rate", "Bit-Crush", "Samp-Hold", "Samp-Hold -", "Radio", "Downsample", "Bitcrush", "Overflow" } };
+        static const int kModeDef[8] = { 0, 0, 0, 0, 0, 5, 0, 0 };   // the Drive lane boots on Soft Clip (the rack's default)
         const juce::StringArray rates { "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars", "8 bars" };
+        const juce::StringArray trigs { "Sync", "Free", "Audio", "MIDI" };
         for (int ln = 0; ln < 8; ++ln)
         {
             const juce::String pid = juce::String ("FLOW_CHOP_") + kLn[ln], nm = juce::String ("Shaper ") + kLnN[ln];
             layout.add (std::make_unique<juce::AudioParameterBool>   (juce::ParameterID { pid + "_ON", 1 },    nm + " On",    ln == 0));
             layout.add (std::make_unique<juce::AudioParameterFloat>  (juce::ParameterID { pid + "_DEPTH", 1 }, nm + " Depth", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_RATE", 1 },  nm + " Rate",  rates, wc::kShaperRateDefault));
-            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_MODE", 1 },  nm + " Mode",  kModes[ln], 0));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_MODE", 1 },  nm + " Mode",  kModes[ln], kModeDef[ln]));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_TRIG", 1 },  nm + " Trigger", trigs, 0));
         }
     }
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.6111f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);   // fb115: grid default = 1/16 (TIME IS TRUTHFUL)
@@ -9864,6 +9884,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     for (auto& l : flowLfo_) l.prepare (sampleRate);
     for (int fli = 0; fli < wc::NUM_LFOS; ++fli) flowLfo_[fli].setCustomTable (lfoTableAudio_[fli]);   // LFO ARC L1 — wire drawn-shape tables
     for (auto& sh : shapers_) sh.prepare (sampleRate);        // tp71 — the Shaper (the FlowChop pool is never prepared: its capture would be 8 s × 4 for nothing)
+    for (int i = 0; i < wc::kFlowInstances; ++i) { shpRoster_[i].prepare (sampleRate); shapers_[i].setExt (&shpRoster_[i]); }   // tp72 — the rosters lent to the lanes
     for (int i = 0; i < wc::kFlowInstances; ++i) if (shaperState_[(size_t) i] == nullptr) rebuildShaperState (i);   // the defaults, or the restored blob
     // (was: for (auto& c : chops_) c.prepare (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates · tp20: every instance
     for (auto& g : glitches_) g.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
@@ -12696,9 +12717,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // Note-ons come from the same host MIDI the glide tracker reads (:8991); voice activity is
     // the fb514 ungated voice walk's velVis_ (>= 0 while any voice sounds, release tails
     // included; -1 when silent — stored every block whether or not an editor exists).
-    bool flowNoteOn = false;
+    bool flowNoteOn = false; int flowNoteAt = -1;   // tp72 — the first note-on's sample, for the Shaper's MIDI trigger
     for (const auto meta : midiMessages)
-        if (meta.getMessage().isNoteOn()) { flowNoteOn = true; break; }
+        if (meta.getMessage().isNoteOn()) { flowNoteOn = true; flowNoteAt = meta.samplePosition; break; }
     const bool flowAnySounding = flowNoteOn || velVis_.load (std::memory_order_relaxed) >= 0.0f;
     for (int i = 0; i < wc::NUM_LFOS; ++i)
     {
@@ -15741,8 +15762,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const auto& R = shpRefs_[inst][ln];
             if (R.on == nullptr) continue;
-            sh.setLaneCtl (ln, R.on->load() > 0.5f, juce::jlimit (0.0f, 1.0f, R.depth->load()), (int) R.rate->load(), (int) R.mode->load());
+            sh.setLaneCtl (ln, R.on->load() > 0.5f, juce::jlimit (0.0f, 1.0f, R.depth->load()), (int) R.rate->load(), (int) R.mode->load(), R.trig != nullptr ? (int) R.trig->load() : 0);
         }
+        if (flowNoteAt >= 0) sh.noteOn (flowNoteAt);   // tp72 — the MIDI trigger restarts at the note's own sample
         float* cl = flowStageL;   // tp30 — this card's own capture bus (the whole master when every pill is on)
         float* cr = flowStageR;
         sh.process (cl, cr, numSamples, flowPpq, flowBpm, flowPlaying, mix);
@@ -17489,6 +17511,8 @@ juce::String TerrainAudioProcessor::getChopFeedJson (int inst) const
     for (int ln = 0; ln < wc::kShaperLanes; ++ln) { if (ln) j << ","; const float v = shpVizV_[inst][ln].load (std::memory_order_relaxed); j << juce::String (std::isfinite (v) ? v : 0.0f, 3); }
     j << "],\"ln\":[";
     for (int ln = 0; ln < wc::kShaperLanes; ++ln) { if (ln) j << ","; const auto& R = shpRefs_[inst][ln]; j << ((R.on != nullptr && R.on->load() > 0.5f) ? 1 : 0); }
+    j << "],\"tr\":[";
+    for (int ln = 0; ln < wc::kShaperLanes; ++ln) { if (ln) j << ","; const auto& R = shpRefs_[inst][ln]; j << (R.trig != nullptr ? (int) R.trig->load() : 0); }
     j << "],\"b\":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"on\":" << (flowChainNow().chopOn[inst] ? 1 : 0)
       << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";
@@ -17537,6 +17561,7 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
     };
     juce::var root = juce::JSON::parse (shaperJson_[inst]);
     const juce::var lanesV = root.isObject() ? root.getProperty ("lanes", juce::var()) : juce::var();
+    if (root.isObject()) st->sense = juce::jlimit (0.0f, 1.0f, (float) (double) root.getProperty ("sense", 0.5));   // tp72 — the Audio trigger's sensitivity
     for (int ln = 0; ln < wc::kShaperLanes; ++ln)
     {
         wc::ShaperLane& L = st->lanes[ln];
@@ -17585,7 +17610,7 @@ void TerrainAudioProcessor::cacheShaperRefs()
         {
             auto& R = shpRefs_[i][ln]; const juce::String id = pre + kLn[ln];
             R.on = apvts.getRawParameterValue (id + "_ON"); R.depth = apvts.getRawParameterValue (id + "_DEPTH");
-            R.rate = apvts.getRawParameterValue (id + "_RATE"); R.mode = apvts.getRawParameterValue (id + "_MODE");
+            R.rate = apvts.getRawParameterValue (id + "_RATE"); R.mode = apvts.getRawParameterValue (id + "_MODE"); R.trig = apvts.getRawParameterValue (id + "_TRIG");
         }
     }
 }

@@ -106,7 +106,7 @@ int main()
         FlowShaper g; g.prepare (SR); auto st = state(); auto& F = st->lanes[2]; F.on = true; F.depth = 1; F.mode = 0; F.k[0] = 0.2f; fill (F, zero);
         auto a = run (g, st, 0.0, 1.0, sig5k); FlowShaper g2; g2.prepare (SR); fill (F, one); auto b = run (g2, st, 0.0, 1.0, sig5k);
         char buf[120]; std::snprintf (buf, sizeof buf, "T5 FILTER LP: shape 0 = %.1f dB, shape 1 = %.1f dB on 5 kHz", db (rms (a.L, 4000, 20000)) + 6.02, db (rms (b.L, 4000, 20000)) + 6.02);
-        check (db (rms (a.L, 4000, 20000)) + 6.02 < -24 && db (rms (b.L, 4000, 20000)) + 6.02 > -2, buf);
+        check (db (rms (a.L, 4000, 20000)) + 6.02 < -24 && db (rms (b.L, 4000, 20000)) + 6.02 > -4, buf);   /* tp72 — the fallback SVF at 20 kHz droops ~3 dB at 5 kHz (bilinear warp); the roster engine replaces it in the plugin */
     }
     // ── T6: PAN — shape 0 is left, shape 1 is right ──
     {
@@ -155,6 +155,89 @@ int main()
         FlowShaper g; g.prepare (SR); auto st = state(); auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.smooth = 0; fill (V, gate16); g.setState (st);
         std::vector<float> L (BLK, 0.5f), R (BLK, 0.5f); for (int b = 0; b < 40; ++b) { std::fill (L.begin(), L.end(), 0.5f); std::fill (R.begin(), R.end(), 0.5f); g.process (L.data(), R.data(), BLK, 7.77, BPM, false); }
         check (std::fabs (L[100] - 0.5f) < 1e-3, "T11 stopped transport: the gate holds its first step (unity), whatever ppq says");
+    }
+    // ══ tp72 — THE TRIGGERS, THE ROSTER HOOKS, THE TARGET TAB ═══════════════════════════════════════════════
+    // ── T12: FREE — the lane runs on its own clock with the transport STOPPED ──
+    {
+        FlowShaper g; g.prepare (SR); auto st = state(); auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.smooth = 0; V.trig = (int) ShaperTrig::Free; V.rate = 4; fill (V, gate16); g.setState (st);
+        std::vector<float> out; std::vector<float> L (BLK), R (BLK);
+        for (int b = 0; b < 190; ++b) { std::fill (L.begin(), L.end(), 0.5f); std::fill (R.begin(), R.end(), 0.5f); g.process (L.data(), R.data(), BLK, 0.0, BPM, false); out.insert (out.end(), L.begin(), L.end()); }
+        // one bar = 96000 samples, a sixteenth = 6000: step 0 on, step 1 off, on its own clock
+        const double s0 = rms (out, 700, 5600), s1 = rms (out, 6700, 11600), s2 = rms (out, 12700, 17600);
+        char buf[160]; std::snprintf (buf, sizeof buf, "T12 FREE trigger, transport stopped: sixteenths read %.2f / %.2f / %.2f (on / off / on)", s0, s1, s2);
+        check (s0 > 0.4 && s1 < 0.05 && s2 > 0.4, buf);
+    }
+    // ── T13: MIDI — a note-on restarts the lane's clock at the note's SAMPLE ──
+    {
+        FlowShaper g; g.prepare (SR); auto st = state(); auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.smooth = 0; V.trig = (int) ShaperTrig::Midi; V.rate = 4; fill (V, ramp); g.setState (st);
+        std::vector<float> L (BLK), R (BLK); std::vector<float> out;
+        for (int b = 0; b < 100; ++b) { std::fill (L.begin(), L.end(), 1.0f); std::fill (R.begin(), R.end(), 1.0f); if (b == 60) g.noteOn (100); g.process (L.data(), R.data(), BLK, 0.0, BPM, true); out.insert (out.end(), L.begin(), L.end()); }
+        const float before = out[(size_t) (60 * BLK + 98)], after = out[(size_t) (60 * BLK + 500)];   // 400 samples on: the 0.2 ms smoother has settled, the ramp has moved 0.004
+        char buf[160]; std::snprintf (buf, sizeof buf, "T13 MIDI trigger: the ramp read %.3f the sample before the note and %.3f 400 samples after (restarted at 0)", before, after);
+        check (before > 0.25 && after < 0.03, buf);
+    }
+    // ── T14: AUDIO — a transient of the input restarts the lane ──
+    {
+        FlowShaper g; g.prepare (SR); auto st = state(); auto& F = st->lanes[2]; F.on = true; F.depth = 1; F.trig = (int) ShaperTrig::Audio; F.rate = 4; fill (F, ramp); st->sense = 0.5f; g.setState (st);
+        std::vector<float> L (BLK), R (BLK); float phBefore = 0, phAfter = 0;
+        for (int b = 0; b < 80; ++b)
+        {
+            for (int i = 0; i < BLK; ++i) { const long long n = (long long) b * BLK + i; const float v = n >= 30000 ? 0.8f * std::sin (2 * 3.14159265f * 440.f * (float) n / (float) SR) : 0.0f; L[(size_t) i] = v; R[(size_t) i] = v; }
+            g.process (L.data(), R.data(), BLK, 0.0, BPM, true);
+            if (b == 57) phBefore = g.vizPhase (2);   // just before the burst (sample 30000 sits in block 58)
+            if (b == 58) phAfter = g.vizPhase (2);
+        }
+        char buf[160]; std::snprintf (buf, sizeof buf, "T14 AUDIO trigger: the lane's phase was %.3f before the burst and %.3f right after it (restarted)", phBefore, phAfter);
+        check (phBefore > 0.25 && phAfter < 0.02, buf);
+    }
+    // ── T15: VOLUME Duck — the shape is read upside down ──
+    {
+        FlowShaper g; g.prepare (SR); auto st = state(); auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.smooth = 0; V.mode = 1; fill (V, one);
+        auto a = run (g, st, 0.0, 0.5, sig440);
+        char buf[120]; std::snprintf (buf, sizeof buf, "T15 VOLUME Duck: a shape at 1 reads as gain 0 (%.1f dB)", db (rms (a.L, 4000, 20000)));
+        check (db (rms (a.L, 4000, 20000)) < -40, buf);
+    }
+    // ── T16: REPEAT reverse + decay + pitch — the slices run without a click ──
+    {
+        FlowShaper g; g.prepare (SR); g.armRing(); auto st = state(); auto& P = st->lanes[4]; P.on = true; P.depth = 1; P.mode = 1; P.k[1] = 0.5f; P.k[2] = 0.8f; fill (P, [] (double p) { return p < 0.25 ? 0.f : 0.6f; });
+        auto a = run (g, st, 0.0, 4.0, sig440);
+        char buf[160]; std::snprintf (buf, sizeof buf, "T16 REPEAT reverse / decay / pitch: level %.1f dB, worst step %.3f (a 440 Hz sine steps %.3f)", db (rms (a.L, 30000, 90000)), maxJump (a.L, 30000, 90000), 0.5 * 2 * 3.14159 * 440 / SR);
+        check (db (rms (a.L, 30000, 90000)) > -30 && maxJump (a.L, 30000, 90000) < 0.25, buf);
+    }
+    // ── T17: THE ROSTER HOOKS — a lane whose type is a rack engine hands the sample to the processor's engine ──
+    {
+        struct FakeExt : ShaperExt
+        {
+            int fCalls[3] = { 0, 0, 0 }, fEng[3] = { -1, -1, -1 }, dCalls[2] = { 0, 0 }, dMode[2] = { -1, -1 }; float lastCut = -1;
+            bool filter (int which, int engine, float cut01, float, float, float, int, bool, float& l, float& r) noexcept override { ++fCalls[which]; fEng[which] = engine; lastCut = cut01; l *= 0.5f; r *= 0.5f; return true; }
+            bool drive  (int which, int mode, float, float, int, float, float, float& l, float& r) noexcept override { ++dCalls[which]; dMode[which] = mode; l *= 0.25f; r *= 0.25f; return true; }
+        } ext;
+        FlowShaper g; g.prepare (SR); g.setExt (&ext); auto st = state();
+        auto& F = st->lanes[2]; F.on = true; F.depth = 1; F.mode = 4; fill (F, one);                 // Acid 303
+        auto& D = st->lanes[5]; D.on = true; D.depth = 1; D.mode = 9; D.k[1] = 0.5f; fill (D, one);  // Diode 1
+        auto& H = st->lanes[6]; H.on = true; H.depth = 1; H.mode = 2; fill (H, one);                 // roster entry 0 = Phaser 4P (19)
+        auto& C = st->lanes[7]; C.on = true; C.depth = 1; C.mode = 4; fill (C, one);                 // Samp-Hold (83)
+        auto a = run (g, st, 0.0, 0.25, sig440);
+        const double lv = rms (a.L, 2000, 6000) / rms (a.L, 2000, 6000);   // (the fake scales: 0.5 · 0.25 · 0.5 · 0.5 = 1/32 of the input, makeup 1.0 at k1 .5)
+        (void) lv;
+        char buf[220]; std::snprintf (buf, sizeof buf, "T17 ROSTER HOOKS: filter(0) engine %d ×%d, phaser filter(1) engine %d ×%d, crush filter(2) engine %d ×%d, drive(0) mode %d ×%d, level %.1f dB (the fakes scale to -30)",
+                                      ext.fEng[0], ext.fCalls[0], ext.fEng[1], ext.fCalls[1], ext.fEng[2], ext.fCalls[2], ext.dMode[0], ext.dCalls[0], db (rms (a.L, 2000, 6000)));
+        check (ext.fEng[0] == 4 && ext.fCalls[0] == 6144 && ext.fEng[1] == 19 && ext.fCalls[1] == 6144 && ext.fEng[2] == 83 && ext.fCalls[2] == 6144 && ext.dMode[0] == 9 && ext.dCalls[0] == 6144
+               && std::fabs (db (rms (a.L, 2000, 6000)) - (db (0.5 / std::sqrt (2.0)) - 30.1)) < 1.0, buf);
+        // and with the crush lane on a distortion type: drive slot 1
+        FlowShaper g2; g2.prepare (SR); g2.setExt (&ext); auto st2 = state(); auto& C2 = st2->lanes[7]; C2.on = true; C2.depth = 1; C2.mode = 8; fill (C2, one);
+        run (g2, st2, 0.0, 0.25, sig440);
+        check (ext.dMode[1] == 21 && ext.dCalls[1] == 6144, "T17b the Crush lane's Bitcrush type is the distortion's mode 21 on drive slot 1");
+        // without an ext every lane still sounds (the built-ins)
+        FlowShaper g3; g3.prepare (SR); auto st3 = state(); auto& F3 = st3->lanes[2]; F3.on = true; F3.depth = 1; F3.mode = 4; fill (F3, one); auto c = run (g3, st3, 0.0, 0.25, sig440);
+        check (db (rms (c.L, 2000, 6000)) > -12, "T17c no ext: the Filter lane's built-in SVF carries the signal (nothing goes silent)");
+    }
+    // ── T18: TIME Glide — the read head slews instead of cutting: a sine stays continuous through a stutter ──
+    {
+        FlowShaper g; g.prepare (SR); g.armRing(); auto st = state(); auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.k[1] = 0.7f; T.rate = 4; fill (T, stut);
+        auto a = run (g, st, 0.0, 2.0, sig440);
+        char buf[160]; std::snprintf (buf, sizeof buf, "T18 TIME glide: worst sample step %.3f through a 1/16 stutter (a cut would step ~%.2f), level %.1f dB", maxJump (a.L, 12000, 90000), 0.5, db (rms (a.L, 12000, 90000)));
+        check (maxJump (a.L, 12000, 90000) < 0.07 && db (rms (a.L, 12000, 90000)) > -12, buf);
     }
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);

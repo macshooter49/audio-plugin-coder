@@ -2071,8 +2071,36 @@ private:
     wc::FlowShaper              shapers_[wc::kFlowInstances];
     juce::String                shaperJson_[wc::kFlowInstances];           // the page's lanes (breakpoints + lane knobs), per instance
     std::shared_ptr<wc::ShaperState> shaperState_[wc::kFlowInstances];    // the baked snapshot the audio thread reads
-    struct ShpLaneRefs { std::atomic<float>* on = nullptr; std::atomic<float>* depth = nullptr; std::atomic<float>* rate = nullptr; std::atomic<float>* mode = nullptr; };
+    struct ShpLaneRefs { std::atomic<float>* on = nullptr; std::atomic<float>* depth = nullptr; std::atomic<float>* rate = nullptr; std::atomic<float>* mode = nullptr; std::atomic<float>* trig = nullptr; };
     ShpLaneRefs                 shpRefs_[wc::kFlowInstances][wc::kShaperLanes] {};
+    // ══ tp72 — THE ROSTERS LENT TO THE LANES. Max: "ladder filter, acid 303 … we can also choose all of our distortions".
+    //    The Filter / Phaser / Crush lanes borrow the rack's FilterFxEngine (the 118-engine roster, the fb642 lift law, the
+    //    swap dip), the Drive / Crush lanes the rack's DistortionEngine (23 types, 2× oversampled). Engines are ARMED
+    //    LAZILY on the timer (the tp63 law: a FilterSlot is ~190 KB of buffers, never paid for by a card that draws a
+    //    volume gate) and published through atomics; until armed the lane's built-in runs.
+    struct ShaperRoster : public wc::ShaperExt
+    {
+        std::unique_ptr<tw::FilterFxEngine> flt[3]; std::atomic<tw::FilterFxEngine*> fltLive[3] { { nullptr }, { nullptr }, { nullptr } };
+        std::unique_ptr<tw::DistortionEngine> dst[2]; std::atomic<tw::DistortionEngine*> dstLive[2] { { nullptr }, { nullptr } };
+        double sr = 48000.0;
+        void prepare (double sampleRate) { sr = sampleRate; for (auto& f : flt) if (f) { f->prepare (sr, 512); } for (auto& d : dst) if (d) d->prepare (sr); }
+        void armFilter (int w) { if (w < 0 || w > 2 || flt[w]) return; auto e = std::make_unique<tw::FilterFxEngine>(); e->prepare (sr, 512); flt[w] = std::move (e); fltLive[w].store (flt[w].get(), std::memory_order_release); }
+        void armDist   (int w) { if (w < 0 || w > 1 || dst[w]) return; auto e = std::make_unique<tw::DistortionEngine>(); e->prepare (sr); e->setMix (1.0f); dst[w] = std::move (e); dstLive[w].store (dst[w].get(), std::memory_order_release); }
+        bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, bool wide, float& l, float& r) noexcept override
+        {
+            auto* e = fltLive[which & 3].load (std::memory_order_acquire); if (e == nullptr) return false;
+            tw::FilterFxEngine::Params p; p.engine = engine; p.cut = cut01; p.res = res; p.drive = drive; p.poles = poles; p.charIdx = charIdx; p.wide = wide;
+            p.env = 0.5f; p.sweep = 0.0f; p.track = 0.0f; p.mix = 1.0f;   // the shape IS the motion: no follower, no LFO, no key
+            e->processSample (l, r, p); return true;
+        }
+        bool drive (int which, int mode, float drive01, float tone, int character, float bias, float mix, float& l, float& r) noexcept override
+        {
+            auto* d = dstLive[which & 1].load (std::memory_order_acquire); if (d == nullptr) return false;
+            d->setMode (mode); d->setDrive (drive01); d->setTone (tone); d->setCharacter (character); d->setBias (bias); d->setMix (mix);
+            float ol = 0, orr = 0; d->processSample (l, r, ol, orr); l = ol; r = orr; return true;
+        }
+    };
+    ShaperRoster                shpRoster_[wc::kFlowInstances];
     std::atomic<float>          shpVizPh_[wc::kFlowInstances][wc::kShaperLanes] {}, shpVizV_[wc::kFlowInstances][wc::kShaperLanes] {};
     void  cacheShaperRefs();
     void  rebuildShaperState (int inst);                                   // message thread: JSON (or the defaults) → baked tables → publish

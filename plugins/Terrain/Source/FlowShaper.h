@@ -25,6 +25,16 @@
 //    Phaser  — a 6-stage allpass whose centre the shape moves, with feedback (Liquid is not our word)
 //    Crush   — bit depth and sample rate together, the shape sets how far both go
 //
+//  tp72 — THE ROSTERS AND THE TRIGGERS. Max: "the filter needs to be able to have a way to choose the
+//  filter type … ladder filter, acid 303 … we can also choose all of our distortions … these effects
+//  night and day". The Filter lane's type is the rack's 118-engine roster, the Drive lane's type the
+//  rack's 23 distortions, the Phaser lane picks from the roster's phasers / flangers / combs and the
+//  Crush lane adds the roster's crushers — all through ShaperExt, an interface the PROCESSOR implements
+//  with the shipped FilterFxEngine / DistortionEngine (this header stays JUCE-free so the offline proof
+//  runs). Until the processor has armed an engine (lazily, on the message thread) the built-in fallback
+//  runs, so a lane is never silent. Trigger per lane: Sync (the transport), Free (its own clock), MIDI
+//  (restarts on the note-on, at its sample) and Audio (restarts on a transient of the input).
+//
 //  Zero allocation on the audio thread. The Time / Repeat rings are armed lazily on the message
 //  thread (the tp63 lazy law) and published through an atomic pointer.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -47,6 +57,29 @@ static constexpr float kShaperRateBeats[8] = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.
 static constexpr int   kShaperRateN = 8;
 static constexpr int   kShaperRateDefault = 4;   // 1 bar
 
+enum class ShaperTrig : int { Sync = 0, Free, Audio, Midi };
+
+/** tp72 — the rack's engines, lent to the lanes. The processor implements this; a slot that is not armed yet
+    returns false and the lane runs its built-in fallback. `which`: filter slots 0 = Filter lane, 1 = Phaser lane,
+    2 = Crush lane; drive slots 0 = Drive lane, 1 = Crush lane. All calls are per sample, audio thread. */
+struct ShaperExt
+{
+    virtual ~ShaperExt() = default;
+    virtual bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, bool wide, float& l, float& r) noexcept = 0;
+    /** mix: the lane's wet/dry — the rack's distortion delays its wet by its resampler and aligns the dry INSIDE, so the
+        engine owns the mix and the lane replaces (a crossfade outside would comb). The lane passes blend × fade-in. */
+    virtual bool drive  (int which, int mode, float drive01, float tone, int character, float bias, float mix, float& l, float& r) noexcept = 0;
+};
+
+// the Phaser lane's roster: indices into the rack's filter roster (tw::filters::Type / FLT_ENGINES), modes 2.. of the lane
+static constexpr int kShaperPhaserRoster[26] = { 19, 72, 20, 73, 74, 99, 101, 103,        // Phaser 4P 6P 8P 12P 16P 24P 32P 48P
+                                                 94, 95, 96, 97, 98, 100, 102, 104,      // their N (notch) variants
+                                                 111, 112, 10, 11, 62, 63, 64, 65, 12, 75 };   // Flange + / -, Comb + / -, Wide, Octave, Fifth, Damp, Shimmer, Diffusor
+static constexpr int kShaperPhaserRosterN = 26;
+// the Crush lane: modes 0..2 built in (Bits + Rate · Bits · Rate), 3..6 the roster's crushers, 7..9 the distortion's digital family
+static constexpr int kShaperCrushRoster[4] = { 23, 83, 84, 91 };   // Bit-Crush, Samp-Hold, Samp-Hold -, Radio
+static constexpr int kShaperCrushDist[3]   = { 20, 21, 22 };       // Downsample, Bitcrush, Overflow
+
 struct ShaperLane
 {
     bool  on      = false;
@@ -59,15 +92,28 @@ struct ShaperLane
     float swing   = 0.0f;     // stretches the first half of the cycle
     int   rate    = kShaperRateDefault;
     int   grid    = 16;
-    int   mode    = 0;        // target mode (filter type, pan law, drive type, phaser mode, time range)
-    float k[4]    = { 0.5f, 0.5f, 0.5f, 0.5f };   // the target's own knobs
+    int   mode    = 0;        // target mode (filter engine, pan law, distortion type, phaser roster entry, time range)
+    int   trig    = 0;        // ShaperTrig
+    float k[4]    = { 0.5f, 0.5f, 0.5f, 0.5f };   // the target's own knobs (the Target tab — the lane's back panel)
     // the shape, BAKED from the editor's breakpoints (the LFO's own law: pinned ends, per-segment tension) on the
     // message thread. table[0] is the value at phase 0, table[kShaperT] the value at phase 1 — a unity ramp for the
     // Time lane reads 0 → 1 exactly, and a grid step sits exactly on its grid line.
     float table[kShaperT + 1] = {};
     void fill (float (*f) (double)) { for (int i = 0; i <= kShaperT; ++i) table[i] = f ((double) i / kShaperT); }
 };
-struct ShaperState { ShaperLane lanes[kShaperLanes]; };
+// tp72 — the Target tab's knobs, per lane, at rest: [k0, k1, k2, k3]
+//   Volume  Attack · Release          Time    Fade · Glide             Filter  Reso · Drive · Poles · Character
+//   Pan     Width · Bass mono         Repeat  Seam · Decay · Pitch     Drive   Tone · Makeup · Character · Bias
+//   Phaser  Feedback · Stereo · Drive Crush   Bits · Rate · Tone
+static constexpr float kShaperKDefault[kShaperLanes][4] = {
+    { 0.5f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 0.5f, 0.5f }, { 0.3f, 0.0f, 1.0f, 0.0f }, { 0.5f, 0.0f, 0.5f, 0.5f },
+    { 0.3f, 0.0f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.5f } };
+struct ShaperState
+{
+    ShaperLane lanes[kShaperLanes];
+    float sense = 0.5f;   // the Audio trigger's sensitivity
+    ShaperState() { for (int ln = 0; ln < kShaperLanes; ++ln) for (int q = 0; q < 4; ++q) lanes[ln].k[q] = kShaperKDefault[ln][q]; }
+};
 
 class FlowShaper
 {
@@ -78,9 +124,15 @@ public:
         for (auto& c : ch_) c = Ch{};
         phL_.assign (6, AP{}); phR_.assign (6, AP{});
         smooth_.fill (0.0f); tsPos_ = 0.0; tsOld_ = 0.0; tsLastBehind_ = 0.0; stepping_ = false; tsXf_ = 0; tsXfN_ = 1; holdN_ = 0;
-        repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0;
+        repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0; repRead_ = 0.0; tsSlew_ = -1.0;
         ringW_ = 0; ringFilled_ = 0;
+        for (auto& f : freePh_) f = 0.0; envFast_ = envSlow_ = 0.0f; refr_ = 0; noteAt_ = -1;
+        for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f;
     }
+    /** The processor lends the rack's engines (may be null: every lane then runs its built-in). Set once, before processing. */
+    void setExt (ShaperExt* e) noexcept { ext_.store (e, std::memory_order_release); }
+    /** Audio thread, before process(): a note-on landed at this sample of the block (the MIDI trigger). */
+    void noteOn (int sampleOffset) noexcept { noteAt_ = sampleOffset < 0 ? 0 : sampleOffset; }
     /** Message thread. The Time and Repeat lanes need a ring of the last cycles: 16 beats at the
         slowest musical tempo is ~16 s — armed once, kept for the instance (the tp63 lazy law). */
     void armRing()
@@ -95,12 +147,20 @@ public:
     void setState (std::shared_ptr<const ShaperState> s) { stateOwner_[(stateSeq_++) & 1] = s; state_.store (s.get(), std::memory_order_release); }
 
     /** Audio thread, per block: the lane's parameters (On / Depth / Rate / Mode) override the snapshot's. */
-    void setLaneCtl (int lane, bool on, float depth, int rate, int mode) noexcept
-    { auto& c = ctl_[lane & 7]; c.set = true; c.on = on; c.depth = depth; c.rate = rate; c.mode = mode; }
+    void setLaneCtl (int lane, bool on, float depth, int rate, int mode, int trig = 0) noexcept
+    { auto& c = ctl_[lane & 7]; c.set = true; c.on = on; c.depth = depth; c.rate = rate; c.mode = mode; c.trig = trig; }
     // ── viz: the phase each lane is at (0..1) and the value it read, for the screen's playhead ──
     float vizPhase (int lane) const noexcept { return vizPh_[lane & 7]; }
     float vizValue (int lane) const noexcept { return vizV_[lane & 7]; }
 
+    // tp72 — the lane's Smooth (0.2 → 40 ms one-pole) on the value every shaped lane reads; the Volume lane has its own
+    // attack / release law below, the Time and Repeat lanes read the raw shape (their jumps are the point)
+    float smoothed (int ln, float v, float smooth) noexcept
+    {
+        if (smooth <= 0.005f) { smooth_[ln] = v; return v; }
+        const float ms = 0.2f + 40.0f * smooth; const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));
+        smooth_[ln] = v + (smooth_[ln] - v) * a; return smooth_[ln];
+    }
     // ── the shape reader: a lane's shape at a phase, with its phase offset, swing and tension ──
     static float readShape (const ShaperLane& L, double ph) noexcept
     {
@@ -126,10 +186,25 @@ public:
         // the block's lanes: the snapshot's tables and knobs, with the parameters' On / Depth / Rate / Mode laid over
         // (a copy of eight small structs; the tables are not copied — the lane view points into the snapshot)
         for (int ln = 0; ln < kShaperLanes; ++ln)
-        { const ShaperLane& src = S0->lanes[ln]; LaneView& v = view_[ln]; v.L = &src; v.on = src.on; v.depth = src.depth; v.rate = src.rate; v.mode = src.mode;
-          const Ctl& c = ctl_[ln]; if (c.set) { v.on = c.on; v.depth = c.depth; v.rate = c.rate; v.mode = c.mode; } }
+        { const ShaperLane& src = S0->lanes[ln]; LaneView& v = view_[ln]; v.L = &src; v.on = src.on; v.depth = src.depth; v.rate = src.rate; v.mode = src.mode; v.trig = src.trig;
+          const Ctl& c = ctl_[ln]; if (c.set) { v.on = c.on; v.depth = c.depth; v.rate = c.rate; v.mode = c.mode; v.trig = c.trig; } }
         const double BP = bpm > 0.0 ? bpm : 120.0, pps = BP / 60.0 / sr_, fpb = sr_ / (BP / 60.0);
         Ring* ring = ring_.load (std::memory_order_acquire);
+        ShaperExt* ext = ext_.load (std::memory_order_acquire);
+        // ── tp72 — THE TRIGGERS. A Sync lane reads the transport; the other three read their own clock (freePh_), which
+        //    runs at the lane's rate from the tempo whether or not the transport plays. MIDI restarts it at the note-on's
+        //    sample; Audio restarts it on a transient of the INPUT (fast minus slow envelope over a threshold set by the
+        //    card's Sense, 40 ms refractory); Free never restarts.
+        const int noteAt = noteAt_; noteAt_ = -1;
+        const float sense = S0->sense;
+        const float onsetThr = 0.02f + 0.5f * (1.0f - sense) * (1.0f - sense);
+        const float aF = 1.0f - std::exp (-1.0f / ((float) sr_ * 0.001f)), aS = 1.0f - std::exp (-1.0f / ((float) sr_ * 0.050f));
+        auto lanePhase = [&] (const LaneView& V, int ln, double beat) noexcept -> double
+        {
+            const double cyc = kShaperRateBeats[V.rate & 7];
+            if (V.trig == (int) ShaperTrig::Sync) { double p = beat / cyc; return p - std::floor (p); }
+            return freePh_[ln];
+        };
         const LaneView& VL = view_[0]; const LaneView& TL = view_[1]; const LaneView& FL = view_[2]; const LaneView& PN = view_[3];
         const LaneView& RP = view_[4]; const LaneView& DR = view_[5]; const LaneView& PH = view_[6]; const LaneView& CR = view_[7];
         const bool anyRing = (TL.on || RP.on) && ring != nullptr;
@@ -141,6 +216,22 @@ public:
         {
             float l = L[i], r = R[i];
             const float dl = l, dr = r;
+            // ── the triggers' clocks: a note at this sample, or an onset of the input, restarts the MIDI / Audio lanes ──
+            {
+                const float rect = std::max (std::fabs (dl), std::fabs (dr));
+                envFast_ += aF * (rect - envFast_); envSlow_ += aS * (rect - envSlow_);
+                bool onset = false;
+                if (refr_ > 0) --refr_;
+                else if (envFast_ - envSlow_ > onsetThr) { onset = true; refr_ = (int) (sr_ * 0.040); }
+                bool retrigMidi = (noteAt == i), retrigAudio = onset;
+                for (int ln = 0; ln < kShaperLanes; ++ln)
+                {
+                    const LaneView& V = view_[ln]; if (V.trig == (int) ShaperTrig::Sync) continue;
+                    const bool rt = (V.trig == (int) ShaperTrig::Midi && retrigMidi) || (V.trig == (int) ShaperTrig::Audio && retrigAudio);
+                    if (rt) freePh_[ln] = 0.0;
+                    else { double f = freePh_[ln] + pps / kShaperRateBeats[V.rate & 7]; freePh_[ln] = f - std::floor (f); }
+                }
+            }
             // ── the ring hears the INPUT (Time and Repeat read from it) ──
             if (anyRing) { ring->L[(size_t) ringW_] = l; ring->R[(size_t) ringW_] = r; }
 
@@ -148,7 +239,7 @@ public:
             if (TL.on && ring != nullptr)
             {
                 const double cyc = kShaperRateBeats[TL.rate & 7];
-                double p = beat / cyc; p -= std::floor (p);
+                const double p = lanePhase (TL, 1, beat);
                 const float s = readShape (*TL.L, p);
                 const float rangeMul = TL.mode == 1 ? 0.5f : TL.mode == 2 ? 2.0f : 1.0f;   // Range: 1 cycle · ½ · 2
                 const double shapedBeats = (double) s * cyc * rangeMul;                 // where in the cycle the shape reads
@@ -157,12 +248,24 @@ public:
                 if (behind < 0.0) behind = 0.0;
                 double behindF = behind * fpb; const double maxB = (double) (ringFilled_ > 4 ? ringFilled_ - 4 : 0);
                 if (behindF > maxB) behindF = maxB;
+                // tp72 — GLIDE (the Target tab's second knob): instead of cutting to a new read position, the head SLEWS
+                // there at a bounded speed — the transition is heard as a pitch bend (a tape scrub, a Gross Beat
+                // "slide"). At 0 the jump law below cuts as before.
+                const float glide = TL.L->k[1];
+                if (glide > 0.02f)
+                {
+                    const double lim = 0.02 + 6.0 * std::pow (1.0 - (double) glide, 3.0);   // samples of read position per sample
+                    if (tsSlew_ < 0.0) tsSlew_ = behindF;
+                    double d = behindF - tsSlew_; if (d > lim) d = lim; else if (d < -lim) d = -lim;
+                    tsSlew_ += d; behindF = tsSlew_; tsLastBehind_ = behindF; stepping_ = false;
+                }
+                else tsSlew_ = -1.0;
                 // ── THE JUMP LAW. A step in the shape is a ramp of one table cell (2 ms at a bar, 8 ms at four bars): the
                 //  read position would SCRATCH backwards through it at tens of samples per sample. So the moment `behind`
                 //  moves faster than 4 samples per sample the lane looks a cell and a half AHEAD for the settled target,
                 //  lands there at once, and crossfades from the old stream over ~1 ms. The transient at the start of a
                 //  repeated slice — the whole point of a stutter — is heard, and nothing scratches or clicks.
-                const double dBeh = behindF - tsLastBehind_; tsLastBehind_ = behindF;
+                const double dBeh = glide > 0.02f ? 0.0 : behindF - tsLastBehind_; tsLastBehind_ = behindF;
                 if (std::fabs (dBeh) > 4.0)
                 {
                     if (! stepping_)
@@ -193,26 +296,35 @@ public:
             if (RP.on && ring != nullptr)
             {
                 const double cyc = kShaperRateBeats[RP.rate & 7];
-                double p = beat / cyc; p -= std::floor (p);
+                const double p = lanePhase (RP, 4, beat);
                 const float s = readShape (*RP.L, p) * RP.depth;
                 const bool want = s > 0.02f;
                 if (want && ! repHold_)
                 {   // capture at this grid step's start: the slice began at the last grid line
                     const double stepBeats = cyc / (double) (RP.L->grid > 0 ? RP.L->grid : 16);
                     const double sinceStep = std::fmod (beat, stepBeats) * fpb;
-                    repStartW_ = ringW_ - (int) sinceStep; repPos_ = 0.0; repHold_ = true;
+                    repStartW_ = ringW_ - (int) sinceStep; repPos_ = 0.0; repRead_ = 0.0; repHold_ = true;
                 }
                 if (want)
                 {   // the slice length: the shape's height on the ladder 1/4 … 1/64 of a beat-cycle (higher = shorter)
                     const int div = 4 << (int) std::floor (s * 4.99f);                 // 4, 8, 16, 32, 64
                     const int len = std::max (32, (int) (cyc * fpb / (double) div));
                     if (len != repLen_) { repLen_ = len; }
-                    double rp = (double) repStartW_ + std::fmod (repPos_, (double) repLen_);
+                    // tp72 — the Target tab: Decay (k1) makes every pass quieter, Pitch (k2, 0.5 = none) moves every pass by up to
+                    // ±6 semitones (the read runs faster or slower through the slice), Reverse (mode 1) plays the slice backwards
+                    const int pass = (int) (repPos_ / (double) repLen_);
+                    const float semis = (RP.L->k[2] - 0.5f) * 12.0f * (float) pass;
+                    const double rate = std::pow (2.0, (double) semis / 12.0);
+                    const double inLoop = std::fmod (repRead_, (double) repLen_);
+                    const double rpIn = RP.mode == 1 ? (double) repLen_ - 1.0 - inLoop : inLoop;
+                    double rp = (double) repStartW_ + rpIn;
+                    const float gain = std::pow (1.0f - 0.9f * RP.L->k[1], (float) pass);
                     // a short cosine seam at the loop point keeps it click-free
-                    const double inLoop = std::fmod (repPos_, (double) repLen_); const int seam = std::min (64, repLen_ / 4);
+                    const int seam = std::min (repLen_ / 4, 8 + (int) (120.0f * RP.L->k[0]));   // Seam (k0): the crossfade at the loop point
                     float rl = rd (ring->L, ring->n, rp), rr = rd (ring->R, ring->n, rp);
-                    if (inLoop < seam) { const float w = 0.5f - 0.5f * std::cos ((float) (inLoop / seam) * 3.14159265f); const double rp2 = rp + repLen_; rl = rl * w + rd (ring->L, ring->n, rp2) * (1 - w); rr = rr * w + rd (ring->R, ring->n, rp2) * (1 - w); }
-                    repPos_ += 1.0;
+                    if (inLoop < seam) { const float w = 0.5f - 0.5f * std::cos ((float) (inLoop / seam) * 3.14159265f); const double rp2 = rp + (RP.mode == 1 ? -repLen_ : repLen_); rl = rl * w + rd (ring->L, ring->n, rp2) * (1 - w); rr = rr * w + rd (ring->R, ring->n, rp2) * (1 - w); }
+                    rl *= gain; rr *= gain;
+                    repPos_ += 1.0; repRead_ += rate; if (repRead_ >= (double) repLen_ * (pass + 1)) repRead_ = (double) repLen_ * (pass + 1);   // a pitched pass ends where the unpitched one does
                     const float mixr = RP.L->blend;
                     l = l + (rl - l) * mixr; r = r + (rr - r) * mixr;
                 }
@@ -221,63 +333,115 @@ public:
             }
             if (anyRing) { ringW_ = (ringW_ + 1) % ring->n; if (ringFilled_ < ring->n) ++ringFilled_; }
 
-            // ── DRIVE ──
+            // ── DRIVE: the rack's 23 distortions (mode = the type), the shape on the drive amount ──
             if (DR.on)
             {
-                const double cyc = kShaperRateBeats[DR.rate & 7]; double p = beat / cyc; p -= std::floor (p);
-                const float s = readShape (*DR.L, p) * DR.depth; const float g = 1.0f + 18.0f * s;
-                const float mk = 1.0f / std::pow (g, 0.6f * (0.3f + 0.7f * DR.L->k[1]));
-                auto sh = [&] (float x) noexcept { x *= g; switch (DR.mode) { case 1: return x < -1.f ? -1.f : (x > 1.f ? 1.f : x);
+                const double p = lanePhase (DR, 5, beat);
+                const float s = smoothed (5, readShape (*DR.L, p), DR.L->smooth) * DR.depth;
+                const float tone = DR.L->k[0], makeup = 0.25f + 1.5f * DR.L->k[1];
+                float wl = l, wr = r;
+                const float fadeIn = s < 0.25f ? s * 4.0f : 1.0f;   // a wire at shape 0, whatever the type does at drive 0
+                if (ext != nullptr && ext->drive (0, DR.mode, s, tone, (int) (DR.L->k[2] * 7.99f), DR.L->k[3], DR.L->blend * fadeIn, wl, wr))
+                { l = wl * makeup; r = wr * makeup; vizPh_[5] = (float) p; vizV_[5] = s; goto driveDone; }
+                else
+                {   // the built-in: a tanh family. At shape 0 the lane is a WIRE (tanh alone would already colour a -6 dBFS
+                    // sine); the shaped signal fades in over the first quarter of the shape's travel, then the pre-gain does the rest
+                    const float g = 1.0f + 18.0f * s;
+                    const float mk = 1.0f / std::pow (g, 0.6f * (0.3f + 0.7f * DR.L->k[1]));
+                    const int fam = DR.mode >= 5 && DR.mode <= 8 ? 1 : DR.mode >= 13 && DR.mode <= 15 ? 2 : DR.mode <= 4 ? 3 : 0;   // CLIP · FOLD · ANALOG · else soft
+                    auto sh = [&] (float x) noexcept { x *= g; switch (fam) { case 1: return x < -1.f ? -1.f : (x > 1.f ? 1.f : x);
                                                                           case 2: return std::sin (x * 0.9f);
                                                                           case 3: return (x < 0 ? -1.f : 1.f) * (1.f - std::exp (-std::fabs (x))) * (1.f + 0.15f * x * x / (1.f + x * x));
                                                                           default: return std::tanh (x); } };
-                // at shape 0 the lane is a WIRE (tanh alone would already colour a -6 dBFS sine); the shaped signal
-                // fades in over the first quarter of the shape's travel, then the pre-gain does the rest
-                const float in = s < 0.25f ? s * 4.0f : 1.0f;
-                const float wl = l + (sh (l) * mk - l) * in, wr = r + (sh (r) * mk - r) * in;
-                // Tone: a one-pole low shelf of the wet against the knob (0.5 = flat)
-                const float tone = DR.L->k[0]; const float tc = 1.0f - std::exp (-2.0f * 3.14159265f * (400.0f + 12000.0f * tone * tone) / (float) sr_);
-                ch_[0].tone += tc * (wl - ch_[0].tone); ch_[1].tone += tc * (wr - ch_[1].tone);
-                const float tl2 = tone >= 0.5f ? wl : ch_[0].tone + (wl - ch_[0].tone) * (tone * 2.0f), tr2 = tone >= 0.5f ? wr : ch_[1].tone + (wr - ch_[1].tone) * (tone * 2.0f);
-                l = l + (tl2 - l) * DR.L->blend; r = r + (tr2 - r) * DR.L->blend;
+                    const float in = s < 0.25f ? s * 4.0f : 1.0f;
+                    wl = l + (sh (l) * mk - l) * in; wr = r + (sh (r) * mk - r) * in;
+                    // Tone: a one-pole low shelf of the wet against the knob (0.5 = flat)
+                    const float tc = 1.0f - std::exp (-2.0f * 3.14159265f * (400.0f + 12000.0f * tone * tone) / (float) sr_);
+                    ch_[0].tone += tc * (wl - ch_[0].tone); ch_[1].tone += tc * (wr - ch_[1].tone);
+                    if (tone < 0.5f) { wl = ch_[0].tone + (wl - ch_[0].tone) * (tone * 2.0f); wr = ch_[1].tone + (wr - ch_[1].tone) * (tone * 2.0f); }
+                }
+                l = l + (wl - l) * DR.L->blend; r = r + (wr - r) * DR.L->blend;
                 vizPh_[5] = (float) p; vizV_[5] = s;
             }
-            // ── CRUSH ──
+            driveDone:
+            // ── CRUSH: bits + rate built in; the roster's crushers (Bit-Crush, Samp-Hold, Radio) and the distortion's
+            //    digital family through the rosters; Tone (k2) is a one-pole low-pass on the wet ──
             if (CR.on)
             {
-                const double cyc = kShaperRateBeats[CR.rate & 7]; double p = beat / cyc; p -= std::floor (p);
-                const float s = readShape (*CR.L, p) * CR.depth;
-                const float bits = CR.mode == 2 ? 16.0f : 16.0f - (4.0f + 8.0f * CR.L->k[0]) * s; const float q = std::pow (2.0f, bits - 1.0f);
-                const int hold = CR.mode == 1 ? 1 : 1 + (int) (s * (2.0f + 30.0f * CR.L->k[1]));   // Mode: Bits + Rate · Bits · Rate
-                if (holdN_ <= 0) { holdL_ = std::round (l * q) / q; holdR_ = std::round (r * q) / q; holdN_ = hold; }
-                --holdN_;
-                l = l + (holdL_ - l) * CR.L->blend; r = r + (holdR_ - r) * CR.L->blend;
+                const double p = lanePhase (CR, 7, beat);
+                const float s = smoothed (7, readShape (*CR.L, p), CR.L->smooth) * CR.depth;
+                float wl = l, wr = r; bool done = false;
+                if (CR.mode >= 3 && CR.mode <= 6 && ext != nullptr)
+                    done = ext->filter (2, kShaperCrushRoster[CR.mode - 3], 1.0f - 0.9f * s, 0.3f + 0.6f * CR.L->k[0], 0.0f, 1.0f, 0, false, wl, wr);
+                else if (CR.mode >= 7 && CR.mode <= 9 && ext != nullptr)
+                {
+                    done = ext->drive (1, kShaperCrushDist[CR.mode - 7], s, 0.5f + 0.5f * CR.L->k[1], (int) (CR.L->k[0] * 7.99f), 0.5f, CR.L->blend * (s < 0.25f ? s * 4.0f : 1.0f), wl, wr);
+                    if (done) { l = wl; r = wr; vizPh_[7] = (float) p; vizV_[7] = s; goto crushDone; }   // the engine mixed its own dry
+                }
+                if (! done)
+                {
+                    const int m = CR.mode <= 2 ? CR.mode : 0;
+                    const float bits = m == 2 ? 16.0f : 16.0f - (4.0f + 8.0f * CR.L->k[0]) * s; const float q = std::pow (2.0f, bits - 1.0f);
+                    const int hold = m == 1 ? 1 : 1 + (int) (s * (2.0f + 30.0f * CR.L->k[1]));   // Mode: Bits + Rate · Bits · Rate
+                    if (holdN_ <= 0) { holdL_ = std::round (l * q) / q; holdR_ = std::round (r * q) / q; holdN_ = hold; }
+                    --holdN_;
+                    wl = holdL_; wr = holdR_;
+                }
+                const float tone = CR.L->k[2];
+                if (tone < 0.98f)
+                {   // the tone rides the shape: at shape 0 the lane stays a wire
+                    const float fc = 300.0f * std::pow (60.0f, tone); const float a = 1.0f - std::exp (-6.2831853f * fc / (float) sr_);
+                    crushLp_[0] += a * (wl - crushLp_[0]); crushLp_[1] += a * (wr - crushLp_[1]);
+                    const float in = s < 0.25f ? s * 4.0f : 1.0f; wl += (crushLp_[0] - wl) * in; wr += (crushLp_[1] - wr) * in;
+                }
+                l = l + (wl - l) * CR.L->blend; r = r + (wr - r) * CR.L->blend;
                 vizPh_[7] = (float) p; vizV_[7] = s;
             }
-            // ── FILTER (SVF, 2-pole; the roster slot, if wired, replaces this — see FilterLaneSlot) ──
+            crushDone:
+            // ── FILTER: the rack's roster (mode = the engine, 0 = Ladder LP 24) through the processor's FilterFxEngine; the
+            //    shape is the cutoff, 40 Hz → 20 kHz over the depth. Until the engine is armed: a 2-pole SVF low-pass ──
             if (FL.on)
             {
-                const double cyc = kShaperRateBeats[FL.rate & 7]; double p = beat / cyc; p -= std::floor (p);
-                const float s = readShape (*FL.L, p);
-                const float fc = 20000.0f * std::pow (40.0f / 20000.0f, FL.depth * (1.0f - s));
-                const float g = std::tan (3.14159265f * std::min (fc, (float) sr_ * 0.45f) / (float) sr_);
-                const float a1 = 1.0f / (1.0f + g * (g + kres)), a2 = g * a1, a3 = g * a2;
-                for (int c = 0; c < 2; ++c)
+                const double p = lanePhase (FL, 2, beat);
+                const float s = smoothed (2, readShape (*FL.L, p), FL.L->smooth);
+                const float cut01 = 1.0f - 0.9f * FL.depth * (1.0f - s);   // 20·1000^cut01 Hz: 1 = 20 kHz, 0.1 = 40 Hz
+                float wl = l, wr = r;
+                if (! (ext != nullptr && ext->filter (0, FL.mode, cut01, FL.L->k[0], FL.L->k[1], FL.L->k[2], (int) (FL.L->k[3] * 5.99f), false, wl, wr)))
                 {
-                    Ch& C = ch_[c]; float x = c ? r : l;
-                    if (FL.L->k[1] > 0.0f) x = std::tanh (x * (1.0f + 6.0f * FL.L->k[1])) / (1.0f + FL.L->k[1]);
-                    const float v3 = x - C.ic2, v1 = a1 * C.ic1 + a2 * v3, v2 = C.ic2 + a2 * C.ic1 + a3 * v3;
-                    C.ic1 = 2 * v1 - C.ic1; C.ic2 = 2 * v2 - C.ic2;
-                    float y; switch (FL.mode) { case 1: y = x - kres * v1 - v2; break; case 2: y = v1; break; case 3: y = x - kres * v1; break; default: y = v2; }
-                    if (c) r = r + (y - r) * FL.L->blend; else l = l + (y - l) * FL.L->blend;
+                    const float fc = 20.0f * std::pow (1000.0f, cut01);
+                    const float g = std::tan (3.14159265f * std::min (fc, (float) sr_ * 0.45f) / (float) sr_);
+                    const float a1 = 1.0f / (1.0f + g * (g + kres)), a2 = g * a1, a3 = g * a2;
+                    const int svf = FL.mode == 6 || FL.mode == 2 ? 1 : FL.mode == 7 ? 2 : FL.mode == 8 ? 3 : 0;   // the roster's SVF HP / Ladder HP → high, BP → band, Notch → notch, else low
+                    for (int c = 0; c < 2; ++c)
+                    {
+                        Ch& C = ch_[c]; float x = c ? r : l;
+                        if (FL.L->k[1] > 0.0f) x = std::tanh (x * (1.0f + 6.0f * FL.L->k[1])) / (1.0f + FL.L->k[1]);
+                        const float v3 = x - C.ic2, v1 = a1 * C.ic1 + a2 * v3, v2 = C.ic2 + a2 * C.ic1 + a3 * v3;
+                        C.ic1 = 2 * v1 - C.ic1; C.ic2 = 2 * v2 - C.ic2;
+                        float y; switch (svf) { case 1: y = x - kres * v1 - v2; break; case 2: y = v1; break; case 3: y = x - kres * v1; break; default: y = v2; }
+                        if (c) wr = y; else wl = y;
+                    }
                 }
+                l = l + (wl - l) * FL.L->blend; r = r + (wr - r) * FL.L->blend;
                 vizPh_[2] = (float) p; vizV_[2] = s;
             }
-            // ── PHASER (or, in Flanger mode, a modulated short delay with feedback): the shape moves the centre ──
-            if (PH.on && PH.mode == 1)
+            // ── PHASER: modes 2.. are the rack roster's phasers / flangers / combs (kShaperPhaserRoster) through the
+            //    processor's engine, the shape on their centre; 0 = the built-in 6-stage phaser, 1 = the built-in flanger ──
+            bool phDone = false;
+            if (PH.on && PH.mode >= 2)
             {
-                const double cyc = kShaperRateBeats[PH.rate & 7]; double p = beat / cyc; p -= std::floor (p);
-                const float s = readShape (*PH.L, p);
+                const double p = lanePhase (PH, 6, beat);
+                const float s = smoothed (6, readShape (*PH.L, p), PH.L->smooth);
+                float wl = l, wr = r;
+                const int ri = PH.mode - 2 < kShaperPhaserRosterN ? PH.mode - 2 : 0;
+                if (ext != nullptr && ext->filter (1, kShaperPhaserRoster[ri], 0.2f + 0.7f * s * PH.depth, 0.15f + 0.8f * PH.L->k[0], PH.L->k[2], 1.0f, 0, PH.L->k[1] > 0.3f, wl, wr))
+                { l = l + (wl - l) * PH.L->blend; r = r + (wr - r) * PH.L->blend; phDone = true; }
+                vizPh_[6] = (float) p; vizV_[6] = s;
+            }
+            if (PH.on && ! phDone && PH.mode == 1)
+            {
+                const double p = lanePhase (PH, 6, beat);
+                const float s = smoothed (6, readShape (*PH.L, p), PH.L->smooth);
                 const float fb = 0.2f + 0.72f * PH.L->k[0], st = PH.L->k[1] * 0.5f;
                 const float dms = 0.3f + 7.7f * s * PH.depth;
                 for (int c = 0; c < 2; ++c)
@@ -291,10 +455,10 @@ public:
                 flW_ = (flW_ + 1) & 2047;
                 vizPh_[6] = (float) p; vizV_[6] = s;
             }
-            else if (PH.on)
+            else if (PH.on && ! phDone)
             {
-                const double cyc = kShaperRateBeats[PH.rate & 7]; double p = beat / cyc; p -= std::floor (p);
-                const float s = readShape (*PH.L, p);
+                const double p = lanePhase (PH, 6, beat);
+                const float s = smoothed (6, readShape (*PH.L, p), PH.L->smooth);
                 const float fb = 0.2f + 0.72f * PH.L->k[0];
                 const float fc = 200.0f * std::pow (40.0f, s * PH.depth);
                 const float st = PH.L->k[1] * 0.35f;   // stereo: the right channel's centre sits a little higher
@@ -309,24 +473,46 @@ public:
                 }
                 vizPh_[6] = (float) p; vizV_[6] = s;
             }
-            // ── PAN ──
+            // ── PAN: position (Power / Linear) or, in Width mode, the stereo width; Width (k0) scales the sides first,
+            //    Bass mono (k1) keeps the lows in the middle whatever the shape does ──
             if (PN.on)
             {
-                const double cyc = kShaperRateBeats[PN.rate & 7]; double p = beat / cyc; p -= std::floor (p);
-                const float s = readShape (*PN.L, p); const float pan = (s * 2.0f - 1.0f) * PN.depth;
-                float gl, gr;
-                if (PN.mode == 1) { gl = 1.0f - (pan > 0 ? pan : 0); gr = 1.0f + (pan < 0 ? pan : 0); }
-                else { const float th = (pan + 1.0f) * 0.78539816f; gl = std::cos (th) * 1.41421356f; gr = std::sin (th) * 1.41421356f; }
-                l *= 1.0f + (gl - 1.0f) * PN.L->blend; r *= 1.0f + (gr - 1.0f) * PN.L->blend;
+                const double p = lanePhase (PN, 3, beat);
+                const float s = smoothed (3, readShape (*PN.L, p), PN.L->smooth);
+                float wl = l, wr = r;
+                {   // width first: 0.5 = as it is, 1 = twice the sides, 0 = mono
+                    const float w = PN.L->k[0] * 2.0f; const float m = 0.5f * (wl + wr), sd = 0.5f * (wl - wr) * w; wl = m + sd; wr = m - sd;
+                }
+                if (PN.mode == 2)
+                {   // the shape is the width: 0 = mono, 1 = double
+                    const float w = 2.0f * s * PN.depth + (1.0f - PN.depth); const float m = 0.5f * (wl + wr), sd = 0.5f * (wl - wr) * w; wl = m + sd; wr = m - sd;
+                }
+                else
+                {
+                    const float pan = (s * 2.0f - 1.0f) * PN.depth; float gl, gr;
+                    if (PN.mode == 1) { gl = 1.0f - (pan > 0 ? pan : 0); gr = 1.0f + (pan < 0 ? pan : 0); }
+                    else { const float th = (pan + 1.0f) * 0.78539816f; gl = std::cos (th) * 1.41421356f; gr = std::sin (th) * 1.41421356f; }
+                    wl *= gl; wr *= gr;
+                }
+                if (PN.L->k[1] > 0.01f)
+                {   // bass mono: below 40..300 Hz the two sides share one centre
+                    const float fc = 40.0f + 260.0f * PN.L->k[1]; const float a = 1.0f - std::exp (-6.2831853f * fc / (float) sr_);
+                    bassLp_[0] += a * (wl - bassLp_[0]); bassLp_[1] += a * (wr - bassLp_[1]);
+                    const float lm = 0.5f * (bassLp_[0] + bassLp_[1]); wl = wl - bassLp_[0] + lm; wr = wr - bassLp_[1] + lm;
+                }
+                l = l + (wl - l) * PN.L->blend; r = r + (wr - r) * PN.L->blend;
                 vizPh_[3] = (float) p; vizV_[3] = s;
             }
-            // ── VOLUME ──
+            // ── VOLUME: a gain (Duck mode reads the shape upside down); Attack (k0) and Release (k1) scale the lane's
+            //    smoothing for the rising and the falling edge, so a gate can snap open and fall slowly ──
             if (VL.on)
             {
-                const double cyc = kShaperRateBeats[VL.rate & 7]; double p = beat / cyc; p -= std::floor (p);
-                const float s = readShape (*VL.L, p);
+                const double p = lanePhase (VL, 0, beat);
+                float s = readShape (*VL.L, p); if (VL.mode == 1) s = 1.0f - s;
                 const float gRaw = 1.0f - VL.depth * (1.0f - s);
-                const float ms = 0.2f + 40.0f * VL.L->smooth; const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));
+                const float base = 0.2f + 40.0f * VL.L->smooth;
+                const float ms = base * (0.1f + 1.9f * (gRaw > smooth_[0] ? VL.L->k[0] : VL.L->k[1]));
+                const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));
                 smooth_[0] = gRaw + (smooth_[0] - gRaw) * a; const float g = 1.0f + (smooth_[0] - 1.0f) * VL.L->blend;
                 l *= g; r *= g;
                 vizPh_[0] = (float) p; vizV_[0] = s;
@@ -342,8 +528,8 @@ private:
     static float rd (const std::vector<float>& b, int n, double p) noexcept
     { double q = std::fmod (p, (double) n); if (q < 0) q += n; const int i0 = (int) q; const float f = (float) (q - i0); const int i1 = (i0 + 1 == n) ? 0 : i0 + 1; return b[(size_t) i0] * (1 - f) + b[(size_t) i1] * f; }
 
-    struct LaneView { const ShaperLane* L = nullptr; bool on = false; float depth = 1.0f; int rate = kShaperRateDefault, mode = 0; };
-    struct Ctl { bool set = false, on = false; float depth = 1.0f; int rate = kShaperRateDefault, mode = 0; };
+    struct LaneView { const ShaperLane* L = nullptr; bool on = false; float depth = 1.0f; int rate = kShaperRateDefault, mode = 0, trig = 0; };
+    struct Ctl { bool set = false, on = false; float depth = 1.0f; int rate = kShaperRateDefault, mode = 0, trig = 0; };
     LaneView view_[kShaperLanes]; Ctl ctl_[kShaperLanes];
     double sr_ = 48000.0;
     std::atomic<const ShaperState*> state_ { nullptr };
@@ -355,7 +541,12 @@ private:
     double tsPos_ = 0, tsOld_ = 0, tsLastBehind_ = 0, stepTarget_ = 0; int tsXf_ = 0, tsXfN_ = 1; bool stepping_ = false;
     float holdL_ = 0, holdR_ = 0; int holdN_ = 0;
     float flL_[2048] = {}, flR_[2048] = {}; int flW_ = 0;   // the Flanger mode's delay line (~43 ms at 48 k)
-    bool repHold_ = false; int repLen_ = 0, repStartW_ = 0; double repPos_ = 0;
+    bool repHold_ = false; int repLen_ = 0, repStartW_ = 0; double repPos_ = 0, repRead_ = 0;
+    double tsSlew_ = -1.0;                       // tp72 — the Time lane's glided read position (-1 = not gliding)
+    std::atomic<ShaperExt*> ext_ { nullptr };    // tp72 — the rack's engines, lent by the processor
+    double freePh_[8] = {};                      // tp72 — the Free / MIDI / Audio lanes' own clocks
+    float envFast_ = 0, envSlow_ = 0; int refr_ = 0, noteAt_ = -1;
+    float crushLp_[2] = {}, bassLp_[2] = {}, volEnv_ = 1.0f;
     float vizPh_[8] = {}, vizV_[8] = {};
 };
 } // namespace wc

@@ -1,7 +1,36 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp71 — `0d714de`** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp72** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp72 (2026-09-21) — THE SHAPER, TO THE BRIEF
+Max on tp71: "looks nothing like the mock-up … the grid to literally be the same thing as the LFO … the follower is
+trash, it bounces … the target is fucked up … too lengthy, needs to be wider … I need to be able to right click".
+**The card is the mockup's** (`.ti-card.shp-ext` 462 wide, on the Patcher too): the screen, the eight targets, Shape /
+Target / Clock, pill rows in titled boxes (Brush · Shape · Rate · Grid · Trigger + Sense). **The screen is the LFO
+editor's field** — the same grid / stroke / node / curve-dot / follower classes and numbers — and the line drawn is the
+line the DSP reads: Tension, Phase, Floor, Smooth, Swing all move it (the raw breakpoints dashed behind when they differ).
+Right-click opens on the right pointer-DOWN (the EQ's macOS law) with the LFO's menu (Grid + Level, Snap, flips,
+Random ×3, the tools, Wavetable → Shape A–D, stock, Clear; no Extend). The follower rides the push and advances on
+the tempo between pushes (never backwards, snaps on a jump, fades in silence).
+
+**DSP (`FlowShaper.h`, 23/23):** `wc::ShaperExt` — the processor lends the rack's engines: Filter lane = the 118-engine
+roster (`FilterFxEngine`, `FLOW_CHOP_FILT_MODE` = engine index, picked through the rack's two-pane browser), Drive =
+the 23 distortions (`DistortionEngine`, mixes its own aligned dry), Phaser = built-in phaser / flanger + the roster's
+phasers / flangers / combs (`kShaperPhaserRoster`), Crush = built-ins + Bit-Crush / Samp-Hold / Radio + the digital
+family. Engines ARM LAZILY on the timer (`ShaperRoster`, atomics; the built-in runs until then). Triggers per lane:
+Sync · Free · Audio (onset, Sense in the blob) · MIDI (`FLOW_CHOP_<LN>_TRIG`, the note's own sample). The Target tab
+is every lane's back panel, all in the engine: Volume Attack/Release + Duck · Time Fade/Glide (a pitch-bent slide) +
+Range · Filter Reso/Drive/Poles/Character · Pan Width/Bass mono + Width mode · Repeat Seam/Decay/Pitch + Reverse ·
+Drive Tone/Makeup/Character/Bias · Phaser Feedback/Stereo/Drive · Crush Bits/Rate/Tone. Smooth now smooths every
+shaped lane (not Time / Repeat).
+
+**Proof:** `au_shaper_lock.cpp` 9/9 on the installed AU (the tp71 bars + Acid 303 on the Filter lane sweeps, Soft Clip
+on the Drive lane drives, Trigger MIDI runs the gate with the transport stopped); `_tp72_gate.js` 16/16; the tp57–tp67
+sweep green. ⚠️ the lit-pill bar first read the BASE colour: `getComputedStyle` is live — snapshot before the next
+click. ⚠️ `.chop-ext .pane .kin` forces four columns on every box — outranked with `.ti-card.shp-ext .gbox .kin`.
+
+**Not done:** lane Depth / On / the target knobs are not mod destinations (Max: "eventually we can modulate").
 
 ## tp71 (2026-09-21) — THE TERRAIN SHAPER
 **The Chop card is the Terrain Shaper** — a ShaperBox 3 / Gross Beat-style multi-lane shaper on the
@@ -173,7 +202,7 @@ they disappeared); E–H right-click menu (`/SYN_OSC_([A-D])_/`); exclusive solo
 or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chops", thin white).
 
 ## GATES
-`Tests/_tp71_gate.js` (11), `Tests/au_shaper_lock.cpp` (6), `Source/FlowShaper_test.cpp` (14), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
+`Tests/_tp72_gate.js` (16), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (23), `Tests/_tp71_gate.js` (superseded by tp72's), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
 window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record.)

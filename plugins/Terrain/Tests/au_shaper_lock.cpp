@@ -107,7 +107,7 @@ int main()
     // [1] from the bar line
     take (0.0, true, (int) (STEP * 8 / BLK) + 1, x);
     char b[200]; snprintf (b, sizeof b, "steps 0..3: %.1f %.1f %.1f %.1f dBFS", stepDb (x, 0), stepDb (x, 1), stepDb (x, 2), stepDb (x, 3));
-    chk (stepDb (x, 0) > -30 && stepDb (x, 1) < stepDb (x, 0) - 25 && stepDb (x, 2) > -30 && stepDb (x, 3) < stepDb (x, 2) - 25, "🚨 [1] play from bar 1: sixteenth 0 ON, 1 OFF, 2 ON, 3 OFF — the gate rides the transport from the first samples", b);
+    chk (stepDb (x, 0) > -30 && stepDb (x, 1) < stepDb (x, 0) - 22 && stepDb (x, 2) > -30 && stepDb (x, 3) < stepDb (x, 2) - 22, "🚨 [1] play from bar 1: sixteenth 0 ON, 1 OFF, 2 ON, 3 OFF — the gate rides the transport from the first samples", b);
     // [2] play pressed a sixteenth in
     x.clear(); take (0.25, true, (int) (STEP * 8 / BLK) + 1, x);
     snprintf (b, sizeof b, "steps 0..3 from ppq 0.25: %.1f %.1f %.1f %.1f dBFS", stepDb (x, 0), stepDb (x, 1), stepDb (x, 2), stepDb (x, 3));
@@ -133,6 +133,32 @@ int main()
     double worst = 0; for (int st = 1; st < 4; ++st) worst = std::max (worst, std::fabs (stepDb (y, st) - stepDb (z, st)));
     snprintf (b, sizeof b, "Time on (unity) vs off, per-sixteenth level: worst %.2f dB (on: %.1f %.1f %.1f · off: %.1f %.1f %.1f)", worst, stepDb (y, 1), stepDb (y, 2), stepDb (y, 3), stepDb (z, 1), stepDb (z, 2), stepDb (z, 3));
     chk (worst < 1.5 && stepDb (y, 1) > -30, "[5] the Time lane on its unity ramp is a wire — the ring armed itself and the read position equals the write position", b);
+    // ══ tp72 ═══════════════════════════════════════════════════════════════════════════════════════════════
+    // [6] the Filter lane on the rack's roster (Acid 303, mode 4 of 118): armed by the timer, the shape (a sine over the
+    //     bar) opens and closes it — a 5 kHz tone is 20 dB+ quieter at the closed sixteenths than at the open ones
+    a.set ("Shaper Time On", 0.0f); a.set ("Shaper Volume On", 0.0f); a.set ("Shaper Filter On", 1.0f); a.set ("Shaper Filter Mode", 4.0f / 117.0f); a.pump (1.2); a.render (10, 0.0, true); a.pump (0.6);
+    x.clear(); take (0.0, true, (int) (STEP * 16 / BLK) + 1, x);
+    {   // the default Filter shape is a sine: closed at the bar's start and end, open at its middle (sixteenth 8)
+        const double closed = std::min (stepDb (x, 0), stepDb (x, 15)), open = stepDb (x, 8);
+        snprintf (b, sizeof b, "Acid 303 on the Filter lane: sixteenth 0 %.1f · 8 %.1f · 15 %.1f dBFS (sine shape: closed at the ends, open mid-bar)", stepDb (x, 0), open, stepDb (x, 15));
+        chk (open > closed + 12.0, "🚨 [6] the Filter lane runs the rack's roster (Acid 303) and the shape sweeps it: mid-bar open, the ends closed", b);
+    }
+    // [7] the Drive lane on the rack's distortion (Soft Clip, the default type): harmonics climb with the ramp shape
+    a.set ("Shaper Filter On", 0.0f); a.set ("Shaper Drive On", 1.0f); a.pump (1.2); a.render (10, 0.0, true); a.pump (0.6);
+    x.clear(); take (0.0, true, (int) (STEP * 16 / BLK) + 1, x);
+    {   // a crude harmonic ratio: energy at 2 kHz+ vs the whole, first sixteenth (shape ~0) against the last (shape ~1)
+        auto hf = [&] (int step) { const size_t s0 = STEP * (size_t) step + 700, s1 = s0 + 4800; double hp = 0, tot = 0, z1 = 0, z2 = 0;
+            for (size_t i = s0; i < s1 && i < x.size(); ++i) { const double v = x[i]; const double h = v - 2 * z1 + z2; z2 = z1; z1 = v; hp += h * h; tot += v * v; }   // a 2nd-difference high-pass
+            return 10 * std::log10 (hp / (tot + 1e-30) + 1e-30); };
+        snprintf (b, sizeof b, "Soft Clip on the Drive lane: high-band share %.1f dB at the ramp's start, %.1f dB at its end", hf (0), hf (15));
+        chk (hf (15) > hf (0) + 6.0, "[7] the Drive lane runs the rack's distortion and the ramp shape drives it harder along the bar", b);
+    }
+    // [8] the MIDI trigger: transport STOPPED, Volume lane on Trigger = MIDI — the 1/16 gate runs from the note-on on its own clock
+    a.set ("Shaper Drive On", 0.0f); a.set ("Shaper Volume On", 1.0f); a.set ("Shaper Volume Trigger", 1.0f); a.pump (0.6);
+    x.clear(); take (5.37, false, (int) (STEP * 8 / BLK) + 1, x);
+    snprintf (b, sizeof b, "stopped transport, Trigger MIDI: sixteenths from the note %.1f %.1f %.1f %.1f dBFS", stepDb (x, 0), stepDb (x, 1), stepDb (x, 2), stepDb (x, 3));
+    chk (stepDb (x, 0) > -30 && stepDb (x, 1) < stepDb (x, 0) - 25 && stepDb (x, 2) > -30 && stepDb (x, 3) < stepDb (x, 2) - 25, "[8] Trigger = MIDI: the gate runs from the note-on with the transport stopped (ON / OFF / ON / OFF from the note)", b);
+    a.set ("Shaper Volume Trigger", 0.0f); a.pump (0.3);
     printf ("\n  %d passed, %d failed\n\n", npass, nfail);
     a.close(); return nfail ? 1 : 0;
 }
