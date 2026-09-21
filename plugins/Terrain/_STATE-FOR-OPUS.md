@@ -1,7 +1,46 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp64** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp71** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp71 (2026-09-21) — THE TERRAIN SHAPER
+**The Chop card is the Terrain Shaper** — a ShaperBox 3 / Gross Beat-style multi-lane shaper on the
+Glitch card's chassis (mix bar, presets, pop-out, duplicatable ×4, routable in the Patcher; the `chop`
+kind key, chain kind 16 and the `FLOW_CHOP_*` pool are all REUSED, so nothing else moved). Eight targets
+under the screen (Volume / Time / Filter / Pan / Repeat / Drive / Phaser / Crush — Max's names: Liquid →
+Phaser, Width → Repeat "same as the Glitch"), each a drawn shape on the LFO editor's own law (breakpoints
+`[x,y,c]`, pinned ends, bias curve, the brushes, free draw that DRAWS, right-click = the LFO menu with the
+grid slider, snap, flips, random, stock shapes, time presets). No captions on the screen; the bottom strip
+is a centred ‹ selector › (filter type / drive type / crush mode / time preset per lane). Tabs: Shape
+(ONE Depth knob, plain like every other knob; Tension / Floor / Blend), Target (the "back panel": On, Type,
+per-target knobs), Clock (Rate / Grid / Trigger boxes + Phase / Swing / Smooth). Selected buttons: purple
+outline, white inside, no glow. The Flow tile's emblem is one moving sine in the bull's-eye centre — tp71b: a FULL
+period between fixed ends (Max: "not cut off"), phase-driven by the `flowTiles` painter on the motion clock at one period
+per beat of `window.__hostBpm` (a one-statement frame stamp), wind-up / wind-down onto phase 0, still with Motion off.
+
+**DSP (`Source/FlowShaper.h`, JUCE-free, `FlowShaper_test.cpp` 14/14):** every lane reads its 2048-cell
+baked table at `phase = ppq / cycleBeats mod 1` PER SAMPLE — "as soon as you press play it instantly
+shapes, no offset". Time = Gross Beat's read-position law on a 16 s ring (armed lazily on the timer when
+Time/Repeat switch on; jump law so a jump lands on a settled target with a ≥ 48-sample fade); Repeat =
+grid-captured slice loop (height → slice length); Filter = SVF LP/HP/BP/Notch; Drive = soft/hard/fold/tube
+(a wire at zero — fade-in over the first quarter); Phaser 6-stage / Flanger; Crush bits+rate; Pan
+constant-power; Volume smoothed; `mix` blends the whole card. Per lane: `FLOW_CHOP_<LN>_ON/DEPTH/RATE/MODE`
+(named "Shaper <Lane> On/Depth/Rate/Mode", cloned to instances 2..4 by the pool block); the shapes travel as
+JSON (`setShaperJson`/`getShaperJson` natives; `shaperJson<i>` in the state beside `lfoShapesJson`; cleared
+by clearPatchBlobs). Feed: `{"ph":[8],"v":[8],"ln":[8],"b","on","pl"}` at 60 Hz through
+`__flowFeedPush.chop[inst]`.
+
+**Proof on the installed AU (`Tests/au_shaper_lock.cpp`, HostCallbacks = a real transport):** play from
+bar 1 → sixteenth 0 ON / 1 OFF from the first samples; play pressed a sixteenth IN → the first sixteenth
+heard is OFF (read at the DAW's position); stopped → phase 0 held; Volume On = 0 → no gate; Time unity =
+a wire. 6/6. Page: `_tp71_gate.js` 11/11; the whole sweep (tp57…tp67) green; `_tp67_gate.js` [0] learned
+the `chop:/./` entry in `DICE_TIME_RX` (the Shaper never rolls — a shape is drawn).
+
+**⚠️ NOT DONE (say so to Max):** the Filter lane's type picker is the SVF's four modes, not the rack
+filter roster (ladder / acid 303 … `FilterFxEngine` not wired); the Drive lane's four types are built in
+(the `DistortionEngine` roster not wired); Trigger is Sync only (Free / Audio / MIDI are listed, not live);
+lane Depth / On are not mod destinations; the Patcher node's visuals for the Shaper were not specifically
+checked. The pop-out and presets ride the TIC factory's own paths, as the Glitch's do.
 
 ## tp64 (2026-09-20, evening) — THE MACHINES AS CARDS, THE DECK, THE CHOP PAGE FOLLOWS THE PRESET, BANK B
 **The three tape machines are card TYPES again — on the machine DSP this time.** Max: "make them like
@@ -134,7 +173,7 @@ they disappeared); E–H right-click menu (`/SYN_OSC_([A-D])_/`); exclusive solo
 or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chops", thin white).
 
 ## GATES
-`Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
+`Tests/_tp71_gate.js` (11), `Tests/au_shaper_lock.cpp` (6), `Source/FlowShaper_test.cpp` (14), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
 window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record.)

@@ -1673,6 +1673,17 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 audioProcessor.requestChopWipe (args.size() > 0 ? (int) args[0] : 0);   // fb106 — Wipe: clear the chop memory
                 complete (juce::var{});
             })
+            .withNativeFunction("setShaperJson", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 1) audioProcessor.setShaperJson ((int) args[0], args[1].toString());   // tp71 — the Shaper's lanes (page → bake → publish)
+                complete (juce::var{});
+            })
+            .withNativeFunction("getShaperJson", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getShaperJson (args.size() > 0 ? (int) args[0] : 0)));
+            })
             .withNativeFunction("getGliFeed", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -6088,6 +6099,17 @@ public:
                     proc.requestChopWipe (args.size() > 0 ? (int) args[0] : 0);
                     complete (juce::var{});
                 })
+                .withNativeFunction ("setShaperJson", [&proc](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() > 1) proc.setShaperJson ((int) args[0], args[1].toString());   // tp71
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getShaperJson", [&proc](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getShaperJson (args.size() > 0 ? (int) args[0] : 0)));
+                })
                 .withNativeFunction ("getGliFeed", [&proc](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
@@ -6812,6 +6834,9 @@ void TerrainUiCore::timerCallback()
     // bytes shipped (and so the idle-skip hash) are identical — only the allocation pattern changes.
     js.preallocateBytes ((size_t) juce::jmax (4096, lastFrameBytes_ + lastFrameBytes_ / 4 + 1024));
     js << "window.__tickT=(window.performance&&performance.now)?performance.now():0;";   // fb483 heartbeat rides first
+    // tp71b — the host's BPM as its own statement (the per-statement idle-skip ships it only when it changes): the
+    // Shaper tile's sine travels one period per beat of it
+    js << "window.__hostBpm=" << juce::String (juce::jlimit (1.0f, 999.0f, audioProcessor.currentBPM.load (std::memory_order_relaxed)), 2) << ";";
     if (audioProcessor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
         js << "window.__isStandalone=1;";   // fb484 — arms the page's QWERTY-to-MIDI handler
     juce::String* frameOut = &js;   // fb483 -- reachable inside blocks that shadow the name js

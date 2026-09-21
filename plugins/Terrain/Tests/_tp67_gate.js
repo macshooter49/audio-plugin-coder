@@ -20,7 +20,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
 
 const t0={ def:/ParameterIDs::FLOW_GLI_SYNC, 1 \}, "Glitch Clock",\s+juce::StringArray \{ "Free", "Sync" \}, 1\)\)/.test(cpp),
   clone:/A clone carries the source's type, range\/choices, default and label/.test(cpp),
-  init:/syncf:1, seed:0 \};/.test(src), rx:/var DICE_TIME_RX=\{ gli:\/\^\(syncf\|grate\|quant\|swing\|chaos\)\$\|_otrg\$\|_ogrd\$\|\^gate_phase\$\|\^rep_driftk\$\|\^sct_jitter\$\/ \};/.test(src),
+  init:/syncf:1, seed:0 \};/.test(src), rx:/var DICE_TIME_RX=\{ gli:\/\^\(syncf\|grate\|quant\|swing\|chaos\)\$\|_otrg\$\|_ogrd\$\|\^gate_phase\$\|\^rep_driftk\$\|\^sct_jitter\$\/(, chop:\/\.\/)? \};/.test(src),
   sync:/var DICE_SYNC   =\{ gli:function\(d\)\{ try\{ d\.S\.set\('syncf',1\);/.test(src), grids:!/if\(id==='gli'\) diceGrids\(\/\^FLOW_GLI_\[A-Z\]\+_GRID\$\/\);\n/.test(src) };
 ok(Object.values(t0).every(Boolean), '[0] the Clock defaults to Sync (clones carry the default), the card\'s Init is Sync, the dice has the time law and no longer re-deals the modules\' grids', JSON.stringify(t0));
 

@@ -56,7 +56,8 @@
 #include "Slice.h"
 #include "TerrainSynth.h"
 #include "FlowArp.h"            // FLOW · ARP engine   (mode 1)
-#include "FlowChop.h"           // FLOW · CHOP engine  (mode 2) — audio insert
+#include "FlowChop.h"
+#include "FlowShaper.h"   // tp71 — the Terrain Shaper (the Flow Chop card's slot)           // FLOW · CHOP engine  (mode 2) — audio insert
 #include "FlowGlitch.h"         // FLOW · GLITCH engine(mode 3) — audio insert
 #include "FlowDrift.h"          // FLOW · DRIFT engine (mode 4) — generative mod source
 #include "FlowChain.h"          // fb131 — MODE CHAIN resolver (click order = signal path; pure)
@@ -2064,6 +2065,22 @@ private:
     wc::FlowGlitch              glitches_[wc::kFlowInstances];
     wc::FlowArp&                flowArp = flowArps_[0];     // FLOW · ARP engine (instance 1)
     wc::FlowChop&               chop    = chops_[0];        // FLOW · CHOP engine (mode 2) — audio insert at end of processBlock
+    // ══ tp71 — THE TERRAIN SHAPER lives in the Chop card's slot: same chain kind (16), same sends, same four
+    //    instances, same Patcher node — the engine and the card are new. The FlowChop pool stays declared (its
+    //    parameters are in every saved patch) but is never prepared or run.
+    wc::FlowShaper              shapers_[wc::kFlowInstances];
+    juce::String                shaperJson_[wc::kFlowInstances];           // the page's lanes (breakpoints + lane knobs), per instance
+    std::shared_ptr<wc::ShaperState> shaperState_[wc::kFlowInstances];    // the baked snapshot the audio thread reads
+    struct ShpLaneRefs { std::atomic<float>* on = nullptr; std::atomic<float>* depth = nullptr; std::atomic<float>* rate = nullptr; std::atomic<float>* mode = nullptr; };
+    ShpLaneRefs                 shpRefs_[wc::kFlowInstances][wc::kShaperLanes] {};
+    std::atomic<float>          shpVizPh_[wc::kFlowInstances][wc::kShaperLanes] {}, shpVizV_[wc::kFlowInstances][wc::kShaperLanes] {};
+    void  cacheShaperRefs();
+    void  rebuildShaperState (int inst);                                   // message thread: JSON (or the defaults) → baked tables → publish
+    static void bakeShaperTable (const float* xs, const float* ys, const float* cs, int np, float* tb) noexcept;   // the LFO editor's bias law
+public:
+    void  setShaperJson (int inst, const juce::String& json);
+    juce::String getShaperJson (int inst) const { return shaperJson_[juce::jlimit (0, wc::kFlowInstances - 1, inst)]; }
+private:
     wc::FlowGlitch&             glitch  = glitches_[0];     // FLOW · GLITCH engine (mode 3) — audio insert at end of processBlock
     bool                        prevGlitchOn_[wc::kFlowInstances] {};   // FLOW · prev-block glitch-on per instance (enable-edge detection; resets glitch clock on (re)enable)
     juce::MidiBuffer            flowMidiBuf_[wc::kFlowInstances];       // tp20 — the note stream between chained Arps (pre-sized in prepare)

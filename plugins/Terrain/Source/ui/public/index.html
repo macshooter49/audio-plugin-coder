@@ -787,7 +787,7 @@
               else is retimed: same period, same level bob, same dead streaks, wings down.
      fb104's law holds: SMIL still animates attributes in viewBox space, and arpTick writes the SAME scale() the killed
      keyframes wrote on fill-box circles. */
-  var TILES = { arp: { P: 1.9, B: [[1.06, 1.9]] }, chop: { P: 2.2, B: [[1.2, 1.52]] },
+  var TILES = { arp: { P: 1.9, B: [[1.06, 1.9]] }, chop: { P: 1, B: [[0, 0]], rate: function(){ var b = window.__hostBpm; return (b > 0 && b < 1000 ? b : 120) / 60; } },   /* tp71b — the Shaper's sine: ONE period per BEAT of the host BPM (loop unit = one period) */
                 glitch: { P: 9.6, B: [[0, 0.6], [2.2, 2.65], [4.63, 4.95], [7.7, 8.03]] }, drift: { P: 2.4, B: [[0.6, 0.6]] } };   /* fb637 — wings DOWN at rest (0.6 mod 0.8 = 0.6 → the down path); the bob is level at 0.6 exactly as it was at 1.8 */
   var tileList = null, tileScan = 0;
   function tileFind(){ var out = [];
@@ -797,7 +797,7 @@
         try { if (sv && (sv.getElementsByTagName('animate').length || sv.getElementsByTagName('animateTransform').length)){
                 if (! sv.animationsPaused()) sv.pauseAnimations(); smil = sv; } } catch (e) {}
         out.push({ el: el, mode: m, smil: smil, notes: el.querySelectorAll('.arpNote'), lines: el.querySelectorAll('.arpLine'),
-                   holds: el.querySelectorAll('.arpHold'), sqs: el.querySelectorAll('.sq'), wind: el.querySelectorAll('.rbnWind'),
+                   holds: el.querySelectorAll('.arpHold'), sqs: el.querySelectorAll('.sq'), wind: el.querySelectorAll('.rbnWind'), sine: el.querySelector('.shpSine'),
                    last: NaN, lastR: NaN }); } } catch (e) {}
     return out; }
   /* fb509b — THE ARP TILE'S PULSES (and CHOP's four dots), byte-faithful to the killed CSS:
@@ -813,8 +813,14 @@
   /* r — the key's REST WEIGHT (0 playing, 1 at rest, __tiWind): every value is blended onto its home, so the ending
      lands on the organised pose exactly, and a wind-up leaves it as the motion comes up to speed. */
   function mix(a, b, r){ return r >= 1 ? b : a + (b - a) * r; }
+  /* tp71b — the Shaper's sine at phase ph (loop units): 33 points across x 8..34, amplitude 8.5 about y 21 — the wave
+     travels through a fixed window, its ends ride up and down, nothing is clipped. One 330-byte string a frame, only
+     while the clock moves (flowTiles skips a tile whose tau did not change). */
+  function sineD(ph){ var N = 32, o = '', i, x, y; for (i = 0; i <= N; i++){ x = 8 + 26 * i / N; y = 21 - 8.5 * Math.sin(6.283185307 * (i / N - ph));
+      o += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + (i < N ? ' ' : ''); } return o; }
   function tilePaint(tl, tau, r){
     if (tl.smil){ try { tl.smil.setCurrentTime(tau); } catch (e) {} }
+    if (tl.sine){ try { tl.sine.setAttribute('d', sineD(tau - Math.floor(tau))); } catch (e) {} }
     var i, el, ph, dash;
     for (i = 0; i < tl.notes.length; i++){ el = tl.notes[i]; ph = ((tau - i * 0.2) / 1.9 % 1 + 1) % 1;
       try { el.style.opacity = mix(arpAt(ph, 0.08, 0.34, 1, 0.4, 1, 0.4), 0.75, r).toFixed(3);
@@ -840,7 +846,7 @@
     for (var i = 0; i < tileList.length; i++){ var tl = tileList[i], T = TILES[tl.mode], key = 'tile-' + tl.mode;
       /* the clock runs even off screen, so a wind-down never strands half-way; only the drawing waits for the tiles.
          fb636 h1 — every tile, lit or not: the MIDI is the only thing that moves them */
-      var tau = window.__tiWind(key, T.P, T.B, live), r = K[key].r;
+      var tau = window.__tiWind(key, T.P, T.B, live, T.rate ? T.rate() : 1), r = K[key].r;   /* tp71b — a tile may carry its own rate (the Shaper: the host BPM) */
       if (off || (tau === tl.last && r === tl.lastR)) continue;
       tl.last = tau; tl.lastR = r; tilePaint(tl, tau, r); } }
   reg.set('flowTiles', flowTiles);   /* the dispatcher's own map: a page that hides window.__tiFrameReg (lfo_park's rAF mode) must not abort this IIFE */
@@ -3946,6 +3952,41 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
   font-size:9px;letter-spacing:.4px;color:rgba(255,255,255,.9);
   cursor:pointer;padding:2px 5px;border:1px solid transparent;border-radius:6px;transition:border-color .15s ease;}
 .ti-card .h .pset .pn:hover{border-color:rgba(255,255,255,.28);}
+
+/* ══ tp71 — THE TERRAIN SHAPER card (.shp-ext rides .chop-ext's chassis). The Glitch card's grammar: the screen, the
+   eight target tiles with their status dots, the tabs. Max: "purple outline, white inside, no glow" for a selected
+   button — every .fxb.on here reads that way. No captions on the screen; the selector strip sits inside its bottom. */
+.shp-ext .screen{position:relative;height:150px;border-radius:10px;background:#0F0F1C;border:1px solid rgba(255,255,255,.06);overflow:hidden;touch-action:none;}
+.shp-ext .screen svg{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair;}
+.shp-ext .screen .grid line{stroke:rgba(255,255,255,.06);stroke-width:1;vector-effect:non-scaling-stroke;}
+.shp-ext .screen .grid line.mid{stroke:rgba(255,255,255,.14);}
+.shp-ext .screen .ghosts path{fill:none;stroke:rgba(183,148,255,.22);stroke-width:1;vector-effect:non-scaling-stroke;}
+.shp-ext .screen path.body{fill:rgba(183,148,255,.14);stroke:none;}
+.shp-ext .screen path.line{fill:none;stroke:#D9C8FF;stroke-width:1.5;stroke-linejoin:round;vector-effect:non-scaling-stroke;}
+.shp-ext .screen.off path.body{fill:rgba(255,255,255,.06);}
+.shp-ext .screen.off path.line{stroke:rgba(255,255,255,.55);}
+.shp-ext .screen .pts circle{fill:#0F0F1C;stroke:#fff;stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:grab;}
+.shp-ext .screen line.ph{stroke:rgba(255,255,255,.85);stroke-width:1;vector-effect:non-scaling-stroke;}
+.shp-ext .screen circle.phd{fill:#fff;}
+.shp-ext .screen .sel{position:absolute;left:0;right:0;bottom:4px;height:18px;display:flex;align-items:center;justify-content:center;gap:6px;pointer-events:none;}
+.shp-ext .screen .sel .pa{pointer-events:auto;color:rgba(255,255,255,.42);font-size:12px;line-height:1;cursor:pointer;padding:0 3px;}
+.shp-ext .screen .sel .pa:hover{color:#fff;}
+.shp-ext .screen .sel .pn{pointer-events:auto;min-width:78px;text-align:center;font-size:8px;letter-spacing:1.1px;text-transform:uppercase;color:rgba(255,255,255,.9);cursor:pointer;padding:2px 6px;border:1px solid transparent;border-radius:6px;}
+.shp-ext .screen .sel .pn:hover{border-color:rgba(255,255,255,.28);}
+.shp-ext .fx{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;}
+.shp-ext .fxb{aspect-ratio:1;font-size:6.5px;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;text-transform:uppercase;color:rgba(255,255,255,.62);}
+.shp-ext .fxb.on{border-color:#B794FF;color:#fff;box-shadow:none;}
+.shp-ext .fleds{display:grid;grid-template-columns:repeat(8,1fr);margin-top:4px;}
+.shp-ext .fleds i{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.14);justify-self:center;}
+.shp-ext .fleds i.on{background:#B794FF;}
+.shp-ext .fleds i.on.live{background:#D9C8FF;}
+.shp-ext .brushes,.shp-ext .stock{display:grid;gap:4px;}
+.shp-ext .brushes{grid-template-columns:repeat(8,minmax(0,1fr));}
+.shp-ext .stock{grid-template-columns:repeat(4,minmax(0,1fr));}
+.shp-ext .brushes .fxb,.shp-ext .stock .fxb{aspect-ratio:auto;height:20px;}
+.shp-ext .gbox .kin{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:end;gap:4px;}
+.shp-ext .gbox .kin .cell .lb{white-space:nowrap;}
+.shp-ext .b{gap:12px;}
 /* fb133 — preset menu = the Import-browser grammar VERBATIM (Max: "look like this one"):
    rgba(22,20,34,.72) glass, blur(20) sat(1.4), dim rows -> white pill + a leading dot when
    current, dim hover wash, and the exact 5px translucent sliders (no chunky white bars). */
@@ -9122,14 +9163,14 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 </svg>
               </div>
               <!-- SEQ -->
-              <div class="flow-mode" data-mode="chop" title="Chop">
+              <div class="flow-mode" data-mode="chop" title="Shaper">
                 <span class="clip"><span class="orbit"></span></span>
                 <svg class="emb" viewBox="0 0 42 42">
-                  <g class="dot" fill="currentColor">
-                    <circle class="sq s1" cx="9" cy="21" r="2.2"/><circle class="sq s2" cx="17" cy="21" r="2.2"/>
-                    <circle class="sq s3" cx="25" cy="21" r="2.2"/><circle class="sq s4" cx="33" cy="21" r="3.2"/>
-                    <circle class="seqBall" cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle>
-                  </g>
+                  <!-- tp71b — the Shaper's emblem: ONE full sine, dead centre, between FIXED ends (nothing clipped); the frame
+                       dispatcher's flowTiles painter rewrites its phase on the motion clock — one period per beat of the host's
+                       BPM (window.__hostBpm), wind-up / wind-down like every tile, still with motion off. Home = phase 0. -->
+                  <path class="shpSine" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"
+                    d="M8.0 21.0 L8.8 19.3 L9.6 17.7 L10.4 16.3 L11.2 15.0 L12.1 13.9 L12.9 13.1 L13.7 12.7 L14.5 12.5 L15.3 12.7 L16.1 13.1 L16.9 13.9 L17.8 15.0 L18.6 16.3 L19.4 17.7 L20.2 19.3 L21.0 21.0 L21.8 22.7 L22.6 24.3 L23.4 25.7 L24.2 27.0 L25.1 28.1 L25.9 28.9 L26.7 29.3 L27.5 29.5 L28.3 29.3 L29.1 28.9 L29.9 28.1 L30.8 27.0 L31.6 25.7 L32.4 24.3 L33.2 22.7 L34.0 21.0"/>
                 </svg>
               </div>
               <!-- GLITCH -->
@@ -16436,12 +16477,12 @@ window.__synArc = function (ring, n, bipolar) {
        card that drifted. Free is the hand's alone. */
     /* tp68 — and the knobs that BEND time: Swing (the grid's odd boundaries), Chaos (slice lengths, jumps), the Gate's
        Nudge ("slide it off the beat"), the Repeat's and Scatter's Vary. The dice never rolls a way off the grid. */
-    var DICE_TIME_RX={ gli:/^(syncf|grate|quant|swing|chaos)$|_otrg$|_ogrd$|^gate_phase$|^rep_driftk$|^sct_jitter$/ };
+    var DICE_TIME_RX={ gli:/^(syncf|grate|quant|swing|chaos)$|_otrg$|_ogrd$|^gate_phase$|^rep_driftk$|^sct_jitter$/, chop:/./ };   /* tp71 — the Shaper: nothing rolls; a shape is drawn */
     var DICE_SYNC   ={ gli:function(d){ try{ d.S.set('syncf',1); Object.keys(d.DEF).forEach(function(k){ if(/_otrg$/.test(k)) d.S.set(k,0); }); }catch(e){} } };
-    var DICE_LADDER={ gli:{grate:19}, chop:{time:16,slices:6,loop:6} };
+    var DICE_LADDER={ gli:{grate:19} };   /* tp71 — the Shaper has no ladders for the dice (Max: "we don't need the 50 % dice roll") */
     /* tp39f — the chop's TIME never rolls the bar-long grids: index 0 (1/1) … 4 (1/2T) leave the oscillators behind the card silent
        for most of a bar (measured: a Modal pluck at −99.6 dBFS for 0.6 s), and 17-18 (1/128, 1/256) are a buzz. 5 = 1/4 … 16 = 1/64. */
-    var DICE_FLOOR={ chop:{time:5} };
+    var DICE_FLOOR={};
     function diceMode(id,wide){
       try{ if(window.__tiEnsure&&window.__tiEnsure[id]) window.__tiEnsure[id](); }catch(e){}
       var d=window.__tiDice&&window.__tiDice[id]; if(!d) return;
@@ -36981,330 +37022,278 @@ restoreThemeFromBackend();
     window.__tiEnsure=window.__tiEnsure||{}; window.__tiEnsure.rbn=function(){ rbnCardObj.ensure(); };
 
     /* ───────── CHOP · "Ribbon" — the memory ribbon, DSP-true ───────── */
-    function makeChopCard(inst){ var SFX=inst>1?String(inst):'', PFX='FLOW_CHOP'+SFX+'_', PSEQ='FLOW_SEQ'+SFX+'_', INST=inst-1;   /* tp20 */
+    /* ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+       tp71 — THE TERRAIN SHAPER. Max: "ShaperBox 3 and Gross Beat had a baby … the same glitch layout with the screen
+       being replaced as the shaper and the buttons being the effects … treat this just like the LFO … everything DAW
+       locked." The Flow Chop card's slot (id 'chop', kind 'chop', FLOW_CHOP_ params, the same chain kind and sends),
+       a new card: the screen is a breakpoint editor with the LFO's own law (pinned ends, per-segment tension, the
+       fb213 brushes and the right-click menu), the eight buttons are the TARGETS, every lit lane runs at once
+       (multi-lane), and phase is the host's — FlowShaper.h reads it every sample.
+       ══════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+    function makeShaperCard(inst){ var SFX=inst>1?String(inst):'', PFX='FLOW_CHOP'+SFX+'_', INST=inst-1;
       var built=null;
-      var LANES=[['order','Order'],['pitch','Pitch'],['rev','Rev'],['trim','Trim'],['rpt','Repeat'],['drop','Drop']];
-      var DEPTH={ order:[['spread','Sprd',0],['bias','Bias',.5],['lock','Lock',0],['seed','Seed',.44]],
-        pitch:[['range','Semi',.33],['steps','Steps',0],['glide','Glide',.15],['quant','Fall',0]],   /* fb144 — Semi not Range (Max: plain function words) */
-        rev:  [['chance','Odds',0],['run','Len',.25],['spread','Sprd',0],['snap','Snap',.6]],
-        trim: [['length','Len',.875],['curve','Curve',.3],['random','Rand',0],['gate','Gate',0]],
-        rpt:  [['count','Count',0],['decay','Decay',.4],['curve','Curve',.5],['chance','Odds',1]],
-        drop: [['density','Amt',0],['grain','Size',.4],['spray','Spray',.1],['tone','Tone',.5]] };
-      var DFMT={ seed:TIC.inum(0,16), count:TIC.inum(1,4), range:TIC.inum(0,12), run:TIC.inum(1,4),
-           steps:function(n){ return ['Off','Ev 8','Ev 4','Ev 3','Ev 2','All'][Math.min(5,Math.floor(n*5.999))]; },
-                 bias:function(n){ return String(Math.round((n-.5)*100)); } };
+      var LN=[['vol','Vol','Volume'],['time','Time','Time'],['filt','Filt','Filter'],['pan','Pan','Pan'],['rep','Rep','Repeat'],['drive','Drive','Drive'],['phase','Phase','Phaser'],['crush','Crush','Crush']];
+      var LNP=['VOL','TIME','FILT','PAN','REP','DRIVE','PHASE','CRUSH'];
+      /* the target's own knobs: [S key, label, default]; 'k0'/'k1' are the engine's per-target knobs, the rest are lane keys */
+      var LNK={ vol:[['floor','Floor',0],['smooth','Smooth',.25]], time:[['k0','Fade',.3],['smooth','Smooth',.25]], filt:[['k0','Reso',.3],['k1','Drive',0],['smooth','Smooth',.25]],
+                pan:[['smooth','Smooth',.25]], rep:[['k0','Seam',.3]], drive:[['k0','Tone',.5],['k1','Makeup',.5]], phase:[['k0','Feedback',.5],['k1','Stereo',.5]], crush:[['k0','Bits',.5],['k1','Rate',.5]] };
+      var LNMODE={ time:['1 cycle','½ cycle','2 cycles'], filt:['Low','High','Band','Notch'], pan:['Power','Linear'], drive:['Soft','Hard','Fold','Tube'], phase:['Phaser','Flanger'], crush:['Bits + Rate','Bits','Rate'] };
+      var LNMODEL={ time:'Range', filt:'Type', pan:'Law', drive:'Type', phase:'Mode', crush:'Mode' };
+      var RATES=['1/16','1/8','1/4','1/2','1 bar','2 bars','4 bars','8 bars'], GRIDS=[2,3,4,6,8,12,16,24,32];
+      var STOCK=[['sine','Sine'],['tri','Triangle'],['saw','Saw up'],['sawdn','Saw down'],['square','Square'],['gate','Gate'],['stairs','Stairs'],['flat','Flat']];
+      var TIMEP=[['unity','Unity'],['half','Half time'],['stut8','Stutter 1/8'],['stut16','Stutter 1/16'],['reverse','Reverse'],['tape','Tape stop']];
+      var DEFSHAPE={vol:'gate',time:'unity',filt:'sine',pan:'sine',rep:'flat',drive:'saw',phase:'sine',crush:'stairs'};
+      function stepsPts(n,fn){ var p=[]; for(var i=0;i<n;i++){ var y=fn(i); p.push([i/n,y,0]); p.push([(i+1)/n-1e-4,y,0]); } p[p.length-1][0]=1; return p; }
+      function stock(k){ switch(k){
+        case 'sine': return [[0,0,-0.62],[.5,1,.62],[1,0,0]];
+        case 'tri': return [[0,0,0],[.5,1,0],[1,0,0]];
+        case 'saw': case 'unity': return [[0,0,0],[1,1,0]];
+        case 'sawdn': case 'reverse': return [[0,1,0],[1,0,0]];
+        case 'square': return [[0,1,0],[.5-1e-4,1,0],[.5,0,0],[1,0,0]];
+        case 'gate': return stepsPts(16,function(i){ return (i&1)?0:1; });
+        case 'stairs': return stepsPts(8,function(i){ return i/7; });
+        case 'flat': return [[0,.5,0],[1,.5,0]];
+        case 'half': return [[0,0,0],[1,.5,0]];
+        case 'stut8': return (function(){ var p=[]; for(var i=0;i<8;i++){ p.push([i/8,0,0]); p.push([(i+1)/8-1e-4,1/8,0]); } p[p.length-1][0]=1; return p; })();
+        case 'stut16': return (function(){ var p=[]; for(var i=0;i<16;i++){ p.push([i/16,0,0]); p.push([(i+1)/16-1e-4,1/16,0]); } p[p.length-1][0]=1; return p; })();
+        case 'tape': return [[0,0,0],[1,.55,.85]];
+        } return [[0,0,0],[1,1,0]]; }
+      /* the LFO editor's own math (shBias / shEvalPts, index.html above) — the processor bakes with the same law */
+      function bias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
+      function evalPts(pts,p){ p=Math.max(0,Math.min(1,p)); var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++; var a=pts[i],b=pts[i+1],w=b[0]-a[0]; if(w<=1e-6)return b[1]; return a[1]+(b[1]-a[1])*bias((p-a[0])/w,a[2]||0); }
+      function gridOf(i){ var ix=S_?S_.v['grid'+i]|0:6; return GRIDS[Math.max(0,Math.min(GRIDS.length-1,ix))]||16; } var S_=null;
+      function kkey(i,key){ return (key==='k0'||key==='k1')?key+'_'+i:key+i; }
       function build(){
-        var sh=TIC.shell({cls:'chop-ext'+(SFX?' ti-inst ti-inst'+SFX:''),id:'chop'+SFX,kind:'chop',title:'Chop'+(SFX?' '+SFX:''),mixId:PFX+'BLEND',mixDef:1.0});
-        var SLICEL=[2,3,4,6,8,12,16], LOOPL=[2,4,6,8,10,12,16];
-        var init={ lane:'order', slices:4, loop:3, mode:0, always:1, catch:0, time:11,
-                   scan:1, auto:0, spreadM:0, feed:0, freeze:0, collect:0, rpts:1,
-                   stepsC:0, detune:0, wow:0, smooth:.15, fltr:0, grit:0, trimC:.5 };
-        for(var L in DEPTH) DEPTH[L].forEach(function(d){ init[L+'_'+d[0]]=d[2]; });
-        var DEF=JSON.parse(JSON.stringify(init));   // fb132 — preset base
-        var S=TIC.mkState(init);
-        var TIPS={ time:'The speed, in beats', order:'Shuffle the slice order', pitch:'Retune slices',
-          rev:'Flip slices backwards', trim:'Shorten slices', repeat:'Stutter a slice',
-          drop:'Mute slices', slices:'How many pieces', loop:'How much audio loops',
-          mode:'How it steps through the slices', always:'Chop everything',
-          catch:'Wait for a moment, then chop', spread:'Push values apart',
-          bias:'Strays lean older or newer', lock:'Odds a slice stays put', seed:'Pick the shuffle - same number, same flip',
-          range:'How far it jumps, in semitones - 12 is an octave', steps:'Which slices jump - every 2nd, 4th, 8th', glide:'Slide between pitches',
-          fall:'Jumps rise, fall, or take turns', crush:'Coarser, crunchier', chance:'How often it happens', length:'How much of it plays',
-          curve:'Bend the shape', random:'Add a little randomness', gate:'Cut the tail',
-          count:'How many repeats', decay:'Repeats get quieter', amount:'How much it happens',
-          size:'How big the pieces are', spray:'Scatter them', tone:'Bright to dark',
-          scan:'Where in the memory it plays', wander:'Let the window drift',
-          speed:'Stretch the memory - slower and grittier', freeze:'Stop recording', collect:'Keep the good moments',
-          wipe:'Clear the memory', detune:'A little out of tune', wow:'Tape-style warble',
-          smooth:'Soften the edges', filter:'Shape the tone', grit:'Add some dirt',
-          slice:'Cut and reorder', shape:'Color the sound',
-          amt:'How much it happens', len:'How long it lasts',
-          rand:'Add a little randomness', odds:'How often it happens', sprd:'How far slices stray from the pattern' };
-        var MEM=16;                                             // memory cells in the strip
-        var sim={ sub:0, frac:0, off:0, dirV:1, idle:0, wave:[] };
-        (function(){ for(var i=0;i<200;i++)sim.wave.push(0); })();
-        var wPh=[Math.random()*6,Math.random()*6,Math.random()*6];
-        function waveAt(t){ return Math.sin(t*1.7+wPh[0])*.5+Math.sin(t*3.3+wPh[1])*.3+Math.sin(t*7.1+wPh[2])*.2; }
-        var wClock=0;
-        function loopLen(){ return LOOPL[S.v.loop]; }
-        function nSlices(){ return SLICEL[S.v.slices]; }
-        function winStart(){ return Math.round(S.v.scan*(MEM-loopLen())); }
+        var sh=TIC.shell({cls:'chop-ext shp-ext'+(SFX?' ti-inst ti-inst'+SFX:''),id:'chop'+SFX,kind:'chop',title:'Shaper'+(SFX?' '+SFX:''),mixId:PFX+'BLEND',mixDef:1.0});
+        var init={ lane:0, tool:0, snap:1 };
+        LN.forEach(function(l,i){ init['on'+i]=i===0?1:0; init['depth'+i]=1; init['rate'+i]=4; init['mode'+i]=0; init['trig'+i]=0;
+          init['smooth'+i]=.25; init['phase'+i]=0; init['tension'+i]=.5; init['floor'+i]=0; init['blend'+i]=1; init['swing'+i]=0; init['grid'+i]=6;   /* an index into GRIDS: 6 = 1/16 */
+          init['k0_'+i]=.5; init['k1_'+i]=.5; (LNK[l[0]]||[]).forEach(function(k){ init[kkey(i,k[0])]=k[2]; });
+          init['pts'+i]=JSON.stringify(stock(DEFSHAPE[l[0]])); });
+        var DEF=JSON.parse(JSON.stringify(init));
+        var S=TIC.mkState(init); S_=S;
+        var TIPS={ depth:'How much of the shape the target gets', smooth:'Soften the edges', tension:'Bend the curve', floor:'The shape never goes below this',
+          blend:'This lane, wet against dry', phase:'Slide the shape along the cycle', swing:'Stretch the first half of the cycle', rate:'One cycle of the shape',
+          grid:'The grid lines', trigger:'What restarts the shape', fade:'Crossfade when the time jumps', reso:'Resonance', drive:'Drive into the filter',
+          seam:'Crossfade at the loop point', tone:'Bright to dark', makeup:'Level after the drive', feedback:'Feedback', stereo:'Spread the two sides',
+          bits:'How coarse the bits get', 'rate ':'How low the sample rate gets', on:'This lane runs' };
+        var pushT=null, pushT2=null, touched=false, natSet=null, natGet=null;
+        try{ if(window.Juce&&window.Juce.getNativeFunction){ natSet=window.Juce.getNativeFunction('setShaperJson'); natGet=window.Juce.getNativeFunction('getShaperJson'); } }catch(e){}
+        function lanesJson(){ var o={lanes:[]}; LN.forEach(function(l,i){ var pts; try{ pts=JSON.parse(S.v['pts'+i]); }catch(e){ pts=stock(DEFSHAPE[l[0]]); }
+          o.lanes.push({ pts:pts, smooth:S.v['smooth'+i], phase:S.v['phase'+i], tension:S.v['tension'+i], floor:S.v['floor'+i], blend:S.v['blend'+i], swing:S.v['swing'+i], grid:gridOf(i), k:[S.v['k0_'+i],S.v['k1_'+i],.5,.5] }); });
+          return JSON.stringify(o); }
+        function pushNow(){ if(!natSet)return; try{ natSet(INST, lanesJson()); }catch(e){} }
+        function push(){ touched=true; clearTimeout(pushT); pushT=setTimeout(pushNow,90); clearTimeout(pushT2); pushT2=setTimeout(pushNow,130); }   /* the LFO's leading + trailing edge */
+        function pull(){ if(!natGet)return; try{ Promise.resolve(natGet(INST)).then(function(js){ if(touched)return; var o=null; try{ o=JSON.parse(String(js||'')); }catch(e){} if(!o||!o.lanes)return;
+          o.lanes.forEach(function(L,i){ if(!L)return; if(L.pts&&L.pts.length>=2) S.set('pts'+i,JSON.stringify(L.pts));
+            ['smooth','phase','tension','floor','blend','swing'].forEach(function(k){ if(L[k]!=null) S.set(k+i,L[k]); }); if(L.grid!=null){ var gi=GRIDS.indexOf(L.grid|0); if(gi>=0) S.set('grid'+i,gi); }
+            if(L.k){ if(L.k[0]!=null)S.set('k0_'+i,L.k[0]); if(L.k[1]!=null)S.set('k1_'+i,L.k[1]); } });
+          fillLane(); paint(); }).catch(function(){}); }catch(e){} }
+        function lane(){ return S.v.lane|0; }
+        function ptsOf(i){ try{ var p=JSON.parse(S.v['pts'+i]); if(p&&p.length>=2)return p; }catch(e){} return stock(DEFSHAPE[LN[i][0]]); }
+        function setPts(i,p){ p=p.slice().sort(function(a,b){ return a[0]-b[0]; }); p[0][0]=0; p[p.length-1][0]=1; S.set('pts'+i,JSON.stringify(p)); push(); paint(); }
 
-        var tp=TIC.tabsPanes([['slice','Slice'],['scan','Scan'],['shape','Shape']]);
+        /* ── THE SCREEN — the shape, drawn ──────────────────────────────────────────────────────────────────── */
+        var W=288, H=150, PL=6, PR=6, PT=8, PB=26;
+        var scr=TIC.el('<div class="screen"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
+          +'<g class="grid"></g><g class="ghosts"></g><path class="body"/><path class="line"/><g class="pts"></g>'
+          +'<line class="ph" y1="'+PT+'" y2="'+(H-PB)+'"/><circle class="phd" r="3"/></svg>'
+          +'<div class="sel"><span class="pa">‹</span><span class="pn"></span><span class="pa">›</span></div></div>');
+        var svg=scr.querySelector('svg'), gGrid=scr.querySelector('.grid'), gGhost=scr.querySelector('.ghosts'), pBody=scr.querySelector('.body'), pLine=scr.querySelector('.line'), gPts=scr.querySelector('.pts'), phL=scr.querySelector('.ph'), phD=scr.querySelector('.phd');
+        var selPn=scr.querySelector('.pn'), selPa=scr.querySelectorAll('.pa');
+        function X(x){ return PL+x*(W-PL-PR); } function Y(y){ return PT+(1-y)*(H-PT-PB); }
+        function pathFor(pts,close){ var d='', i, first=true;
+          for(i=0;i<pts.length-1;i++){ var a=pts[i], b=pts[i+1], w=b[0]-a[0];
+            if(first){ d+='M'+X(a[0]).toFixed(1)+' '+Y(a[1]).toFixed(1); first=false; }
+            if(w<=1e-6){ d+=' L'+X(b[0]).toFixed(1)+' '+Y(b[1]).toFixed(1); continue; }
+            var n=Math.max(2,Math.ceil(w*(W-PL-PR)/3));
+            for(var k=1;k<=n;k++){ var t=k/n; d+=' L'+X(a[0]+w*t).toFixed(1)+' '+Y(a[1]+(b[1]-a[1])*bias(t,a[2]||0)).toFixed(1); } }
+          if(close) d+=' L'+X(1).toFixed(1)+' '+Y(0).toFixed(1)+' L'+X(0).toFixed(1)+' '+Y(0).toFixed(1)+' Z';
+          return d; }
+        function paint(){ var i=lane(), g=gridOf(i), pts=ptsOf(i), h='';
+          for(var c=0;c<=g;c++){ var x=X(c/g).toFixed(1); h+='<line x1="'+x+'" x2="'+x+'" y1="'+PT+'" y2="'+(H-PB)+'"/>'; }
+          for(var r=0;r<=4;r++){ var y=Y(r/4).toFixed(1); h+='<line class="'+(r===2?'mid':'')+'" x1="'+X(0)+'" x2="'+X(1)+'" y1="'+y+'" y2="'+y+'"/>'; }
+          gGrid.innerHTML=h;
+          var gh=''; LN.forEach(function(l,j){ if(j===i||!S.v['on'+j])return; gh+='<path d="'+pathFor(ptsOf(j),false)+'"/>'; }); gGhost.innerHTML=gh;
+          pBody.setAttribute('d',pathFor(pts,true)); pLine.setAttribute('d',pathFor(pts,false));
+          scr.classList.toggle('off',!S.v['on'+i]);
+          var ph=''; pts.forEach(function(p,k){ ph+='<circle data-i="'+k+'" cx="'+X(p[0]).toFixed(1)+'" cy="'+Y(p[1]).toFixed(1)+'" r="3.2"/>'; }); gPts.innerHTML=ph;
+          paintSel(); }
+        /* the bottom strip: ‹ the selector › — the target's roster where it has one, the time presets on Time, the stock shapes elsewhere */
+        function selList(){ var l=LN[lane()][0]; if(l==='filt'||l==='drive'||l==='phase'||l==='crush'||l==='pan') return {kind:'mode',items:LNMODE[l]}; if(l==='time') return {kind:'time',items:TIMEP}; return {kind:'stock',items:STOCK}; }
+        var selIx={};
+        function paintSel(){ var i=lane(), L=selList(); if(L.kind==='mode'){ selPn.textContent=L.items[S.v['mode'+i]|0]||L.items[0]; } else { var k=selIx[i]|0; selPn.textContent=L.items[k]?L.items[k][1]:'—'; } }
+        function selApply(k){ var i=lane(), L=selList(); if(L.kind==='mode'){ S.set('mode'+i,Math.max(0,Math.min(L.items.length-1,k))); } else { selIx[i]=k; setPts(i,stock(L.items[k][0])); } paintSel(); }
+        selPa[0].addEventListener('click',function(){ var i=lane(), L=selList(), cur=L.kind==='mode'?(S.v['mode'+i]|0):(selIx[i]|0); selApply((cur-1+L.items.length)%L.items.length); });
+        selPa[1].addEventListener('click',function(){ var i=lane(), L=selList(), cur=L.kind==='mode'?(S.v['mode'+i]|0):(selIx[i]|0); selApply((cur+1)%L.items.length); });
+        selPn.addEventListener('click',function(e){ if(!window.__synShowMenu)return; var i=lane(), L=selList(), cur=L.kind==='mode'?(S.v['mode'+i]|0):(selIx[i]|0);
+          window.__synShowMenu('', L.items.map(function(it,k){ return { label:typeof it==='string'?it:it[1], isChecked:k===cur, white:true, onPick:function(){ selApply(k); } }; }), e.clientX, e.clientY); });
 
-        /* SLICE pane: lanes strip + carve/depth boxes */
-        var lanesEl=TIC.el('<div class="lanes">'+LANES.map(function(l,i){
-          return '<span class="lane'+(i?'':' on')+'" data-l="'+l[0]+'">'+l[1]+'</span>'; }).join('')+'</div>');
-        var ctlrow=TIC.el('<div class="ctlrow"></div>');
-        var carve=TIC.el('<div class="gbox carve"><span class="gbl">Carve</span><div class="togrow"></div><div class="cells"></div></div>');
-        carve.querySelector('.togrow').appendChild(TIC.togEl(S,'always','Always'));
-        carve.querySelector('.togrow').appendChild(TIC.togEl(S,'catch','Catch'));
-        var cc=carve.querySelector('.cells');
-        var tmC=TIC.el('<div class="cell"><span class="lb">Time</span></div>');   /* fb107 — the chop grid division, front and center */
-        tmC.insertBefore(TIC.stepEl(S,'time',RATE_DIV_RICH),tmC.firstChild); cc.appendChild(tmC);
-        var slC=TIC.el('<div class="cell"><span class="lb">Slices</span></div>');
-        slC.insertBefore(TIC.stepEl(S,'slices',SLICEL),slC.firstChild); cc.appendChild(slC);
-        var lpC=TIC.el('<div class="cell"><span class="lb">Loop</span></div>');
-        lpC.insertBefore(TIC.stepEl(S,'loop',LOOPL),lpC.firstChild); cc.appendChild(lpC);
-        var mdC=TIC.el('<div class="cell"><span class="lb">Mode</span></div>');
-        mdC.insertBefore(TIC.stepEl(S,'mode',['Step','Ping','Rand','Walk']),mdC.firstChild); cc.appendChild(mdC);
-        var depth=TIC.el('<div class="gbox depth"><span class="gbl">Order · Depth</span><div class="in"></div></div>');
-        function fillDepth(){ var l=S.v.lane, nm=null;
-          LANES.forEach(function(x){ if(x[0]===l)nm=x[1]; });
-          depth.querySelector('.gbl').textContent=nm+' · Depth';
-          var g=depth.querySelector('.in'); g.innerHTML='';
-          DEPTH[l].forEach(function(d){ g.appendChild(TIC.vsCell(S,l+'_'+d[0],d[1],DFMT[d[0]]||TIC.inum(0,100),d[2])); });
-          TIC.applyTips(depth,TIPS); }
-        lanesEl.addEventListener('click',function(e){ var b=e.target.closest('.lane'); if(!b)return;
-          TIC.EA(lanesEl.querySelectorAll('.lane'),function(x){ x.classList.toggle('on',x===b); });
-          S.set('lane',b.getAttribute('data-l')); fillDepth(); });
-        fillDepth();
-        ctlrow.appendChild(carve); ctlrow.appendChild(depth);
-        tp.panes.slice.appendChild(lanesEl); tp.panes.slice.appendChild(ctlrow);
+        /* ── drawing: points, segments (tension), brushes, free draw ── */
+        function pos(e){ var r=svg.getBoundingClientRect(); var x=(e.clientX-r.left)/r.width*W, y=(e.clientY-r.top)/r.height*H;
+          return { x:Math.max(0,Math.min(1,(x-PL)/(W-PL-PR))), y:Math.max(0,Math.min(1,1-(y-PT)/(H-PT-PB))), sx:x, sy:y }; }
+        function snapX(x){ var i=lane(); if(!S.v.snap)return x; var g=gridOf(i); return Math.round(x*g)/g; }
+        function hitPoint(p,pts){ var best=-1, bd=8; pts.forEach(function(q,k){ var dx=X(q[0])-p.sx, dy=Y(q[1])-p.sy, d=Math.sqrt(dx*dx+dy*dy); if(d<bd){ bd=d; best=k; } }); return best; }
+        function hitSeg(p,pts){ for(var k=0;k<pts.length-1;k++){ if(p.x>=pts[k][0]&&p.x<=pts[k+1][0]){ var y=evalPts(pts,p.x); if(Math.abs(Y(y)-p.sy)<10) return k; } } return -1; }
+        function stampCell(i,pts,cx,y,tool){ var g=gridOf(i), c=Math.max(0,Math.min(g-1,Math.floor(cx*g))), x0=c/g, x1=(c+1)/g;
+          var keep=pts.filter(function(q){ return q[0]<x0-1e-6||q[0]>x1+1e-6; }); var add=[];
+                    switch(tool){
+            case 1: add=[[x0,y,0],[x1-1e-4,y,0]]; break;
+            case 2: add=[[x0,0,0],[x1-1e-4,y,0]]; break;
+            case 3: add=[[x0,y,0],[x1-1e-4,0,0]]; break;
+            case 4: add=[[x0,y,0],[(x0+x1)/2-1e-4,y,0],[(x0+x1)/2,0,0],[x1-1e-4,0,0]]; break;
+            case 5: add=[[x0,0,0],[(x0+x1)/2,y,0],[x1-1e-4,0,0]]; break;
+            case 6: add=[[x0,0,-0.62],[(x0+x1)/2,y,0.62],[x1-1e-4,0,0]]; break; }
+          if(x1>=1-1e-6&&add.length) add[add.length-1][0]=1;
+          if(x0<=1e-6&&add.length) add[0][0]=0;
+          var out=keep.concat(add); if(!out.some(function(q){ return q[0]<=1e-6; })) out.push([0,evalPts(pts,0),0]); if(!out.some(function(q){ return q[0]>=1-1e-6; })) out.push([1,evalPts(pts,1),0]);
+          return out; }
+        var drag=null, lastTap=0, lastTapIx=-1;
+        svg.addEventListener('pointerdown',function(e){ if(e.button===2)return; e.preventDefault(); e.stopPropagation(); var i=lane(), pts=ptsOf(i), p=pos(e), tool=S.v.tool|0;
+          try{ svg.setPointerCapture(e.pointerId); }catch(_){}
+          if(tool===0){ var k=hitPoint(p,pts);
+            if(k>=0){ var now=Date.now(); if(now-lastTap<340&&lastTapIx===k&&k>0&&k<pts.length-1){ pts.splice(k,1); setPts(i,pts); drag=null; lastTap=0; return; } lastTap=now; lastTapIx=k; drag={kind:'pt',k:k,pts:pts}; return; }
+            var sgi=hitSeg(p,pts); if(sgi>=0){ drag={kind:'seg',k:sgi,pts:pts,y0:p.sy,c0:pts[sgi][2]||0}; return; }
+            var nx=snapX(p.x); pts.push([nx,p.y,0]); pts.sort(function(a,b){ return a[0]-b[0]; }); var ni=pts.findIndex(function(q){ return q[0]===nx&&q[1]===p.y; }); drag={kind:'pt',k:ni,pts:pts}; S.set('pts'+i,JSON.stringify(pts)); paint(); return; }
+          if(tool===7){ drag={kind:'free',pts:pts,last:-1}; freeAt(i,drag,p); return; }
+          drag={kind:'stamp',pts:pts,cell:-1}; stampAt(i,drag,p,tool); });
+        function freeAt(i,d,p){ var g=gridOf(i)*4, q=Math.round(p.x*g)/g; if(d.last===q)return; d.last=q;
+          var pts=d.pts.filter(function(t){ return Math.abs(t[0]-q)>0.5/g-1e-9; }); pts.push([q,p.y,0]); pts.sort(function(a,b){ return a[0]-b[0]; });
+          if(pts[0][0]>1e-6) pts.unshift([0,p.y,0]); if(pts[pts.length-1][0]<1-1e-6) pts.push([1,p.y,0]); pts[0][0]=0; pts[pts.length-1][0]=1; d.pts=pts; S.set('pts'+i,JSON.stringify(pts)); paint(); }
+        function stampAt(i,d,p,tool){ var g=gridOf(i), c=Math.floor(p.x*g); if(c===d.cell)return; d.cell=c; d.pts=stampCell(i,d.pts,p.x,p.y,tool); d.pts.sort(function(a,b){ return a[0]-b[0]; }); S.set('pts'+i,JSON.stringify(d.pts)); paint(); }
+        svg.addEventListener('pointermove',function(e){ if(!drag)return; e.preventDefault(); var i=lane(), p=pos(e);
+          if(drag.kind==='pt'){ var pts=drag.pts, k=drag.k; if(k>0&&k<pts.length-1) pts[k][0]=Math.max(pts[k-1][0],Math.min(pts[k+1][0],snapX(p.x))); pts[k][1]=p.y; S.set('pts'+i,JSON.stringify(pts)); paint(); }
+          else if(drag.kind==='seg'){ var c=Math.max(-1,Math.min(1,drag.c0+(drag.y0-p.sy)/60)); drag.pts[drag.k][2]=+c.toFixed(3); S.set('pts'+i,JSON.stringify(drag.pts)); paint(); }
+          else if(drag.kind==='free'){ freeAt(i,drag,p); }
+          else if(drag.kind==='stamp'){ stampAt(i,drag,p,S.v.tool|0); } });
+        function up(e){ if(!drag)return; drag=null; try{ svg.releasePointerCapture(e.pointerId); }catch(_){} setPts(lane(),ptsOf(lane())); }
+        svg.addEventListener('pointerup',up); svg.addEventListener('pointercancel',up);
+        svg.addEventListener('dblclick',function(e){ e.preventDefault(); });
+        /* the right-click menu — the LFO's rows, on this lane */
+        function gridNode(){ var i=lane(), key='grid'+i; var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
+          var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;';
+          var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;display:inline-flex;align-items:center;gap:5px;';
+          lab.innerHTML='<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg><span>Grid</span>';
+          var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;'; row.appendChild(lab); row.appendChild(val);
+          var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
+          for(var q=0;q<GRIDS.length;q++){ var nk=document.createElement('div'); nk.style.cssText='position:absolute;top:-2px;width:1px;height:6px;background:rgba(255,255,255,0.28);left:'+(q/(GRIDS.length-1)*100)+'%;'; track.appendChild(nk); }
+          var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;left:0;height:2px;border-radius:1px;background:#8B5CF6;';
+          var marker=document.createElement('div'); marker.style.cssText='position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#FFFFFF;transform:translate(-50%,-50%);';
+          track.appendChild(fill); track.appendChild(marker); wrap.appendChild(row); wrap.appendChild(track);
+          function pnt(){ var ix=S.v[key]|0; if(ix<0||ix>=GRIDS.length)ix=6; var pct=ix/(GRIDS.length-1)*100; marker.style.left=pct+'%'; fill.style.width=pct+'%'; val.textContent=GRIDS[ix]; } pnt();
+          function fromX(cx){ var r=track.getBoundingClientRect(); var t=Math.max(0,Math.min(1,(cx-r.left)/Math.max(1,r.width))); var ni=Math.round(t*(GRIDS.length-1)); if(ni!==(S.v[key]|0)){ S.set(key,ni); push(); pnt(); paint(); } }
+          var dg=false; track.addEventListener('pointerdown',function(ev){ ev.preventDefault(); ev.stopPropagation(); dg=true; try{track.setPointerCapture(ev.pointerId);}catch(e2){} fromX(ev.clientX); });
+          track.addEventListener('pointermove',function(ev){ if(dg){ ev.preventDefault(); fromX(ev.clientX); } }); function up2(ev){ if(dg){ dg=false; try{track.releasePointerCapture(ev.pointerId);}catch(e2){} } }
+          track.addEventListener('pointerup',up2); track.addEventListener('pointercancel',up2); return wrap; }
+        function menu(e){ if(!window.__synShowMenu)return; var i=lane(), l=LN[i][0];
+          function tool(lbl,t){ return { label:lbl, isChecked:(S.v.tool|0)===t, white:true, onPick:function(){ S.set('tool',t); paintTools(); } }; }
+          var rows=[ { node:gridNode() },
+            { label:'Snap', isChecked:!!S.v.snap, white:true, onPick:function(){ S.set('snap',S.v.snap?0:1); paintTools(); } },
+            { label:'Flip vertical', white:true, onPick:function(){ setPts(i,ptsOf(i).map(function(p){ return [p[0],1-p[1],p[2]||0]; })); } },
+            { label:'Flip horizontal', white:true, onPick:function(){ var p=ptsOf(i).map(function(q){ return [1-q[0],q[1],-(q[2]||0)]; }).reverse(); for(var k=0;k<p.length-1;k++) p[k][2]=-(p[k+1][2]||0); setPts(i,p); } },
+            { isHeader:true, label:'Random' },
+            { label:'Random flat', white:true, keepOpen:true, onPick:function(){ var g=gridOf(i); setPts(i,stepsPts(g,function(){ return Math.random(); })); } },
+            { label:'Random curve', white:true, keepOpen:true, onPick:function(){ var g=Math.max(2,gridOf(i)/2), p=[]; for(var k=0;k<=g;k++) p.push([k/g,Math.random(),(Math.random()*2-1)*.8]); setPts(i,p); } },
+            { isHeader:true, label:'Shape' },
+            tool('Point · edit',0), tool('Straight line',1), tool('Ramp up',2), tool('Ramp down',3), tool('Square',4), tool('Triangle',5), tool('Sine',6), tool('Free draw',7),
+            { isHeader:true, label:l==='time'?'Time':'Stock' } ];
+          (l==='time'?TIMEP:STOCK).forEach(function(it){ rows.push({ label:it[1], white:true, onPick:function(){ setPts(i,stock(it[0])); } }); });
+          rows.push({ label:'Clear', white:true, onPick:function(){ setPts(i,stock(l==='time'?'unity':'flat')); } });
+          window.__synShowMenu('', rows, e.clientX, e.clientY); }
+        svg.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); menu(e); });
 
-        /* SCAN pane */
-        var mem=TIC.el('<div class="gbox"><span class="gbl">Memory</span><div class="kin"></div></div>');
-        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'scan','Scan',function(n){
-          return n>0.98?'Now':TIC.pct(n); },1));
-        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'auto','Wander',TIC.inum(0,100),0));
-        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'spreadM','Spread',TIC.inum(0,100),0));
-        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'feed','Speed',TIC.inum(0,100),0));
-        var cap=TIC.el('<div class="gbox"><span class="gbl">Capture</span><div class="gr4"></div></div>');
-        cap.querySelector('.gr4').appendChild(TIC.togEl(S,'freeze','Freeze'));
-        cap.querySelector('.gr4').appendChild(TIC.togEl(S,'collect','Collect'));
-        var wipeB=TIC.el('<div class="tog off"><i></i>Wipe</div>');
-        wipeB.addEventListener('click',function(){ sim.off+=997;
-          if(chopWipeFn){ try{ chopWipeFn(INST); }catch(e){} }        /* fb106 — clears the DSP memory */
-          wipeB.classList.remove('off');
-          setTimeout(function(){ wipeB.classList.add('off'); },180); });
-        cap.querySelector('.gr4').appendChild(wipeB);
-        var rpC=TIC.el('<div style="display:flex;align-items:center"></div>');
-        rpC.appendChild(TIC.stepEl(S,'rpts',['1','2','3','4'],function(v){ return 'Rpts '+v; }));
-        cap.querySelector('.gr4').appendChild(rpC);
-        tp.panes.scan.appendChild(mem); tp.panes.scan.appendChild(cap);
+        /* ── the eight targets ── */
+        var bank=TIC.el('<div><div class="fx"></div><div class="fleds">'+new Array(9).join('<i></i>')+'</div></div>');
+        var fxEl=bank.querySelector('.fx'), leds=bank.querySelectorAll('.fleds i');
+        LN.forEach(function(l,i){ var b=TIC.el('<div class="fxb" data-l="'+i+'">'+l[1]+'</div>'); var t0=0;
+          b.addEventListener('click',function(){ var now=Date.now(); if(lane()===i&&now-t0<380){ S.set('on'+i,S.v['on'+i]?0:1); } t0=now; S.set('lane',i); });
+          fxEl.appendChild(b); });
+        function paintBank(){ var i=lane(); TIC.EA(fxEl.querySelectorAll('.fxb'),function(b,k){ b.classList.toggle('on',k===i); }); TIC.EA(leds,function(d,k){ d.classList.toggle('on',!!S.v['on'+k]); }); }
 
-        /* SHAPE pane */
-        /* fb145 — Character + Bus = full-height VERTICAL glass sliders (Max: "fills this
-           entire space from top to bottom"); the Filter picker is GONE (Max: "fuck a
-           filter — the terrain patcher will own filtering"; FLOW_CHOP_FILTER stays
-           registered + wired, defaulting Off, like the glitch fb129 precedent). */
-        var ch=TIC.el('<div class="gbox"><span class="gbl">Character</span><div class="kin"></div></div>');
-        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'stepsC','Crush',TIC.inum(0,100),0));
-        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'detune','Detune',TIC.inum(0,100),0));
-        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'wow','Wow',TIC.inum(0,100),0));
-        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'smooth','Smooth',TIC.inum(0,100),.15));
-        var bus=TIC.el('<div class="gbox"><span class="gbl">Bus</span><div class="kin3"></div></div>');
-        bus.querySelector('.kin3').appendChild(TIC.vsCell(S,'grit','Grit',TIC.inum(0,100),0));
-        bus.querySelector('.kin3').appendChild(TIC.vsCell(S,'trimC','Trim',TIC.inum(0,100),.5));
-        var shRow=TIC.el('<div class="gboxrow"></div>');
-        shRow.appendChild(ch); shRow.appendChild(bus);
-        tp.panes.shape.appendChild(shRow);
+        /* ── the three tabs ── */
+        var tp=TIC.tabsPanes([['shape','Shape'],['target','Target'],['clock','Clock']]);
+        var laneBox=TIC.el('<div class="gbox"><span class="gbl">Volume</span><div class="kin"></div></div>');
+        var tools=TIC.el('<div class="brushes"></div>'), stockRow=TIC.el('<div class="stock"></div>');
+        var TOOLS=[['Point',0],['Line',1],['Ramp',2],['Square',4],['Tri',5],['Sine',6],['Free',7]];
+        TOOLS.forEach(function(t){ var b=TIC.el('<div class="fxb" data-t="'+t[1]+'">'+t[0]+'</div>'); b.addEventListener('click',function(){ S.set('tool',t[1]); paintTools(); }); tools.appendChild(b); });
+        var snapB=TIC.el('<div class="fxb snap">Snap</div>'); snapB.addEventListener('click',function(){ S.set('snap',S.v.snap?0:1); paintTools(); }); tools.appendChild(snapB);
+        function paintTools(){ TIC.EA(tools.querySelectorAll('.fxb[data-t]'),function(b){ b.classList.toggle('on',(S.v.tool|0)===+b.getAttribute('data-t')); }); snapB.classList.toggle('on',!!S.v.snap); }
+        function fillStock(){ stockRow.innerHTML=''; var i=lane(), L=LN[i][0]==='time'?TIMEP:STOCK; L.forEach(function(it){ var b=TIC.el('<div class="fxb">'+it[1]+'</div>'); b.addEventListener('click',function(){ setPts(lane(),stock(it[0])); }); stockRow.appendChild(b); }); }
+        tp.panes.shape.appendChild(laneBox); tp.panes.shape.appendChild(tools); tp.panes.shape.appendChild(stockRow);
+        var tgtBox=TIC.el('<div class="gbox"><span class="gbl">Volume</span><div class="kin"></div></div>');
+        tp.panes.target.appendChild(tgtBox);
+        var clkBox=TIC.el('<div class="gbox"><span class="gbl">Clock</span><div class="kin"></div></div>');
+        tp.panes.clock.appendChild(clkBox);
+        function fillLane(){ var i=lane(), l=LN[i][0], nm=LN[i][2];
+          laneBox.querySelector('.gbl').textContent=nm; var g=laneBox.querySelector('.kin'); g.innerHTML='';
+          g.appendChild(TIC.knobCell(S,'depth'+i,'Depth',TIC.inum(0,100),1)); g.appendChild(TIC.knobCell(S,'tension'+i,'Tension',TIC.inum(0,100),.5));
+          g.appendChild(TIC.knobCell(S,'floor'+i,'Floor',TIC.inum(0,100),0)); g.appendChild(TIC.knobCell(S,'blend'+i,'Blend',TIC.inum(0,100),1));
+          tgtBox.querySelector('.gbl').textContent=nm; var t=tgtBox.querySelector('.kin'); t.innerHTML='';
+          var onC=TIC.el('<div class="cell"></div>'); onC.appendChild(TIC.togEl(S,'on'+i,'On')); t.appendChild(onC);
+          if(LNMODE[l]){ var mc=TIC.el('<div class="cell"><span class="lb">'+LNMODEL[l]+'</span></div>'); mc.insertBefore(TIC.stepEl(S,'mode'+i,LNMODE[l]),mc.firstChild); t.appendChild(mc); }
+          (LNK[l]||[]).forEach(function(k){ t.appendChild(TIC.knobCell(S,kkey(i,k[0]),k[1],TIC.inum(0,100),k[2])); });
+          var c=clkBox.querySelector('.kin'); c.innerHTML='';
+          var rc=TIC.el('<div class="cell"><span class="lb">Rate</span></div>'); rc.insertBefore(TIC.stepEl(S,'rate'+i,RATES),rc.firstChild); c.appendChild(rc);
+          var gc=TIC.el('<div class="cell"><span class="lb">Grid</span></div>'); gc.insertBefore(TIC.stepEl(S,'grid'+i,GRIDS),gc.firstChild); c.appendChild(gc);
+          var trc=TIC.el('<div class="cell"><span class="lb">Trigger</span></div>'); trc.insertBefore(TIC.stepEl(S,'trig'+i,['Sync','Free','Audio','MIDI']),trc.firstChild); c.appendChild(trc);
+          c.appendChild(TIC.knobCell(S,'phase'+i,'Phase',TIC.inum(0,100),0)); c.appendChild(TIC.knobCell(S,'swing'+i,'Swing',TIC.inum(0,100),0)); c.appendChild(TIC.knobCell(S,'smooth'+i,'Smooth',TIC.inum(0,100),.25));
+          fillStock(); paintTools(); paintBank(); TIC.applyTips(sh.card,TIPS); paint(); }
 
-        /* THE RIBBON — persistent below the panes */
-        var rib=TIC.el('<div class="ribbon"><svg viewBox="0 0 288 52" preserveAspectRatio="none"></svg></div>');
-        var rsvg=rib.querySelector('svg');
-        function ribbonPaint(){
-          var s='', cellW=280/MEM, ws=winStart(), wl=4+ws*cellW, ww=loopLen()*cellW, wr=wl+ww, n=nSlices();
-          s+='<rect x="4" y="6" width="280" height="30" rx="5" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"/>';
-          /* the memory waveform: dim past, bright inside the loop window */
-          function seg(x0,x1,op){ if(x1-x0<3)return '';
-            var p=''; for(var x=x0;x<=x1;x+=3){ var v=waveAt((x+sim.off)*.09); if(sim.rw>0)v+=(waveAt(x*.09)-v)*sim.rw;
-              p+=(p?' L':'M')+x.toFixed(1)+','+(21-v*9).toFixed(1); }
-            return '<path d="'+p+'" fill="none" stroke="rgba(255,255,255,'+op+')" stroke-width="1"/>'; }
-          s+=seg(6,wl-1,'.28'); s+=seg(wr+1,282,'.28');
-          s+='<rect x="'+wl.toFixed(1)+'" y="6.5" width="'+ww.toFixed(1)+'" height="29" fill="rgba(255,255,255,.055)"/>';
-          s+=seg(wl,wr,'.85');
-          for(var i=1;i<n;i++){ var dx=wl+i*(ww/n);
-            s+='<line x1="'+dx.toFixed(1)+'" y1="6" x2="'+dx.toFixed(1)+'" y2="36" stroke="rgba(255,255,255,.16)" stroke-width="1"/>'; }
-          s+='<rect class="nubL" x="'+(wl-3).toFixed(1)+'" y="2" width="6" height="3" rx="1" fill="rgba(255,255,255,.40)"/>';
-          s+='<rect class="nubR" x="'+(wr-3).toFixed(1)+'" y="2" width="6" height="3" rx="1" fill="rgba(255,255,255,.40)"/>';
-          s+='<line x1="'+wl.toFixed(1)+'" y1="6" x2="'+wl.toFixed(1)+'" y2="36" stroke="rgba(255,255,255,.45)" stroke-width="1" stroke-dasharray="3 2"/>';
-          s+='<line x1="'+wr.toFixed(1)+'" y1="6" x2="'+wr.toFixed(1)+'" y2="36" stroke="rgba(255,255,255,.30)" stroke-width="1"/>';
-          var subW=ww/n, px=wl+(sim.sub+sim.frac)*subW;
-          if(px>wr)px=wr;
-          s+='<line x1="'+px.toFixed(1)+'" y1="4" x2="'+px.toFixed(1)+'" y2="38" stroke="#B794FF" stroke-width="1.4"/>';
-          for(var j=0;j<n;j++){ var lx=wl+(j+.5)*subW;
-            s+='<circle cx="'+lx.toFixed(1)+'" cy="45" r="1.5" fill="'+(j===sim.sub?'#B794FF':'rgba(255,255,255,.18)')+'"/>'; }
-          rsvg.innerHTML=s; }
-        /* ribbon touch: drag window = Scan · drag nubs = Loop · tap a slice = jump */
-        (function(){
-          var mode2=null, downX=0, scan0=0, moved=false;
-          function rx(e){ var r=rsvg.getBoundingClientRect(); return (e.clientX-r.left)/r.width*288; }
-          rsvg.style.cursor='ew-resize';
-          rsvg.addEventListener('pointerdown',function(e){
-            var x=rx(e), cellW=280/MEM, ws=winStart(), wl=4+ws*cellW, wr=wl+loopLen()*cellW;
-            moved=false; downX=x; scan0=S.v.scan;
-            if(Math.abs(x-wl)<6&&x<wl+4) mode2='nl';
-            else if(Math.abs(x-wr)<6) mode2='nr';
-            else if(x>wl&&x<wr) mode2='win';
-            else mode2='jump';
-            try{ rsvg.setPointerCapture(e.pointerId); }catch(_){}
-            e.preventDefault(); });
-          rsvg.addEventListener('pointermove',function(e){ if(!mode2)return;
-            var x=rx(e), cellW=280/MEM; if(Math.abs(x-downX)>2)moved=true;
-            if(mode2==='win'||mode2==='jump'){
-              var span=(MEM-loopLen())*cellW; if(span<=0)return;
-              S.set('scan',TIC.C01(scan0+(x-downX)/span)); ribbonPaint(); }
-            else { var ws=winStart(), wl=4+ws*cellW;
-              if(mode2==='nr'){ var cells=Math.round((x-wl)/cellW);
-                for(var i2=0;i2<LOOPL.length;i2++){ if(LOOPL[i2]>=cells){ S.set('loop',i2); break; } }
-                if(cells>LOOPL[LOOPL.length-1])S.set('loop',LOOPL.length-1); }
-              else { var wr2=wl+loopLen()*cellW, cells2=Math.round((wr2-x)/cellW);
-                for(var i3=0;i3<LOOPL.length;i3++){ if(LOOPL[i3]>=cells2){ S.set('loop',i3); break; } } }
-              ribbonPaint(); } });
-          rsvg.addEventListener('pointerup',function(e){
-            if(mode2&&!moved){ var x=rx(e), cellW=280/MEM, ws=winStart(), wl=4+ws*cellW, ww=loopLen()*cellW;
-              if(x>wl&&x<wl+ww){ var n=nSlices(); sim.sub=Math.max(0,Math.min(n-1,Math.floor((x-wl)/(ww/n)))); sim.frac=0; ribbonPaint(); } }
-            mode2=null; });
-        })();
-        S.on(function(k){ if(k==='slices'||k==='loop'||k==='scan'){ var n=nSlices();
-          if(sim.sub>=n)sim.sub=0; ribbonPaint(); } });
+        /* ── S → paint / push ── */
+        S.on(function(k,v){ if(k==='lane'){ fillLane(); return; }
+          if(/^(smooth|phase|tension|floor|blend|swing|grid|k0_|k1_)\d$/.test(k)){ push(); if(/^grid/.test(k)) paint(); return; }
+          if(/^on\d$/.test(k)){ paintBank(); paint(); return; } });
 
-        var snapGet=function(){ var o={}; for(var k in S.v)o[k]=S.v[k]; return JSON.stringify(o); };
-        var snapSet=function(s){ var o=JSON.parse(s); for(var k in o)S.set(k,o[k]); fillDepth(); ribbonPaint(); };
+        /* ── the parameters: On / Depth / Rate / Mode per lane, through the shim (the chop card's own wiring) ── */
+        (function(){ var BIND={}; LN.forEach(function(l,i){ BIND['on'+i]=[PFX+LNP[i]+'_ON',1]; BIND['depth'+i]=[PFX+LNP[i]+'_DEPTH',0]; BIND['rate'+i]=[PFX+LNP[i]+'_RATE',RATES.length-1]; BIND['mode'+i]=[PFX+LNP[i]+'_MODE',LNMODE[l[0]]?LNMODE[l[0]].length-1:1]; });
+          TIC.stampMod(sh.card,BIND,S);
+          Object.keys(BIND).forEach(function(key){ var pid=BIND[key][0], steps=BIND[key][1], h=null;
+            if(window.__synSliderShim) h=window.__synSliderShim(pid, steps?(S.v[key]/steps):S.v[key]); if(!h)return;
+            var fromParam=false;
+            var toUI=function(){ try{ var v=h.getNormalisedValue(); fromParam=true; S.set(key, steps?Math.round(v*steps):v); fromParam=false; }catch(e){ fromParam=false; } };
+            toUI(); if(h.valueChangedEvent&&h.valueChangedEvent.addListener) h.valueChangedEvent.addListener(toUI);
+            S.on(function(k,v){ if(k!==key||fromParam)return; try{ h.setNormalisedValue(steps?(v/steps):v); }catch(e){} }); }); })();
+
+        /* ── presets + chain (the house preset menu, the 12-slot chain) ── */
+        var snapGet=function(){ return JSON.stringify(S.v); };
+        var snapSet=function(s){ var o=JSON.parse(s); for(var k in o)S.set(k,o[k]); fillLane(); push(); };
         var sc=TIC.slotsChain(snapGet,snapSet);
-        /* fb132 — factory bank (fb107 research: Gross Beat slot-1 law, Beat Repeat's
-           Chance lesson, chop-culture flips; Speed = slowdown 0..1, Scan 1 = Now) */
-        var CHOP_PRESETS=[
+        var SHP_PRESETS=[
           {name:'Init',v:{}},
-          {name:'Half-Time',v:{time:5,'catch':1,always:0,feed:.33,smooth:.3,fltr:1,trim_length:1,trim_curve:.2}},
-          {name:'Doubles',v:{lane:'rpt',time:8,rpt_chance:.35,rpt_count:.33,rpt_decay:.15,rpt_curve:.4,trim_length:.9}},
-          {name:'Gate 16ths',v:{lane:'trim',slices:6,loop:6,trim_length:.55,trim_curve:.85,trim_gate:.4}},
-          {name:'Triplet Roll',v:{time:5,slices:2,rpt_chance:1,rpt_count:.66,rpt_decay:.2,rpt_curve:.6,trim_curve:.3}},
-          {name:'Reverse Flip',v:{lane:'rev',time:8,rev_chance:.3,rev_run:.33,rev_snap:1,rev_spread:.2,
-            order_lock:.7,order_seed:.5}},
-          {name:'Tape Drop',v:{lane:'pitch',time:2,slices:0,'catch':1,always:0,feed:.5,pitch_range:1,
-            pitch_glide:.85,trim_length:1,trim_curve:.2,fltr:1,smooth:.4}},
-          {name:'Riser Stutter',v:{time:8,'catch':1,always:0,rpt_chance:1,rpt_count:1,rpt_decay:0,
-            rpt_curve:.8,pitch_range:.6,pitch_glide:.5,trim_length:.7}},
-          {name:'Scatter Fill',v:{slices:6,'catch':1,always:0,mode:3,auto:.4,spreadM:.6,order_spread:.7,
-            order_seed:.3,drop_density:.1,drop_grain:.3,drop_spray:.4}},
-          {name:'Freeze Juggle',v:{time:8,loop:1,mode:2,freeze:1,scan:.55,auto:.1,trim_length:.9,
-            trim_curve:.3,smooth:.25}},
-          {name:'Ghost Chance',v:{slices:6,rev_chance:.1,rev_run:0,rev_snap:1,rpt_chance:.15,rpt_count:.33,
-            rpt_decay:.4,pitch_range:.25,pitch_glide:.2,drop_density:.05,trim_random:.1,detune:.08}},
-          {name:'Verse Flip',v:{},
-            slots:{1:{},2:{rev_chance:.5,rev_run:.33,rev_snap:1},3:{order_spread:.8,order_seed:.35},
-                   4:{rpt_chance:.8,rpt_count:.66,rpt_decay:.25}},
-            chain:[1,1,2,3,1,1,2,4]},
-          {name:'IDM Machine',v:{slices:6,mode:3,order_spread:.8,order_seed:.3,rev_chance:.25,rev_run:.33,
-            rpt_chance:.4,rpt_count:.5,rpt_decay:.3,drop_density:.15,drop_grain:.25,detune:.2,grit:.3,
-            wow:.15,smooth:.2},
-            slots:{1:{},2:{time:14,rpt_chance:.7},3:{rev_chance:.5,drop_density:.3,spreadM:.5}},
-            chain:[1,2,1,3]} ];
-        TIC.presets({id:'chop'+SFX,kind:'chop',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,factory:CHOP_PRESETS});
+          {name:'Gate 16ths',v:{lane:0,on0:1,pts0:JSON.stringify(stock('gate'))}},
+          {name:'Half time',v:{lane:1,on0:0,on1:1,pts1:JSON.stringify(stock('half'))}},
+          {name:'Stutter 1/16',v:{lane:1,on0:0,on1:1,pts1:JSON.stringify(stock('stut16'))}},
+          {name:'Reverse',v:{lane:1,on0:0,on1:1,pts1:JSON.stringify(stock('reverse'))}},
+          {name:'Tape stop',v:{lane:1,on0:0,on1:1,pts1:JSON.stringify(stock('tape'))}},
+          {name:'Filter sweep',v:{lane:2,on0:0,on2:1,pts2:JSON.stringify(stock('sine')),rate2:5}},
+          {name:'Pan swing',v:{lane:3,on0:0,on3:1,pts3:JSON.stringify(stock('tri')),rate3:3}},
+          {name:'Phaser wash',v:{lane:6,on0:0,on6:1,pts6:JSON.stringify(stock('sine')),rate6:6}},
+          {name:'Crush stairs',v:{lane:7,on0:0,on7:1,pts7:JSON.stringify(stock('stairs'))}},
+          {name:'Gate + sweep',v:{lane:0,on0:1,on2:1,pts2:JSON.stringify(stock('sine')),rate2:5}} ];
+        TIC.presets({id:'chop'+SFX,kind:'chop',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,factory:SHP_PRESETS});
         TIC.cardSync('chop'+SFX,sc,S,sh.card);
 
-        /* fb106 — DSP WIRING: every Ribbon control ↔ its APVTS param through
-           __synSliderShim (post-ceiling law — works identically on both surfaces).
-           steps>0 = index param (stored as INDEX, sent idx/N). Slot recall replays
-           through S.set, so the chain re-pushes every param for free. */
-        (function(){
-          var PRE={order:'O',pitch:'P',rev:'RV',trim:'T',rpt:'R',drop:'D'};
-          var KN={spread:'SPREAD',bias:'BIAS',lock:'LOCK',seed:'SEED',range:'RANGE',steps:'STEPS',
-                  glide:'GLIDE',quant:'QUANT',chance:'ODDS',run:'RUN',snap:'SNAP',length:'LEN',
-                  curve:'CURVE',random:'RAND',gate:'GATE',count:'COUNT',decay:'DECAY',
-                  density:'AMT',grain:'SIZE',spray:'SPRAY',tone:'TONE'};
-          var BIND={ time:[PSEQ+'RATE',18,1],   /* fb107 — shares the front chop-grid knob (relay when docked) */
-                     'catch':[PFX+'CATCH',1], slices:[PFX+'SLICES',6], loop:[PFX+'LOOP',6],
-                     mode:[PFX+'MODE',3], rpts:[PFX+'RPTS',3], fltr:[PFX+'FILTER',3],
-                     freeze:[PFX+'FREEZE',1], collect:[PFX+'COLLECT',1],
-                     scan:[PFX+'SCAN',0], auto:[PFX+'WANDER',0], spreadM:[PFX+'SPREAD',0],
-                     feed:[PFX+'SPEED',0], stepsC:[PFX+'STEPS',0], detune:[PFX+'DETUNE',0],
-                     wow:[PFX+'WOW',0], smooth:[PFX+'SMOOTH',0], grit:[PFX+'GRIT',0],
-                     trimC:[PFX+'TRIM',0] };
-          for(var L in DEPTH) DEPTH[L].forEach(function(d){
-            BIND[L+'_'+d[0]]=[PFX+PRE[L]+'_'+KN[d[0]],0]; });
-          TIC.stampMod(sh.card,BIND,S);   /* fb145 — LFO drop targets · fb524 — S publishes the card's live value per dest (the anchor law) */
-          Object.keys(BIND).forEach(function(key){
-            var pid=BIND[key][0], steps=BIND[key][1], relay=BIND[key][2], h=null;
-            if(relay&&!window.__cardOnly&&J){ try{ h=J.getSliderState(pid); }catch(e){} }
-            if(!h&&window.__synSliderShim) h=window.__synSliderShim(pid, steps?(S.v[key]/steps):S.v[key]);
-            if(!h)return;
-            var fromParam=false;   /* fb124 — echo guard: a param-originated set must NOT
-              re-push to the param, or drifting round-trips self-oscillate (the chaos-knob
-              "moving like an LFO" fight) */
-            var toUI=function(){ try{ var v=h.getNormalisedValue();
-              fromParam=true; S.set(key, steps?Math.round(v*steps):v); fromParam=false; }catch(e){ fromParam=false; } };
-            toUI();
-            if(h.valueChangedEvent&&h.valueChangedEvent.addListener) h.valueChangedEvent.addListener(toUI);
-            S.on(function(k,v){ if(k!==key||fromParam)return; try{ h.setNormalisedValue(steps?(v/steps):v); }catch(e){} });
-          });
-          /* Always/Catch = one radio pair (Catch is the param; Always = not-Catch) */
-          S.on(function(k,v){
-            if(k==='catch'){ if(v){ if(S.v.always)S.set('always',0); } else if(!S.v.always)S.set('always',1); }
-            else if(k==='always'){ if(v){ if(S.v['catch'])S.set('catch',0); } else if(!S.v['catch'])S.set('catch',1); }
-          });
-          if(S.v.always&&S.v['catch'])S.set('always',0);
-        })();
-        var chopFeedFn=null, chopWipeFn=null;
-        try{ if(window.Juce&&window.Juce.getNativeFunction){
-          chopFeedFn=window.Juce.getNativeFunction('getChopFeed');
-          chopWipeFn=window.Juce.getNativeFunction('chopWipe'); } }catch(e){}
+        sh.body.appendChild(scr); sh.body.appendChild(bank); sh.body.appendChild(tp.tabs);
+        sh.body.appendChild(tp.panes.shape); sh.body.appendChild(tp.panes.target); sh.body.appendChild(tp.panes.clock); sh.body.appendChild(sc.el);
+        fillLane(); pull();
 
-        sh.body.appendChild(tp.tabs);
-        sh.body.appendChild(tp.panes.slice); sh.body.appendChild(tp.panes.scan); sh.body.appendChild(tp.panes.shape);
-        sh.body.appendChild(rib); sh.body.appendChild(sc.el);
-
-        /* fb106 — LIVE ribbon: rAF-poll the DSP feed (getChopFeed). In CHOP mode
-           the playhead and active slice ride the REAL grid clock (BPM, geometry,
-           drops and all); the chain steps on every window wrap. Other FLOW modes:
-           gentle self-clock so the card never looks dead. */
-        var acc=0, feed=null, feedBusy=false, prevSub=0;
+        /* ── the live playhead: the DSP's phase per lane (the 60 Hz push, the poll as a fallback) ── */
+        var feedFn=null; try{ if(window.Juce&&window.Juce.getNativeFunction) feedFn=window.Juce.getNativeFunction('getChopFeed'); }catch(e){}
+        var feed=null, busy=false, pollAcc=0;
         var start=TIC.runLoop(sh.card,function(dt){
-          /* fb636 — the memory ribbon scrolls while its mode plays a note, winding up and down with it; out of the chain, or
-             in silence, it rests. No feed (a browser): as before. The feed poll and the chain below are untouched. */
-          /* fb636 h1 — in the chain or not: the MIDI moves it. At rest the waveform is HOME: seg() blends the scrolled wave onto
-             offset 0 by 1 − envelope, and when the envelope reaches 0 the offset IS 0, so the next wind-up scrolls out of home. */
-          var ribE=feed?window.__tiEnv('card-chop-ribbon',window.__tiLive()):1;
-          if(!S.v.freeze) sim.off+=dt*(22+S.v.feed*30)*ribE;
-          sim.rw=1-ribE; if(ribE<=0) sim.off=0;
-          /* tp34 — the engine PUSHES this feed in the frame now (fb354: push, never poll); the poll below is the fallback */
-            var __pf=window.__flowFeedPush; if(__pf&&__pf.chop&&__pf.chop[INST]){ feed=__pf.chop[INST]; }
-            else if(chopFeedFn&&!feedBusy){ feedBusy=true;
-            try{ Promise.resolve(chopFeedFn(INST)).then(function(fs){ feedBusy=false;
-              try{ feed=JSON.parse(fs); }catch(e){} }).catch(function(){ feedBusy=false; }); }
-            catch(e){ feedBusy=false; } }
-          var n=nSlices();
-          if(feed&&feed.on===1){
-            var sub=Math.floor(feed.s)%n;
-            sim.frac=Math.max(0,Math.min(1,feed.s-Math.floor(feed.s)));
-            if(feed.pl===1||feed.a===1)sc.__actT=performance.now();   /* fb141 — playing OR audio = life */
-            var go=(performance.now()-(sc.__actT||0)<1500)?1:0;
-            if(go===1&&sc.__pl!==1)sc.restart(); sc.__pl=go;   /* silence -> life retriggers the chain */
-            if(go===1&&sub<prevSub) sc.advance();   /* chain steps on window wrap — frozen only in true silence */
-            if(sub!==prevSub){ prevSub=sub; }
-            sim.sub=sub;
-            ribbonPaint();
-          } else if(feed){
-            /* fb636 h1 — out of the chain, with a feed: the playhead is decoration and moves "just about the MIDI" — a wound
-               slice clock (__tiWind, 8 slices/s) that winds up with the note and, when the sound ends, walks forward onto its
-               home: slice 1 at the loop window's left edge. (The chain step below needs !feed, so it is untouched.) */
-            /* fb636 h3 — vmax 4n: the playhead's fastest out-of-chain speed (8 slices/s over the smallest grid, 2 — the loop
-               window in 0.25 s), in this grid's slices: a 16-slice walk home is bounded to 2.5 s */
-            var cw=window.__tiWind('card-chop',n,[[0,0]],window.__tiLive(),8,true,4*n), cf=Math.floor(cw+1e-9);
-            sim.sub=cf%n; sim.frac=Math.max(0,Math.min(1,cw-cf));
-            ribbonPaint();
-          } else {   /* no feed (a browser): the self-clock, as before — the only place the sim steps the chain */
-            var sps=8;                                  // fallback grid clock
-            if(!S.v.always){ sim.idle+=dt; if(sim.idle%3>1.6){ ribbonPaint(); return; } }
-            acc+=dt*sps; sim.frac=Math.min(1,acc);
-            while(acc>=1){ acc-=1;
-              var m=S.v.mode;
-              if(m===0){ sim.sub=(sim.sub+1)%n; if(sim.sub===0&&!feed)sc.advance(); }
-              else if(m===1){ sim.sub+=sim.dirV; if(sim.sub>=n-1){sim.sub=n-1;sim.dirV=-1;} if(sim.sub<=0){sim.sub=0;sim.dirV=1;} }
-              else if(m===2){ sim.sub=Math.floor(Math.random()*n); }
-              else { sim.sub=Math.max(0,Math.min(n-1,sim.sub+(Math.random()<.5?-1:1))); } }
-            ribbonPaint();
-          }
+          var pushd=window.__flowFeedPush&&window.__flowFeedPush.chop&&window.__flowFeedPush.chop[INST];
+          if(pushd){ feed=pushd; }
+          else { pollAcc+=dt; if(feedFn&&!busy&&pollAcc>0.05){ pollAcc=0; busy=true; try{ Promise.resolve(feedFn(INST)).then(function(js){ busy=false; try{ feed=JSON.parse(String(js||'')); }catch(e){} }).catch(function(){ busy=false; }); }catch(e){ busy=false; } } }
+          var i=lane(), show=!!(feed&&feed.on&&feed.pl&&feed.ph&&S.v['on'+i]);
+          phL.style.display=show?'':'none'; phD.style.display=show?'':'none';
+          if(show){ var p=+feed.ph[i]||0, v=+feed.v[i]||0; var x=X(p).toFixed(1); phL.setAttribute('x1',x); phL.setAttribute('x2',x); phD.setAttribute('cx',x); phD.setAttribute('cy',Y(v).toFixed(1)); }
+          if(feed&&feed.ln){ TIC.EA(leds,function(d,k){ d.classList.toggle('live',!!feed.ln[k]&&!!feed.pl); }); }
         });
-        ribbonPaint();
-        TIC.applyTips(sh.card,TIPS);
-        return { open:function(){ sh.open(); start(); } }; }
+        return { open:function(){ sh.open(); start(); paint(); } }; }
       return { open:function(){ if(!built)built=build(); built.open(); },
-               ensure:function(){ if(!built)built=build(); } };   /* fb168 — the dice build the card HIDDEN so its state exists before first open */
+               ensure:function(){ if(!built)built=build(); } };
     }
-    var chopCardObj=makeChopCard(1);
+    var chopCardObj=makeShaperCard(1);
     function openChopCard(){ chopCardObj.open(); }
     window.__tiEnsure=window.__tiEnsure||{}; window.__tiEnsure.chop=function(){ chopCardObj.ensure(); };
     // fb82 — ONE opener for every surface (expand button, tile right-click, popped-card
@@ -37315,7 +37304,7 @@ restoreThemeFromBackend();
     var __flowCards={};
     window.__flowCardOf=function(kind,inst){ inst=(inst|0)||1; if(kind==='drift') inst=1;
       if(inst<=1) return kind==='arp'?arpCard:kind==='glitch'?gliCardObj:kind==='chop'?chopCardObj:kind==='drift'?rbnCardObj:null;
-      var mk=kind==='arp'?makeArpCard:kind==='glitch'?makeGliCard:kind==='chop'?makeChopCard:null; if(!mk) return null;
+      var mk=kind==='arp'?makeArpCard:kind==='glitch'?makeGliCard:kind==='chop'?makeShaperCard:null; if(!mk) return null;   /* tp71 — the Chop slot builds the Shaper */
       var key=kind+inst; if(!__flowCards[key]) __flowCards[key]=mk(inst); return __flowCards[key]; };
     window.__flowPidOf=function(m){ var k=fKind(m), n=fInst(m); return ((k==='chop')?'chop':(k==='glitch')?'gli':(k==='drift')?'rbn':'arp')+(n>1&&k!=='drift'?n:''); };
     window.__flowModeOfPid=function(pid){ pid=String(pid||''); var k=pid.replace(/\d+$/,''), n=pid.slice(k.length); return ({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[k]||'arp')+(k==='rbn'?'':n); };
@@ -43284,7 +43273,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var TAPE_VIZ=[196,150];   /* the machine picture inside the tape node: the cabinet scales by min(h·.85/160, w/220), so a squarer box fills it */
   var FXNAMES={reverb:'Reverb',delay:'Delay',saturate:'Distortion',granular:'Granular',flt:'Filter',cho:'Chorus',fla:'Flanger',pha:'Phaser',tape:'Tape',eqz:'Equalizer',wid:'Widen',cmp:'Compress',ott:'Multiband',bod:'Bode',utl:'Utility',spl:'Splitter'};
   var FXLIST=['reverb','delay','saturate','granular','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];   /* the Tape card lives in the Tape category */
-  var OSC=['a','b','c','d'], FLOWS=['arp','drift','chop','glitch'], FLOWNAME={arp:'Arp',drift:'Robin',chop:'Chop',glitch:'Glitch'}, FLOW_INST_MAX={arp:4,drift:1,chop:4,glitch:4};   /* tp20 — the Flow pool */
+  var OSC=['a','b','c','d'], FLOWS=['arp','drift','chop','glitch'], FLOWNAME={arp:'Arp',drift:'Robin',chop:'Shaper',glitch:'Glitch'}   /* tp71 — the Chop slot is the Shaper */, FLOW_INST_MAX={arp:4,drift:1,chop:4,glitch:4};   /* tp20 — the Flow pool */
   /* tp60 — FIVE AGAIN. Max: "we literally had 5 total and now it's three, where are the other
    two?" They were the GLOBAL machines tp43a deleted when it moved tape onto the cables — right
    call, two casualties. Porta and Wire are routed card types now, each with its own transport

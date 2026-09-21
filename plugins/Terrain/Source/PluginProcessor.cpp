@@ -3073,6 +3073,11 @@ void TerrainAudioProcessor::timerCallback()
     releaseIdleEnginesIfUnused();       // tp63 — and give them back when no oscillator has wanted them for a while
     releaseIdleWavetables();            // tp63 — and the wavetables the dice visited and left behind
     releaseIdleBankBIfUnused();         // tp64 — and the second oscillator bank, when no E–H oscillator is on
+    for (int i = 0; i < wc::kFlowInstances; ++i)   // tp71 — the Shaper's ring (Time / Repeat) is armed here, on the message thread, when a lane asks
+    {
+        const auto& T = shpRefs_[i][1]; const auto& R = shpRefs_[i][4];
+        if (((T.on != nullptr && T.on->load() > 0.5f) || (R.on != nullptr && R.on->load() > 0.5f)) && ! shapers_[i].ringArmed()) shapers_[i].armRing();
+    }
 
     // fb514 — THE CLOSED-EDITOR IDLE GOVERNOR. This timer dispatches on the HOST'S UI thread;
     // seven closed instances at 60 Hz = 420 message-thread dispatches a second competing with
@@ -7299,6 +7304,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     addFlowKnob (ParameterIDs::FLOW_CHOP_R_CURVE, "Chop Repeat Curve",0.50f); addFlowKnob (ParameterIDs::FLOW_CHOP_R_ODDS, "Chop Repeat Odds",1.00f);   // fb113: Odds carves DOWN from All — Count is instantly audible
     addFlowKnob (ParameterIDs::FLOW_CHOP_D_AMT,   "Chop Drop Amount", 0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_D_SIZE, "Chop Drop Size", 0.40f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_D_SPRAY, "Chop Drop Spray",  0.10f); addFlowKnob (ParameterIDs::FLOW_CHOP_D_TONE, "Chop Drop Tone", 0.50f);
+    // ══ tp71 — THE TERRAIN SHAPER's lanes. Declared HERE, inside the FLOW_CHOP_ family, so the pool block clones
+    //    them into instances 2..4 like every other Chop-slot parameter. Per lane: On, Depth, Rate (the cycle, on the
+    //    shaper's ladder), Mode (the target's own choice). Everything else a lane owns — its breakpoints, smoothing,
+    //    phase, tension, floor, blend, swing, grid and the target's knobs — travels in the shaperJson blob (the LFO
+    //    shapes' own law), so it is drawn, not automated.
+    {
+        static const char* const kLn[8]  = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH" };
+        static const char* const kLnN[8] = { "Volume", "Time", "Filter", "Pan", "Repeat", "Drive", "Phaser", "Crush" };
+        static const juce::StringArray kModes[8] = {
+            juce::StringArray { "Gain", "Reserved" },
+            juce::StringArray { "1 cycle", "1/2 cycle", "2 cycles", "Reserved" },
+            juce::StringArray { "Low", "High", "Band", "Notch", "Reserved 5", "Reserved 6" },
+            juce::StringArray { "Power", "Linear" },
+            juce::StringArray { "Slice", "Reserved" },
+            juce::StringArray { "Soft", "Hard", "Fold", "Tube", "Reserved 5", "Reserved 6" },
+            juce::StringArray { "Phaser", "Flanger" },
+            juce::StringArray { "Bits + Rate", "Bits", "Rate" } };
+        const juce::StringArray rates { "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars", "8 bars" };
+        for (int ln = 0; ln < 8; ++ln)
+        {
+            const juce::String pid = juce::String ("FLOW_CHOP_") + kLn[ln], nm = juce::String ("Shaper ") + kLnN[ln];
+            layout.add (std::make_unique<juce::AudioParameterBool>   (juce::ParameterID { pid + "_ON", 1 },    nm + " On",    ln == 0));
+            layout.add (std::make_unique<juce::AudioParameterFloat>  (juce::ParameterID { pid + "_DEPTH", 1 }, nm + " Depth", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_RATE", 1 },  nm + " Rate",  rates, wc::kShaperRateDefault));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_MODE", 1 },  nm + " Mode",  kModes[ln], 0));
+        }
+    }
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.6111f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);   // fb115: grid default = 1/16 (TIME IS TRUTHFUL)
     addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);  // VARY = fire CHANCE; 0 = never fires (silent), 0.5 = glitches out of the box
     addFlowKnob (ParameterIDs::FLOW_GLI_MORPH,"Glitch Morph",0.00f);
@@ -9723,6 +9755,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     cacheUtlRefs();      // fb444 — Utility's six-pill roster
     cacheSplRefs();      // fb444 — the Splitter's own roster shape
     cacheFlowRouteRefs();   // tp30 — the audio FLOW cards' ten route pills + the per-source output cable
+    cacheShaperRefs();      // tp71 — the Shaper lanes' On / Depth / Rate / Mode, per instance
     cacheTapRefs();         // tp41 — every device's direct taps + the flow cards' inline rank
     cacheDeckParams();      // tp43 — the deck's pills, switch and rank
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
@@ -9830,7 +9863,9 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     // FLOW · ARP — prepare the block-rate global LFO bank + reset the engine
     for (auto& l : flowLfo_) l.prepare (sampleRate);
     for (int fli = 0; fli < wc::NUM_LFOS; ++fli) flowLfo_[fli].setCustomTable (lfoTableAudio_[fli]);   // LFO ARC L1 — wire drawn-shape tables
-    for (auto& c : chops_)    c.prepare (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates · tp20: every instance
+    for (auto& sh : shapers_) sh.prepare (sampleRate);        // tp71 — the Shaper (the FlowChop pool is never prepared: its capture would be 8 s × 4 for nothing)
+    for (int i = 0; i < wc::kFlowInstances; ++i) if (shaperState_[(size_t) i] == nullptr) rebuildShaperState (i);   // the defaults, or the restored blob
+    // (was: for (auto& c : chops_) c.prepare (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates · tp20: every instance
     for (auto& g : glitches_) g.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
     for (auto& pg : prevGlitchOn_) pg = false;               // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
@@ -15694,64 +15729,29 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //  flow cards in chain order and hands each the bus the rack captured for it.
     float* flowStageL = nullptr;
     float* flowStageR = nullptr;
-    auto chopStage = [&] (int inst)   // fb131 — dispatched in chain order below · tp20 — per instance
+    auto chopStage = [&] (int inst)   // fb131 — dispatched in chain order below · tp20 — per instance · tp71 — THE SHAPER
     {
-        auto& chop = chops_[inst];
-        const float cRate  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_RATE), fd (inst, wc::ModDest::ChopRate));
-        const float cGate  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_GATE), fd (inst, wc::ModDest::ChopGate));
-        const float cVary  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_VARY), fd (inst, wc::ModDest::ChopVary));
-        const float cTraj  = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_TRAJ), fd (inst, wc::ModDest::ChopTraj));
-        const float cMorph = flowKnob (fid (inst, ParameterIDs::FLOW_SEQ_MORPH), fd (inst, wc::ModDest::ChopMorph));
-        chop.setMix (flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_BLEND), fd (inst, wc::ModDest::FlowChopMix)));   // dry/wet (glass menu); default 0.60
-
-        // ── fb106 extension card: every Ribbon control, read per block ──
+        // ══ tp71 — THE TERRAIN SHAPER in the Chop card's slot. Nothing here fires or anchors: every lane reads its
+        //    drawn shape at the host's phase (FlowShaper.h). The Mix is the card's header knob (FLOW_CHOP_BLEND, the
+        //    FlowChopMix destination it always had); On / Depth / Rate / Mode per lane are parameters, the rest is the
+        //    baked snapshot the message thread publishes.
+        auto& sh = shapers_[inst];
+        const float mix = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_BLEND), fd (inst, wc::ModDest::FlowChopMix));
+        for (int ln = 0; ln < wc::kShaperLanes; ++ln)
         {
-            static constexpr int kSliceL[7] = { 2, 3, 4, 6, 8, 12, 16 };
-            static constexpr int kLoopL[7]  = { 2, 4, 6, 8, 10, 12, 16 };
-            wc::FlowChop::ChopExtParams X;
-            X.slices    = kSliceL[juce::jlimit (0, 6, (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_SLICES)))];
-            X.loopCells = kLoopL [juce::jlimit (0, 6, (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_LOOP)))];
-            X.modeOrder = (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_MODE));
-            X.rpts      = 1 + (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_RPTS));
-            X.filter    = (int) *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_FILTER));
-            X.freeze    = *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_FREEZE))  > 0.5f;
-            X.collect   = *rawParam (fid (inst, ParameterIDs::FLOW_CHOP_COLLECT)) > 0.5f;
-            X.scan   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SCAN), fd (inst, wc::ModDest::FlowChopScan));   X.wander = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_WANDER), fd (inst, wc::ModDest::FlowChopWander));
-            X.spread = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SPREAD), fd (inst, wc::ModDest::FlowChopSpread)); X.speed  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SPEED), fd (inst, wc::ModDest::FlowChopSpeed));
-            X.steps  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_STEPS), fd (inst, wc::ModDest::FlowChopCrush));  X.detune = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_DETUNE), fd (inst, wc::ModDest::FlowChopDetune));
-            X.wow    = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_WOW), fd (inst, wc::ModDest::FlowChopWow));    X.smooth = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_SMOOTH), fd (inst, wc::ModDest::FlowChopSmooth));
-            X.grit   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_GRIT), fd (inst, wc::ModDest::FlowChopGrit));   X.trim   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_TRIM), fd (inst, wc::ModDest::FlowChopTrim));
-            X.oSpread= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_SPREAD), fd (inst, wc::ModDest::FlowChopOSpread)); X.oBias = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_BIAS), fd (inst, wc::ModDest::FlowChopOBias));
-            X.oLock  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_LOCK), fd (inst, wc::ModDest::FlowChopOLock));   X.oSeed = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_O_SEED), fd (inst, wc::ModDest::FlowChopOSeed));
-            X.pRange = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_RANGE), fd (inst, wc::ModDest::FlowChopPRange));  X.pSteps= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_STEPS), fd (inst, wc::ModDest::FlowChopPSteps));
-            X.pGlide = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_GLIDE), fd (inst, wc::ModDest::FlowChopPGlide));  X.pQuant= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_P_QUANT), fd (inst, wc::ModDest::FlowChopPQuant));
-            X.rvOdds = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_ODDS), fd (inst, wc::ModDest::FlowChopRvOdds));  X.rvRun = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_RUN), fd (inst, wc::ModDest::FlowChopRvRun));
-            X.rvSpread=flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_SPREAD), fd (inst, wc::ModDest::FlowChopRvSpread));X.rvSnap= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_RV_SNAP), fd (inst, wc::ModDest::FlowChopRvSnap));
-            X.tLen   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_LEN), fd (inst, wc::ModDest::FlowChopTLen));    X.tCurve= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_CURVE), fd (inst, wc::ModDest::FlowChopTCurve));
-            X.tRand  = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_RAND), fd (inst, wc::ModDest::FlowChopTRand));   X.tGate = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_T_GATE), fd (inst, wc::ModDest::FlowChopTGate));
-            X.rCount = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_COUNT), fd (inst, wc::ModDest::FlowChopRCount));  X.rDecay= flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_DECAY), fd (inst, wc::ModDest::FlowChopRDecay));
-            X.rCurve = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_CURVE), fd (inst, wc::ModDest::FlowChopRCurve));  X.rOdds = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_R_ODDS), fd (inst, wc::ModDest::FlowChopROdds));
-            X.dAmt   = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_AMT), fd (inst, wc::ModDest::FlowChopDAmt));    X.dSize = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_SIZE), fd (inst, wc::ModDest::FlowChopDSize));
-            X.dSpray = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_SPRAY), fd (inst, wc::ModDest::FlowChopDSpray));  X.dTone = flowKnob (fid (inst, ParameterIDs::FLOW_CHOP_D_TONE), fd (inst, wc::ModDest::FlowChopDTone));
-            chop.setExt (X);
-            chop.setMode (*rawParam (fid (inst, ParameterIDs::FLOW_CHOP_CATCH)) > 0.5f ? wc::ChopMode::Catch
-                                                                            : wc::ChopMode::AlwaysOn);
-            chop.setCatchHeld (resoHeldN_ > 0);                 // CATCH rides the real held keys
-            if (resoHeldN_ > 0) chop.noteOnRoot (resoHeld_[resoHeldN_ - 1]);
-            if (chopWipeReq_[inst].exchange (false)) chop.wipe();     // Wipe button (UI native)
+            const auto& R = shpRefs_[inst][ln];
+            if (R.on == nullptr) continue;
+            sh.setLaneCtl (ln, R.on->load() > 0.5f, juce::jlimit (0.0f, 1.0f, R.depth->load()), (int) R.rate->load(), (int) R.mode->load());
         }
-
         float* cl = flowStageL;   // tp30 — this card's own capture bus (the whole master when every pill is on)
         float* cr = flowStageR;
-        chop.process (cRate, cGate, cVary, cTraj, cMorph,
-                      flowPpq, flowBpm, getSampleRate(), cl, cr, numSamples, flowPlaying);
-
-        // live Ribbon feed (UI rAF-polls getChopFeed)
-        chopVizStepF_[inst].store (chop.vizStepF(),             std::memory_order_relaxed);
-        chopVizCount_[inst].store ((int) chop.vizFireCount(),   std::memory_order_relaxed);
-        chopVizSlice_[inst].store (chop.lastSliceIndex(),       std::memory_order_relaxed);
-        chopVizWet_[inst].store   (chop.wetLevel(),             std::memory_order_relaxed);
-        chopVizActive_[inst].store(chop.isActive() ? 1 : 0,     std::memory_order_relaxed);
+        sh.process (cl, cr, numSamples, flowPpq, flowBpm, flowPlaying, mix);
+        for (int ln = 0; ln < wc::kShaperLanes; ++ln)
+        {
+            shpVizPh_[inst][ln].store (sh.vizPhase (ln), std::memory_order_relaxed);
+            shpVizV_[inst][ln].store  (sh.vizValue (ln), std::memory_order_relaxed);
+        }
+        chopVizActive_[inst].store (1, std::memory_order_relaxed);
     };
 
     // ── FLOW · GLITCH (mode 3): audio insert — beat-synced buffer-mangler IN PLACE, click-free
@@ -17481,20 +17481,113 @@ juce::String TerrainAudioProcessor::getArpFeedJson (int inst) const
 
 juce::String TerrainAudioProcessor::getChopFeedJson (int inst) const
 {
+    // tp71 — the Shaper's screen feed: each lane's phase (0..1) and the value it read, the transport, the tempo.
     inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
-    const float sf = chopVizStepF_[inst].load (std::memory_order_relaxed);
-    const float wt = chopVizWet_[inst].load (std::memory_order_relaxed);
-    juce::String j ("{\"s\":");
-    j << juce::String (std::isfinite (sf) ? sf : 0.0f, 3)
-      << ",\"c\""  << ":" << chopVizCount_[inst].load (std::memory_order_relaxed)
-      << ",\"sl\"" << ":" << chopVizSlice_[inst].load (std::memory_order_relaxed)
-      << ",\"a\""  << ":" << chopVizActive_[inst].load (std::memory_order_relaxed)
-      << ",\"w\""  << ":" << juce::String (std::isfinite (wt) ? wt : 0.0f, 3)
-      << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
-      << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
+    juce::String j ("{\"ph\":[");
+    for (int ln = 0; ln < wc::kShaperLanes; ++ln) { if (ln) j << ","; const float p = shpVizPh_[inst][ln].load (std::memory_order_relaxed); j << juce::String (std::isfinite (p) ? p : 0.0f, 4); }
+    j << "],\"v\":[";
+    for (int ln = 0; ln < wc::kShaperLanes; ++ln) { if (ln) j << ","; const float v = shpVizV_[inst][ln].load (std::memory_order_relaxed); j << juce::String (std::isfinite (v) ? v : 0.0f, 3); }
+    j << "],\"ln\":[";
+    for (int ln = 0; ln < wc::kShaperLanes; ++ln) { if (ln) j << ","; const auto& R = shpRefs_[inst][ln]; j << ((R.on != nullptr && R.on->load() > 0.5f) ? 1 : 0); }
+    j << "],\"b\":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"on\":" << (flowChainNow().chopOn[inst] ? 1 : 0)
-      << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";   // fb131/137
+      << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";
     return j;
+}
+
+// ══ tp71 — THE SHAPER'S STATE ═════════════════════════════════════════════════════════════════════════════
+//  shaperJson_[inst] = { "lanes": [ { "pts":[[x,y,c],…], "smooth","phase","tension","floor","blend","swing","grid",
+//  "k":[4] } × 8 ] }. The page owns it (the LFO shapes' law: a local edit outranks a pull), the processor bakes each
+//  lane's breakpoints into a 2048-cell table with the LFO editor's own bias law (shBias / shEvalPts in index.html —
+//  the two must agree to the sample) and publishes the snapshot. An empty blob = the defaults below.
+void TerrainAudioProcessor::bakeShaperTable (const float* xs, const float* ys, const float* cs, int np, float* tb) noexcept
+{
+    auto bias = [] (double t, double c) noexcept { if (std::fabs (c) < 1e-4) return t; const double P = -c * 8.0; return (std::exp (P * t) - 1.0) / (std::exp (P) - 1.0); };
+    for (int i = 0; i <= wc::kShaperT; ++i)
+    {
+        const double p = (double) i / wc::kShaperT;
+        if (np < 2) { tb[i] = np == 1 ? ys[0] : 0.0f; continue; }
+        int k = 0; while (k < np - 2 && xs[k + 1] <= p) ++k;
+        const double w = xs[k + 1] - xs[k];
+        if (w <= 1e-6) { tb[i] = ys[k + 1]; continue; }
+        tb[i] = (float) (ys[k] + (ys[k + 1] - ys[k]) * bias ((p - xs[k]) / w, cs[k]));
+    }
+}
+void TerrainAudioProcessor::rebuildShaperState (int inst)
+{
+    inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
+    auto st = std::make_shared<wc::ShaperState>();
+    // the defaults — what a fresh card draws: a 1/16 gate on Volume, unity on Time, a sine on Filter / Pan / Phaser,
+    // a flat half on Repeat (1/16 slices), a ramp on Drive, stairs on Crush
+    static const int kDefN[8] = { 33, 2, 3, 3, 2, 2, 3, 9 };
+    auto seed = [&] (int ln, std::vector<float>& xs, std::vector<float>& ys, std::vector<float>& cs)
+    {
+        xs.clear(); ys.clear(); cs.clear();
+        auto add = [&] (float x, float y, float c) { xs.push_back (x); ys.push_back (y); cs.push_back (c); };
+        switch (ln)
+        {
+            case 0:  for (int i = 0; i < 16; ++i) { const float x0 = i / 16.0f, x1 = (i + 1) / 16.0f; add (x0, (i & 1) ? 0.f : 1.f, 0); add (x1 - 0.0001f, (i & 1) ? 0.f : 1.f, 0); } add (1.f, 0.f, 0); break;
+            case 1:  add (0, 0, 0); add (1, 1, 0); break;
+            case 2: case 3: case 6: add (0, 0, -0.6f); add (0.5f, 1, 0.6f); add (1, 0, 0); break;
+            case 4:  add (0, 0.5f, 0); add (1, 0.5f, 0); break;
+            case 5:  add (0, 0, 0); add (1, 1, 0); break;
+            default: for (int i = 0; i < 8; ++i) { add (i / 8.0f, i / 7.0f, 0); add ((i + 1) / 8.0f - 0.0001f, i / 7.0f, 0); } add (1.f, 1.f, 0); break;
+        }
+        juce::ignoreUnused (kDefN);
+    };
+    juce::var root = juce::JSON::parse (shaperJson_[inst]);
+    const juce::var lanesV = root.isObject() ? root.getProperty ("lanes", juce::var()) : juce::var();
+    for (int ln = 0; ln < wc::kShaperLanes; ++ln)
+    {
+        wc::ShaperLane& L = st->lanes[ln];
+        std::vector<float> xs, ys, cs;
+        const juce::var lv = (lanesV.isArray() && ln < lanesV.size()) ? lanesV[ln] : juce::var();
+        bool havePts = false;
+        if (lv.isObject())
+        {
+            L.smooth  = (float) (double) lv.getProperty ("smooth",  0.25); L.phase = (float) (double) lv.getProperty ("phase", 0.0);
+            L.tension = (float) (double) lv.getProperty ("tension", 0.5);  L.floor_ = (float) (double) lv.getProperty ("floor", 0.0);
+            L.blend   = (float) (double) lv.getProperty ("blend",   1.0);  L.swing = (float) (double) lv.getProperty ("swing", 0.0);
+            L.grid    = (int) lv.getProperty ("grid", 16);
+            const juce::var kv = lv.getProperty ("k", juce::var()); if (kv.isArray()) for (int q = 0; q < 4 && q < kv.size(); ++q) L.k[q] = (float) (double) kv[q];
+            const juce::var pv = lv.getProperty ("pts", juce::var());
+            if (pv.isArray() && pv.size() >= 2)
+            {
+                for (int q = 0; q < pv.size(); ++q) { const juce::var pt = pv[q]; if (! pt.isArray() || pt.size() < 2) continue;
+                    xs.push_back (juce::jlimit (0.0f, 1.0f, (float) (double) pt[0])); ys.push_back (juce::jlimit (0.0f, 1.0f, (float) (double) pt[1])); cs.push_back (pt.size() > 2 ? juce::jlimit (-1.0f, 1.0f, (float) (double) pt[2]) : 0.0f); }
+                havePts = xs.size() >= 2;
+            }
+        }
+        if (! havePts) seed (ln, xs, ys, cs);
+        // sort by x, pin the ends (the LFO's own law)
+        std::vector<int> idx (xs.size()); for (size_t q = 0; q < idx.size(); ++q) idx[q] = (int) q;
+        std::stable_sort (idx.begin(), idx.end(), [&] (int a, int b) { return xs[(size_t) a] < xs[(size_t) b]; });
+        std::vector<float> sx, sy, sc; for (int q : idx) { sx.push_back (xs[(size_t) q]); sy.push_back (ys[(size_t) q]); sc.push_back (cs[(size_t) q]); }
+        sx.front() = 0.0f; sx.back() = 1.0f;
+        bakeShaperTable (sx.data(), sy.data(), sc.data(), (int) sx.size(), L.table);
+    }
+    shaperState_[inst] = st;
+    shapers_[inst].setState (st);
+}
+void TerrainAudioProcessor::setShaperJson (int inst, const juce::String& json)
+{
+    inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
+    shaperJson_[inst] = json;
+    rebuildShaperState (inst);
+}
+void TerrainAudioProcessor::cacheShaperRefs()
+{
+    static const char* const kLn[8] = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH" };
+    for (int i = 0; i < wc::kFlowInstances; ++i)
+    {
+        const juce::String pre = i == 0 ? juce::String ("FLOW_CHOP_") : "FLOW_CHOP" + juce::String (i + 1) + "_";
+        for (int ln = 0; ln < wc::kShaperLanes; ++ln)
+        {
+            auto& R = shpRefs_[i][ln]; const juce::String id = pre + kLn[ln];
+            R.on = apvts.getRawParameterValue (id + "_ON"); R.depth = apvts.getRawParameterValue (id + "_DEPTH");
+            R.rate = apvts.getRawParameterValue (id + "_RATE"); R.mode = apvts.getRawParameterValue (id + "_MODE");
+        }
+    }
 }
 
 juce::String TerrainAudioProcessor::getGliFeedJson (int inst) const
@@ -18236,6 +18329,11 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
         if (lfoShapesJson_.isNotEmpty())
             state.setProperty ("lfoShapesJson", lfoShapesJson_, nullptr);   // LFO ARC L1 — drawn shapes
         else state.removeProperty ("lfoShapesJson", nullptr);   // fb618
+        for (int i = 0; i < wc::kFlowInstances; ++i)   // tp71 — the Shaper's lanes, per instance (absent means the defaults)
+        {
+            const juce::String key = "shaperJson" + juce::String (i);
+            if (shaperJson_[i].isNotEmpty()) state.setProperty (key, shaperJson_[i], nullptr); else state.removeProperty (key, nullptr);
+        }
         if (dstCurvesJson_.isNotEmpty())
             state.setProperty ("dstCurvesJson", dstCurvesJson_, nullptr);   // fb328 — drawn distortion curves
         else state.removeProperty ("dstCurvesJson", nullptr);   // fb618
@@ -19329,6 +19427,8 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                 if (de.isNotEmpty()) setSynthDynEnvs (de);
                 auto lsj = newState.getProperty ("lfoShapesJson", "").toString();   // LFO ARC L1
                 if (lsj.isNotEmpty()) setSynthLfoShapes (lsj);
+                for (int i = 0; i < wc::kFlowInstances; ++i)   // tp71 — the Shaper's lanes (absent = the defaults)
+                    setShaperJson (i, newState.getProperty ("shaperJson" + juce::String (i), "").toString());
                 auto dcv = newState.getProperty ("dstCurvesJson", "").toString();   // fb328
                 if (dcv.isNotEmpty()) setDistortionCurves (dcv);
             }
@@ -20461,6 +20561,7 @@ void TerrainAudioProcessor::clearPatchBlobs()
         lfoShapesJson_ = {};
     }
     lfoShapeVersion_.fetch_add (1, std::memory_order_release);
+    for (int i = 0; i < wc::kFlowInstances; ++i) setShaperJson (i, {});   // tp71 — a cleared patch draws the default shapes
     distortionEngine.clearUserCurves();
     {
         static const float kBars[16] = { 1.0f, 0.55f, 0.8f, 0.3f, 0.65f, 0.2f, 0.5f, 0.15f, 0.4f, 0.1f, 0.3f, 0.08f, 0.22f, 0.06f, 0.15f, 0.1f };
