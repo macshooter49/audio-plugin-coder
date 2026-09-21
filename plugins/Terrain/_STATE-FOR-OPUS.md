@@ -29,6 +29,13 @@ when first encoded for a save (`tiWriteSampleSpare`; factory paths and our own f
 **Bank B is released** (`releaseIdleBankBIfUnused`: unwanted 3 s + no voice → `bankB_ = nullptr` →
 +3 audioSeq → `synthEngineB_.reset()`). ⚠️ read it on **malloc size_in_use** — the footprint does not
 move for a release of many small blocks (the harness prints both now).
+**tp70 — PHASE MODE DEFAULTS TO RANDOM (Serum's law), at Max's word "yes I'd like this, just to see".** ⚠️ This
+REVERSES his own tp12b/tp12c rule of 2026-09-15 ("I want it all to have 180 no matter what … not a random 180"):
+the four `SYN_OSC_x_PHASE_MODE` defaults are 2 (E–H clone it; verified on the AU: def 2) and the Patcher's
+`phase180()` spawns oscillators at Random (was 0). PHASE stays 0.5 (180°) and PHASE_AMT 1, so Random = 180° + a
+fresh random offset per note, exactly fb631's "180 with the random 100". ONE LINE back: `2));   // tp70` → 0 in the
+four declarations and `choiceNorm(X+'PHASE_MODE', 2, 4)` → 0. ⚠️ The attack-peak "discriminator" I first quoted
+(-1.8 vs -4.0 dBFS) was noise: repeated takes vary in every mode (tails, stealing) — do not re-use it as proof.
 **tp69 — THE MASTER IS LINEAR IN A HOST (the sine-chord "clipping").** Measured against Serum 2's own sine
 (`Tests/au_chord_*.cpp`): same per-note level (-15.14 dBFS), Terrain's Sine pure, the beating identical — but a
 7-note Cm11 through the limiter + soft clip carried distortion 46 dB under the notes (9 notes: 29 dB) while Serum

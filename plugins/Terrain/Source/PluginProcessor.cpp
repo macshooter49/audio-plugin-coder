@@ -4633,7 +4633,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_A_PHASE_MODE, 1 },
         "Synth OSC A Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+        2));   // tp70 — DEFAULT IS RANDOM (Serum's law: Rand Phase 100 %). Max 2026-09-20: "yes I'd like this, just to see" —
+               // every voice of a chord starts at its own phase, so six sines no longer pile up on the first cycle
+               // (attack peak -4.0 vs -1.8 dBFS on the Cm11, au_chord_beating2.cpp). ONE LINE back to 0 if he does not.
+               // tp12c — WAS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
                // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
                // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
                // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.
@@ -4854,7 +4857,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PHASE_MODE, 1 },
         "Synth OSC B Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+        2));   // tp70 — DEFAULT IS RANDOM (Serum's law: Rand Phase 100 %). Max 2026-09-20: "yes I'd like this, just to see" —
+               // every voice of a chord starts at its own phase, so six sines no longer pile up on the first cycle
+               // (attack peak -4.0 vs -1.8 dBFS on the Cm11, au_chord_beating2.cpp). ONE LINE back to 0 if he does not.
+               // tp12c — WAS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
                // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
                // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
                // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.
@@ -5047,7 +5053,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PHASE_MODE, 1 },
         "Synth OSC C Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+        2));   // tp70 — DEFAULT IS RANDOM (Serum's law: Rand Phase 100 %). Max 2026-09-20: "yes I'd like this, just to see" —
+               // every voice of a chord starts at its own phase, so six sines no longer pile up on the first cycle
+               // (attack peak -4.0 vs -1.8 dBFS on the Cm11, au_chord_beating2.cpp). ONE LINE back to 0 if he does not.
+               // tp12c — WAS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
                // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
                // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
                // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.
@@ -5240,7 +5249,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PHASE_MODE, 1 },
         "Synth OSC D Phase Mode",
         juce::StringArray { "Manual", "Free", "Random", "Spread" },
-        0));   // tp12c — DEFAULT IS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
+        2));   // tp70 — DEFAULT IS RANDOM (Serum's law: Rand Phase 100 %). Max 2026-09-20: "yes I'd like this, just to see" —
+               // every voice of a chord starts at its own phase, so six sines no longer pile up on the first cycle
+               // (attack peak -4.0 vs -1.8 dBFS on the Cm11, au_chord_beating2.cpp). ONE LINE back to 0 if he does not.
+               // tp12c — WAS MANUAL (ALIGNED): resolvePhase case 0 starts every note at PHASE, which ships at
                // 0.5 = 180 deg. Max 2026-09-15: "I want it all to have 180 no matter what … not a random 180 … I
                // shouldn't see an oscillator that isn't 180." Was 2 (Random) since fb532 — a fresh phase per note.
                // A SAVED patch carries its own stored value and is untouched; this is what a NEW instance / Init gets.

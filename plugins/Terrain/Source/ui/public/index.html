@@ -44364,7 +44364,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* tp12b — HARD RULE (Max): EVERY oscillator this plugin summons sits at PHASE 180°, and it is the ALIGNED mode (0 =
      the note starts at PHASE/360 every time), never Random — a random 180 is not 180. PHASE_AMT is ignored by that mode
      (resolvePhase case 0) and stays at 100. */
-  function phase180(X,P){ P(X+'PHASE', .5); P(X+'PHASE_AMT', 1); P(X+'PHASE_MODE', choiceNorm(X+'PHASE_MODE', 0, 4)); }
+  function phase180(X,P){ P(X+'PHASE', .5); P(X+'PHASE_AMT', 1); P(X+'PHASE_MODE', choiceNorm(X+'PHASE_MODE', 2, 4)); }   /* tp70 — RANDOM (Serum's law), Max: "yes I'd like this, just to see"; was 0 = Manual (tp12b) */
   /* the sample engines' own knobs, rolled (Max: "loop them, reverse them, chop them, stretch them, formant-shift them"). SCAN is −1..+1 (0.75
      normalised = 1x forward; below the middle plays BACKWARDS); FORMANT −1..+1 (0.5 = none). */
   /* tp39f — THE ARP'S DOTS. pitch rows 0..6 (3 = centre, <0 = rest), gate .05..1, vel 0..1, oct -1/0/1, ratchet 1..4, prob 0..1, wt 0..1.
