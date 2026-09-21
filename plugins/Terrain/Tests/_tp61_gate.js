@@ -231,6 +231,49 @@ const fake=()=>{const N=1200,mn=[],mx=[];for(let i=0;i<N;i++){const e=.2+.7*Math
     '[8d] the header reads "All Chops", "Chop 7", and "5 Chops" for a partial selection — one phrase, not a formula',
     JSON.stringify(r8d));
 
+ /* tp78 — Max: "instead of it saying ALL in the selector, can it just be the number of slices …
+    same number, same style, same everything. No glow in the middle." The pill wears the TOTAL chop
+    count, not the selection count (the header keeps "All Chops" — that phrase is Max's, tp61b), it
+    tracks a chop being added or deleted, and nothing inside it fills, glows or casts a shadow. */
+ const r8e=await p.evaluate(async()=>{
+   const pill=()=>{ const a=document.getElementById('ti-chop-all'); return a?a.textContent.trim():null; };
+   const total=()=>document.querySelectorAll('#ti-slice-overlays .ti-slice-body').length;
+   const out={ word:pill(), total:total() };
+   const a=document.getElementById('ti-chop-all'), cs=getComputedStyle(a);
+   out.rest={ bg:cs.backgroundColor, shadow:cs.boxShadow, text:cs.textShadow, filter:cs.filter };
+   /* select every chop — the pill must still read the TOTAL, not the selection */
+   window.__tiChopSelectAll && window.__tiChopSelectAll(); await new Promise(r=>setTimeout(r,300));
+   out.whenAll=pill();
+   const on=getComputedStyle(document.getElementById('ti-chop-all'));
+   out.lit={ bg:on.backgroundColor, shadow:on.boxShadow, text:on.textShadow, filter:on.filter, border:on.borderColor, ink:on.color };
+   /* a PARTIAL selection must not move it either */
+   window.__tiChopSetSel && window.__tiChopSetSel([0,1,2]); await new Promise(r=>setTimeout(r,300));
+   out.whenFive=pill();
+   return out; });
+ const none=v=>v==='none'||/rgba\(0, 0, 0, 0\)/.test(v||'');
+ ok(r8e.word===String(r8e.total) && r8e.whenAll===String(r8e.total) && r8e.whenFive===String(r8e.total)
+    && /^\d+$/.test(r8e.word||'') && none(r8e.rest.bg) && none(r8e.rest.shadow) && none(r8e.rest.text) && none(r8e.rest.filter)
+    && none(r8e.lit.bg) && none(r8e.lit.shadow) && none(r8e.lit.text) && none(r8e.lit.filter),
+    '[8e] the pill says the NUMBER OF CHOPS, not "All" — the total, unmoved by how many are selected, with nothing filled, glowing or shadowed in it either at rest or lit',
+    JSON.stringify(r8e));
+ /* [8f] — a SOURCE bar, because deleting a chop needs the native deleteSlice and there is none here.
+    The count only stays honest if it is repainted where the slice LIST changes: ovPaintTitle fires on
+    a panel open and on a selection move, neither of which is a chop being added or removed. This
+    asserts the repaint sits inside redrawSliceOverlay's own body, which is the function that re-runs
+    on a slice-list change. Controls below: it must not pass on a call that merely appears somewhere
+    in the file, nor on the definition alone. */
+ const r8f=(()=>{ const i=cpp.indexOf('function redrawSliceOverlay ()'); if(i<0) return {err:'no redrawSliceOverlay'};
+   let d=0, j=cpp.indexOf('{', i), k=j;
+   for(; k<cpp.length; k++){ const c=cpp[k]; if(c==='{')d++; else if(c==='}'){ d--; if(!d) break; } }
+   const body=cpp.slice(j,k);
+   return { inBody:body.includes('ovPaintAllPill()'), defined:cpp.includes('function ovPaintAllPill ()'),
+            inTitle:(()=>{ const a=cpp.indexOf('function ovPaintTitle (idx)'); const b=cpp.indexOf('\n  }', a);
+                           return cpp.slice(a,b).includes('ovPaintAllPill()'); })(),
+            len:body.length }; })();
+ ok(!r8f.err && r8f.defined && r8f.inBody && r8f.inTitle && r8f.len>1000,
+    '[8f] the count is repainted from inside redrawSliceOverlay — the one function that re-runs when the chop LIST changes — as well as from ovPaintTitle',
+    JSON.stringify(r8f));
+
  // ── [9] capture OFF greys the stems out ──
  const r9=await p.evaluate(async()=>{
    /* ⚠️ getComputedStyle returns a LIVE object: read the numbers OUT of it before the class goes,

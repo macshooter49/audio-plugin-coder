@@ -9306,11 +9306,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     font: 300 9.5px/1 -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif; letter-spacing: .02em;
     color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.45);
     border-radius: 9px; cursor: pointer; user-select: none;
-    background: none; box-shadow: none;
+    background: none; box-shadow: none; text-shadow: none;
+    font-variant-numeric: tabular-nums;   /* tp78 — the count must not jitter the pill as digits change */
     transition: color .22s ease, border-color .22s ease;
   }
   #ti-chop-panel .ov-head .ov-all:hover { color: #fff; }
-  #ti-chop-panel.multi .ov-head .ov-all { color: #fff; border-color: var(--purple-400); }
+  #ti-chop-panel.multi .ov-head .ov-all { color: #fff; border-color: var(--purple-400); background: none; box-shadow: none; text-shadow: none; }   /* tp78 — Max: "no glow in the middle": lit is the OUTLINE and the ink, never a fill or a halo on the number */
   #ti-chop-panel .ov-head .ov-close {
     position: absolute; right: 14px; top: 50%;
     transform: translateY(-50%);
@@ -9774,7 +9775,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
            but a shortcut whose only route is the host's keyboard handling is a feature you can
            lose to a DAW preference. One click here does the same thing, and it is where a right
            click already brought you. */
-        '<div class="ov-all" id="ti-chop-all" title="Select every chop (⌘A)">All</div>' +
+        /* tp78 — THE PILL COUNTS. Max: "instead of it saying ALL in the selector, can it just be
+           the number of slices … same style, same everything. No glow in the middle." The word is
+           painted by ovPaintAllPill() from state.slices.length, so the markup ships it empty. */
+        '<div class="ov-all" id="ti-chop-all" title="Select every chop (⌘A)"></div>' +
         '<div class="ov-close" id="ti-chop-close" title="Close">' +
           '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>' +
         '</div>' +
@@ -9957,6 +9961,19 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       return (total > 0 && ovSel.length >= total) ? ['All', 'Chops'] : [String(ovSel.length), 'Chops'];
     return ['Chop', String((idx | 0) + 1)];
   }
+  /* tp78 — the ALL pill wears the CHOP COUNT. It is the TOTAL number of chops, not how many are
+     selected: the header's .num already carries the selection ("5 Chops", "All Chops" — tp61b, and
+     that phrase is Max's, so it stays). Nothing about the pill moves but the word — same 15 px
+     outline, same dim-to-white hover, same purple border when the selection is live, and nothing
+     filled, glowing or shadowed inside it. */
+  function ovPaintAllPill () {
+    var a = document.getElementById('ti-chop-all'); if (! a) return;
+    var n = (state.slices && state.slices.length) ? state.slices.length : 0;
+    var t = String (n);
+    if (a.textContent !== t) a.textContent = t;
+    var ttl = 'Select every chop (⌘A) · ' + t + (n === 1 ? ' chop' : ' chops');
+    if (a.title !== ttl) a.title = ttl;
+  }
   function ovPaintTitle (idx) {
     /* ⚠️ PITCH MODE OWNS THIS HEADER TOO. targetIdx -1 replaces the whole .name with the words
        "Pitch mode" and no .w/.num inside it — so a repaint here would rebuild the two spans and
@@ -9970,6 +9987,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     var t = ovTitleFor (idx);
     if (w.textContent !== t[0]) w.textContent = t[0];
     if (n.textContent !== t[1]) n.textContent = t[1];
+    ovPaintAllPill();
   }
   function ovSelSet (list) { ovSel = (list || []).slice(); paintSliceSel(); }
   function ovSelClear () { if (! ovSel.length) return; ovSel = []; paintSliceSel(); }
@@ -10940,6 +10958,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         overlays.appendChild(label0);
       }
     });
+    /* tp78 — the pill's number tracks the chop list, and this is the one function that re-runs on a
+       slice-list change (add / delete / re-slice). ovPaintTitle only fires when the panel opens or
+       the selection moves, so without this a chop added under an open panel left a stale count. */
+    ovPaintAllPill();
   }
 
   // ── Pitch-mode IN/OUT bound markers ───────────────────────────────────────

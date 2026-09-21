@@ -1,7 +1,19 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp77** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp78** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp78 (2026-09-21) — THE CHOP MENU'S SELECTOR SAYS THE NUMBER, NOT "ALL"
+Max: "whenever we right click one of our slices … instead of it saying ALL in the selector, can it just be the number
+of slices? Same number, same style, same everything. No glow in the middle."
+The `.ov-all` pill in the chop right-click header wears `state.slices.length` — the TOTAL chop count, not the
+selection count. The header's own spans keep `All Chops` / `Chop 7` / `5 Chops`; **that phrase is Max's from tp61b and
+is untouched.** `ovPaintAllPill()` runs from `ovPaintTitle` (panel open, selection move) AND from the end of
+`redrawSliceOverlay`, the one function that re-runs on a slice-LIST change — without the second call a chop added under
+an open panel left a stale count. Style unchanged: the same 15 px outline on the Off pill's left rule, dim-to-white
+hover, purple border + white ink when live, and `background/box-shadow/text-shadow:none` in BOTH states.
+`_tp61_gate.js` 16/16, bars [8e] runtime + [8f] source (the delete half needs the native `deleteSlice`, absent
+headless), both mutation-checked. UI only, no DSP.
 
 ## tp77 (2026-09-21) — ONE MIDLINE, ONE CARD COLOUR, A REAL SINE, THE LFO'S GRID BOTH WAYS
 Max: "every time I click point or custom it gets lower … draw a line through the center of that bottom, it needs to go
