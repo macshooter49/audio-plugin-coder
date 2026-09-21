@@ -3726,7 +3726,7 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
 /* fb212 — the LFO right-click moved to the CANONICAL syn-ctx menu (white rows, fb69 house sliders, clamped) */
 #mod-engine .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.46;}
 #mod-engine .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
-#mod-engine .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.6;pointer-events:none;r:2;}   /* tp76 — the Shaper's node, at the pane's scale (CSS r: the SVG2 geometry property) */
+#mod-engine .sh-nd{fill:#ECE8F2;stroke:rgba(255,255,255,.55);stroke-width:.6;pointer-events:none;r:2;}   /* tp77 — one node, both screens: pure white (the purple is the selection's) */   /* tp76 — the Shaper's node, at the pane's scale (CSS r: the SVG2 geometry property) */
 #mod-engine .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;r:1.4;}
 #mod-engine .sh-hit{fill:transparent;cursor:grab;}
 #mod-engine .sh-hit.cdh{cursor:ns-resize;}
@@ -3795,7 +3795,7 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
 .mv-menu div svg{width:22px;height:12px;flex:none;opacity:.9;}
 
 /* body-level extender */
-.mv-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;
+.mv-ext{position:fixed;z-index:2147483645;width:316px;background:linear-gradient(180deg,#26223E,#1C1932);border:1px solid rgba(140,130,180,0.45);border-radius:12px;   /* tp77 — the expanded LFO joins the one card colour */
   box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;}
 .mv-ext.open{display:block;}
 /* ═══ fb232 — the LFO card rides the shared .ti-card kit (shell/header/presets/slots/chain
@@ -3935,20 +3935,24 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
    pop-out CONTRACT (CARDS map, edge handoff, card-only boot) — but every
    visual rule lives on the shared .ti-card kit below. ═══ */
 .ti-card{position:fixed;z-index:2147483645;width:316px;border-radius:14px;
-  background:linear-gradient(180deg,rgba(38,34,62,.84),rgba(28,25,50,.92));
-  -webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);
+  background:linear-gradient(180deg,#26223E,#1C1932);
+  /* tp77 — ONE CARD COLOUR (Max: "our card is a couple of shades lighter … I need all the cards to be the exact
+     same colour"). The card was TRANSLUCENT over a 22 px blur, so its colour was whatever sat behind it: over the
+     synth panel it lifted a few shades, and the popped window — which has always been forced opaque at
+     html.card-only .ti-popcard — showed the true one. That opaque pair is now the card's own paint, docked and
+     popped, so the two can no longer disagree. Nothing else about the chassis moves. */
   border:1px solid rgba(255,255,255,.14);
   box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07);
   overflow:hidden;display:none;user-select:none;-webkit-user-select:none;
   font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
   font-variant-numeric:tabular-nums;}
 .ti-card.open{display:block;}
-.ti-card .h{display:flex;align-items:center;gap:6px;padding:10px 10px 9px;
+.ti-card .h{display:flex;align-items:center;gap:6px;padding:10px 14px 9px;   /* tp77 — 14 px = .ti-card .b's own left padding, so the title's first letter lands on the same rule as the screen and the tiles under it (Max: "the beginning of S lines up with the beginning of all this stuff") */
   border-bottom:1px solid rgba(255,255,255,.08);cursor:grab;}
 .ti-card .h.grab{cursor:grabbing;}
 .ti-card .h .g{letter-spacing:2px;color:rgba(255,255,255,.30);font-size:10px;}
 .ti-card .h .dot{width:5px;height:5px;border-radius:50%;background:#B794FF;}
-.ti-card .h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:uppercase;font-weight:600;white-space:nowrap;}
+.ti-card .h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:none;font-weight:600;white-space:nowrap;}   /* tp77 — Max: "any card that still has capital glitch, still has capital ARP, still has capital Robin, needs to get changed down". Every shell is already handed a title-case name (Arp / Glitch / Robin / Shaper / LFO n) — the caps were this one declaration. */
 .ti-card .h .pset{flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;gap:4px;cursor:default;}
 .ti-card .h .pset .pa{color:rgba(255,255,255,.42);font-size:12px;line-height:1;cursor:pointer;padding:0 1px;transition:color .15s ease;}
 .ti-card .h .pset .pa:hover{color:#fff;}
@@ -3969,7 +3973,7 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .shp-ext .screen .mv-fill{fill:rgba(224,216,245,0.07);}
 .shp-ext .screen .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.7;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));}
 .shp-ext .screen.off .mv-stroke{stroke:rgba(236,232,242,.45);filter:none;}
-.shp-ext .screen .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
+.shp-ext .screen .sh-nd{fill:#ECE8F2;stroke:rgba(255,255,255,.55);stroke-width:.8;pointer-events:none;}   /* tp77 — Max: "the shaper has these purple dots on the outline … I just want it to be pure white". The purple ring is the SELECTED node's job alone (.sh-nd.sel below). */
 .shp-ext .screen .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
 .shp-ext .screen .sh-hit{fill:transparent;cursor:grab;}
 .shp-ext .screen .sh-hit.cdh{cursor:ns-resize;}
@@ -3978,13 +3982,22 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .shp-ext .screen.idle .mv-play,.shp-ext .screen.idle .mv-foll{opacity:0;transition:opacity .35s ease;}
 /* the bar: the LFO's chip grammar (.mv-ov.bot / .mv-c) at the mockup's size — small, seamless, no glyphs; each chip is a native dropdown */
 .shp-ext .screen .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
-.shp-ext .screen .mv-ov.bot{bottom:0;height:17px;padding:0 10px 0;justify-content:space-between;align-items:flex-end;}   /* tp76 — Max: 'drop them down a pixel or two … close to the bottom' */
-.shp-ext .screen .mv-c{padding-bottom:2px;}
+.shp-ext .screen .mv-ov.bot{bottom:0;height:18px;padding:0 10px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;}   /* tp77 — ONE MIDLINE (Max: "draw a line through the center … it needs to go through the middle of them both"). THREE COLUMNS, the outer two equal: the middle chip is centred in the bar however long the outer words are. justify-content:space-between only centred it when both sides weighed the same, and 'Point' against 'Ladder LP 24' never did (Max: "sign is not in the middle"). */
+.shp-ext .screen .mv-ov.bot .ch-brush{justify-self:start;}
+.shp-ext .screen .mv-ov.bot .ch-shape{justify-self:center;}
+.shp-ext .screen .mv-ov.bot .ch-type{justify-self:end;}
+.shp-ext .screen .mv-c{height:100%;min-width:0;}   /* tp77 — every chip owns the bar's full height and centres its own ink, so all three sit on ONE line whatever they contain */
 .shp-ext .screen .mv-c{position:relative;display:flex;align-items:center;gap:3px;font-size:7px;letter-spacing:.9px;font-weight:300;color:rgba(255,255,255,0.5);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;line-height:1;}
 .shp-ext .screen .mv-c:hover{color:#fff;}
 .shp-ext .screen .mv-c .chev{width:7px;height:7px;opacity:.55;flex:none;}
+/* tp77 — THE ARROWS HUG THE WORD (Max: "the Ladder LP, that's supposed to have the arrows … make sure they're in
+   the middle and they hug the word and they don't get too far out — that's how the filter has it"). They ride ABOVE
+   the invisible <select> (z-index) or the overlay would swallow every click on them. */
+.shp-ext .screen .mv-c .ar{position:relative;z-index:3;font-size:9px;line-height:1;opacity:.5;padding:0 1px;cursor:pointer;flex:none;transition:opacity .12s;}
+.shp-ext .screen .mv-c .ar:hover{opacity:1;}
+.shp-ext .screen .ch-type{gap:2px;}   /* the arrows HUG: 2 px plus the arrow's own 1 px padding */
 .shp-ext .screen .mv-c .t{white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;}
-.shp-ext .screen .mv-c select{position:absolute;inset:-3px -2px;width:auto;height:auto;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}
+.shp-ext .screen .mv-c select{position:absolute;inset:0;width:auto;height:auto;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}   /* tp77 — THE BAR WALKED ON EVERY CLICK. The select hung 3 px past the screen's floor, so focusing it made the browser scroll its overflow:hidden ancestor to reveal it (measured .screen.scrollTop 0 → 2.85 on the first click) and the whole bar rode with it — Max: "every time I try to click on point or custom, it gets lower". Flush now; a JS belt in the card keeps it at zero. */
 .shp-ext .screen .mv-c.browser select{display:none;}
 .shp-ext .screen .sh-ghost{fill:none;stroke:rgba(236,232,242,.17);stroke-width:1;pointer-events:none;}
 .shp-ext .screen .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
@@ -4005,7 +4018,8 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 /* tp74 — NO ALL-CAPS on this card but the eight lane tiles (Max): the header, tabs, box titles, knob labels, values, the bar */
 .ti-card.shp-ext .h .tt,.ti-card.shp-ext .tab,.ti-card.shp-ext .gbl,.ti-card.shp-ext .cell .lb,.ti-card.shp-ext .tog,.ti-card.shp-ext .h .pop,.ti-card.shp-ext .mix,.ti-card.shp-ext .step em,.ti-card.shp-ext .foot .lb,.ti-card.shp-ext .chain .lb{text-transform:none;}
 .ti-card.shp-ext .h .tt{letter-spacing:1.2px;font-size:10px;} .ti-card.shp-ext .tab{letter-spacing:1px;font-size:8.5px;} .ti-card.shp-ext .gbl{letter-spacing:.9px;font-size:6.5px;} .ti-card.shp-ext .cell .lb{letter-spacing:.5px;font-size:6.8px;}
-.ti-card.shp-ext .fx .fxb{text-transform:uppercase;}
+.ti-card.shp-ext .fx .fxb{text-transform:uppercase;}   /* the eight lane names ARE the caps Max keeps (VOL … CRUSH) */
+.ti-card.shp-ext .chain .gl{text-transform:none;letter-spacing:.9px;font-size:7px;}   /* tp77 — 'Chain', not 'CHAIN' (the tp74 rule aimed at .chain .lb; the label wears .gl) */
 .shp-ext .oncell{justify-content:center;align-self:center;}
 .shp-ext .oncell .tog{min-width:34px;}
 .shp-ext .k svg{width:32px;height:32px;display:block;}
@@ -4296,6 +4310,13 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .ti-card .fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600;}
 .ti-card .fxb.cur{border-color:#B794FF;color:#B794FF;}
 .ti-card .fxb.on.cur{background:rgba(255,255,255,.92);color:#1A1A2E;box-shadow:0 0 0 1px #B794FF;}
+/* tp77 — FILLED MEANS FILLED. Max: "when it's being filled white we don't have it to where … there's a purple
+   outline … forget that pinkish purple outline when it's filled; when it's NOT filled, then yeah, we got that
+   purple outline, white inside." So on the Shaper a lit lane is plain white with nothing around it, and the lane
+   the SCREEN is showing is told apart by its ink instead of by a ring. These carry four classes so they land after
+   .ti-card .fxb.on.cur (0,4,0) above and after .ti-card.shp-ext .fxb.cur (0,4,0) further up. */
+.ti-card.shp-ext .fxb.on{border-color:transparent;box-shadow:none;color:#1A1A2E;}
+.ti-card.shp-ext .fxb.on.cur{border-color:transparent;box-shadow:none;color:#5B21B6;}
 .ti-card .fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14);}
 .ti-card .fleds i.on{background:#B794FF;}
 
@@ -35644,10 +35665,13 @@ restoreThemeFromBackend();
         card.__mixRebind=resolve;   /* fb232 — the LFO card re-aims its Depth at whichever LFO is selected */
         resolve(pid); }
 
-      /* card shell: header (⠿ · dot · title · MIX · Pop Out · ✕) + body + drag/handoff */
+      /* card shell: header (title · MIX · Pop Out · ✕) + body + drag/handoff
+         tp77 — the grip glyph and the purple pip are GONE. Max: "I don't want that purple button right there at the
+         top where it says Shaper … no purple buttons anywhere … move Shaper to the very top left." The whole header
+         is still the drag handle (.h carries cursor:grab and the pointerdown), so nothing was lost but the ink. */
       function shell(cfg){
         var card=el('<div class="ti-card '+cfg.cls+'">'
-          +'<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">'+cfg.title+'</span>'
+          +'<div class="h"><span class="tt">'+cfg.title+'</span>'
           +'<span class="mix">Mix <b>–</b></span>'
           +'<span class="pop" title="Pop the card out into a floating window">Pop Out</span>'
           +'<span class="x" title="Close">✕</span></div>'
@@ -37129,6 +37153,14 @@ restoreThemeFromBackend();
       var DEFSHAPE={vol:'gate',time:'unity',filt:'sine',pan:'sine',rep:'flat',drive:'saw',phase:'sine',crush:'stairs'};
       var TOOLS=[['Point',0],['Line',1],['Ramp up',2],['Ramp down',3],['Square',4],['Triangle',5],['Sine',6],['Free draw',7]];
       function stepsPts(n,fn){ var p=[]; for(var i=0;i<n;i++){ var y=fn(i); p.push([i/n,y,0]); p.push([(i+1)/n-1e-4,y,0]); } p[p.length-1][0]=1; return p; }
+      /* tp77 — A SINE IS A SINE. Max: "that's not a sine wave, that's a fucking triangle spike wave with a couple
+         curvature." The segment law between two breakpoints is an EXPONENTIAL bend — bias() below, and the identical
+         one in the DSP at PluginProcessor.cpp:1914 — and no amount of bending draws a cosine across three points:
+         the old [[0,0,-.62],[.5,1,.62],[1,0]] could only ever be a spike with soft shoulders. Nine points on the
+         eighths, each segment's curve FITTED (min-max over the segment it has to cover) to the cosine, holds the
+         real curve to 0.5 % of full height — a sine you cannot pick apart by eye, still nine draggable nodes. */
+      var SINE9=[[0,0,-0.252],[0.125,0.1464,-0.041],[0.25,0.5,0.041],[0.375,0.8536,0.252],
+                 [0.5,1,-0.252],[0.625,0.8536,-0.041],[0.75,0.5,0.041],[0.875,0.1464,0.252],[1,0,0]];
       function stock(k){ var i,p; switch(k){
         case 'gate8': return stepsPts(8,function(i){ return (i&1)?0:1; });
         case 'gate32': return stepsPts(32,function(i){ return (i&1)?0:1; });
@@ -37155,7 +37187,7 @@ restoreThemeFromBackend();
         case 'scratch': p=[]; for(i=0;i<8;i++){ p.push([i/8,(i&1)?0.25:0,0]); } p.push([1,0,0]); return p;
         case 'rewind': p=[]; for(i=0;i<4;i++){ p.push([i/4,0.25,0]); p.push([(i+1)/4-1e-4,0,0]); } p[p.length-1][0]=1; return p;
         case 'halfback': return [[0,0,0],[.5,.25,0],[1,0,0]];
-        case 'sine': return [[0,0,-0.62],[.5,1,.62],[1,0,0]];
+        case 'sine': return SINE9.map(function(q){ return q.slice(); });   /* a FRESH copy: setPts sorts and pins its argument in place */
         case 'tri': return [[0,0,0],[.5,1,0],[1,0,0]];
         case 'saw': case 'unity': return [[0,0,0],[1,1,0]];
         case 'sawdn': case 'reverse': return [[0,1,0],[1,0,0]];
@@ -37219,7 +37251,7 @@ restoreThemeFromBackend();
         var scr=TIC.el('<div class="screen"><div class="field"></div>'
           +'<div class="mv-ov bot"><span class="mv-c ch-brush"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span>'
           +'<span class="mv-c ch-shape"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span>'
-          +'<span class="mv-c ch-type"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span></div></div>');
+          +'<span class="mv-c ch-type"><span class="ar l">\u2039</span><span class="t"></span><span class="ar r">\u203A</span><select></select></span></div></div>');
         var field=scr.querySelector('.field'), chBrush=scr.querySelector('.ch-brush'), chShape=scr.querySelector('.ch-shape'), chType=scr.querySelector('.ch-type');
         function fillSel(chip,names,cur,groups){ var se=chip.querySelector('select'); se.innerHTML=''; var host=se, lastG=null;
           names.forEach(function(n,k){ var g=groups?groups[k]:null; if(g!==lastG){ lastG=g; if(g){ host=document.createElement('optgroup'); host.label=g; se.appendChild(host); } else host=se; }
@@ -37262,12 +37294,29 @@ restoreThemeFromBackend();
           chBrush.querySelector('.t').textContent=TOOLS[ti][0]; fillSel(chBrush,TOOLS.map(function(t){ return t[0]; }),ti);
           var key=S.v['shape'+i]||'custom', L=shapeList(), cur=-1; for(var q=0;q<L.length;q++) if(L[q][0]===key) cur=q;
           chShape.querySelector('.t').textContent=cur>=0?L[cur][1]:'Custom'; fillSel(chShape,L.map(function(e){ return e[1]; }).concat(['Custom']),cur>=0?cur:L.length,L.map(function(e){ return e[2]; }).concat([null]));
+          /* tp77 — RANDOM HAS TO STAY RANDOM. Max: "whenever I select random curve or random wave … it's not random,
+             it's the same." A native <select> fires NO change event when you pick the row that is already selected,
+             so the second helping never reached stock() and the old dice stood. The random rows therefore leave the
+             select with NOTHING selected — the chip's visible word comes from the state, not from the select, so it
+             still reads 'Random curve' — and every pick after one is a genuine change. */
+          if(cur>=0&&/^rand/.test(L[cur][0])) chShape.querySelector('select').selectedIndex=-1;
           chType.style.display=ROSTER[l]?'':'none'; chType.classList.toggle('browser',l==='filt');
           if(ROSTER[l]){ var M=LNMODE(l), mi=S.v['mode'+i]|0; chType.querySelector('.t').textContent=M[mi]||M[0]||'—'; if(l!=='filt') fillSel(chType,M,mi); else chType.querySelector('select').innerHTML=''; } }
         chBrush.querySelector('select').addEventListener('change',function(){ var k=parseInt(this.value,10)||0; S.set('tool',TOOLS[k][1]); paintChips(); });
         chShape.querySelector('select').addEventListener('change',function(){ var i=lane(), L=shapeList(), k=parseInt(this.value,10)||0; if(k<L.length) setPts(i,stock(L[k][0]),L[k][0]); else paintChips(); });
         chType.querySelector('select').addEventListener('change',function(){ var i=lane(); S.set('mode'+i,parseInt(this.value,10)||0); paintChips(); });
         TIC.EA(scr.querySelectorAll('.mv-c select'),function(se){ se.addEventListener('pointerdown',function(e){ e.stopPropagation(); }); });
+        /* tp77 — the arrows STEP the lane's engine, the word still opens the list (the filter's grammar, and the
+           synth page's: '‹ Sine ›'). They sit above the invisible <select>, so they must swallow their own clicks
+           before the chip's browser handler below sees them. */
+        TIC.EA(chType.querySelectorAll('.ar'),function(a){
+          a.addEventListener('pointerdown',function(e){ e.preventDefault(); e.stopPropagation(); });
+          a.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var i=lane(), l=lkey(); if(!ROSTER[l])return;
+            var M=LNMODE(l), N=M.length; if(!N)return; var d=a.classList.contains('l')?-1:1;
+            S.set('mode'+i,(((S.v['mode'+i]|0)+d)%N+N)%N); paintChips(); }); });
+        /* tp77 — THE BELT under the select's flush inset: nothing that overhangs the screen later can scroll the
+           picture out from under the bar (see .shp-ext .screen .mv-c select). */
+        scr.addEventListener('scroll',function(){ if(scr.scrollTop||scr.scrollLeft){ scr.scrollTop=0; scr.scrollLeft=0; } },true);
         chType.addEventListener('click',function(e){ if(lkey()!=='filt')return; e.stopPropagation(); var i=lane(), M=LNMODE('filt'), cur=S.v['mode'+i]|0;
           /* the filter's 118: the rack's own two-pane browser (fb603), its categories */
           var G=window.__FLT_ENGGRP||[], GN=window.__FLT_GRPNAMES||[], cats=[], byG={};
@@ -37278,6 +37327,11 @@ restoreThemeFromBackend();
         /* ── drawing on the field: the LFO's grammar ── */
         function pos(e){ return { x:X01(e.clientX), y:Y01(e.clientY) }; }
         function snapX(x){ var i=lane(); if(!S.v.snap)return x; var g=gridOf(i); return Math.round(x*g)/g; }
+        /* tp77 — THE LFO'S GRID RULES, BOTH AXES. Max: "the shaper doesn't follow the same grid rules as the LFO …
+           the LFO's grid rules are very smart … make our grid smart too." The LFO's shSnap lands a dragged point on
+           the time cells AND the level lines (sp.gv / sp.gh, index.html:32257/32264); the Shaper only ever snapped x,
+           so a node slid freely up and down off the very grid it was drawn against. Level = the menu's Level slider. */
+        function snapY(y){ if(!S.v.snap)return y; var g=lgridOf(); return Math.round(y*g)/g; }
         function hitOf(e){ var t=e.target; if(!t||!t.classList||!t.classList.contains('sh-hit')) return null; return { t:t.classList.contains('cdh')?'cd':'nd', i:+t.getAttribute('data-i') }; }
         function stampCell(i,pts,cx,y,tool){ var g=gridOf(i), c=Math.max(0,Math.min(g-1,Math.floor(cx*g))), x0=c/g, x1=(c+1)/g;
           var keep=pts.filter(function(q){ return q[0]<x0-1e-6||q[0]>x1+1e-6; }); var add=[];
@@ -37287,7 +37341,7 @@ restoreThemeFromBackend();
             case 3: add=[[x0,y,0],[x1-1e-4,0,0]]; break;
             case 4: add=[[x0,y,0],[(x0+x1)/2-1e-4,y,0],[(x0+x1)/2,0,0],[x1-1e-4,0,0]]; break;
             case 5: add=[[x0,0,0],[(x0+x1)/2,y,0],[x1-1e-4,0,0]]; break;
-            case 6: add=[[x0,0,-0.62],[(x0+x1)/2,y,0.62],[x1-1e-4,0,0]]; break; }
+            case 6: add=SINE9.map(function(q){ return [x0+q[0]*(x1-x0-1e-4), q[1]*y, q[2]]; }); break; }   /* tp77 — the Sine brush stamps the real curve too */
           if(x1>=1-1e-6&&add.length) add[add.length-1][0]=1;
           if(x0<=1e-6&&add.length) add[0][0]=0;
           var out=keep.concat(add); if(!out.some(function(q){ return q[0]<=1e-6; })) out.push([0,evalPts(pts,0),0]); if(!out.some(function(q){ return q[0]>=1-1e-6; })) out.push([1,evalPts(pts,1),0]);
@@ -37332,9 +37386,18 @@ restoreThemeFromBackend();
           var grp=sel.length>1&&sel.indexOf(ri)>=0; if(!grp&&sel.length) selClear();
           drag={kind:'pt',k:ri,pts:pts,x0:e.clientX,y0:e.clientY,did:false,grp:grp,org:grp?pts.map(function(q){ return [q[0],q[1]]; }):null,bnd:null};
           if(grp) drag.bnd=grpBounds(pts,drag.org); });
+        /* tp77 — THE CLIFF AT THE EDGE OF A STROKE. Max: "it starts off good, but then there'd be like a point in
+           time in which it has this weird line … it starts to turn into like a triangle." A stroke that begins a few
+           pixels inside the field left the OLD shape's breakpoint standing just outside the swept span, and the line
+           fell off a wall to reach it — a free-drawn sine measured as `M0.0 10.0 L3.6 98.0`, a full-height drop
+           across 0.8 % of the width, before anything the pointer did. The sweep now EATS a small margin past its own
+           two ends (and owns an edge outright once it comes that close), so what is left to bridge is a short ramp
+           rather than a cliff, and a stroke that starts near the edge simply owns the edge. */
+        var FREE_EAT=0.02;
         function freeAt(i,d,p){ var x=p.x, y=p.y; if(x<d.lo)d.lo=x; if(x>d.hi)d.hi=x;
           d.raw=d.raw.filter(function(t){ return Math.abs(t[0]-x)>0.0012; }); d.raw.push([x,y,0]);
-          var pts=d.pts.filter(function(t){ return t[0]<d.lo-1e-9||t[0]>d.hi+1e-9; }).concat(d.raw); pts.sort(function(a,b){ return a[0]-b[0]; });
+          var lo=(d.lo<FREE_EAT)?-1:d.lo-FREE_EAT, hi=(d.hi>1-FREE_EAT)?2:d.hi+FREE_EAT;
+          var pts=d.pts.filter(function(t){ return t[0]<lo-1e-9||t[0]>hi+1e-9; }).concat(d.raw); pts.sort(function(a,b){ return a[0]-b[0]; });
           if(pts[0][0]>1e-6) pts.unshift([0,pts[0][1],0]); if(pts[pts.length-1][0]<1-1e-6) pts.push([1,pts[pts.length-1][1],0]); pts[0][0]=0; pts[pts.length-1][0]=1;
           S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); }
         function stampAt(i,d,p,tool){ var g=gridOf(i), c=Math.floor(p.x*g); if(c===d.cell)return; d.cell=c; d.pts=stampCell(i,d.pts,p.x,p.y,tool); d.pts.sort(function(a,b){ return a[0]-b[0]; }); S.set('pts'+i,JSON.stringify(d.pts)); S.set('shape'+i,'custom'); paint(); }
@@ -37342,10 +37405,10 @@ restoreThemeFromBackend();
           if(drag.kind==='band'){ drag.mv(e); return; }
           if(drag.kind==='pt'){ if(!drag.did&&Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)<3)return; drag.did=true;   /* the LFO's 3 px threshold: a click cannot nudge a point */
             var pts=drag.pts, k=drag.k;
-            if(drag.grp){ var org=drag.org, bnd=drag.bnd, ax=(k===0||k===pts.length-1)?org[k][0]:snapX(p.x), ay=p.y;
+            if(drag.grp){ var org=drag.org, bnd=drag.bnd, ax=(k===0||k===pts.length-1)?org[k][0]:snapX(p.x), ay=snapY(p.y);
               var gdx=Math.max(bnd.x0,Math.min(bnd.x1,ax-org[k][0])), gdy=Math.max(bnd.y0,Math.min(bnd.y1,ay-org[k][1]));
               sel.forEach(function(si){ var ep=(si===0||si===pts.length-1); pts[si][0]=ep?org[si][0]:org[si][0]+gdx; pts[si][1]=org[si][1]+gdy; }); }
-            else { if(k>0&&k<pts.length-1) pts[k][0]=Math.max(pts[k-1][0],Math.min(pts[k+1][0],snapX(p.x))); pts[k][1]=p.y; }
+            else { if(k>0&&k<pts.length-1) pts[k][0]=Math.max(pts[k-1][0],Math.min(pts[k+1][0],snapX(p.x))); pts[k][1]=snapY(p.y); }
             S.set('pts'+i,JSON.stringify(pts)); S.set('shape'+i,'custom'); paint(); selPaint(); }
           else if(drag.kind==='seg'){ if(!drag.did&&Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)<3)return; drag.did=true;
             var q=drag.pts, kk=drag.k, dir=(q[kk+1][1]>=q[kk][1])?1:-1; var c=Math.max(-1,Math.min(1,drag.c0+(drag.y0-e.clientY)*0.012*dir)); if(Math.abs(c)<0.06)c=0;   /* the LFO's zero detent */
@@ -37364,7 +37427,7 @@ restoreThemeFromBackend();
           if(h){ var ri=rawIndexFor(i,h.i); if(ri<0)return;
             if(h.t==='cd'){ if((pts[ri][2]||0)!==0){ pts[ri][2]=0; setPts(i,pts); } return; }
             if(ri>0&&ri<pts.length-1&&pts.length>2){ selClear(); pts.splice(ri,1); setPts(i,pts); } return; }
-          if(pts.length>=160)return; var p=pos(e); var nx=snapX(p.x), ny=S.v.snap?Math.round(p.y*lgridOf())/lgridOf():p.y;
+          if(pts.length>=160)return; var p=pos(e); var nx=snapX(p.x), ny=snapY(p.y);
           /* the point lands where the read is: undo the lane's phase / swing so it sits under the pointer */
           var ph=S.v['phase'+i]||0, sw=S.v['swing'+i]||0; if(Math.abs(ph)>1e-4||sw>1e-4){ var u=swingFwd(nx,sw)+ph; u-=Math.floor(u); nx=u; }
           selClear(); pts.push([nx,ny,0]); setPts(i,pts); });

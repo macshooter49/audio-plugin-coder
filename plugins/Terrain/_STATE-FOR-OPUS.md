@@ -1,7 +1,35 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp76** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp77** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp77 (2026-09-21) — ONE MIDLINE, ONE CARD COLOUR, A REAL SINE, THE LFO'S GRID BOTH WAYS
+Max: "every time I click point or custom it gets lower … draw a line through the center of that bottom, it needs to go
+through the middle of them both … the shaper doesn't follow the same grid rules as the LFO … purple dots, I want pure
+white … sign is not in the middle … the Ladder LP is supposed to have the arrows, hug the word … our card is a couple
+of shades lighter, I need ALL the cards the exact same colour … capital glitch / ARP / Robin down to lowercase … I
+don't want that purple button at the top, move Shaper to the very top left … random curve isn't random, it's the same
+… that's not a sine wave, that's a triangle spike … free draw sometimes turns into a ramp".
+🚨 **The bar walked because a focused `<select>` scrolled its `overflow:hidden` screen** — the chip's invisible select
+sat at `inset:-3px -2px`, overhanging the floor, so the browser scrolled the box to reveal it (measured
+`.screen.scrollTop` 0 → 2.85 on the first click). Flush at `inset:0` + a `scroll` belt. The bar is a three-column grid
+(`minmax(0,1fr) auto minmax(0,1fr)`) so the middle chip is centred in the BAR, and every chip owns its full height.
+🚨 **`SINE9`** — the segment law is the exponential `bias()` (same one at `PluginProcessor.cpp:1914`), which cannot draw
+a cosine across three points. Nine points on the eighths, each segment's curve fitted min-max to the cosine it covers
+(±0.252 / ±0.041): max error 0.5 % of full height. The Sine brush stamps it too.
+🚨 **`FREE_EAT = 0.02`** — a stroke starting inside the field left the old shape's breakpoint a hair outside the swept
+span and the line fell off a wall to reach it (measured `M0.0 10.0 L3.6 98.0`). The sweep eats a margin past each end.
+**`snapY()`** mirrors `snapX()` (the LFO's `shSnap` on both axes, `index.html:32257/32264`). **Random** rows leave the
+`<select>` deselected, because a native select fires no change when you re-pick the selected row. **One card colour:**
+`.ti-card` was translucent over a 22 px blur — now the popped window's opaque pair `#26223E → #1C1932`, docked and
+popped, no blur. **Header:** grip and purple pip gone, `text-transform:none` on the title, `.h` padding 14 px so the
+first letter stands on the screen's left rule. **Tiles:** lit = plain white, no ring, no border; the current lane is
+told by its ink. Dots pure white in both renderers. **Type chip** wears `‹ … ›` above the select.
+⚠️ Harness trap: the card is ~560 × 800 device px and opened near x 880, so a 1200 px viewport cut its right third off
+and a drawn stroke stopped at the edge (59 of 91 moves landed) — the gate parks the card at 6,6 before any gesture.
+`_tp77_gate.js` 30/30 (mutation-checked on the sine, the snap and the seam), `FlowShaper_test.cpp` 25/25,
+`au_shaper_lock.cpp` 9/9 on the installed AU, older page gates green.
+⚠️ Still unproven: the popped-window browser growth (tp74), in a real second window.
 
 ## tp76 (2026-09-21) — ONE LINE, ONE GRID; THE LFO'S GRAMMAR IN THE SHAPER; THE MENU ON TOP
 Max (a beat made on the Shaper — "if I can make a beat with it, it's a go"): consistency — "three different grid lines …
@@ -14,7 +42,7 @@ the expanded pane 1.7; the pane's nodes via CSS `r`; every grid white .065 / .14
 to the body (fixed, the panel's origin + local px) while a card floats and comes home on hide; the 44 rules are
 `:is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu)`; trimmed to Grid / Level / Snap / flips / Random / Wavetable /
 selection rows / Clear. **The library:** grouped shape dropdown (Basic · Gates · Curves · Steps; Time: Basic ·
-Stutter · Tape), generators. Lit lanes fill white; chips on the floor. `_tp76_gate.js` 20/20, sweep green,
+Stutter · Tape), generators. Lit lanes fill white; chips on the floor. The Shaper page gate (now `_tp77_gate.js`) was 20/20 here, sweep green,
 `au_shaper_lock.cpp` 9/9. ⚠️ the popped-window browser growth (tp74) is still unproven in a real second window.
 
 ## tp75 (2026-09-21) — THE SHAPER'S EMBLEM IS A SAWTOOTH
@@ -249,7 +277,7 @@ they disappeared); E–H right-click menu (`/SYN_OSC_([A-D])_/`); exclusive solo
 or glows anywhere; ALL pill + header rewritten ("All Chops" / "Chop 7" / "5 Chops", thin white).
 
 ## GATES
-`Tests/_tp76_gate.js` (20 — the ONE Shaper page gate; tp71–tp74's were each renamed into the next and tp71's deleted at the tp76 cleanup), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (25), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
+`Tests/_tp77_gate.js` (30 — the ONE Shaper page gate; tp71–tp76's were each renamed into the next and tp71's deleted at the tp76 cleanup), `Tests/au_shaper_lock.cpp` (9), `Source/FlowShaper_test.cpp` (25), `Tests/_tp61_gate.js` (14), `Tests/stem_memory_gate.py` (10 + 4 controls),
 `fxtopo_test` case 22, `au_chopsend` [3] rewritten to the serial law.
 ⚠️ `capture_last_gate.py` had been STALE since tp20 and is live again (its anchor and rule [4]'s
 window were both wrong). (tp70 cleanup: the stale probes `_tp10.js`, `_tp11.js`, `_probe59.js`, `_probe60.js` are deleted — they threw at HEAD and proved nothing; the gates in `Tests/README.md` are the record. tp76 cleanup: `_tp71_gate.js` deleted for the same reason.)
