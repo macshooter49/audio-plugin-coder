@@ -2158,6 +2158,8 @@ private:
             else { nsLen = 0; nsSL = nsSR = nullptr; }
         }
         // the Reverb lane's four rooms, each built only if its type is the one chosen
+        int   rvLastT_ = -1;                       // tp85 — rebuild the reverb's coefficients when a knob MOVES, not per sample
+        float rvLastK_[4] = { -1.f, -1.f, -1.f, -1.f };
         std::unique_ptr<RoomReverb>    rvRoom;    std::unique_ptr<PlateReverb>   rvPlate;
         std::unique_ptr<HallReverb>    rvHall;    std::unique_ptr<ShimmerReverb> rvShim;
         std::atomic<int> rvBuilt { 0 };   // bit per type, release-stored after the engine is prepared
@@ -2193,11 +2195,31 @@ private:
                     if (! ((rvBuilt.load (std::memory_order_acquire) >> t) & 1)) return false;
                     float wl = 0, wr = 0;
                     /* Size · Decay · Tone · Diffusion — the four every room here answers to. (Damping and Width
-                       are NOT shared: Hall spells it setHighDamping, Shimmer reuses that slot for setShimmer.) */
-                    switch (t) { case 0: rvRoom ->setSize (k[0]); rvRoom ->setDecay (k[1]); rvRoom ->setTone (k[2]); rvRoom ->setDiffusion (k[3]); rvRoom ->processSample (l, r, wl, wr); break;
-                                 case 1: rvPlate->setSize (k[0]); rvPlate->setDecay (k[1]); rvPlate->setTone (k[2]); rvPlate->setDiffusion (k[3]); rvPlate->processSample (l, r, wl, wr); break;
-                                 case 2: rvHall ->setSize (k[0]); rvHall ->setDecay (k[1]); rvHall ->setTone (k[2]); rvHall ->setDiffusion (k[3]); rvHall ->processSample (l, r, wl, wr); break;
-                                 default:rvShim ->setSize (k[0]); rvShim ->setDecay (k[1]); rvShim ->setTone (k[2]); rvShim ->setDiffusion (k[3]); rvShim ->processSample (l, r, wl, wr); break; }
+                       are NOT shared: Hall spells it setHighDamping, Shimmer reuses that slot for setShimmer.)
+
+                       🚨 tp85 — THREE OF THESE FOUR WERE INERT. A reverb setter only stores the value: it
+                       reaches the DSP when updateCoefficients() rebuilds the tank, which is why the header
+                       says "call updateCoefficients() after a batch" and why the RACK's own path does
+                       exactly that. This branch did not, so only `tone` (read straight in processSample)
+                       and half of `diffuse` ever did anything — Size and Decay moved nothing at all.
+                       MEASURED: sweeping Decay end to end changed the tail's length by 0.3 dB.
+                       ⚠️ It cannot be called per sample — it is a coefficient rebuild, and this runs inside
+                       the sample loop. It is called when a knob MOVES, which is the only time it means
+                       anything, and the engines smooth to their new targets so nothing clicks. */
+                    bool rvCh = (t != rvLastT_);
+                    for (int q = 0; q < 4; ++q) if (k[q] != rvLastK_[q]) rvCh = true;
+                    if (rvCh)
+                    {
+                        rvLastT_ = t; for (int q = 0; q < 4; ++q) rvLastK_[q] = k[q];
+                        switch (t) { case 0: rvRoom ->setSize (k[0]); rvRoom ->setDecay (k[1]); rvRoom ->setTone (k[2]); rvRoom ->setDiffusion (k[3]); rvRoom ->updateCoefficients(); break;
+                                     case 1: rvPlate->setSize (k[0]); rvPlate->setDecay (k[1]); rvPlate->setTone (k[2]); rvPlate->setDiffusion (k[3]); rvPlate->updateCoefficients(); break;
+                                     case 2: rvHall ->setSize (k[0]); rvHall ->setDecay (k[1]); rvHall ->setTone (k[2]); rvHall ->setDiffusion (k[3]); rvHall ->updateCoefficients(); break;
+                                     default:rvShim ->setSize (k[0]); rvShim ->setDecay (k[1]); rvShim ->setTone (k[2]); rvShim ->setDiffusion (k[3]); rvShim ->updateCoefficients(); break; }
+                    }
+                    switch (t) { case 0: rvRoom ->processSample (l, r, wl, wr); break;
+                                 case 1: rvPlate->processSample (l, r, wl, wr); break;
+                                 case 2: rvHall ->processSample (l, r, wl, wr); break;
+                                 default:rvShim ->processSample (l, r, wl, wr); break; }
                     l += wl * m; r += wr * m; return true;   // the reverbs return WET only, so the send is the mix
                 }
                 case wc::ShaperLaneId::Delay:

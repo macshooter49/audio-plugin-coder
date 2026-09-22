@@ -18440,11 +18440,19 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
             state.setProperty ("dstTableSrc", dstTableSrc_, nullptr);       // fb339 — Table source pill
         else state.removeProperty ("dstTableSrc", nullptr);   // fb618
     }
-    if (noiseSampleSelJson_.isNotEmpty())
-        state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
+    /* ⚠️ tp85 — A DANGLING ELSE ATE THE SYNTH'S NOISE SAMPLE. tp84 inserted the shpNoiseSel loop
+       between this if and its else, so the `else` re-bound to the loop's INNER if: any Shaper
+       instance WITHOUT a noise sample — the normal case — ran removeProperty("noiseSampleSel")
+       and wiped the SYNTH's selection out of the patch being saved. Both halves are braced now,
+       and each key is removed when its own string is empty, which is all fb618 ever asked for. */
+    if (noiseSampleSelJson_.isNotEmpty()) state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
+    else                                  state.removeProperty ("noiseSampleSel", nullptr);                     // fb618
     for (int q = 0; q < wc::kFlowInstances; ++q)                               // tp84 — each Shaper Noise lane's own selection
-        if (shpNoiseSel_[q].isNotEmpty()) state.setProperty ("shpNoiseSel" + juce::String (q), shpNoiseSel_[q], nullptr);
-    else state.removeProperty ("noiseSampleSel", nullptr);   // fb618
+    {
+        const juce::String key = "shpNoiseSel" + juce::String (q);
+        if (shpNoiseSel_[q].isNotEmpty()) state.setProperty (key, shpNoiseSel_[q], nullptr);
+        else                              state.removeProperty (key, nullptr);
+    }
     if (noiseSampleSelJson2_.isNotEmpty()) state.setProperty ("noiseSampleSel2", noiseSampleSelJson2_, nullptr); else state.removeProperty ("noiseSampleSel2", nullptr);   // tp43 — Noise 2
     if (noiseVizMode2_ != 1) state.setProperty ("noiseVizMode2", noiseVizMode2_, nullptr); else state.removeProperty ("noiseVizMode2", nullptr);
     // fb621 — THE ENVIRONMENT SEAT. Empty until the patcher exists; written and cleared by the same
