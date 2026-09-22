@@ -199,7 +199,8 @@ public:
         phL_.assign (6, AP{}); phR_.assign (6, AP{});
         smooth_.fill (0.0f); tsPos_ = 0.0; tsOld_ = 0.0; tsLastBehind_ = 0.0; stepping_ = false; tsXf_ = 0; tsXfN_ = 1; holdN_ = 0;
         repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0; repRead_ = 0.0; tsSlew_ = -1.0;
-        ringW_ = 0; ringFilled_ = 0; soundAge_ = 0; silentRun_ = 0;
+        ringW_ = 0; ringFilled_ = 0; soundAge_ = 0; silentRun_ = 0; tsRatio_ = 1.0; tsPrevBehind_ = -1.0;
+        blInit();   // tp88 — the band-limit table, built off the audio thread
         for (auto& f : freePh_) f = 0.0; envFast_ = envSlow_ = 0.0f; refr_ = 0; noteAt_ = -1;
         for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f; volPrev_ = 1.0f; punchEnv_ = 0.0f; punchRefr_ = 0;
         for (auto& h : haasL_) h = 0.0f; for (auto& h : haasR_) h = 0.0f; haasW_ = 0;
@@ -456,9 +457,32 @@ public:
                         if (tsXf_ <= 0 && std::fabs (((double) ringW_ - behindF) - (tsPos_ + 1.0)) > 6.0)
                         { tsOld_ = tsPos_ + 1.0; tsXfN_ = std::max (48, (int) (sr_ * 0.001 * (0.5 + TL.L->k[0] * 4.5))); tsXf_ = tsXfN_; }
                     }
+                    /* tp88 — THE PLAYBACK RATE, for the band-limit. It is exactly how fast the read walks
+                       the source: 1 minus the change in `behind` per sample. A JUMP is not a rate (the jump
+                       law owns those), so a step leaves the ratio where it stood, and the ratio is smoothed
+                       so a new tread does not switch kernels with a click. ⚠️ Max found this by ear before
+                       the maths did: "I turned the depth down to 50, it sounds WAY better, 100 sounds off."
+                       Depth scales the offset, so it scales the RATE — a full rise is 2x at depth 100 and
+                       1.5x at 50, and half the speed-up is a quarter of the folding. */
+                    if (tsPrevBehind_ < -0.5) tsPrevBehind_ = behindF;
+                    { const double dRate = behindF - tsPrevBehind_; tsPrevBehind_ = behindF;
+                      if (std::fabs (dRate) <= 4.0)
+                      { const double r = std::fabs (1.0 - dRate);
+                        const double want = r < 1.0 ? 1.0 : (r > 8.0 ? 8.0 : r);
+                        tsRatio_ += (want - tsRatio_) * 0.01; } }
                     const double pos = (double) ringW_ - behindF;
-                    float tl = rd (ring->L, ring->n, pos, ringW_), tr = rd (ring->R, ring->n, pos, ringW_);
-                    if (tsXf_ > 0) { const float w = (float) tsXf_ / (float) tsXfN_; tl = tl * (1 - w) + rd (ring->L, ring->n, tsOld_, ringW_) * w; tr = tr * (1 - w) + rd (ring->R, ring->n, tsOld_, ringW_) * w; tsOld_ += 1.0; --tsXf_; }
+                    float tl, tr;
+                    if (tsRatio_ > 1.02)   // above unity the read DECIMATES, so it has to be band-limited
+                    { tl = rdBL (ring->L, ring->n, behindF, ringW_, tsRatio_, maxB);
+                      tr = rdBL (ring->R, ring->n, behindF, ringW_, tsRatio_, maxB); }
+                    else
+                    { tl = rd (ring->L, ring->n, pos, ringW_); tr = rd (ring->R, ring->n, pos, ringW_); }
+                    if (tsXf_ > 0)
+                    { const float w = (float) tsXf_ / (float) tsXfN_;
+                      const double obh = (double) ringW_ - tsOld_;
+                      const float ol = (tsRatio_ > 1.02) ? rdBL (ring->L, ring->n, obh, ringW_, tsRatio_, maxB) : rd (ring->L, ring->n, tsOld_, ringW_);
+                      const float orr = (tsRatio_ > 1.02) ? rdBL (ring->R, ring->n, obh, ringW_, tsRatio_, maxB) : rd (ring->R, ring->n, tsOld_, ringW_);
+                      tl = tl * (1 - w) + ol * w; tr = tr * (1 - w) + orr * w; tsOld_ += 1.0; --tsXf_; }
                     /* tp81 — TONE (k3), the Time lane's fourth target: a one-pole on what the head reads. Below
                        0.5 it darkens the repeat, above it lifts the top back out. 0.5 is exactly flat. */
                     {
@@ -508,8 +532,16 @@ public:
                         const float gain = std::pow (1.0f - 0.9f * RP.L->k[1], (float) pass);
                         // a short cosine seam at the loop point keeps it click-free
                         const int seam = std::min (repLen_ / 4, 8 + (int) (120.0f * RP.L->k[0]));   // Seam (k0): the crossfade at the loop point
-                        float rl = rd (ring->L, ring->n, rp, ringW_), rr = rd (ring->R, ring->n, rp, ringW_);
-                        if (inLoop < seam) { const float w = 0.5f - 0.5f * std::cos ((float) (inLoop / seam) * 3.14159265f); const double rp2 = rp + (RP.mode == 1 ? -repLen_ : repLen_); rl = rl * w + rd (ring->L, ring->n, rp2, ringW_) * (1 - w); rr = rr * w + rd (ring->R, ring->n, rp2, ringW_) * (1 - w); }
+                        /* tp88 — REPEAT PITCHES THE SLICE TOO, and a pitched-UP pass is the same decimation
+                           the Time lane was folding on. Here the rate is known outright (2^(semis/12)), so
+                           the band-limit needs no estimate at all. Below unity the cubic is still right. */
+                        const double rBL = rate > 1.02 ? rate : 0.0;
+                        const double maxBh = (double) (ringFilled_ > 4 ? ringFilled_ - 4 : 0);
+                        float rl, rr;
+                        if (rBL > 0.0) { rl = rdBL (ring->L, ring->n, (double) ringW_ - rp, ringW_, rBL, maxBh);
+                                         rr = rdBL (ring->R, ring->n, (double) ringW_ - rp, ringW_, rBL, maxBh); }
+                        else           { rl = rd (ring->L, ring->n, rp, ringW_); rr = rd (ring->R, ring->n, rp, ringW_); }
+                        if (inLoop < seam) { const float w = 0.5f - 0.5f * std::cos ((float) (inLoop / seam) * 3.14159265f); const double rp2 = rp + (RP.mode == 1 ? -repLen_ : repLen_); const float s2l = rBL > 0.0 ? rdBL (ring->L, ring->n, (double) ringW_ - rp2, ringW_, rBL, maxBh) : rd (ring->L, ring->n, rp2, ringW_); const float s2r = rBL > 0.0 ? rdBL (ring->R, ring->n, (double) ringW_ - rp2, ringW_, rBL, maxBh) : rd (ring->R, ring->n, rp2, ringW_); rl = rl * w + s2l * (1 - w); rr = rr * w + s2r * (1 - w); }
                         rl *= gain; rr *= gain;
                         repPos_ += 1.0; repRead_ += rate; if (repRead_ >= (double) repLen_ * (pass + 1)) repRead_ = (double) repLen_ * (pass + 1);   // a pitched pass ends where the unpitched one does
                         /* tp81 — TONE (k3), the Repeat lane's fourth target: a one-pole on what the head reads. Below
@@ -826,6 +858,65 @@ private:
         fractional position, so a pitched read comes back dull and grainy and modulates as it travels. Four points
         and a cubic cost a few multiplies, and are the choice fb530 already measured as worth it on full-band
         content. At slope exactly 1 the fraction is 0 and this returns b[i1] — bit-identical to the old read. */
+    /* 🚨 tp88 — READING FASTER THAN REALTIME IS A DECIMATION, AND A DECIMATION WITHOUT A BAND-LIMIT FOLDS.
+       Max: "double time has a weird bitcrush bug … it's bitcrushed and distorted when it shifts up, and it's
+       almost detuned as well." That is aliasing, exactly: at 2x every partial above SR/4 comes back mirrored
+       around Nyquist, inharmonic, which is precisely what a bitcrusher sounds like. MEASURED before this:
+       a 13 / 15 / 17 kHz tone read at 2x vanished from 2f and reappeared at |SR-2f| at FULL amplitude —
+       120 to 141 dB of alias — while the same tones at 1x left those bins empty.
+       The cure has to be applied WHERE the resampling happens, so `rd` stays the cubic (right at rate <= 1)
+       and this takes over above it: a Blackman-windowed sinc whose cutoff is 1/ratio, which is the textbook
+       decimation filter. One table, built once: the kernel is K(u) = sinc(u)·w(u) over a fixed u, and a tap
+       at source distance t reads K(t/ratio) — so widening the kernel and lowering the cutoff are the same
+       act, and no sin() is called per sample. */
+    static constexpr int kBlZeros = 16;                 // kernel half-width, in sinc zeros
+    static constexpr int kBlRes   = 512;               // table points per zero
+    static inline float blTab_[2 * kBlZeros * kBlRes + 1] = {};
+    static inline bool  blReady_ = false;
+    static void blInit() noexcept
+    {
+        if (blReady_) return;
+        const int N = 2 * kBlZeros * kBlRes;
+        for (int i = 0; i <= N; ++i)
+        {
+            const double u = (double) (i - N / 2) / (double) kBlRes;      // -kBlZeros .. +kBlZeros
+            const double x = M_PI * u;
+            const double sinc = (std::fabs (x) < 1e-9) ? 1.0 : std::sin (x) / x;
+            const double wp = (u + kBlZeros) / (2.0 * kBlZeros);          // 0..1 across the window
+            const double win = 0.42 - 0.5 * std::cos (2.0 * M_PI * wp) + 0.08 * std::cos (4.0 * M_PI * wp);
+            blTab_[i] = (float) (sinc * win);
+        }
+        blReady_ = true;
+    }
+    static inline float blK (double u) noexcept        // the kernel, by table lookup
+    {
+        const double a = (u + kBlZeros) * kBlRes;
+        if (a <= 0.0 || a >= (double) (2 * kBlZeros * kBlRes)) return 0.0f;
+        const int i = (int) a; const float f = (float) (a - i);
+        return blTab_[i] + (blTab_[i + 1] - blTab_[i]) * f;
+    }
+    /** Band-limited read for rate > 1. `behind` is how far back the head is, so a tap's own distance behind
+        is known exactly and taps that would reach the UNWRITTEN future, or past what the ring holds, are
+        dropped and the rest renormalised. */
+    static float rdBL (const std::vector<float>& b, int n, double behind, int wr, double ratio, double maxBehind) noexcept
+    {
+        const double pos = (double) wr - behind;
+        const double base = std::floor (pos);
+        const double frac = pos - base;
+        const int half = (int) std::ceil (kBlZeros * ratio);
+        double acc = 0.0, norm = 0.0;
+        for (int k = -half + 1; k <= half; ++k)
+        {
+            const double t = (double) k - frac;                 // source samples from the read point
+            const double tapBehind = behind + frac - (double) k;
+            if (tapBehind < 0.0 || tapBehind > maxBehind) continue;   // the future, or older than the ring holds
+            const double c = blK (t / ratio);
+            if (c == 0.0) continue;
+            long idx = (long) base + k; idx %= n; if (idx < 0) idx += n;
+            acc += c * (double) b[(size_t) idx]; norm += c;
+        }
+        return (float) (std::fabs (norm) > 1.0e-6 ? acc / norm : 0.0);
+    }
     static float rd (const std::vector<float>& b, int n, double p, int wr) noexcept
     {
         double q = std::fmod (p, (double) n); if (q < 0) q += n;
@@ -857,6 +948,7 @@ private:
     std::shared_ptr<Ring> ringOwner_; std::atomic<Ring*> ring_ { nullptr };
     int ringW_ = 0, ringFilled_ = 0;
     int soundAge_ = 0, silentRun_ = 0;   // tp87 — how much of the ring is the sound that is playing now
+    double tsRatio_ = 1.0, tsPrevBehind_ = -1.0;   // tp88 — the playback rate the band-limit follows
     Ch ch_[2]; std::vector<AP> phL_, phR_;
     std::array<float, kShaperLanes> smooth_ {};
     double tsPos_ = 0, tsOld_ = 0, tsLastBehind_ = 0, stepTarget_ = 0, tsPrevTgt_ = -1.0; int tsXf_ = 0, tsXfN_ = 1; bool stepping_ = false;

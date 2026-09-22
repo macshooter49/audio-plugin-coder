@@ -701,6 +701,51 @@ int main()
             if (holes) { char w[150]; std::snprintf (w, sizeof w, " — worst %.0f ms at %.2f s holding %+.5f", longest*1000.0, longestAt, held); std::strncat (buf, w, sizeof buf - std::strlen (buf) - 1); }
             check (holes == 0, buf);
         }
+        // ── T36 🚨 DOUBLE SPEED DOES NOT ALIAS ──
+        {
+            /* Max: "double time has a weird bitcrush bug going when things are CHOPPED in the 2x speed …
+               it's bitcrushed and distorted when it shifts up, and it's almost detuned as well."  That is
+               aliasing exactly: reading faster than realtime is a DECIMATION, and a decimation without a
+               band-limit folds everything above SR/(2·rate) back around Nyquist, inharmonic — which is what
+               a bitcrusher is. MEASURED BEFORE: a 13 / 15 / 17 kHz tone read at 2x vanished from 2f and came
+               back at |SR-2f| at FULL amplitude. He heard it as a depth problem first — "depth 50 sounds WAY
+               better, 100 sounds off" — and he was reading it right: depth scales the offset, so it scales
+               the RATE, and half the speed-up is a quarter of the folding. */
+            auto goertz = [] (const std::vector<float>& x, size_t a, size_t n, double f) -> double
+            { double mean = 0; for (size_t i = a; i < a+n; ++i) mean += x[i]; mean /= (double) n;
+              const double w = 2.0*M_PI*f/SR, c = 2.0*std::cos (w); double s1 = 0, s2 = 0;
+              for (size_t i = a; i < a+n; ++i) { const double s0 = ((double) x[i]-mean) + c*s1 - s2; s2 = s1; s1 = s0; }
+              return std::sqrt (std::max (0.0, s1*s1 + s2*s2 - c*s1*s2)) / (double) n; };
+            auto at2x = [&] (double toneHz) -> std::vector<float>
+            { FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+              auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 4;
+              T.k[0] = 0.3f; T.k[1] = 0.0f; T.k[2] = 0.5f; T.k[3] = 0.5f;
+              T.fill ([] (double x) { return (float) x; });           // a full rise = a sustained 2x
+              g.setState (st);
+              const int N = (int) (SR * 8.4); std::vector<float> L ((size_t) N), R ((size_t) N);
+              for (int i = 0; i < N; ++i) L[(size_t) i] = R[(size_t) i] = (float) (0.5 * std::sin (2.0*M_PI*toneHz*i/SR));
+              int done = 0; double ppq = 0.0; const int B = 256;
+              while (done < N) { const int n = std::min (B, N-done); g.process (L.data()+done, R.data()+done, n, ppq, BPM, true); ppq += n/FPB; done += n; }
+              return L; };
+            const size_t A = (size_t) (SR * 6.2), W = (size_t) (SR * 0.35);
+            bool ok = true; std::string got;
+            //  above SR/4 there is nothing legal to hear at 2x, so the mirror bin must be EMPTY
+            for (double f : { 15000.0, 17000.0 })
+            { const std::vector<float> x = at2x (f);
+              const double al = goertz (x, A, W, std::fabs (SR - 2.0*f));
+              char q[80]; std::snprintf (q, sizeof q, "%s%.0f kHz folds to %.5f", got.empty() ? "" : " · ", f/1000.0, al);
+              got += q;
+              if (al > 0.005) ok = false; }                            // 0.25 is full scale: this is -34 dB
+            //  and the band that IS legal must still be there, at level
+            { const std::vector<float> x = at2x (5000.0);
+              const double keep = goertz (x, A, W, 10000.0);
+              char q[70]; std::snprintf (q, sizeof q, " · 5 kHz still arrives at 10 kHz at %.3f", keep);
+              got += q;
+              if (keep < 0.20) ok = false; }
+            char buf[330]; std::snprintf (buf, sizeof buf,
+                "T36 DOUBLE SPEED DOES NOT ALIAS: read at 2x, the bins above SR/4 stay empty and the band below it comes through at level — %s", got.c_str());
+            check (ok, buf);
+        }
         // ── T33 FADE CLOSES THE SEAM AT A STEP ──
         {
             //  a stutter in this model is a DESCENDING STAIRCASE: each tread is flat (normal speed) and each
