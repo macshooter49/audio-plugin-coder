@@ -1,7 +1,62 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp84** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp85** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp85 (2026-09-22) — THE BATTERY'S SECOND HALF, AND THE TWO BUGS IT FOUND
+
+🔑 **THE UNLOCK IS tp83's LESSON A SECOND TIME: THE SHAPER'S BLOB WAS ALREADY REACHABLE, AS A PRESET.** The four
+target knobs per lane are not parameters — they live in `shaperJson`, which only the interface writes — so nothing
+outside the UI could set them. But `getStateInformation` already writes `shaperJson0..3` into the plugin's state,
+and a host sets that state through `kAudioUnitProperty_ClassInfo`. `Tests/au_shaper_cert2.cpp` therefore does
+exactly what a DAW does when it loads a patch: read the state, put a lane in it, hand it back. Every `k[]` became
+measurable **with the real engines running and no test-only door added to the plugin**. 24/24.
+
+🚨 **TWO SHIPPED BUGS, BOTH FOUND BY WRITING THE BARS.**
+1. **A DANGLING ELSE ATE THE SYNTH'S NOISE SAMPLE.** tp84 inserted the `shpNoiseSel` loop between an `if` and its
+   `else`, so the `else` re-bound to the loop's INNER `if`: any Shaper without a noise sample — the normal case —
+   ran `removeProperty("noiseSampleSel")` and wiped the SYNTH's selection out of the patch being saved. Both halves
+   braced; each key removed when its own string is empty.
+2. **THREE OF THE REVERB LANE'S FOUR KNOBS WERE INERT.** A reverb setter only STORES its value; it reaches the DSP
+   when `updateCoefficients()` rebuilds the tank. The rack's path calls it, `ShaperRoster`'s branch did not — so
+   only `tone` (read straight in `processSample`) and half of `diffuse` ever did anything. Sweeping Decay end to end
+   moved the tail's length by **0.3 dB**; committed, by **38.7 dB**. Committed when a knob MOVES, never per sample
+   (it is a coefficient rebuild inside the sample loop). ⚠️ **A patch with the Reverb lane lit will sound
+   different** — Size and Decay were pinned at the engine's construction defaults.
+
+**TIME AGAINST SHAPERBOX 3** (the last item owed from tp79). `FlowShaper_test.cpp` T28–T32, 41/41, mutation-checked:
+a flat shape FREEZES and the top line plays NOW; a falling shape REVERSES at exactly the slope drawn; RANGE is the
+interval (an octave a quarter turn); **the future cannot be read**, which is WHY the rise is drawn as a freeze then
+a catch-up — drawn that way it runs at exactly ×2 and ×4; FADE closes the seam at the wrap.
+📘 Checked against the manual (TimeShaper 3, pp. 10–11), **two real differences, neither a DSP defect, both Max's
+call**: (a) **the axis convention is sheared by one diagonal** — ShaperBox's Y is TIME OFFSET against a grey
+"buffer start" reference line, so *their* flat line plays normally and *their* diagonal is the freeze, while ours is
+the absolute read position and mirrored; their factory Time shapes do not transcribe one-to-one. The cheap answer if
+he wants one is to DRAW the reference diagonal in the Time lane's editor, not to shear the axis (that would change
+the meaning of every saved shape). (b) **there is no Fine (ms) Time Range** — ShaperBox sets it independently of LFO
+length (Linked · Beat 1/2/4/8 bars · **Fine 2.5/10/20 ms**), ours is a multiplier on the cycle (×⅛…×8), so at a
+one-bar cycle the smallest offset is **250 ms** and **wow, vibrato, chorus and flanging are out of reach**.
+
+⚠️ **FIVE MEASUREMENT LAWS THIS EARNED** — a click is not a slew rate (a WIDER signal jumps more every sample:
+peak-over-percentile); a reverb's Decay is tail LENGTH and its Diffusion tail SMOOTHNESS; Widen's claim is the IMAGE;
+a tape TRANSPORT is a pitch WANDER (types 0/4 and 1/3 share a machine); and the new one — **THE SOURCE WAS THE NOISE
+IN THE MEASUREMENT.** A held note on the current patch is not repeatable (the synth's modulators free-run), so every
+small number moved between runs; driven by the NOISE lane, which tp82's null proves deterministic bit-for-bit,
+Multiband went from 0.2–9.3 dB and unstable to 16.8–63.6 dB and repeatable. Plus a harness law: **ARM, THEN WAIT** —
+the roster builds a lent engine on demand and passes audio through until it is built.
+
+**ALSO: `_fb606_wtnav_gate.js` IS GREEN AGAIN (26/26), AND THE PAGE WAS NEVER BROKEN.** It had been red 5/26 since
+before tp77. A wrapper round the real opener proved `__tpbFolderMenu` WAS reached and DID build the right menu; the
+gate's `__menu()` did `querySelector('.pmenu')` and the page has since grown five `.pmenu` singletons, so it was
+reading the CLOSED quick-menu host. ⚠️ **WHEN A UI GATE GOES RED, PROVE WHICH SIDE ROTTED BEFORE FIXING EITHER.**
+
+Green at tp85: `au_shaper_cert2.cpp` 24/24 · `au_shaper_fx.cpp` 13/13 · `au_shaper_lock.cpp` 9/9 ·
+`FlowShaper_test.cpp` 41/41 · `TerrainNoise_test.cpp` 15/15 · eleven page gates.
+
+⚠️ **STILL OWED:** a bar that a LOADED NOISE SAMPLE plays. The selection travels in the preset (`shpNoiseSel0..3`)
+but **the processor never re-reads the file — the editor does, when it opens** — so a headless render cannot load
+one and neither can the harness. That is also worth Max's judgement on its own terms: an offline DAW render that
+never opens the UI will not have the sample.
 
 ## tp84 (2026-09-21) — THE NOISE LANE BROWSES THE WHOLE LIBRARY
 Max: "noise needs to have the browser of all 200+ sounds we have."
