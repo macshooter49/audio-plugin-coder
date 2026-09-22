@@ -44,7 +44,8 @@
 #include "TerrainCompressFx.h"    // fb426 — chain kind 11
 #include "TerrainOttFx.h"
 #include "TerrainBodeFx.h"        // fb444 — kind 13, the Bode SSB shifter
-#include "TerrainSplitterFx.h"    // fb444 — kind 15, the band Splitter
+#include "TerrainSplitterFx.h"
+#include "TerrainNoise.h"    // fb444 — kind 15, the band Splitter
 #include "TerrainUtilityFx.h"     // fb444 — kind 14, the glue strip         // fb426 — chain kind 12    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
@@ -2123,6 +2124,9 @@ private:
         std::unique_ptr<tw::GranularFxEngine>  grn; std::atomic<tw::GranularFxEngine*>  grnLive { nullptr };
         std::unique_ptr<tw::TerrainBodeFx>     bod; std::atomic<tw::TerrainBodeFx*>     bodLive { nullptr };
         int grnUsed = 0;   // the granular's grain budget counter — it wants somewhere to keep score
+        /* tp82 — NOISE needs no lazy arm and no atomic. Every other engine here carries megabytes of ring and is
+           built on the message thread; TerrainNoise is a handful of floats with no heap at all, so it simply IS. */
+        tw::TerrainNoise nse; float nsLp[2] = { 0, 0 }, nsCur[2] = { 0, 0 }, nsPrev[2] = { 0, 0 }, nsPh = 0.0f; bool nsReady = false;
         // the Reverb lane's four rooms, each built only if its type is the one chosen
         std::unique_ptr<RoomReverb>    rvRoom;    std::unique_ptr<PlateReverb>   rvPlate;
         std::unique_ptr<HallReverb>    rvHall;    std::unique_ptr<ShimmerReverb> rvShim;
@@ -2233,6 +2237,35 @@ private:
                     p.fdbk = k[1]; p.spread = k[2]; p.blur = k[3];
                     p.mix = bl; e->setParams (p);
                     float ol = 0, orr = 0; e->processStereo (l, r, ol, orr); l = ol; r = orr; return true;
+                }
+                case wc::ShaperLaneId::Noise:
+                {
+                    /* THE SHAPE IS THE LEVEL. This is the only kind that ADDS signal rather than processing it —
+                       ShaperBox's NoiseShaper — and it is why a gate drawn on it is a hi-hat, a ramp is a riser,
+                       and a vinyl tick lands on the offbeat. The generator is the INSTRUMENT'S (TerrainNoise.h,
+                       lifted out of SynthVoice at tp82), so the thirteen colours here are the thirteen colours
+                       the synth has always had, not a second set. */
+                    if (! nsReady) { nse.prepare (sr); nse.reset(); nsReady = true; }
+                    nse.setType (mode);
+                    // SCAN (k2): the generator is sampled and held, then interpolated, so the noise "scans" slower
+                    // and turns grainy and pitched-down. 1 = native rate, 0 = a tenth of it.
+                    const float rate = 0.1f + 0.9f * k[2];
+                    nsPh += rate;
+                    while (nsPh >= 1.0f) { nsPh -= 1.0f; nsPrev[0] = nsCur[0]; nsPrev[1] = nsCur[1]; nse.tick (nsCur[0], nsCur[1]); }
+                    float nl = nsPrev[0] + (nsCur[0] - nsPrev[0]) * nsPh;
+                    float nr = nsPrev[1] + (nsCur[1] - nsPrev[1]) * nsPh;
+                    // TONE (k0): one-pole, 200 Hz .. 20 kHz
+                    const float fc = 200.0f * std::pow (100.0f, k[0]);
+                    const float a = 1.0f - std::exp (-2.0f * 3.14159265f * (fc < 20000.0f ? fc : 20000.0f) / (float) sr);
+                    nsLp[0] += a * (nl - nsLp[0]); nsLp[1] += a * (nr - nsLp[1]);
+                    nl = nsLp[0]; nr = nsLp[1];
+                    // WIDTH (k1): 0 mono, 1 twice the sides the generator already decorrelated
+                    { const float w = k[1] * 2.0f, mid = 0.5f * (nl + nr), sd = 0.5f * (nl - nr) * w; nl = mid + sd; nr = mid - sd; }
+                    // DRIVE (k3): saturate, so the noise thickens and cuts instead of just getting louder
+                    if (k[3] > 0.01f)
+                    { const float g = 1.0f + 12.0f * k[3]; nl = std::tanh (nl * g) / std::tanh (g) ; nr = std::tanh (nr * g) / std::tanh (g); }
+                    l += nl * m; r += nr * m;
+                    return true;
                 }
                 default: return false;   // Volume / Time / Filter / Pan / Repeat / Drive / Phaser / Crush do their own work in FlowShaper
             }

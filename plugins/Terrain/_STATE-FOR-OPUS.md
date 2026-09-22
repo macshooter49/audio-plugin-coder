@@ -1,7 +1,38 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp81** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp82** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp82 (2026-09-21) — THE NOISE LANE · THE ROSTER IS CLOSED
+Max: "it should just be like ShaperBox's noise engine, nothing too complicated … we already have a whole bunch of
+noises … imagine the stuff we can break beat with."
+
+**NOT A LEND.** Every other effect the Shaper borrows is a finished self-contained rack engine. The noise generator
+lived INSIDE `SynthVoice`'s render (three functions, eleven lines of state, thirteen colours). It was **lifted into
+`TerrainNoise.h`, shared by the synth and the Shaper** — one generator, not a second one bolted on beside the real one.
+
+🚨 **MOVED, NOT REWRITTEN — AND PROVEN.** The body was captured and asserted byte-equal to the lines it came from (only
+edit: `juce::jlimit` → `tnClamp`, so the header needs no JUCE). `TerrainNoise_test.cpp` holds a **FROZEN copy of the
+generator as it was** and runs it in lockstep with the shared one for two seconds a colour, demanding **bit-for-bit**
+agreement (`memcmp`, not an epsilon). Also: every colour must actually sound (a silent one cannot null trivially),
+and `reset()` must return a used generator to a fresh one's exact state.
+⚠️ If a future edit to `TerrainNoise.h` reds that file, that is the point — either Max has to hear the change first,
+or the change is wrong.
+
+**The lane:** the shape is the noise's LEVEL — the only kind that ADDS signal rather than processing it. Targets:
+Tone · Width · Scan · Drive. Thirteen colours index-aligned with `SYN_NOISE_TYPE`. Boots on a GATE, not a sine.
+⚠️ No lazy arm and no atomic: it carries no ring, so it simply is. `noiseLpL_`/`noiseLpR_` went with the move (dead).
+
+**Seventeen kinds, eight chain positions. The roster Max asked for is closed.**
+`TerrainNoise_test.cpp` 15/15, `FlowShaper_test.cpp` 36/36, `_tp77_gate.js` 33/33, `au_shaper_lock.cpp` 9/9.
+
+⚠️ **OWED.** (1) **SOUND CERTIFICATION of the nine borrowed kinds.** The AU cert cannot place a kind, because the
+chain lives in the shaperJson blob, not in parameters. **Make the eight positions eight CHOICE PARAMETERS** — it
+unlocks the cert and buys host automation of the chain. Then a per-effect battery: the drawn curve must MOVE each
+effect's own signature (reverb tail length · delay correlation peak at the Time knob's ms · chorus spectral flux ·
+widen side/mid · multiband band ratio · tape THD + wander · granular onset density · bode where a pure tone's energy
+moved to · noise level), every target swept end to end, every type distinct, no click on a send opening, and Delay /
+Bode bounded at full feedback. (2) Time against ShaperBox 3 / Gross Beat beyond the pitch law.
 
 ## tp81 (2026-09-21) — THE ROSTER CLOSES BUT ONE · FOUR TARGETS ON EVERY LANE
 Max: "still owed: Tape, Granular, Bode and Noise … I want everyone to have four targets, exactly four."

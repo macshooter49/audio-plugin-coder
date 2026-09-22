@@ -37124,13 +37124,13 @@ restoreThemeFromBackend();
          arrive with theirs. Short names are the tile's, long names the menu's — Max picked them. */
       var LN=[['vol','Vol','Volume'],['time','Time','Time'],['filt','Filt','Filter'],['pan','Pan','Pan'],['rep','Rep','Repeat'],['drive','Drive','Drive'],['phase','Phase','Phaser'],['crush','Crush','Crush'],
               ['verb','Reverb','Reverb'],['delay','Delay','Delay'],['chorus','Chorus','Chorus'],['widen','Widen','Widen'],['multi','Multi','Multiband'],
-              ['tape','Tape','Tape'],['grain','Grain','Granular'],['bode','Bode','Bode']];
-      var LNP=['VOL','TIME','FILT','PAN','REP','DRIVE','PHASE','CRUSH','VERB','DELAY','CHORUS','WIDEN','MULTI','TAPE','GRAIN','BODE'];
+              ['tape','Tape','Tape'],['grain','Grain','Granular'],['bode','Bode','Bode'],['noise','Noise','Noise']];
+      var LNP=['VOL','TIME','FILT','PAN','REP','DRIVE','PHASE','CRUSH','VERB','DELAY','CHORUS','WIDEN','MULTI','TAPE','GRAIN','BODE','NOISE'];
       /* ⚠️ tp81 — every FOURTH target boots NEUTRAL, or the knob changes what the lane already did: Volume Hold 0,
          Filter Punch 0, Phaser Centre 0.2 (= the 200 Hz it always swept from), Crush Stereo 0, Tone/Tilt 0.5. */
       var KDEF={ vol:[.5,.5,0,0,.5,.5], time:[.3,0,.5,.5,.5,.5], filt:[.3,0,1,0,0,0], pan:[.5,0,0,.5,.5,.5], rep:[.3,0,.5,.5,.5,.5], drive:[.5,.5,.5,.5,.5,.5], phase:[.5,.5,0,.2,.5,.5], crush:[.5,.5,1,0,.5,.5],
                  verb:[.45,.5,.4,.7,.5,.5], delay:[.375,.35,.5,.6,.5,.5], chorus:[.35,.5,0,.5,.5,.5], widen:[.5,.5,.35,.5,.5,.5], multi:[.5,.5,.5,.6,.5,.5],
-                 tape:[.3,.3,.3,.2,.5,.5], grain:[.25,.4,.5,.5,.5,.5], bode:[.5,.3,.6,0,.5,.5] };   /* wc::kShaperKDefault */
+                 tape:[.3,.3,.3,.2,.5,.5], grain:[.25,.4,.5,.5,.5,.5], bode:[.5,.3,.6,0,.5,.5], noise:[.6,.6,1,0,.5,.5] };   /* wc::kShaperKDefault */
       /* the Target tab: the left box = On + the lane's knobs; the right box = its steps (a dropdown each, the Glitch's OUT box) */
       /* three knobs a target (Max: "every target should have three parameters … no on and off button — double click the tile") */
       /* tp81 — FOUR targets on every lane (Max: "it's not three, not two, exactly four"). The fourth on the eight
@@ -37144,10 +37144,11 @@ restoreThemeFromBackend();
                 chorus:[['k0','Rate'],['k1','Depth'],['k2','Feedbk'],['k3','Voice']], widen:[['k0','Amount'],['k1','Width'],['k2','Rate'],['k3','Axis']],
                 multi:[['k0','Split'],['k1','Slope'],['k2','Spread'],['k3','Range']],
                 tape:[['k0','Flutter'],['k1','Drive'],['k2','Age'],['k3','Width']], grain:[['k0','Size'],['k1','Density'],['k2','Pitch'],['k3','Spread']],
-                bode:[['k0','Range'],['k1','Feedbk'],['k2','Spread'],['k3','Blur']] };
+                bode:[['k0','Range'],['k1','Feedbk'],['k2','Spread'],['k3','Blur']],
+                noise:[['k0','Tone'],['k1','Width'],['k2','Scan'],['k3','Drive']] };
       var LNS={ vol:[['mode','Mode',['Gain','Duck']]], time:[], filt:[['k2','Poles',['6 dB','12 dB','18 dB','24 dB']],['k3','Char',['Tube','Diode','Fold','Hard','Crush','Fuzz']]],
                 pan:[['mode','Law',['Power','Linear','Width']]], rep:[['mode','Mode',['Slice','Reverse']]], drive:[['k2','Char',['1','2','3','4','5','6','7','8']]], phase:[], crush:[],
-                verb:[], delay:[], chorus:[], widen:[], multi:[], tape:[], grain:[], bode:[] };
+                verb:[], delay:[], chorus:[], widen:[], multi:[], tape:[], grain:[], bode:[], noise:[] };
       var KFMT={ 'rep:k2':function(n){ return (n>=.5?'+':'')+((n-.5)*12).toFixed(1); }, 'drive:k3':function(n){ return (n>=.5?'+':'')+Math.round((n-.5)*200); }, 'time:k2':function(n){ var m=Math.pow(4,(n-.5)*2); return (m>=1?'×'+m.toFixed(1):'÷'+(1/m).toFixed(1)); } };
       var DST=['Tube','Tape','Transformer','Stomp Box','Overdrive','Soft Clip','Hard Clip','Zero-Square','Slew Clip','Diode 1','Diode 2','Asym','Rectify','Linear Fold','Sine Fold','West Coast','Shaper','Shaper Asym','Harmonics','Table','Downsample','Bitcrush','Overflow'];
       var DSTFAM=function(i){ return i<=4?'Analog':i<=8?'Clip':i<=12?'Diode':i<=15?'Fold':i<=19?'Shaper':'Digital'; };
@@ -37165,10 +37166,12 @@ restoreThemeFromBackend();
         case 'multi': return ['Low / High','Low / Mid / High','Sub / Low / Mid / High','Mid / Side','Left / Right'];
         case 'tape': return ['Studio','Cassette','Reel','Porta','Wire'];
         case 'grain': return ['Cloud','Rise','Swarm','Suspend','Scatter','Rewind','Stretch','Pulverize'];
-        case 'bode': return ['Shift','Barberpole','Echobode','Detune','Ring','Spiral','Chorale','Freeze']; } return []; }
-      var MODESTEPS={ vol:1, time:2, filt:117, pan:2, rep:1, drive:22, phase:27, crush:9, verb:3, delay:3, chorus:7, widen:5, multi:4, tape:4, grain:7, bode:7 };
-      var MODEDEF={ vol:0, time:0, filt:0, pan:0, rep:0, drive:5, phase:0, crush:0, verb:1, delay:0, chorus:0, widen:0, multi:0, tape:1, grain:0, bode:0 };
-      var ROSTER={ filt:1, drive:1, phase:1, crush:1, verb:1, delay:1, chorus:1, widen:1, multi:1, tape:1, grain:1, bode:1 };   /* the lanes whose type is a roster: the screen's type chip */
+        case 'bode': return ['Shift','Barberpole','Echobode','Detune','Ring','Spiral','Chorale','Freeze'];
+        /* tp82 — the INSTRUMENT'S own thirteen colours (SYN_NOISE_TYPE), because it is the instrument's own generator */
+        case 'noise': return ['White Noise','Pink Noise','Brown Noise','Geiger','Tape Hiss','Tape Hum','Tape Air','Tape Crackle','Clean Vinyl','Dirty Vinyl','Space Open','Space Helium','Space Wind']; } return []; }
+      var MODESTEPS={ vol:1, time:2, filt:117, pan:2, rep:1, drive:22, phase:27, crush:9, verb:3, delay:3, chorus:7, widen:5, multi:4, tape:4, grain:7, bode:7, noise:12 };
+      var MODEDEF={ vol:0, time:0, filt:0, pan:0, rep:0, drive:5, phase:0, crush:0, verb:1, delay:0, chorus:0, widen:0, multi:0, tape:1, grain:0, bode:0, noise:1 };
+      var ROSTER={ filt:1, drive:1, phase:1, crush:1, verb:1, delay:1, chorus:1, widen:1, multi:1, tape:1, grain:1, bode:1, noise:1 };   /* the lanes whose type is a roster: the screen's type chip */
       /* tp79 — the chain, read out of the state and PROVEN to be a permutation before anything indexes with it.
          Anything else (an old preset with no list, a hand-edited one, a short one) reads as the tile order. */
       /* tp80 — EIGHT POSITIONS, THIRTEEN KINDS: the chain is eight DISTINCT kinds out of the roster, not a
@@ -37188,7 +37191,7 @@ restoreThemeFromBackend();
                  ['stairs','Stairs up','Steps'],['stairsdn','Stairs down','Steps'],['steps4','4 steps','Steps'],['randsteps','Random steps','Steps'],['randcurve','Random curve','Steps'],['randgate','Random gate','Steps']];
       var TIMEP=[['unity','Unity','Basic'],['half','Half time','Basic'],['reverse','Reverse','Basic'],['stut8','Stutter 1/8','Stutter'],['stut16','Stutter 1/16','Stutter'],['stut32','Stutter 1/32','Stutter'],['stutbuild','Stutter build','Stutter'],
                  ['tape','Tape stop','Tape'],['tapestart','Tape start','Tape'],['scratch','Scratch','Tape'],['rewind','Rewind','Tape'],['halfback','Half + back','Tape']];
-      var DEFSHAPE={vol:'sine',time:'unity',filt:'sine',pan:'sine',rep:'flat',drive:'saw',phase:'sine',crush:'stairs',verb:'sine',delay:'sine',chorus:'sine',widen:'sine',multi:'sine',tape:'sine',grain:'sine',bode:'sine'};   /* tp79 — Max: "change the shape to a triangle or a sine wave, I don't want to see that gate … it looks very ugly whenever we first load it up". Gate 1/16 is one pick away in the shape list. Mirrored in rebuildShaperState's seed. */
+      var DEFSHAPE={vol:'sine',time:'unity',filt:'sine',pan:'sine',rep:'flat',drive:'saw',phase:'sine',crush:'stairs',verb:'sine',delay:'sine',chorus:'sine',widen:'sine',multi:'sine',tape:'sine',grain:'sine',bode:'sine',noise:'gate'};   /* tp82 — a gate, because rhythmic noise is what the lane is FOR */   /* tp79 — Max: "change the shape to a triangle or a sine wave, I don't want to see that gate … it looks very ugly whenever we first load it up". Gate 1/16 is one pick away in the shape list. Mirrored in rebuildShaperState's seed. */
       var TOOLS=[['Point',0],['Line',1],['Ramp up',2],['Ramp down',3],['Square',4],['Triangle',5],['Sine',6],['Free draw',7]];
       function stepsPts(n,fn){ var p=[]; for(var i=0;i<n;i++){ var y=fn(i); p.push([i/n,y,0]); p.push([(i+1)/n-1e-4,y,0]); } p[p.length-1][0]=1; return p; }
       /* tp77 — A SINE IS A SINE. Max: "that's not a sine wave, that's a fucking triangle spike wave with a couple

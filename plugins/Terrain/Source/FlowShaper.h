@@ -58,15 +58,15 @@ namespace wc
     armed lazily, only when a lane of that kind is actually lit (the tp63 law — Delay, Granular and Bode each
     carry ~8.4 MB of ring at 48 k and a card drawing a volume gate must never pay for them). */
 static constexpr int kShaperSlots = 8;           // positions in the chain
-static constexpr int kShaperLanes = 16;          // KINDS (one lane struct, one parameter set, one clock each)
+static constexpr int kShaperLanes = 17;          // KINDS (one lane struct, one parameter set, one clock each)
 static constexpr int kShaperT     = 2048;        // the baked table: one cycle, end to end (index kShaperT = the value AT the cycle's end)
 enum class ShaperLaneId : int { Volume = 0, Time, Filter, Pan, Repeat, Drive, Phaser, Crush,
-                                Reverb, Delay, Chorus, Widen, Multi, Tape, Grain, Bode };
-/* ⚠️ A KIND ONLY EXISTS HERE ONCE ITS ENGINE IS ACTUALLY LENT — a kind that appears on the card and does
-   nothing is worse than one that is not there yet. NOISE is the last one owed and is NOT here, because unlike
-   every effect above it there is no standalone noise engine to borrow: the generator lives inside SynthVoice's
-   render, so it has to be lifted out into its own header (used by BOTH, proven bit-identical on the synth)
-   before a lane can have it. That is surgery on the instrument's core, not a lend. */
+                                Reverb, Delay, Chorus, Widen, Multi, Tape, Grain, Bode, Noise };
+/* tp82 — NOISE closes the roster, and it is the one that was not a lend: there was no standalone noise engine
+   to borrow, because the generator lived inside SynthVoice's render. It was lifted into TerrainNoise.h, which
+   the instrument and this lane now share (one generator, not two), and Source/TerrainNoise_test.cpp proves the
+   move changed nothing bit for bit across all thirteen colours.
+   ⚠️ It is also the only kind that ADDS signal instead of processing it — the shape is the noise's LEVEL. */
 
 // the rate ladder — one cycle of the shape, in beats (4 = 1 bar)
 static constexpr float kShaperRateBeats[8] = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f };
@@ -157,10 +157,12 @@ static constexpr float kShaperKDefault[kShaperLanes][6] = {
     /* tp80 — the nine borrowed lanes, four targets each (see ShaperExt::fx):
        Reverb  Size · Decay · Tone · Diffuse      Delay  Time · Feedback · Tone · Width
        Chorus  Rate · Depth · Feedback · Voice   Widen  Amount · Width · Rate · Axis       Multi  Split · Slope · Spread · Range
-       Tape    Wow · Flutter · Drive · Age       Grain  Size · Density · Pitch · Spread    Bode   Range · Feedback · Spread · Blur */
+       Tape    Flutter · Drive · Age · Width      Grain  Size · Density · Pitch · Spread    Bode   Range · Feedback · Spread · Blur
+       Noise   Tone · Width · Scan · Drive */
     { 0.45f, 0.5f, 0.4f, 0.7f, 0.5f, 0.5f },  { 0.375f, 0.35f, 0.5f, 0.6f, 0.5f, 0.5f },
     { 0.35f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f },  { 0.5f, 0.5f, 0.35f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.5f, 0.5f, 0.6f, 0.5f, 0.5f },
-    { 0.3f, 0.3f, 0.3f, 0.2f, 0.5f, 0.5f },   { 0.25f, 0.4f, 0.5f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.3f, 0.6f, 0.0f, 0.5f, 0.5f } };
+    { 0.3f, 0.3f, 0.3f, 0.2f, 0.5f, 0.5f },   { 0.25f, 0.4f, 0.5f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.3f, 0.6f, 0.0f, 0.5f, 0.5f },
+    { 0.6f, 0.6f, 1.0f, 0.0f, 0.5f, 0.5f } };
 struct ShaperState
 {
     ShaperLane lanes[kShaperLanes];
@@ -746,7 +748,8 @@ public:
                     case 6: applyPhaser(); break;
                     case 7: applyCrush(); break;
                     case  8: case  9: case 10: case 11:
-                    case 12: case 13: case 14: case 15: applyLent (slot[sl]); break;   // Reverb · Delay · Chorus · Widen · Multiband · Tape · Granular · Bode
+                    case 12: case 13: case 14:
+                    case 15: case 16: applyLent (slot[sl]); break;   // Reverb · Delay · Chorus · Widen · Multiband · Tape · Granular · Bode · Noise
                     default: break;
                 }
             /* ⚠️ tp79 — THE RING'S WRITE HEAD ADVANCES ONCE PER SAMPLE, FOR EVERYONE, OUTSIDE THE DISPATCH.

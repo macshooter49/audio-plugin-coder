@@ -398,6 +398,18 @@ int main()
         char buf[280]; std::snprintf (buf, sizeof buf, "T25 the lent lanes: %d of 7 reached fx() with the shape, the four target knobs, the type and the mix; the lit Volume lane used fx() %d times; level %.1f dB",
                                       placedRan ? 7 : 0, ext.calls[0], db (rms (a.L, 2000, 6000)));
         check (placedRan && nativeStayedHome && kOk && modeOk && sOk && mixOk, buf);
+        /* tp82 — the last two kinds, in their own placement (eight positions cannot hold nine lent kinds at once).
+           NOISE is the one that ADDS signal rather than processing it, so the thing to prove here is that the door
+           still hands it the shape as its LEVEL. */
+        {
+            LentExt e2; FlowShaper g3; g3.prepare (SR); g3.setExt (&e2); auto st3 = state();
+            st3->slot[0] = 15; st3->slot[1] = 16;
+            for (int q : { 15, 16 }) { auto& L = st3->lanes[q]; L.on = true; L.depth = 1; L.blend = 1; L.mode = 2; L.k[0] = 0.4f; fill (L, one); }
+            run (g3, st3, 0.0, 0.25, sig440);
+            char b3[220]; std::snprintf (b3, sizeof b3, "T25c Bode and Noise reach fx() too — %d and %d calls, shape %.2f / %.2f, mode %d / %d",
+                                         e2.calls[15], e2.calls[16], (double) e2.lastS[15], (double) e2.lastS[16], e2.lastMode[15], e2.lastMode[16]);
+            check (e2.calls[15] > 0 && e2.calls[16] > 0 && std::fabs (e2.lastS[16] - 1.0f) < 0.01f && e2.lastMode[16] == 2, b3);
+        }
         // an UNARMED engine must be a wire, not a mute — the lane passes the audio through
         LentExt off; off.armed = false;
         FlowShaper g2; g2.prepare (SR); g2.setExt (&off); auto st2 = state();

@@ -7335,8 +7335,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     {
         // tp80 — five borrowed rack effects join the eight native lanes. Their type lists come from the ENGINES
         // themselves (typeNames()), never retyped here, so a name cannot drift out of sync with the roster.
-        static const char* const kLn[16]  = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE" };
-        static const char* const kLnN[16] = { "Volume", "Time", "Filter", "Pan", "Repeat", "Drive", "Phaser", "Crush", "Reverb", "Delay", "Chorus", "Widen", "Multiband", "Tape", "Granular", "Bode" };
+        static const char* const kLn[17]  = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE", "NOISE" };
+        static const char* const kLnN[17] = { "Volume", "Time", "Filter", "Pan", "Repeat", "Drive", "Phaser", "Crush", "Reverb", "Delay", "Chorus", "Widen", "Multiband", "Tape", "Granular", "Bode", "Noise" };
         auto fromEngine = [] (const char* const* names, int n) { juce::StringArray a; for (int q = 0; q < n; ++q) a.add (names[q]); return a; };
         // tp72 — THE TYPES ARE THE ROSTERS. Filter = the rack's 118 engines (terrainFilterEngineNames, index = tw::filters::Type);
         //        Drive = the rack's 23 distortions (index = DistortionEngine::Mode); Phaser = the two built-ins then the roster's
@@ -7344,7 +7344,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         //        distortion's digital family. Volume adds Duck, Pan adds Width, Repeat adds Reverse. Plus TRIG per lane.
         const juce::StringArray fltNames = terrainFilterEngineNames();
         juce::StringArray phaserModes { "Phaser", "Flanger" }; for (int q = 0; q < wc::kShaperPhaserRosterN; ++q) phaserModes.add (fltNames[wc::kShaperPhaserRoster[q]]);
-        const juce::StringArray kModes[16] = {
+        const juce::StringArray kModes[17] = {
             juce::StringArray { "Gain", "Duck" },
             juce::StringArray { "1 cycle", "1/2 cycle", "2 cycles" },
             fltNames,
@@ -7363,8 +7363,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             /* ⚠️ these two engines expose no typeNames(); the lists are the rack's own, at lines 6596 and 7096.
                If either moves, this copy and the page's LNMODE must move with it — index-for-index. */
             juce::StringArray { "Cloud", "Rise", "Swarm", "Suspend", "Scatter", "Rewind", "Stretch", "Pulverize" },
-            juce::StringArray { "Shift", "Barberpole", "Echobode", "Detune", "Ring", "Spiral", "Chorale", "Freeze" } };
-        static const int kModeDef[16] = { 0, 0, 0, 0, 0, 5, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0 };   // Drive boots on Soft Clip; Reverb on Plate; Tape on Cassette
+            juce::StringArray { "Shift", "Barberpole", "Echobode", "Detune", "Ring", "Spiral", "Chorale", "Freeze" },
+            /* tp82 — the instrument's OWN thirteen colours, index-aligned with SYN_NOISE_TYPE. One generator,
+               one list: the Noise lane hears exactly what the synth's noise module hears. */
+            juce::StringArray { "White Noise", "Pink Noise", "Brown Noise", "Geiger", "Tape Hiss", "Tape Hum",
+                                "Tape Air", "Tape Crackle", "Clean Vinyl", "Dirty Vinyl",
+                                "Space Open", "Space Helium", "Space Wind" } };
+        static const int kModeDef[17] = { 0, 0, 0, 0, 0, 5, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1 };   // Drive boots on Soft Clip; Reverb on Plate; Tape on Cassette; Noise on Pink
         const juce::StringArray rates { "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars", "8 bars" };
         const juce::StringArray trigs { "Sync", "Free", "Audio", "MIDI" };
         for (int ln = 0; ln < wc::kShaperLanes; ++ln)
@@ -17591,7 +17596,8 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
         {
             case 0: case 2: case 3: case 6:
             case  8: case  9: case 10: case 11:
-            case 12: case 13: case 14: case 15: addSine(); break;   // tp80 — the borrowed lanes open on a sine too
+            case 12: case 13: case 14:
+            case 15: case 16: addSine(); break;   // tp80 — the borrowed lanes open on a sine too
             case 1:  add (0, 0, 0); add (1, 1, 0); break;
             case 4:  add (0, 0.5f, 0); add (1, 0.5f, 0); break;
             case 5:  add (0, 0, 0); add (1, 1, 0); break;
@@ -17651,7 +17657,7 @@ void TerrainAudioProcessor::setShaperJson (int inst, const juce::String& json)
 }
 void TerrainAudioProcessor::cacheShaperRefs()
 {
-    static const char* const kLn[wc::kShaperLanes] = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE" };
+    static const char* const kLn[wc::kShaperLanes] = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE", "NOISE" };
     for (int i = 0; i < wc::kFlowInstances; ++i)
     {
         const juce::String pre = i == 0 ? juce::String ("FLOW_CHOP_") : "FLOW_CHOP" + juce::String (i + 1) + "_";
