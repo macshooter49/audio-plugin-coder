@@ -570,6 +570,30 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  ok(q37.initOn && q37.defVol && /255, 255, 255/.test(q37.ribbon) && !/0\.5[0-9]?\)/.test(q37.ribbon),
     '[37] a fresh card lights NO lane and opens on a sine, and the box ribbons are white on their purple chip', JSON.stringify(q37));
 
+ // ── [38] tp84 — 🚨 THE NOISE LANE BROWSES THE LIBRARY, NOT A DROPDOWN. Max: "noise needs to have the
+ //        browser of all 200+ sounds we have." Every noise-sample native already took a trailing instance
+ //        (tp43, so Noise 2 could share Noise 1's library), so this lane reaches the SAME library by passing
+ //        its own — instances 3.. are the Shapers. The thirteen algorithmic colours are the first category,
+ //        and the factory categories and imports follow when the natives answer. ──
+ const q38=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext.open');
+   const tiles=[...card.querySelectorAll('.fx .fxb')];
+   /* put Noise in a chain position first — it is not in the default eight */
+   window.__tiDice.chop.S.set('slotk7',16); await new Promise(r=>setTimeout(r,300));
+   const t=[...card.querySelectorAll('.fx .fxb')]; t[7].click(); await new Promise(r=>setTimeout(r,350));
+   const chip=card.querySelector('.ch-type');
+   const isBrowser=chip.classList.contains('browser');
+   const selHidden=getComputedStyle(chip.querySelector('select')).display==='none';
+   const word=chip.querySelector('.t').textContent;
+   chip.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:300,clientY:300}));
+   await new Promise(r=>setTimeout(r,600));
+   const pane=document.querySelector('.tpb, .tpb-wrap, .two-pane, [class*="tpb"]');
+   const txt=pane?pane.textContent:'';
+   return { isBrowser, selHidden, word, opened:!!pane,
+            colours:/Colours/.test(txt), white:/White Noise/.test(txt), vinyl:/Dirty Vinyl/.test(txt),
+            tiles:tiles.length }; });
+ ok(q38.isBrowser && q38.selHidden && q38.opened && q38.colours && q38.white && q38.vinyl,
+    '[38] 🚨 the Noise lane\'s type chip opens the two-pane LIBRARY browser (its native dropdown hidden, as the Filter\'s is), with the thirteen colours as its first category', JSON.stringify(q38));
+
  ok(errs.length===0,'[14] the page threw nothing', errs.slice(0,3).join(' | ')||'clean');
  await b.close(); console.log('\n  '+pass+' passed, '+fail+' failed\n'); process.exit(fail?1:0);
 })();

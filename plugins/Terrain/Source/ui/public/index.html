@@ -37260,7 +37260,7 @@ restoreThemeFromBackend();
         /* tp79 — THE CHAIN. `slot` is a comma list: the KIND at each position, first position first. It rides
            S.v, so TIC.presets / slotsChain (which snapshot JSON.stringify(S.v)) carry it with no extra work, and
            lanesJson() hands the same list to the processor. */
-        var init={ lane:0, tool:0, snap:1, lgrid:3, sense:.5 };
+        var init={ lane:0, tool:0, snap:1, lgrid:3, sense:.5, nsname:'' };   /* tp84 — the Noise lane's loaded sample, by name ('' = an algorithmic colour) */
         for(var sq=0;sq<SLOTS;sq++) init['slotk'+sq]=sq;   /* tp83 — the chain, one parameter a position */
         LN.forEach(function(l,i){ init['on'+i]=0; init['depth'+i]=1;   /* tp79 — Max: "please stop starting off with the volume on"; the FLOW_CHOP_*_ON parameters default false to match */ init['rate'+i]=4; init['mode'+i]=MODEDEF[l[0]]; init['trig'+i]=0;
           init['smooth'+i]=.2; init['phase'+i]=0; init['tension'+i]=.5; init['floor'+i]=0; init['blend'+i]=1; init['swing'+i]=0; init['grid'+i]=6;
@@ -37349,8 +37349,12 @@ restoreThemeFromBackend();
              select with NOTHING selected — the chip's visible word comes from the state, not from the select, so it
              still reads 'Random curve' — and every pick after one is a genuine change. */
           if(cur>=0&&/^rand/.test(L[cur][0])) chShape.querySelector('select').selectedIndex=-1;
-          chType.style.display=ROSTER[l]?'':'none'; chType.classList.toggle('browser',l==='filt');
-          if(ROSTER[l]){ var M=LNMODE(l), mi=S.v['mode'+i]|0; chType.querySelector('.t').textContent=M[mi]||M[0]||'—'; if(l!=='filt') fillSel(chType,M,mi); else chType.querySelector('select').innerHTML=''; } }
+          chType.style.display=ROSTER[l]?'':'none'; chType.classList.toggle('browser',l==='filt'||l==='noise');
+          if(ROSTER[l]){ var M=LNMODE(l), mi=S.v['mode'+i]|0;
+            /* tp84 — the Noise lane says its LOADED SAMPLE when there is one, and its colour when there is not */
+            var lbl=(l==='noise'&&S.v.nsname)?S.v.nsname:(M[mi]||M[0]||'—');
+            chType.querySelector('.t').textContent=lbl;
+            if(l!=='filt'&&l!=='noise') fillSel(chType,M,mi); else chType.querySelector('select').innerHTML=''; } }
         chBrush.querySelector('select').addEventListener('change',function(){ var k=parseInt(this.value,10)||0; S.set('tool',TOOLS[k][1]); paintChips(); });
         chShape.querySelector('select').addEventListener('change',function(){ var i=lane(), L=shapeList(), k=parseInt(this.value,10)||0; if(k<L.length) setPts(i,stock(L[k][0]),L[k][0]); else paintChips(); });
         chType.querySelector('select').addEventListener('change',function(){ var i=lane(); S.set('mode'+i,parseInt(this.value,10)||0); paintChips(); });
@@ -37366,7 +37370,47 @@ restoreThemeFromBackend();
         /* tp77 — THE BELT under the select's flush inset: nothing that overhangs the screen later can scroll the
            picture out from under the bar (see .shp-ext .screen .mv-c select). */
         scr.addEventListener('scroll',function(){ if(scr.scrollTop||scr.scrollLeft){ scr.scrollTop=0; scr.scrollLeft=0; } },true);
-        chType.addEventListener('click',function(e){ if(lkey()!=='filt')return; e.stopPropagation(); var i=lane(), M=LNMODE('filt'), cur=S.v['mode'+i]|0;
+        /* ══ tp84 — THE NOISE LANE'S BROWSER ═══════════════════════════════════════════════════════════════
+           Max: "noise needs to have the browser of all 200+ sounds we have." Every noise-sample native already
+           carried a trailing INSTANCE (tp43 added it so Noise 2 could share Noise 1's library), so this lane
+           reaches the SAME library — factory categories, imported files, dropped folders — by passing its own
+           instance number. Nothing about the library was rebuilt. Instances 3.. are the Shapers
+           (TerrainAudioProcessor::kShpNoiseBase), one sample buffer a card. */
+        var NSINST=3+(SFX?((+SFX)-1):0);
+        function nsFn(nm,withInst){ try{ if(!(window.Juce&&window.Juce.getNativeFunction))return null;
+          var f=window.Juce.getNativeFunction(nm); if(!f)return null;
+          return withInst?function(){ var a=[].slice.call(arguments); a.push(NSINST); return f.apply(null,a); }:f; }catch(e){ return null; } }
+        function nsCall(nm,withInst){ var f=nsFn(nm,withInst); if(!f)return; var a=[].slice.call(arguments,2); try{ f.apply(null,a); }catch(e){} }
+        function noiseBrowser(e){ if(!window.openTwoPaneBrowser)return; var i=lane(), cur=S.v.nsname||'';
+          var pretty=function(f){ return String(f).replace(/\.[^.]+$/,''); };
+          var pickColour=function(ix){ nsCall('clearNoiseSample',1); nsCall('setNoiseSampleSel',1,''); S.set('nsname',''); S.set('mode'+i,ix); paintChips(); };
+          var loadFact=function(cat,file){ nsCall('loadNoiseFactory',1,cat,file);
+            nsCall('setNoiseSampleSel',1,JSON.stringify({kind:'fact',cat:cat,file:file,name:pretty(file)}));
+            S.set('nsname',pretty(file)); paintChips(); };
+          var loadPath=function(path,nm){ nsCall('loadNoiseByPath',1,path);
+            nsCall('setNoiseSampleSel',1,JSON.stringify({kind:'path',path:path,name:nm}));
+            S.set('nsname',nm); paintChips(); };
+          var build=function(fact,imp){
+            var cats=[{ label:'Colours', items:LNMODE('noise').map(function(nm,ix){
+              return { name:nm, sel:(!cur&&(S.v['mode'+i]|0)===ix), pick:function(){ pickColour(ix); } }; }) }];
+            var fc=(fact&&fact.cats)||{};
+            Object.keys(fc).sort().forEach(function(c){ cats.push({ label:c, items:(fc[c]||[]).map(function(fl){
+              return { name:pretty(fl), sel:(cur===pretty(fl)), pick:function(){ loadFact(c,fl); } }; }) }); });
+            var mk=function(it){ return { name:it.name, sel:(cur===it.name), pick:function(){ loadPath(it.path,it.name); } }; };
+            ((imp&&imp.folders)||[]).forEach(function(fd){ cats.push({ label:fd.name, items:(fd.items||[]).map(mk) }); });
+            if(imp&&(imp.files||[]).length) cats.push({ label:'Imports', items:imp.files.map(mk) });
+            var oc=0; for(var q=0;q<cats.length;q++){ if((cats[q].items||[]).some(function(it){ return it.sel; })){ oc=q; break; } }
+            window.openTwoPaneBrowser(e,{ cats:cats, openCat:oc, searchPlaceholder:'Search the noise library' }); };
+          var sf=nsFn('scanNoiseFactory',0), lf=nsFn('listNoiseImports',0);
+          Promise.resolve(sf?sf():'{}').then(function(js){ var f={}; try{ f=JSON.parse(js||'{}'); }catch(e2){}
+            Promise.resolve(lf?lf():'{}').then(function(j2){ var im={}; try{ im=JSON.parse(j2||'{}'); }catch(e3){} build(f,im); })
+              .catch(function(){ build(f,null); }); }).catch(function(){ build(null,null); }); }
+        /* on open, the card asks what this lane had loaded so the chip can say its name */
+        (function(){ var g=nsFn('getNoiseSampleSel',1); if(!g)return;
+          try{ Promise.resolve(g()).then(function(js){ var o={}; try{ o=JSON.parse(js||'{}'); }catch(e){} if(o&&o.name){ S.set('nsname',o.name); paintChips(); } }).catch(function(){}); }catch(e){} })();
+
+        chType.addEventListener('click',function(e){ if(lkey()==='noise'){ e.stopPropagation(); noiseBrowser(e); return; }
+          if(lkey()!=='filt')return; e.stopPropagation(); var i=lane(), M=LNMODE('filt'), cur=S.v['mode'+i]|0;
           /* the filter's 118: the rack's own two-pane browser (fb603), its categories */
           var G=window.__FLT_ENGGRP||[], GN=window.__FLT_GRPNAMES||[], cats=[], byG={};
           for(var k=0;k<M.length;k++){ var g=GN[G[k]]||'Other'; if(!byG[g]){ byG[g]={label:g,items:[]}; cats.push(byG[g]); } (function(idx){ byG[g].items.push({ name:M[idx], sel:idx===cur, pick:function(){ S.set('mode'+i,idx); paintChips(); } }); })(k); }

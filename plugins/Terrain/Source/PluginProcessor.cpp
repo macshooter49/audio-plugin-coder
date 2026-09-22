@@ -9924,7 +9924,9 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     for (auto& l : flowLfo_) l.prepare (sampleRate);
     for (int fli = 0; fli < wc::NUM_LFOS; ++fli) flowLfo_[fli].setCustomTable (lfoTableAudio_[fli]);   // LFO ARC L1 — wire drawn-shape tables
     for (auto& sh : shapers_) sh.prepare (sampleRate);        // tp71 — the Shaper (the FlowChop pool is never prepared: its capture would be 8 s × 4 for nothing)
-    for (int i = 0; i < wc::kFlowInstances; ++i) { shpRoster_[i].prepare (sampleRate); shapers_[i].setExt (&shpRoster_[i]); }   // tp72 — the rosters lent to the lanes
+    for (int i = 0; i < wc::kFlowInstances; ++i)
+    { shpRoster_[i].prepare (sampleRate); shapers_[i].setExt (&shpRoster_[i]);   // tp72 — the rosters lent to the lanes
+      shpRoster_[i].nsSrc = &shpNoiseBuf_[i]; }                                  // tp84 — and this card's own noise sample
     for (int i = 0; i < wc::kFlowInstances; ++i) if (shaperState_[(size_t) i] == nullptr) rebuildShaperState (i);   // the defaults, or the restored blob
     // (was: for (auto& c : chops_) c.prepare (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates · tp20: every instance
     for (auto& g : glitches_) g.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
@@ -15805,6 +15807,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             sh.setLaneCtl (ln, R.on->load() > 0.5f, juce::jlimit (0.0f, 1.0f, R.depth->load()), (int) R.rate->load(), (int) R.mode->load(), R.trig != nullptr ? (int) R.trig->load() : 0);
         }
         /* tp83 — and the chain itself, from its own eight parameters */
+        shpRoster_[inst].refreshNoise();   // tp84 — once a block: the sample's shared_ptr never moves on the audio thread
         { int sl[wc::kShaperSlots]; bool any = false;
           for (int q = 0; q < wc::kShaperSlots; ++q)
           { auto* sp = shpSlotRefs_[inst][q]; sl[q] = sp != nullptr ? (int) sp->load() : q; if (sp != nullptr) any = true; }
@@ -18439,6 +18442,8 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
     }
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
+    for (int q = 0; q < wc::kFlowInstances; ++q)                               // tp84 — each Shaper Noise lane's own selection
+        if (shpNoiseSel_[q].isNotEmpty()) state.setProperty ("shpNoiseSel" + juce::String (q), shpNoiseSel_[q], nullptr);
     else state.removeProperty ("noiseSampleSel", nullptr);   // fb618
     if (noiseSampleSelJson2_.isNotEmpty()) state.setProperty ("noiseSampleSel2", noiseSampleSelJson2_, nullptr); else state.removeProperty ("noiseSampleSel2", nullptr);   // tp43 — Noise 2
     if (noiseVizMode2_ != 1) state.setProperty ("noiseVizMode2", noiseVizMode2_, nullptr); else state.removeProperty ("noiseVizMode2", nullptr);
@@ -19397,6 +19402,8 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             }
             patcherJson_ = newState.getProperty ("patcherJson", juce::String()).toString();   // fb621 — the seat
             noiseSampleSelJson_ = newState.getProperty ("noiseSampleSel", juce::String()).toString();
+            for (int q = 0; q < wc::kFlowInstances; ++q)   // tp84
+                shpNoiseSel_[q] = newState.getProperty ("shpNoiseSel" + juce::String (q), juce::String()).toString();
             noiseSampleSelJson2_ = newState.getProperty ("noiseSampleSel2", juce::String()).toString();   // tp43
             noiseVizMode2_ = (int) newState.getProperty ("noiseVizMode2", 1);
             if (noiseSampleSelJson_.isEmpty())   // fb618 — absent means algorithmic noise, not the previous patch's loop

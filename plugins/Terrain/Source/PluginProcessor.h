@@ -959,10 +959,23 @@ public:
     // PEROSC-BUFFERS — per-OSC Sample oscillator buffers (synth-side; A/B/C/D independent).
     tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)]; }
     // NOISE IMPORT (P5) — one shared looping-sample source for the Noise module (user drop or factory sample).
-    tw::SampleBuffer& getNoiseSampleBuffer (int inst = 1) noexcept { return inst == 2 ? noiseSampleBufferB_ : noiseSampleBuffer_; }   // tp43 — Noise 2 has its own
+    /** tp84 — instances 3.. are THE SHAPERS' Noise lanes, one buffer each. Max: "noise needs to have the browser
+        of all 200+ sounds we have." Every noise-sample native already carried a trailing instance (tp43 added it
+        for Noise 2), so the whole load path — factory, imported file, dropped folder, persisted selection —
+        reaches a Shaper lane by widening this one accessor rather than by writing a second one. */
+    static constexpr int kShpNoiseBase = 3;
+    tw::SampleBuffer& getNoiseSampleBuffer (int inst = 1) noexcept
+    {
+        if (inst >= kShpNoiseBase && inst < kShpNoiseBase + wc::kFlowInstances) return shpNoiseBuf_[inst - kShpNoiseBase];
+        return inst == 2 ? noiseSampleBufferB_ : noiseSampleBuffer_;   // tp43 — Noise 2 has its own
+    }
     // NOISE IMPORT (P5c) — persisted noise-sample selection descriptor (JSON): factory path or embedded user audio.
-    void         setNoiseSampleSel (const juce::String& j, int inst = 1) { (inst == 2 ? noiseSampleSelJson2_ : noiseSampleSelJson_) = j; }
-    juce::String getNoiseSampleSel (int inst = 1) const                { return inst == 2 ? noiseSampleSelJson2_ : noiseSampleSelJson_; }
+    void         setNoiseSampleSel (const juce::String& j, int inst = 1)
+    { if (inst >= kShpNoiseBase && inst < kShpNoiseBase + wc::kFlowInstances) { shpNoiseSel_[inst - kShpNoiseBase] = j; return; }
+      (inst == 2 ? noiseSampleSelJson2_ : noiseSampleSelJson_) = j; }
+    juce::String getNoiseSampleSel (int inst = 1) const
+    { if (inst >= kShpNoiseBase && inst < kShpNoiseBase + wc::kFlowInstances) return shpNoiseSel_[inst - kShpNoiseBase];
+      return inst == 2 ? noiseSampleSelJson2_ : noiseSampleSelJson_; }
     // fb66 — NOISE right-click engine bridges: waveform follower + peaks + persisted viz choice.
     float        getNoiseFollow (int inst = 1) const noexcept { return (inst == 2 ? noiseVizPosB_ : noiseVizPos_).load (std::memory_order_relaxed); }   // representative follower 0..1 (-1 = none)
     juce::String getNoiseWavePeaksJson (int inst = 1);            // min/max envelope of the loaded noise sample ("" if none)
@@ -2128,6 +2141,22 @@ private:
         /* tp82 — NOISE needs no lazy arm and no atomic. Every other engine here carries megabytes of ring and is
            built on the message thread; TerrainNoise is a handful of floats with no heap at all, so it simply IS. */
         tw::TerrainNoise nse; float nsLp[2] = { 0, 0 }, nsCur[2] = { 0, 0 }, nsPrev[2] = { 0, 0 }, nsPh = 0.0f; bool nsReady = false;
+        /* tp84 — THE LANE'S SAMPLE. When one is loaded it plays INSTEAD of the algorithmic colour, looping, with
+           Scan as its rate — the same override the synth's noise module has had. ⚠️ The shared_ptr is swapped ONCE
+           A BLOCK in refreshNoise(), never per sample: the audio thread reads raw pointers it already holds. */
+        tw::SampleBuffer* nsSrc = nullptr; tw::SampleBuffer::BufferPtr nsHeld; const void* nsLast = nullptr;
+        const float* nsSL = nullptr; const float* nsSR = nullptr; int nsLen = 0; double nsPos = 0.0, nsStep = 1.0;
+        void refreshNoise() noexcept
+        {
+            if (nsSrc == nullptr) return;
+            auto b = nsSrc->load();
+            if (b.get() == nsLast) return;
+            nsHeld = b; nsLast = b.get();
+            if (b != nullptr && b->getNumSamples() > 1)
+            { nsLen = b->getNumSamples(); nsSL = b->getReadPointer (0); nsSR = b->getNumChannels() > 1 ? b->getReadPointer (1) : nsSL;
+              const double nr = nsSrc->getSampleRate(); nsStep = (nr > 0.0 && sr > 0.0) ? (nr / sr) : 1.0; if (nsPos >= (double) nsLen) nsPos = 0.0; }
+            else { nsLen = 0; nsSL = nsSR = nullptr; }
+        }
         // the Reverb lane's four rooms, each built only if its type is the one chosen
         std::unique_ptr<RoomReverb>    rvRoom;    std::unique_ptr<PlateReverb>   rvPlate;
         std::unique_ptr<HallReverb>    rvHall;    std::unique_ptr<ShimmerReverb> rvShim;
@@ -2247,14 +2276,27 @@ private:
                        lifted out of SynthVoice at tp82), so the thirteen colours here are the thirteen colours
                        the synth has always had, not a second set. */
                     if (! nsReady) { nse.prepare (sr); nse.reset(); nsReady = true; }
-                    nse.setType (mode);
-                    // SCAN (k2): the generator is sampled and held, then interpolated, so the noise "scans" slower
-                    // and turns grainy and pitched-down. 1 = native rate, 0 = a tenth of it.
-                    const float rate = 0.1f + 0.9f * k[2];
-                    nsPh += rate;
-                    while (nsPh >= 1.0f) { nsPh -= 1.0f; nsPrev[0] = nsCur[0]; nsPrev[1] = nsCur[1]; nse.tick (nsCur[0], nsCur[1]); }
-                    float nl = nsPrev[0] + (nsCur[0] - nsPrev[0]) * nsPh;
-                    float nr = nsPrev[1] + (nsCur[1] - nsPrev[1]) * nsPh;
+                    const float rate = 0.1f + 1.9f * k[2];   // SCAN — slower is grainy and pitched down, faster is thinner
+                    float nl = 0, nr = 0;
+                    if (nsLen > 1 && nsSL != nullptr)
+                    {
+                        /* tp84 — A SAMPLE IS LOADED, so it plays INSTEAD of the colour, looping forever. Scan is
+                           its playback rate, which is what makes a drawn gate on a vinyl crackle land on the grid. */
+                        const int i0 = (int) nsPos; const float f = (float) (nsPos - i0);
+                        const int i1 = (i0 + 1 >= nsLen) ? 0 : i0 + 1;
+                        nl = nsSL[i0] + (nsSL[i1] - nsSL[i0]) * f;
+                        nr = nsSR[i0] + (nsSR[i1] - nsSR[i0]) * f;
+                        nsPos += nsStep * (double) rate; while (nsPos >= (double) nsLen) nsPos -= (double) nsLen;
+                    }
+                    else
+                    {
+                        // no sample: the instrument's own colour, sampled and held at Scan so it turns grainy
+                        nse.setType (mode);
+                        nsPh += rate > 1.0f ? 1.0f : rate;
+                        while (nsPh >= 1.0f) { nsPh -= 1.0f; nsPrev[0] = nsCur[0]; nsPrev[1] = nsCur[1]; nse.tick (nsCur[0], nsCur[1]); }
+                        nl = nsPrev[0] + (nsCur[0] - nsPrev[0]) * nsPh;
+                        nr = nsPrev[1] + (nsCur[1] - nsPrev[1]) * nsPh;
+                    }
                     // TONE (k0): one-pole, 200 Hz .. 20 kHz
                     const float fc = 200.0f * std::pow (100.0f, k[0]);
                     const float a = 1.0f - std::exp (-2.0f * 3.14159265f * (fc < 20000.0f ? fc : 20000.0f) / (float) sr);
@@ -2812,6 +2854,8 @@ private:
     tw::SampleBuffer                          noiseSampleBufferB_;  // tp42 — Noise 2's, deliberately EMPTY (algorithmic only; no import yet)
     juce::String                              noiseSampleSelJson_;  // NOISE IMPORT (P5c) — persisted selection (factory path / user audio)
     juce::String                              noiseSampleSelJson2_; // tp43 — Noise 2's
+    tw::SampleBuffer                          shpNoiseBuf_[wc::kFlowInstances];   // tp84 — a Shaper Noise lane's own sample, one per card
+    juce::String                              shpNoiseSel_[wc::kFlowInstances];   // tp84 — and its persisted selection
     juce::String                              noiseLoadedSel2_;     // tp43 — what Noise 2's buffer currently holds (restore skips a repeat)
     int                                       noiseVizMode2_ = 1;   // tp43 — Noise 2's viz choice
     std::atomic<float>                        noiseVizPosB_ { -1.0f };   // tp43 — Noise 2's follower (bank 1's loudest voice)

@@ -1,7 +1,32 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp83** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp84** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp84 (2026-09-21) — THE NOISE LANE BROWSES THE WHOLE LIBRARY
+Max: "noise needs to have the browser of all 200+ sounds we have."
+
+🔑 **Nothing about the library was rebuilt.** Every noise-sample native already carried a trailing INSTANCE (tp43,
+so Noise 2 could share Noise 1's library). **Instances 3.. are the Shapers** (`kShpNoiseBase`), one
+`tw::SampleBuffer` per card; widening `getNoiseSampleBuffer` / `setNoiseSampleSel` / `getNoiseSampleSel` by that
+range carried the WHOLE load path — `loadNoiseFactory`, `loadNoiseByPath`, `clearNoiseSample`, the persisted
+selection — with it.
+
+A loaded sample plays INSTEAD of the algorithmic colour, looping, with **Scan as its playback rate**. Tone / Width /
+Drive still shape it; the drawn curve is still its level.
+⚠️ The shared_ptr is swapped ONCE A BLOCK (`ShaperRoster::refreshNoise`, called where the slots are pushed), never
+per sample — the audio thread only reads raw pointers it already holds.
+The type chip is a browser chip (like the Filter's): thirteen colours first, then the library; it says the loaded
+sample's NAME, and the card asks `getNoiseSampleSel` on open so it survives a reopen. Persisted per card as
+`shpNoiseSel<n>`.
+
+`_tp77_gate.js` 34/34, `au_shaper_fx.cpp` 13/13, `au_shaper_lock.cpp` 9/9, `FlowShaper_test.cpp` 36/36,
+`TerrainNoise_test.cpp` 15/15.
+
+⚠️ **OWED.** (1) The battery's other half: every target swept end to end, every type proven distinct, a click check
+when a send opens, Delay / Bode bounded at full feedback. (2) A bar that a LOADED SAMPLE changes the Noise lane's
+output in the real plugin — [38] proves the browser, not the playback (the headless natives return no library).
+(3) Taste is not certified and cannot be. (4) Time against ShaperBox 3 beyond the pitch law.
 
 ## tp83 (2026-09-21) — THE CHAIN IS PARAMETERS · THE NINE BORROWED EFFECTS ARE SOUND-CERTIFIED
 **The unblock:** the chain lived only in the shaperJson blob, so the host could not automate the order and no
