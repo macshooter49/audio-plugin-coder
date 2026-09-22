@@ -2134,6 +2134,13 @@ private:
         std::unique_ptr<tw::TerrainChorusFx>   cho; std::atomic<tw::TerrainChorusFx*>   choLive { nullptr };
         std::unique_ptr<tw::TerrainWidenFx>    wid; std::atomic<tw::TerrainWidenFx*>    widLive { nullptr };
         std::unique_ptr<tw::TerrainSplitterFx> spl; std::atomic<tw::TerrainSplitterFx*> splLive { nullptr };
+        /* 🚨 tp89 — THE MULTIBAND LANE WAS BORROWING THE WRONG ENGINE. In the rack, "Multiband" IS the OTT
+           (`SYN_OTT`); "Splitter" (`SYN_SPL`) is the band splitter beside it — two engines, two pools. The
+           lane took the SPLITTER, which has no compressor in it at all: only crossovers and per-band
+           gain/width/pan. Max heard exactly that — "it gives us a very thinning effect instead of that
+           powerful boost/OTT that a real multiband gives" — and the level audit read it at -10.43 dB against
+           the same render dark. It borrows the OTT now, the engine the card he likes is driving. */
+        std::unique_ptr<tw::TerrainOttFx> ott; std::atomic<tw::TerrainOttFx*> ottLive { nullptr };
         std::unique_ptr<tw::TapeFxEngine>      tpe; std::atomic<tw::TapeFxEngine*>      tpeLive { nullptr };
         std::unique_ptr<tw::GranularFxEngine>  grn; std::atomic<tw::GranularFxEngine*>  grnLive { nullptr };
         std::unique_ptr<tw::TerrainBodeFx>     bod; std::atomic<tw::TerrainBodeFx*>     bodLive { nullptr };
@@ -2168,6 +2175,7 @@ private:
         void armChorus  () { if (cho) return; auto e = std::make_unique<tw::TerrainChorusFx>();   e->prepare (sr, 512); cho = std::move (e); choLive.store (cho.get(), std::memory_order_release); }
         void armWiden   () { if (wid) return; auto e = std::make_unique<tw::TerrainWidenFx>();    e->prepare (sr, 512); wid = std::move (e); widLive.store (wid.get(), std::memory_order_release); }
         void armSplit   () { if (spl) return; auto e = std::make_unique<tw::TerrainSplitterFx>(); e->prepare (sr, 512); spl = std::move (e); splLive.store (spl.get(), std::memory_order_release); }
+        void armOtt     () { if (ott) return; auto e = std::make_unique<tw::TerrainOttFx>();      e->prepare (sr, 512); ott = std::move (e); ottLive.store (ott.get(), std::memory_order_release); }
         void armTape    () { if (tpe) return; auto e = std::make_unique<tw::TapeFxEngine>();      e->prepare (sr); tpe = std::move (e); tpeLive.store (tpe.get(), std::memory_order_release); }
         void armBode    () { if (bod) return; auto e = std::make_unique<tw::TerrainBodeFx>();     e->prepare (sr, 3); bod = std::move (e); bodLive.store (bod.get(), std::memory_order_release); }
         void armGrain   () { if (grn) return; auto e = std::make_unique<tw::GranularFxEngine>();  e->prepare (sr); e->setGrainBudget (&grnUsed, 48); grn = std::move (e); grnLive.store (grn.get(), std::memory_order_release); }
@@ -2251,13 +2259,24 @@ private:
                 }
                 case wc::ShaperLaneId::Multi:
                 {
-                    auto* e = splLive.load (std::memory_order_acquire); if (e == nullptr) return false;
-                    tw::TerrainSplitterFx::Params p; p.type = mode < 0 ? 0 : mode;
-                    p.split = k[0]; p.slope = (int) (k[1] * 3.99f); p.spread = k[2];
-                    // THE SHAPE TILTS THE BANDS: at 0 the low end carries, at 1 the top does.
-                    p.balance = 0.5f + (sh - 0.5f) * (0.2f + 1.6f * k[3]);
-                    p.mix = bl; e->setParams (p);   // the shape is the TILT here, not the wet amount, so the wet stays put
-                    float ol = 0, orr = 0; e->processStereo (l, r, ol, orr); l = ol; r = orr; return true;
+                    /* tp89 — THE OTT, and THE SHAPE IS THE PUSH: `amount` is the upward/downward drive, so
+                       drawing the curve draws how hard it pumps. That is the thing Max is trying to shape —
+                       "it just sounds really boosted and I love that exact sound, that's what I'm trying to
+                       shape." Targets: Speed · Lift · Character · Range. */
+                    auto* e = ottLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    tw::TerrainOttFx::Params p;
+                    p.type      = mode < 0 ? 0 : (mode > tw::TerrainOttFx::kNumTypes - 1 ? tw::TerrainOttFx::kNumTypes - 1 : mode);
+                    p.character = (int) (k[2] * (float) (tw::TerrainOttFx::kNumChars - 1) + 0.5f);
+                    /* ⚠️ the shape driving `amount` across its WHOLE range is the engine at maximum:
+                       measured +15.76 dB and a 5.71x peak, which is a push nobody can mix. The rack card he
+                       likes sits at 0.50, so the curve sweeps up to a little past that and the lane stays
+                       loud-but-usable. */
+                    p.amount    = 0.45f * sh;              // the drawn curve IS the push (0.60 measured +9.3 dB at a 2.76x peak — over full scale)
+                    p.speed     = k[0];
+                    p.topLift   = k[1];
+                    p.b5        = k[3];                    // the crossover spread
+                    p.mix       = bl;
+                    e->setParams (p); e->processStereo (&l, &r, 1); return true;
                 }
                 case wc::ShaperLaneId::Tape:
                 {

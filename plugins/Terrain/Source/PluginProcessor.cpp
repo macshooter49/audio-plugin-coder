@@ -3094,7 +3094,7 @@ void TerrainAudioProcessor::timerCallback()
           if (lit (DL)) ro.armDelay();
           if (lit (CH)) ro.armChorus();
           if (lit (WD)) ro.armWiden();
-          if (lit (ML)) ro.armSplit();
+          if (lit (ML)) ro.armOtt();       // tp89 — the Multiband lane is the OTT now, not the Splitter
           const auto& TP = shpRefs_[i][13]; const auto& GR = shpRefs_[i][14]; const auto& BO = shpRefs_[i][15];
           if (lit (TP)) ro.armTape();
           if (lit (GR)) ro.armGrain();    // ⚠️ ~8.4 MB of ring, and its prepare() allocates — message thread only, which is where this runs

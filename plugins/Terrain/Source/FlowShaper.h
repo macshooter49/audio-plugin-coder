@@ -72,6 +72,10 @@ enum class ShaperLaneId : int { Volume = 0, Time, Filter, Pan, Repeat, Drive, Ph
 static constexpr float kShaperRateBeats[8] = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f };
 static constexpr int   kShaperRateN = 8;
 static constexpr int   kShaperRateDefault = 4;   // 1 bar
+/* tp89 — a dry+wet sum halved loses ~3 dB on broadband material (the notches are real cancellation),
+   so this is the makeup that puts the Phaser lane back at unity. CALIBRATED against the level audit,
+   not guessed: the lane has to read 0.00 dB against the same render with it dark. */
+static constexpr float kPhMakeup = 0.85f;   // measured: unscaled +7.45 dB · halved +1.43 dB · x0.85 lands on 0
 
 enum class ShaperTrig : int { Sync = 0, Free, Audio, Midi };
 
@@ -156,11 +160,11 @@ static constexpr float kShaperKDefault[kShaperLanes][6] = {
     { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.2f, 0.5f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.0f, 0.5f, 0.5f },
     /* tp80 — the nine borrowed lanes, four targets each (see ShaperExt::fx):
        Reverb  Size · Decay · Tone · Diffuse      Delay  Time · Feedback · Tone · Width
-       Chorus  Rate · Depth · Feedback · Voice   Widen  Amount · Width · Rate · Axis       Multi  Split · Slope · Spread · Range
+       Chorus  Rate · Depth · Feedback · Voice   Widen  Amount · Width · Rate · Axis       Multi  Speed · Lift · Character · Range
        Tape    Flutter · Drive · Age · Width      Grain  Size · Density · Pitch · Spread    Bode   Range · Feedback · Spread · Blur
        Noise   Tone · Width · Scan · Drive */
     { 0.45f, 0.5f, 0.4f, 0.7f, 0.5f, 0.5f },  { 0.375f, 0.35f, 0.5f, 0.6f, 0.5f, 0.5f },
-    { 0.35f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f },  { 0.5f, 0.5f, 0.35f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.5f, 0.5f, 0.6f, 0.5f, 0.5f },
+    { 0.35f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f },  { 0.5f, 0.5f, 0.35f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.25f, 0.0f, 0.5f, 0.5f, 0.5f },
     { 0.3f, 0.3f, 0.3f, 0.2f, 0.5f, 0.5f },   { 0.25f, 0.4f, 0.5f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.3f, 0.6f, 0.0f, 0.5f, 0.5f },
     { 0.6f, 0.6f, 1.0f, 0.0f, 0.5f, 0.5f } };
 struct ShaperState
@@ -696,7 +700,10 @@ public:
                         const float rp = (float) flW_ - dsm * (float) sr_ * 0.001f; const int i0 = (int) std::floor (rp); const float f = rp - (float) i0;
                         const float w = D[(i0 + 4096) & 2047] * (1 - f) + D[(i0 + 1 + 4096) & 2047] * f;
                         const float x = c ? r : l; D[flW_ & 2047] = x + w * fb;
-                        if (c) r = r + (w - x * 0.15f) * PH.L->blend; else l = l + (w - x * 0.15f) * PH.L->blend;
+                        /* tp89 — and the built-in flanger was the same unscaled sum (+7.03 dB, 1.99x peak). */
+                        const float mx = PH.L->blend;
+                        const float gN = kPhMakeup / (1.0f + mx);
+                        if (c) r = (r + (w - x * 0.15f) * mx) * gN; else l = (l + (w - x * 0.15f) * mx) * gN;
                     }
                     flW_ = (flW_ + 1) & 2047;
                     vizPh_[6] = (float) p; vizV_[6] = s;
@@ -716,7 +723,15 @@ public:
                         const float x = (c ? r : l) + ch_[c].phfb * fb * 0.6f; float y = x;
                         for (int q = 0; q < 6; ++q) { AP& st2 = A[(size_t) q]; const float o = -gg * y + st2.x1 + gg * st2.y1; st2.x1 = y; st2.y1 = o; y = o; }
                         ch_[c].phfb = y;
-                        if (c) r = r + y * PH.L->blend; else l = l + y * PH.L->blend;
+                        /* 🚨 tp89 — A PHASER IS DRY PLUS ALLPASS, AND SUMMING THEM AT FULL LEVEL APPROACHES 2x.
+                           Max: "the phaser really distorts and clips, it's shit … nothing should be making
+                           anything quieter or louder." MEASURED: +7.45 dB rms and a 2.47x peak against the
+                           same render dark — that is the clipping, and it was simply an unscaled sum.
+                           Summed at half it is the textbook phaser; the 3 dB a notch filter genuinely loses
+                           is made up so the lane lands where the law says it should, at unity. */
+                        const float mx = PH.L->blend;
+                        const float gN = kPhMakeup / (1.0f + mx);
+                        if (c) r = (r + y * mx) * gN; else l = (l + y * mx) * gN;
                     }
                     vizPh_[6] = (float) p; vizV_[6] = s;
                 }
