@@ -37226,24 +37226,35 @@ restoreThemeFromBackend();
         case 'randsteps': return stepsPts(16,function(){ return Math.random(); });
         case 'randcurve': p=[]; for(i=0;i<=8;i++) p.push([i/8,Math.random(),(Math.random()*2-1)*.8]); return p;
         case 'randgate': return stepsPts(16,function(){ return Math.random()<.5?0:1; });
-        case 'stut32': p=[]; for(i=0;i<32;i++){ p.push([i/32,0,0]); p.push([(i+1)/32-1e-4,1/32,0]); } p[p.length-1][0]=1; return p;
-        case 'stutbuild': p=[]; var segs=[[0,.5,8],[.5,.75,8],[.75,.875,8],[.875,1,8]]; segs.forEach(function(sg){ var n=sg[2], w=(sg[1]-sg[0])/n; for(var q=0;q<n;q++){ p.push([sg[0]+q*w,0,0]); p.push([sg[0]+(q+1)*w-1e-4,w,0]); } }); p[p.length-1][0]=1; return p;
-        case 'tapestart': return [[0,0,-0.85],[1,1,0]];
-        case 'scratch': p=[]; for(i=0;i<8;i++){ p.push([i/8,(i&1)?0.25:0,0]); } p.push([1,0,0]); return p;
-        case 'rewind': p=[]; for(i=0;i<4;i++){ p.push([i/4,0.25,0]); p.push([(i+1)/4-1e-4,0,0]); } p[p.length-1][0]=1; return p;
-        case 'halfback': return [[0,0,0],[.5,.25,0],[1,0,0]];
+        case 'stut32': return stepsPts(32,function(i){ return 1-i/32; });
+        case 'stutbuild': p=[]; [[0,.5,8],[.5,.75,8],[.75,.875,8],[.875,1,8]].forEach(function(sg){ var n=sg[2], w=(sg[1]-sg[0])/n; for(var q=0;q<n;q++){ var x0=sg[0]+q*w; p.push([x0,1-(x0-sg[0]),0]); p.push([x0+w-1e-4,1-(x0-sg[0]),0]); } }); p[p.length-1][0]=1; return p;
+        /* 🚨 tp86 — THE TIME PRESETS ARE DRAWN IN THE OFFSET CONVENTION NOW. The vertical is how far BACK
+           from now, the top line is the present, and rate = 1 + slope × Range. So NORMAL is a flat line,
+           the grey guideline (falling a full height across the cycle) is STOPPED, steeper is REVERSE and
+           rising plays FASTER — Cableguys' own rules, and every one of these was redrawn to obey them. */
+        case 'tapestart': return [[0,1,0.8],[1,0.45,0]];        // starts stopped, flattens out to normal
+        case 'scratch': p=[]; for(i=0;i<8;i++){ p.push([i/8,(i&1)?0.75:1,0]); } p.push([1,1,0]); return p;   // a zigzag either side of the guideline
+        case 'rewind': p=[]; for(i=0;i<4;i++){ p.push([i/4,1,0]); p.push([(i+1)/4-1e-4,0,0]); } p[p.length-1][0]=1; return p;   // four fast reverses
+        case 'halfback': return [[0,1,0],[.5,.75,0],[1,0,0]];   // half speed forward, then half speed back
         case 'sine': return SINE9.map(function(q){ return q.slice(); });   /* a FRESH copy: setPts sorts and pins its argument in place */
         case 'tri': return [[0,0,0],[.5,1,0],[1,0,0]];
-        case 'saw': case 'unity': return [[0,0,0],[1,1,0]];
-        case 'sawdn': case 'reverse': return [[0,1,0],[1,0,0]];
+        case 'saw': return [[0,0,0],[1,1,0]];
+        case 'unity': return [[0,1,0],[1,1,0]];                  // tp86 — TIME's normal is a FLAT LINE AT THE TOP
+        case 'sawdn': return [[0,1,0],[1,0,0]];
+        /* tp86 — a full-height fall across the WHOLE cycle is the guideline, which is STOPPED, not reverse.
+           Reverse needs steeper, so the video draws it the way this does: half a bar of normal playback,
+           then the same half bar taken backwards at -1. */
+        case 'reverse': return [[0,1,0],[.5,1,0],[1,0,0]];
         case 'square': return [[0,1,0],[.5-1e-4,1,0],[.5,0,0],[1,0,0]];
         case 'gate': return stepsPts(16,function(i){ return (i&1)?0:1; });
         case 'stairs': return stepsPts(8,function(i){ return i/7; });
         case 'flat': return [[0,.5,0],[1,.5,0]];
-        case 'half': return [[0,0,0],[1,.5,0]];
-        case 'stut8': return (function(){ var p=[]; for(var i=0;i<8;i++){ p.push([i/8,0,0]); p.push([(i+1)/8-1e-4,1/8,0]); } p[p.length-1][0]=1; return p; })();
-        case 'stut16': return (function(){ var p=[]; for(var i=0;i<16;i++){ p.push([i/16,0,0]); p.push([(i+1)/16-1e-4,1/16,0]); } p[p.length-1][0]=1; return p; })();
-        case 'tape': return [[0,0,0],[1,.55,.85]];
+        case 'half': return [[0,1,0],[1,.5,0]];                   // tp86 — halftime is a slope of -1/2
+        /* tp86 — A STUTTER IS A DESCENDING STAIRCASE: each tread is FLAT, so the slice plays at normal
+           speed, and each riser jumps back one slice. Exactly the shape the tutorial draws. */
+        case 'stut8': return stepsPts(8,function(i){ return 1-i/8; });
+        case 'stut16': return stepsPts(16,function(i){ return 1-i/16; });
+        case 'tape': return [[0,1,-0.8],[1,0,0]];                 // tp86 — flat (normal) bending down to the guideline: the tape stop
         } return [[0,0,0],[1,1,0]]; }
       function bias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
       function evalPts(pts,p){ p=Math.max(0,Math.min(1,p)); var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++; var a=pts[i],b=pts[i+1],w=b[0]-a[0]; if(w<=1e-6)return b[1]; return a[1]+(b[1]-a[1])*bias((p-a[0])/w,a[2]||0); }
@@ -37276,17 +37287,34 @@ restoreThemeFromBackend();
           feedbk:'Feedback', stereo:'Spread the two sides', bits:'How coarse the bits get', 'rate ':'How low the sample rate gets', on:'This lane runs', attack:'The rising edge', release:'The falling edge', mode:'', law:'', range:'' };
         var pushT=null, pushT2=null, touched=false, natSet=null, natGet=null;
         try{ if(window.Juce&&window.Juce.getNativeFunction){ natSet=window.Juce.getNativeFunction('setShaperJson'); natGet=window.Juce.getNativeFunction('getShaperJson'); } }catch(e){}
-        function lanesJson(){ var o={lanes:[],sense:S.v.sense,slot:chainOf(S)};   /* tp83 — the chain is PARAMETERS now (FLOW_CHOP_SLOT1..8); this copy rides along only as the snapshot's fallback order */ LN.forEach(function(l,i){ var pts; try{ pts=JSON.parse(S.v['pts'+i]); }catch(e){ pts=stock(DEFSHAPE[l[0]]); }
+        /* tp86 — `tv` is the TIME convention this blob is written in. 2 = the shape is the OFFSET back from
+           now (ShaperBox's reading). Absent or lower means the old absolute-position reading, and the Time
+           lane's points are sheared once on the way in — see migrateTime below and the matching shear in
+           PluginProcessor.cpp, which covers the case where no editor is ever opened. */
+        function lanesJson(){ var o={lanes:[],sense:S.v.sense,slot:chainOf(S),tv:2};   /* tp83 — the chain is PARAMETERS now (FLOW_CHOP_SLOT1..8); this copy rides along only as the snapshot's fallback order */ LN.forEach(function(l,i){ var pts; try{ pts=JSON.parse(S.v['pts'+i]); }catch(e){ pts=stock(DEFSHAPE[l[0]]); }
           o.lanes.push({ pts:pts, smooth:S.v['smooth'+i], phase:S.v['phase'+i], tension:S.v['tension'+i], floor:S.v['floor'+i], blend:S.v['blend'+i], swing:S.v['swing'+i], grid:gridOf(i), k:[S.v['k0_'+i],S.v['k1_'+i],S.v['k2_'+i],S.v['k3_'+i],S.v['k4_'+i],S.v['k5_'+i]] }); });
           return JSON.stringify(o); }
         function pushNow(){ if(!natSet)return; try{ natSet(INST, lanesJson()); }catch(e){} }
         function push(){ touched=true; clearTimeout(pushT); pushT=setTimeout(pushNow,90); clearTimeout(pushT2); pushT2=setTimeout(pushNow,130); }
+        /* tp86 — the one-time shear that keeps an old patch sounding the way it was drawn:
+              behind_old = cyc·(p − y·Range)  ==  behind_new = (1 − y')·cyc·Range   ⇒   y' = y + 1 − p/Range
+           The old default unity ramp at the default Range lands on a flat line at the top, which is exactly
+           the new neutral. Past 1 the old lane was already pinned at the write head, so clipping there
+           reproduces it; a CURVED segment is approximate (the curve between two points is not re-fitted),
+           and so is a Range far from ×1. */
+        function shearTime(pts,k2){ var rm=Math.pow(4,((k2==null?0.5:+k2)-0.5)*2); if(!(rm>1e-4))rm=1;
+          return pts.map(function(q){ return [q[0], Math.max(0,Math.min(1, q[1] + 1 - q[0]/rm)), q[2]||0]; }); }
         function pull(){ if(!natGet)return; try{ Promise.resolve(natGet(INST)).then(function(js){ if(touched)return; var o=null; try{ o=JSON.parse(String(js||'')); }catch(e){} if(!o||!o.lanes)return;
+          var needShear=((o.tv|0)<2);
           if(o.sense!=null) S.set('sense',+o.sense);
-          o.lanes.forEach(function(L,i){ if(!L)return; if(L.pts&&L.pts.length>=2){ S.set('pts'+i,JSON.stringify(L.pts)); S.set('shape'+i,'custom'); }
+          o.lanes.forEach(function(L,i){ if(!L)return; if(L.pts&&L.pts.length>=2){
+              var pp=(needShear&&i===1)?shearTime(L.pts,L.k?L.k[2]:null):L.pts;
+              S.set('pts'+i,JSON.stringify(pp)); S.set('shape'+i,'custom'); }
             ['smooth','phase','tension','floor','blend','swing'].forEach(function(k){ if(L[k]!=null) S.set(k+i,L[k]); }); if(L.grid!=null){ var gi=GRIDS.indexOf(L.grid|0); if(gi>=0) S.set('grid'+i,gi); }
             if(L.k){ for(var q=0;q<6;q++) if(L.k[q]!=null) S.set('k'+q+'_'+i,L.k[q]); } });
-          fillLane(); paint(); }).catch(function(){}); }catch(e){} }
+          fillLane(); paint();
+          if(needShear) push();   /* stamp tv:2 so the shear happens exactly once */
+        }).catch(function(){}); }catch(e){} }
         function lane(){ return S.v.lane|0; }
         function lkey(){ return LN[lane()][0]; }
         function ptsOf(i){ try{ var p=JSON.parse(S.v['pts'+i]); if(p&&p.length>=2)return p; }catch(e){} return stock(DEFSHAPE[LN[i][0]]); }
@@ -37333,6 +37361,24 @@ restoreThemeFromBackend();
           /* the other lit lanes, faint, behind the line (Max: "see the shaper lines in the background, like ShaperBox, very faintly") —
              spliced into the markup before it lands (insertAdjacentHTML into an svg births HTML-namespace paths that never paint) */
           var gh=''; LN.forEach(function(l,j){ if(j===i||!S.v['on'+j])return; gh+='<path class="sh-ghost" d="'+LF.pathD(dispPts(j),456,GEO)+'"/>'; });
+          /* 🚨 tp86 — THE STOP GUIDELINE, on the TIME lane only. Cableguys' tutorial leans on it for every
+             gesture in the video: "when your LFO matches the angle of this gray guideline you get 0% playback
+             speed", steeper is reverse, shallower is a slowdown, and a point placed ON it sends the read head
+             back to the one of the loop. rate = 1 + slope × Range, so the stopped gradient falls 1/Range over
+             the cycle — the line moves when the Range knob moves, which is the whole point of drawing it.
+             Below it is the cross-hatch: an offset deeper than the cycle has run, which is the audio the
+             buffer does not hold yet (their "there'll be silence during the gray area until the buffer fills"). */
+          if(lkey()==='time'){
+            var rm=Math.pow(4,((S.v['k2_'+i]==null?0.5:+S.v['k2_'+i])-0.5)*2); if(!(rm>1e-4))rm=1;
+            var xEnd=Math.min(1,rm), yEnd=1-xEnd/rm;                 /* where the guideline leaves the box */
+            var X0=LF.x(0).toFixed(1), X1=LF.x(xEnd).toFixed(1), XR=LF.x(1).toFixed(1);
+            var Y0=LF.y(1,GEO).toFixed(1), Y1=LF.y(yEnd,GEO).toFixed(1), YB=LF.y(0,GEO).toFixed(1);
+            var hatch='<defs><pattern id="shtg'+INST+'" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+                    + '<line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,.055)" stroke-width="1"/></pattern></defs>';
+            var below='M'+X0+' '+Y0+'L'+X1+' '+Y1+(xEnd<1?('L'+XR+' '+Y1):'')+'L'+XR+' '+YB+'L'+X0+' '+YB+'Z';
+            gh=hatch+'<path d="'+below+'" fill="url(#shtg'+INST+')" stroke="none"/>'
+              +'<line x1="'+X0+'" y1="'+Y0+'" x2="'+X1+'" y2="'+Y1+'" stroke="rgba(255,255,255,.22)" stroke-width="1" stroke-dasharray="3 3"/>'+gh;
+          }
           if(gh) html=html.replace('<path class="mv-stroke"',gh+'<path class="mv-stroke"');
           field.innerHTML=html; if(sel.length) selPaint();
           scr.classList.toggle('off',!S.v['on'+i]);

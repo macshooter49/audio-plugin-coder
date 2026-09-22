@@ -17615,7 +17615,10 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
             case  8: case  9: case 10: case 11:
             case 12: case 13: case 14:
             case 15: case 16: addSine(); break;   // tp80 — the borrowed lanes open on a sine too
-            case 1:  add (0, 0, 0); add (1, 1, 0); break;
+            /* tp86 — TIME's neutral is a FLAT LINE AT THE TOP, because the shape is now the OFFSET back
+               from now and the top line is the present. It was a unity ramp while the shape meant an
+               absolute position. Same sound at rest — no offset, normal speed — drawn ShaperBox's way. */
+            case 1:  add (0, 1, 0); add (1, 1, 0); break;
             case 4:  add (0, 0.5f, 0); add (1, 0.5f, 0); break;
             case 5:  add (0, 0, 0); add (1, 1, 0); break;
             default: for (int i = 0; i < 8; ++i) { add (i / 8.0f, i / 7.0f, 0); add ((i + 1) / 8.0f - 0.0001f, i / 7.0f, 0); } add (1.f, 1.f, 0); break;
@@ -17623,6 +17626,16 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
     };
     juce::var root = juce::JSON::parse (shaperJson_[inst]);
     const juce::var lanesV = root.isObject() ? root.getProperty ("lanes", juce::var()) : juce::var();
+    /* tp86 — THE TIME LANE'S SHAPE CHANGED MEANING, so a patch drawn before it says so. `tv` is the Time
+       convention the blob was written in: absent (or < 2) means the OLD absolute-position reading, and the
+       lane's points are sheared once, here, so an old patch keeps sounding the way it was drawn.
+           behind_old = cyc·(p − y·Range)   ==   behind_new = (1 − y')·cyc·Range      ⇒   y' = y + 1 − p/Range
+       The default unity ramp at the default Range maps to a flat line at the top, which is exactly the new
+       neutral. Where the shear runs past 1 the old lane was already pinned at the head, so clipping there
+       reproduces it; at a Range far from ×1 the result is approximate, and so is a CURVED segment (the curve
+       between two points is not re-fitted). The page applies the same shear and stamps `tv:2` on its next
+       push, after which nothing is transformed again. */
+    const int shapeTv = root.isObject() ? (int) root.getProperty ("tv", 0) : 0;
     if (root.isObject()) st->sense = juce::jlimit (0.0f, 1.0f, (float) (double) root.getProperty ("sense", 0.5));   // tp72 — the Audio trigger's sensitivity
     // tp79 — THE CHAIN, out of the blob. slot[p] = the kind at position p. An older blob has no "slot" at all and
     // keeps the identity, which is the tile order. sanitise() is the wall: this array indexes a switch on the audio
@@ -17661,6 +17674,12 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
         std::stable_sort (idx.begin(), idx.end(), [&] (int a, int b) { return xs[(size_t) a] < xs[(size_t) b]; });
         std::vector<float> sx, sy, sc; for (int q : idx) { sx.push_back (xs[(size_t) q]); sy.push_back (ys[(size_t) q]); sc.push_back (cs[(size_t) q]); }
         sx.front() = 0.0f; sx.back() = 1.0f;
+        if (ln == 1 && shapeTv < 2 && havePts)
+        {
+            const float rangeMul = std::pow (4.0f, (L.k[2] - 0.5f) * 2.0f);   // the knob's part; Time Mode is a parameter, not in the blob
+            for (size_t q = 0; q < sy.size(); ++q)
+                sy[q] = juce::jlimit (0.0f, 1.0f, sy[q] + 1.0f - sx[q] / (rangeMul > 1.0e-4f ? rangeMul : 1.0f));
+        }
         bakeShaperTable (sx.data(), sy.data(), sc.data(), (int) sx.size(), L.table);
     }
     shaperState_[inst] = st;

@@ -1,7 +1,46 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp85** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp86** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp86 (2026-09-22) — 🚨 TIME IS SHAPERBOX'S TIMESHAPER NOW, AND NOTHING DROPS OUT
+Max sent the Cableguys TimeShaper tutorial: *"we need our time to act like this."*
+
+🔑 **THE SHAPE IS THE TIME OFFSET, NOT AN ABSOLUTE POSITION.** Their model, stated on screen: the vertical is how
+far BACK from now, the top line is the present, *"a horizontal line gives 100% playback speed"*, *"when your LFO
+matches the angle of this gray guideline you get 0% playback speed — the audio is stopped"*, steeper is reverse,
+a line angled up plays faster. That is **rate = 1 + slope × Range**.
+
+🚨 **THE OLD READING RE-ANCHORED THE READ HEAD TO *NOW* AT EVERY CYCLE BOUNDARY** (`behind = nowBeats − y·cyc·Range`;
+`nowBeats` is zero there, so `behind` could only be ≤ 0 and clamped to the write head). Two capabilities fell out
+of that one line, both MEASURED: a constant delay **decayed into a freeze** (0.755× instead of 1.000×, because the
+first beat of every cycle was frozen) and the average speed over a cycle **could never exceed 1.000×** however the
+shape was drawn. AFTER: flat at the top 1.000× no lag · flat at half **1.000× held a constant half-cycle behind** ·
+a full rise **2.000×** sustained (3.000× at Range ×2) · falling at the guideline 0.000× · half a bar flat then
+twice as steep +1.000× then −1.000×.
+
+🚨 **AND THE DROPOUT.** Max: *"I press play and it drops out and then it comes in two bars later — I hate that shit,
+ShaperBox doesn't do that, it's very reactive."* He was right and it was a second, separate bug: an offset the ring
+could not satisfy was clamped to `maxB = ringFilled − 4`, which pins the read to the **OLDEST sample — and the
+oldest sample does not move**, so the read stood still while the write head ran away: a bar of frozen near-DC.
+MEASURED: a constant half-bar offset rendered **−24.8 dBFS for exactly one bar**, then snapped to −9.0. It falls
+back to the **PRESENT** now — full level, full speed, from the first sample, whatever the shape asks for (`T34`).
+⚠️ **STEADY STATE IS NOT ONSET.** The first cut of `T28` read the lag at six seconds and reported "no lag" on a
+lane that dropped out for a whole bar every time you pressed play. Max heard it; the bar never looked at bar one.
+
+⚠️ **MIGRATION.** The blob carries `tv`; absent or < 2 means the old reading, and the Time lane's points are
+sheared ONCE — `y' = y + 1 − p/Range` — on both sides (the page, and `rebuildShaperState` for the case where no
+editor is ever opened), then stamped `tv:2`. The old unity ramp at the default Range lands on a flat line at the
+top: exactly the new neutral. Clipping past 1 reproduces the old head-pin; a CURVED segment and a Range far from
+×1 are approximate. **Every Time preset was redrawn** — Unity is flat, Halftime a −½ slope, a stutter a DESCENDING
+STAIRCASE (flat treads, jumping risers), Reverse half a bar flat then falling twice as steep, Tape stop flat
+bending onto the guideline.
+
+⚠️ **THE EDITOR DRAWS THE GUIDELINE** (`_tp77_gate.js` [39]): the dashed stop gradient, which falls 1/Range across
+the cycle and so SHALLOWS as Range doubles, plus the cross-hatch below it. Time lane only.
+
+Green at tp86: `FlowShaper_test.cpp` 43/43 (T23/T24/T28–T34, mutation-checked) · `_tp77_gate.js` 35/35 ·
+`au_shaper_cert2.cpp` 24/24 · `au_shaper_fx.cpp` 13/13 · `au_shaper_lock.cpp` 9/9 · eleven page gates.
 
 ## tp85 (2026-09-22) — THE BATTERY'S SECOND HALF, AND THE TWO BUGS IT FOUND
 

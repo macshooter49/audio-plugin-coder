@@ -26,8 +26,12 @@ static float gate16 (double p) { return ((int) std::floor (p * 16.0) & 1) ? 0.f 
 static float one (double) { return 1.f; }
 static float zero (double) { return 0.f; }
 static float ramp (double p) { return (float) p; }
-static float half (double p) { return (float) (0.5 * p); }
-static float stut (double p) { return (float) (std::fmod (p * 16.0, 1.0) / 16.0); }   // the first SIXTEENTH, sixteen times
+/* tp86 — RESTATED IN THE OFFSET CONVENTION. The shape is now HOW FAR BACK FROM NOW (1 = the present),
+   so rate = 1 + slope x Range. Halftime is a slope of -1/2, not a ramp of 1/2; and a stutter is a
+   DESCENDING STAIRCASE — each tread flat (normal speed) and each riser jumping back a slice. */
+static float unity (double)   { return 1.0f; }                                        // flat at the top = 100%, no delay
+static float half (double p)  { return (float) (1.0 - 0.5 * p); }                     // slope -1/2 = halftime
+static float stut (double p)  { const int k = (int) (p * 16.0); return 1.0f - (float) k / 16.0f; }   // the first SIXTEENTH, sixteen times
 static float sine (double p) { return 0.5f - 0.5f * (float) std::cos (2 * 3.14159265 * p); }
 
 struct Run { std::vector<float> L, R; };
@@ -91,7 +95,7 @@ int main()
     {
         auto count = [] (const std::vector<float>& x, size_t a, size_t b) { int c = 0; bool up = false; for (size_t i = a; i < b; ++i) { const bool h = std::fabs (x[i]) > 0.3f; if (h && ! up) ++c; up = h; } return c; };
         FlowShaper g; g.prepare (SR); g.armRing(); auto st = state(); auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.rate = 4; T.mode = 0; T.k[0] = 0.3f;
-        fill (T, ramp); auto u = run (g, st, 0.0, 4.0, clicks8); const int nU = count (u.L, (size_t) FPB * 2, (size_t) FPB * 4);
+        fill (T, unity); auto u = run (g, st, 0.0, 4.0, clicks8); const int nU = count (u.L, (size_t) FPB * 2, (size_t) FPB * 4);
         FlowShaper g2; g2.prepare (SR); g2.armRing(); fill (T, half); auto h = run (g2, st, 0.0, 4.0, clicks8); const int nH = count (h.L, (size_t) FPB * 2, (size_t) FPB * 4);
         FlowShaper g3; g3.prepare (SR); g3.armRing(); fill (T, stut); auto s = run (g3, st, 0.0, 4.0, clicks8); const int nS = count (s.L, (size_t) FPB * 2, (size_t) FPB * 4);
         char buf[260]; std::snprintf (buf, sizeof buf, "T3 TIME: unity keeps the 1/8 clicks (%d in 2 beats), HALFTIME halves them (%d, the restart's own click may add one), a 1/16 stutter repeats the first sixteenth (%d)", nU, nH, nS);
@@ -312,7 +316,9 @@ int main()
             FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
             auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 4;
             T.k[0] = 0.3f; T.k[1] = glide; T.k[2] = 0.5f;
-            fill (T, [] (double x) { return (float) (g_sl * x); });
+            /* tp86 — the shape is the OFFSET now: a line falling at `1 - slope` per cycle reads at `slope`,
+               because rate = 1 + d(offset)/dt x Range. Flat is 1.000x, the grey guideline is 0.000x. */
+            fill (T, [] (double x) { return (float) (1.0 - (1.0 - g_sl) * x); });
             g.setState (st);
             const int N = (int) (SR * 2.2); std::vector<float> L ((size_t) N), R ((size_t) N);
             for (int i = 0; i < N; ++i) L[(size_t) i] = R[(size_t) i] = (float) i / (float) N;
@@ -327,7 +333,7 @@ int main()
             for (float gl : { 0.0f, 0.7f })
             { const double got = rateFor (sl, gl);
               if (std::fabs (got - sl) > 0.02) { ok = false; std::snprintf (worst, sizeof worst, "slope %.2f glide %.1f -> rate %.3f", sl, gl, got); } }
-        char buf[260]; std::snprintf (buf, sizeof buf, "T23 TIME: the playback rate IS the shape's slope at 1, 0.75, 0.5 and 0.25 — with Glide off AND on%s%s",
+        char buf[260]; std::snprintf (buf, sizeof buf, "T23 TIME: rate = 1 + slope x Range — a line falling by 0, 1/4, 1/2 and 3/4 of full height reads 1, 0.75, 0.5 and 0.25, with Glide off AND on%s%s",
                                       ok ? " (measured within 0.02)" : " — WRONG at ", worst);
         check (ok, buf);
         //  ⚠️ Glide used to clamp the read position's TOTAL motion, which clamped the pitch: every slope came out
@@ -342,16 +348,16 @@ int main()
         FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
         auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 4; T.k[1] = 0.0f; T.k[2] = 0.5f;
         auto& RP = st->lanes[4]; RP.on = false;            // REPEAT stays OFF: Time must move the head by itself
-        fill (T, [] (double x) { return (float) (g_sl2 * x); });
+        fill (T, [] (double x) { return (float) (1.0 - g_sl2 * x); });   // tp86 — halftime is a slope of -1/2 in the offset convention
         g.setState (st);
-        const int N = (int) (SR * 2.0); std::vector<float> L ((size_t) N), R ((size_t) N);
+        const int N = (int) (SR * 4.2); std::vector<float> L ((size_t) N), R ((size_t) N);   // tp86 — past the first cycle: the ring must hold what the offset asks for
         for (int i = 0; i < N; ++i) L[(size_t) i] = R[(size_t) i] = (float) i / (float) N;
         int done = 0; double ppq = 0.0; const int B = 256;
         while (done < N)
         { const int n = std::min (B, N - done); g.process (L.data() + done, R.data() + done, n, ppq, BPM, true); ppq += n / FPB; done += n; }
-        const int i0 = (int) (SR * 1.3), w = 2000;
+        const int i0 = (int) (SR * 3.3), w = 2000;
         const double rate = ((double) L[(size_t) (i0 + w)] - (double) L[(size_t) i0]) * N / w;
-        char buf[200]; std::snprintf (buf, sizeof buf, "T24 the ring advances for TIME ALONE (Repeat off): a 0.5 slope reads at %.3f, not stuck at unity", rate);
+        char buf[220]; std::snprintf (buf, sizeof buf, "T24 the ring advances for TIME ALONE (Repeat off): a halftime line reads at %.3f, not stuck at unity", rate);
         check (std::fabs (rate - 0.5) < 0.02, buf);
     }
     // ── T25: tp80 — 🚨 THE NINE LENT LANES REACH THEIR ENGINE, WITH THE SHAPE AS THE RHYTHM ──
@@ -473,7 +479,7 @@ int main()
                 auto& L = st->lanes[c.kind]; L.on = true; L.depth = 1; L.blend = 1; L.k[c.knob] = kv;
                 if (c.kind == 7) { L.mode = 0; L.k[0] = 1.0f; L.k[1] = 0.6f; }      // a coarse, slow crush to hear the stereo split
                 if (c.kind == 0) fill (L, [] (double x) { return x < 0.15 ? 1.0f : 0.0f; });   // a short opening, so Hold has something to hold
-                else if (c.kind == 1) fill (L, [] (double x) { return (float) (0.5 * x); });   // a halftime read, so Tone has something to colour
+                else if (c.kind == 1) fill (L, [] (double x) { return (float) (1.0 - 0.5 * x); });   // tp86 — a halftime read is a slope of -1/2 now, so Tone has something to colour
                 else if (c.kind == 4) fill (L, [] (double x) { return x < 0.5 ? 0.8f : 0.0f; });
                 else fill (L, [] (double x) { return (float) x; });
                 return run (g, st, 0.0, 1.0, sig440);
@@ -497,17 +503,20 @@ int main()
         char buf2[220]; std::snprintf (buf2, sizeof buf2, "T27b Filter Punch reached the engine as %.2f (set 0.83) and Drive Knee as %.2f (set 0.31)", spy.punch, spy.knee);
         check (std::fabs (spy.punch - 0.83f) < 1e-3f && std::fabs (spy.knee - 0.31f) < 1e-3f, buf2);
     }
-    // ── T28: tp85 — 🚨 TIME AGAINST SHAPERBOX 3 / GROSS BEAT, BEYOND THE PITCH LAW ────────────────
-    //  T23 proved the one law Max named: the shape's SLOPE is the playback rate. That is the headline,
-    //  but it is not the contract. Gross Beat's Time envelope also says a FLAT segment freezes, the top
-    //  line plays now, a FALLING segment plays backwards, the grid's Range is how far back the bottom of
-    //  the shape reaches, and the future cannot be read. Those are the bars here, on the same instrument
-    //  T23 used — the input's VALUE IS ITS OWN SAMPLE INDEX, so the output says which sample was read and
-    //  its slope is the playback rate exactly. No estimator, nothing to fool.
+    // ── T28-T33: tp86 — 🚨 TIME IS SHAPERBOX'S TIMESHAPER NOW: THE SHAPE IS THE OFFSET ───────────
+    //  Max sent the Cableguys TimeShaper tutorial with "we need our time to act like this". The model it
+    //  states on screen is: the vertical is TIME OFFSET, the top line is the present, "a horizontal line
+    //  gives 100% playback speed", "when your LFO matches the angle of this gray guideline you get 0%
+    //  playback speed — the audio is stopped", steeper than the guideline is reverse, and a line angled up
+    //  plays faster. That is rate = 1 + slope × Range, and it is what these bars measure.
     //
-    //  ⚠️ ONE MEASUREMENT TRAP COST ME AN HOUR AND IS WORTH THE COMMENT: reading the rate too early reads
-    //  UNITY whatever the shape says, because the ring has not filled yet and every request is clamped to
-    //  the head. Measure after the ring holds more than the shape asks for.
+    //  ⚠️ WHAT WAS WRONG BEFORE, and it was ONE thing: the shape was read as an absolute position WITHIN
+    //  the cycle, which re-anchors the read head to NOW at every cycle boundary. Two capabilities fell out
+    //  of that and both are in T29 and T33 — a constant delay decayed into a freeze, and the average speed
+    //  over a cycle could never exceed 1.000× however the shape was drawn.
+    //
+    //  Measured on T23's instrument: the input's VALUE IS ITS OWN SAMPLE INDEX, so the output says exactly
+    //  which sample was read and its slope is the playback rate. No estimator to be fooled by.
     {
         auto traceOf = [&] (float (*shape) (double), float range, float fade, float glide, double seconds) -> std::vector<float>
         {
@@ -524,84 +533,145 @@ int main()
         };
         auto rateAt = [] (const std::vector<float>& t, double at, int w) -> double
         { const size_t i0 = (size_t) (SR * at); return ((double) t[i0 + (size_t) w] - (double) t[i0]) / w; };
+        //  the whole-cycle numbers: the cycle is 4 beats = 2 s at 120, so read the third one, warm.
+        auto cycleRate = [&] (const std::vector<float>& t) -> double
+        { const size_t a2 = (size_t) (SR * 6.02), b2 = (size_t) (SR * 7.98); return ((double) t[b2] - (double) t[a2]) / (double) (b2 - a2); };
+        auto lagAtCycle = [&] (const std::vector<float>& t, double at) -> double
+        { const size_t i = (size_t) (SR * at); return (double) i - (double) t[i]; };
 
-        // ── T28 a FLAT shape FREEZES, and the top line plays now ──
+        // ── T28 THE MANUAL'S OWN SENTENCE: A HORIZONTAL LINE GIVES 100% PLAYBACK SPEED ──
         {
-            static float gy; char worst[160] = ""; bool ok = true;
-            auto flat = [] (double) { return gy; };
-            gy = 0.5f; const std::vector<float> mid = traceOf (flat, 0.5f, 0.3f, 0.0f, 2.2);
-            const double rMid = rateAt (mid, 1.3, 2000);
-            gy = 1.0f; const std::vector<float> top = traceOf (flat, 0.5f, 0.3f, 0.0f, 2.2);
-            const double rTop = rateAt (top, 1.3, 2000), lagTop = SR * 1.3 - (double) top[(size_t) (SR * 1.3)];
-            if (std::fabs (rMid) > 0.02) { ok = false; std::snprintf (worst, sizeof worst, "a flat mid shape read at %.3f, not frozen", rMid); }
-            if (std::fabs (rTop - 1.0) > 0.02 || std::fabs (lagTop) > 8.0) { ok = false; std::snprintf (worst, sizeof worst, "the top line read at %.3f with a lag of %.0f", rTop, lagTop); }
-            char buf[300]; std::snprintf (buf, sizeof buf, "T28 TIME vs GROSS BEAT — a FLAT shape FREEZES (rate %.3f) and the TOP line plays NOW (rate %.3f, lag %.0f samples)%s%s",
-                                          rMid, rTop, lagTop, ok ? "" : " — WRONG: ", worst);
+            static float gy; auto flat = [] (double) { return gy; };
+            gy = 1.0f; const std::vector<float> top = traceOf (flat, 0.5f, 0.3f, 0.0f, 8.4);
+            gy = 0.5f; const std::vector<float> mid = traceOf (flat, 0.5f, 0.3f, 0.0f, 8.4);
+            const double rTop = cycleRate (top), lTop = lagAtCycle (top, 6.0);
+            const double rMid = cycleRate (mid), lMid = lagAtCycle (mid, 6.0);
+            const bool ok = std::fabs (rTop - 1.0) < 0.02 && std::fabs (lTop) < 8.0
+                         && std::fabs (rMid - 1.0) < 0.02 && std::fabs (lMid - 48000.0) < 400.0;
+            char buf[330]; std::snprintf (buf, sizeof buf,
+                "T28 A HORIZONTAL LINE GIVES 100%% PLAYBACK SPEED — at the top %.3fx with no lag (%.0f samples), and half way down %.3fx held a constant %.0f samples behind: normal speed, DELAYED",
+                rTop, lTop, rMid, lMid);
             check (ok, buf);
         }
-        // ── T29 a FALLING shape plays BACKWARDS, at the slope it is drawn at ──
+        // ── T29 🚨 THE CAPABILITY THE OLD MODEL COULD NOT REACH: A CONSTANT DELAY ──
         {
-            bool ok = true; char worst[160] = "";
-            /* ⚠️ WHERE IN THE CYCLE YOU MEASURE IS PART OF THE MEASUREMENT. A falling shape starts AT the
-               present and descends, so for the first part of its cycle it is asking for samples that do
-               not exist yet and the lane is pinned to now, reading +1.000. 1-x only clears the present at
-               p ≥ ½ and 1-½x at p ≥ ⅔. Read at p = 0.8 of a later cycle — the cycle is 4 beats = 2 s — and
-               the reverse is exact. Measuring at p = 0.15 "proved" reverse was broken when it was not. */
-            const std::vector<float> a1 = traceOf ([] (double x) { return (float) (1.0 - x); },       0.5f, 0.3f, 0.0f, 4.4);
-            const std::vector<float> a2 = traceOf ([] (double x) { return (float) (1.0 - 0.5 * x); }, 0.5f, 0.3f, 0.0f, 4.4);
-            const double r1 = rateAt (a1, 3.6, 400), r2 = rateAt (a2, 3.6, 400);
-            if (std::fabs (r1 + 1.0)  > 0.03) { ok = false; std::snprintf (worst, sizeof worst, "slope -1 read %+.3f", r1); }
-            if (std::fabs (r2 + 0.5)  > 0.03) { ok = false; std::snprintf (worst, sizeof worst, "slope -0.5 read %+.3f", r2); }
-            char buf[280]; std::snprintf (buf, sizeof buf, "T29 TIME REVERSES: a shape falling at -1 plays backwards at %+.3f and one falling at -0.5 at %+.3f%s%s",
-                                          r1, r2, ok ? "" : " — WRONG: ", worst);
-            check (ok, buf);
-        }
-        // ── T30 RANGE is the pitch interval: ¼x .. 4x, the knob's own law ──
-        {
+            /* Under the absolute model the best drawable "play normally, one beat late" averaged 0.755x,
+               because the first beat of EVERY cycle was a freeze — the read head was re-anchored to now at
+               the cycle boundary and had to fall behind again from scratch. A flat line does it now. */
+            static float gy2; auto flat = [] (double) { return gy2; };
             bool ok = true; std::string got;
-            //  rate = slope x 4^((k2-0.5)*2), so a HALF ramp walks the quarter-speed end of the knob.
-            const float ks[3] = { 0.0f, 0.25f, 0.5f };
-            const double want[3] = { 0.125, 0.25, 0.5 };
-            for (int i = 0; i < 3; ++i)
+            for (float y : { 0.75f, 0.5f, 0.25f })
             {
-                const std::vector<float> t = traceOf ([] (double x) { return (float) (0.5 * x); }, ks[i], 0.3f, 0.0f, 2.6);
-                const double r = rateAt (t, 1.6, 2000);
-                char q[60]; std::snprintf (q, sizeof q, "%s%.3f", i ? " · " : "", r); got += q;
-                if (std::fabs (r - want[i]) > 0.03) ok = false;
+                gy2 = y; const std::vector<float> t = traceOf (flat, 0.5f, 0.3f, 0.0f, 8.4);
+                const double r = cycleRate (t), lag = lagAtCycle (t, 6.0);
+                char q[80]; std::snprintf (q, sizeof q, "%sy=%.2f %.3fx at %.0f behind", got.empty() ? "" : " · ", y, r, lag);
+                got += q;
+                if (std::fabs (r - 1.0) > 0.02) ok = false;
+                if (std::fabs (lag - (double) (1.0f - y) * 96000.0) > 600.0) ok = false;
             }
-            char buf[300]; std::snprintf (buf, sizeof buf, "T30 RANGE IS THE INTERVAL: the same half-slope read at Range 0, ¼ and ½ gives %s — the knob's 4^((k-½)·2) law, an octave a quarter turn", got.c_str());
+            char buf[330]; std::snprintf (buf, sizeof buf, "T29 A CONSTANT OFFSET PLAYS AT FULL SPEED, WHICH THE OLD MODEL COULD NOT DO AT ALL (its best was 0.755x): %s", got.c_str());
             check (ok, buf);
         }
-        // ── T31 THE FUTURE CANNOT BE READ — and that is WHY the rise is drawn the way Gross Beat draws it ──
+        // ── T30 THE GUIDELINE IS THE STOP, AND STEEPER IS REVERSE ──
         {
-            /* A shape through the origin can NEVER exceed unity, and this is not a clamp bolted on: at p=0
-               the read is already at the write head, so any slope steeper than the grid asks for samples
-               that do not exist yet, and `behind` floors at zero. You pitch UP the way Gross Beat does —
-               FREEZE first to bank some lag, then catch up. Drawn that way the rate is exactly the slope,
-               ×2 and ×4, which is the octave and the two octaves. */
-            const std::vector<float> flat2 = traceOf ([] (double x) { return (float) x; }, 0.75f, 0.0f, 0.0f, 2.6);
-            const double pinned = rateAt (flat2, 1.6, 2000);
-            const std::vector<float> up2 = traceOf ([] (double x) { return x < 0.5 ? 0.0f : (float) (2.0 * (x - 0.5)); }, 0.5f, 0.0f, 0.0f, 4.4);
-            const std::vector<float> up4 = traceOf ([] (double x) { return x < 0.75 ? 0.0f : (float) (4.0 * (x - 0.75)); }, 0.5f, 0.0f, 0.0f, 4.4);
-            const double held = rateAt (up2, 2.6, 400), rise2 = rateAt (up2, 3.3, 400), rise4 = rateAt (up4, 3.6, 400);
-            const bool ok = std::fabs (pinned - 1.0) < 0.03 && std::fabs (held) < 0.03
-                         && std::fabs (rise2 - 2.0) < 0.05 && std::fabs (rise4 - 4.0) < 0.08;
-            char buf[400]; std::snprintf (buf, sizeof buf,
-                "T31 THE FUTURE CANNOT BE READ, SO THE RISE IS DRAWN AS A FREEZE THEN A CATCH-UP: a ramp through the origin at Range ×2 pins to now (%.3f), while freeze-then-slope-2 holds at %.3f and then runs at %.3f, and freeze-then-slope-4 at %.3f — the octave and the two octaves, exactly as drawn",
-                pinned, held, rise2, rise4);
+            //  slope -1 over the cycle is the grey guideline: rate 1 + (-1) = 0. Steeper reverses, and the
+            //  video draws exactly that — half a bar of normal playback, then the same half bar backwards.
+            const std::vector<float> stop = traceOf ([] (double x) { return (float) (1.0 - x); }, 0.5f, 0.3f, 0.0f, 8.4);
+            const std::vector<float> rev  = traceOf ([] (double x) { return x < 0.5 ? 1.0f : (float) (1.0 - 2.0 * (x - 0.5)); }, 0.5f, 0.0f, 0.0f, 8.4);
+            const double rStop = cycleRate (stop);
+            const double rFwd = rateAt (rev, 6.4, 400), rBack = rateAt (rev, 7.4, 400);
+            const bool ok = std::fabs (rStop) < 0.02 && std::fabs (rFwd - 1.0) < 0.05 && std::fabs (rBack + 1.0) < 0.05;
+            char buf[330]; std::snprintf (buf, sizeof buf,
+                "T30 THE GREY GUIDELINE IS THE STOP AND STEEPER IS REVERSE: a slope of -1 over the cycle reads %.3fx, and half a bar flat then falling twice as steep reads %+.3fx then %+.3fx",
+                rStop, rFwd, rBack);
             check (ok, buf);
         }
-        // ── T32 FADE closes the seam at the cycle wrap ──
+        // ── T31 🚨 THE OTHER CAPABILITY THE OLD MODEL COULD NOT REACH: FASTER THAN REALTIME, SUSTAINED ──
         {
+            /* "A line angled up plays the audio faster." Under the absolute model the average speed over a
+               cycle could never exceed 1.000x whatever was drawn, because the cycle always began at the
+               present and the read could only fall behind. This is the tutorial's 200% line. */
+            const std::vector<float> up1 = traceOf ([] (double x) { return (float) x; },       0.5f,  0.0f, 0.0f, 8.4);
+            const std::vector<float> up2 = traceOf ([] (double x) { return (float) x; },       0.75f, 0.0f, 0.0f, 8.4);
+            const double r1 = cycleRate (up1), r2 = cycleRate (up2);
+            const bool ok = std::fabs (r1 - 2.0) < 0.03 && std::fabs (r2 - 3.0) < 0.05;
+            char buf[330]; std::snprintf (buf, sizeof buf,
+                "T31 A LINE ANGLED UP PLAYS FASTER, FOR THE WHOLE CYCLE — a full rise reads %.3fx at Range x1 and %.3fx at Range x2 (the old model was pinned at 1.000x however it was drawn)",
+                r1, r2);
+            check (ok, buf);
+        }
+        // ── T32 THE FUTURE IS STILL UNREADABLE ──
+        {
+            /* The one clamp that survives the change, and the tutorial has it too: the cross-hatched area
+               below the guideline is audio the buffer does not hold yet. Asking for it pins you to now. */
+            const std::vector<float> ahead = traceOf ([] (double) { return 1.0f; }, 0.5f, 0.3f, 0.0f, 4.4);
+            const double lag = lagAtCycle (ahead, 3.0);
+            const std::vector<float> deep = traceOf ([] (double) { return 0.0f; }, 1.0f, 0.3f, 0.0f, 1.0);
+            const double early = lagAtCycle (deep, 0.10);   // 0.1 s in, the ring cannot hold a whole Range yet
+            const bool ok = std::fabs (lag) < 8.0 && early < (double) (SR * 0.11);
+            char buf[320]; std::snprintf (buf, sizeof buf,
+                "T32 THE FUTURE IS STILL UNREADABLE AND THE BUFFER STILL HAS TO FILL: the top line sits exactly on the write head (%.0f samples) and a full-Range offset asked for 0.1 s after the start reads only %.0f samples back",
+                lag, early);
+            check (ok, buf);
+        }
+        // ── T34 🚨 PRESS PLAY AND NOTHING DROPS OUT ──
+        {
+            /* Max: "I press play and it drops out and then it comes in two bars later — I hate that shit,
+               ShaperBox doesn't do that, it's very reactive."  He was right, and the cause was the clamp:
+               an offset the ring could not meet pinned the read to the OLDEST sample, and the oldest sample
+               does not move, so the read stood still while the write head ran away — a whole bar of frozen
+               near-DC. MEASURED BEFORE: a constant half-bar offset rendered -24.8 dBFS for exactly one bar
+               and then snapped to -9.0. It falls back to the PRESENT now: full level, full speed, from the
+               first sample, whatever the shape asks for. */
+            struct Sh { const char* name; float (*f) (double); };
+            static const Sh S4[5] = {
+                { "flat at the top",   [] (double)   { return 1.0f; } },
+                { "a constant offset", [] (double)   { return 0.5f; } },
+                { "a 1/8 stutter",     [] (double x) { const int k = (int) (x * 8.0); return 1.0f - (float) k / 8.0f; } },
+                { "a full rise (200%)",[] (double x) { return (float) x; } },
+                { "halftime",          [] (double x) { return (float) (1.0 - 0.5 * x); } } };
+            bool ok = true; char worst[180] = ""; double worstDb = 0;
+            for (const auto& sh : S4)
+            {
+                FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+                auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 4;
+                T.k[0] = 0.3f; T.k[1] = 0.0f; T.k[2] = 0.5f; T.fill (sh.f); g.setState (st);
+                const int N = (int) (SR * 4.2); std::vector<float> L ((size_t) N), R ((size_t) N);
+                for (int i = 0; i < N; ++i) L[(size_t) i] = R[(size_t) i] = 0.5f * (float) std::sin (2.0 * M_PI * 220.0 * i / SR);
+                int done = 0; double ppq = 0.0; const int B = 256;
+                while (done < N) { const int n = std::min (B, N - done); g.process (L.data() + done, R.data() + done, n, ppq, BPM, true); ppq += n / FPB; done += n; }
+                //  every sixteenth of the first two bars, against the settled level in the third
+                const size_t rA = (size_t) (SR * 3.0), rB = (size_t) (SR * 4.0);
+                double e = 0; for (size_t i = rA; i < rB; ++i) e += (double) L[i] * L[i];
+                const double ref = 20.0 * std::log10 (std::sqrt (e / (double) (rB - rA)) + 1e-12);
+                for (int k = 0; k < 16; ++k)
+                {
+                    const size_t a2 = (size_t) (k * SR * 0.125), b2 = (size_t) ((k + 1) * SR * 0.125);
+                    double e2 = 0; for (size_t i = a2; i < b2; ++i) e2 += (double) L[i] * L[i];
+                    const double db = 20.0 * std::log10 (std::sqrt (e2 / (double) (b2 - a2)) + 1e-12);
+                    if (db < ref - 3.0) { ok = false;
+                        if (ref - db > worstDb) { worstDb = ref - db; std::snprintf (worst, sizeof worst, "%s dipped %.1f dB at the %d%s sixteenth", sh.name, ref - db, k + 1, k == 0 ? "st" : "th"); } }
+                }
+            }
+            char buf[330]; std::snprintf (buf, sizeof buf,
+                "T34 PRESS PLAY AND NOTHING DROPS OUT: flat, a constant offset, a stutter, a full rise and halftime all hold full level from the FIRST sixteenth — an offset the ring cannot meet yet plays the PRESENT, it does not freeze at the buffer's edge%s%s",
+                ok ? "" : " — WRONG: ", worst);
+            check (ok, buf);
+        }
+        // ── T33 FADE CLOSES THE SEAM AT A STEP ──
+        {
+            //  a stutter in this model is a DESCENDING STAIRCASE: each tread is flat (normal speed) and each
+            //  riser jumps back. The risers are the steps Fade has to smooth.
             double jump[3]; const float fades[3] = { 0.0f, 0.3f, 1.0f };
             for (int i = 0; i < 3; ++i)
             {
-                const std::vector<float> t = traceOf ([] (double x) { return (float) (0.5 * x); }, 0.5f, fades[i], 0.0f, 2.2);
-                double m = 0; for (size_t q = (size_t) (SR * 0.6); q < t.size(); ++q) m = std::max (m, (double) std::fabs ((double) t[q] - (double) t[q-1]));
+                const std::vector<float> t = traceOf ([] (double x) { const int k = (int) (x * 8.0); return 1.0f - (float) k / 8.0f; },
+                                                      0.5f, fades[i], 0.0f, 4.4);
+                double m = 0; for (size_t q = (size_t) (SR * 2.2); q < t.size(); ++q) m = std::max (m, (double) std::fabs ((double) t[q] - (double) t[q-1]));
                 jump[i] = m;
             }
-            const bool ok = jump[1] < jump[0] * 0.85 && jump[2] < jump[1] * 0.85;
-            char buf[300]; std::snprintf (buf, sizeof buf, "T32 FADE CLOSES THE SEAM: the read's largest jump at the cycle wrap falls %.0f → %.0f → %.0f samples as Fade goes 0 → 0.3 → 1",
+            const bool ok = jump[1] < jump[0] * 0.9 && jump[2] < jump[1] * 0.9;
+            char buf[300]; std::snprintf (buf, sizeof buf, "T33 FADE CLOSES THE SEAM AT A STUTTER'S RISER: the read's largest jump falls %.0f -> %.0f -> %.0f samples as Fade goes 0 -> 0.3 -> 1",
                                           jump[0], jump[1], jump[2]);
             check (ok, buf);
         }

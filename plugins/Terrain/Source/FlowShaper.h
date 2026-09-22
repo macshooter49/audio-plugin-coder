@@ -355,12 +355,36 @@ public:
                     const double p = lanePhase (TL, 1, beat);
                     const float s = readShape (*TL.L, p);
                     const float rangeMul = (TL.mode == 1 ? 0.5f : TL.mode == 2 ? 2.0f : 1.0f) * std::pow (4.0f, (TL.L->k[2] - 0.5f) * 2.0f);   // Range: the step × the knob (k2: ¼ … ×4, 0.5 = ×1)
-                    const double shapedBeats = (double) s * cyc * rangeMul;                 // where in the cycle the shape reads
-                    const double nowBeats    = p * cyc;                                     // where the cycle is
-                    double behind = (nowBeats - shapedBeats) * (double) TL.depth;           // can only read the PAST
-                    if (behind < 0.0) behind = 0.0;
+                    /* 🚨 tp86 — THE SHAPE IS THE TIME OFFSET, NOT AN ABSOLUTE POSITION IN THE CYCLE.
+                       ShaperBox 3's TimeShaper (and Gross Beat) read the vertical as HOW FAR BACK FROM NOW: the
+                       top line is the present, so a FLAT line plays NORMALLY, a line falling at the grey
+                       guideline's gradient is STOPPED, and a RISING line plays FASTER.
+                       rate = 1 + slope × Range, straight out of d(offset)/dt.
+
+                       ⚠️ Until tp86 this lane read the shape as the absolute position WITHIN THE CYCLE
+                       (`behind = nowBeats − s·cyc·Range`). That re-anchors the read head to NOW at every cycle
+                       boundary — `nowBeats` is zero there, so `behind` could only come out ≤ 0 and was clamped to
+                       the head. MEASURED, and it is exactly what Max heard: a constant delay decayed into a
+                       freeze (the best drawable "play normally, one beat late" averaged **0.755×** rather than
+                       1.000×, because the first beat of every cycle was frozen), and **the average speed over a
+                       cycle could never exceed 1.000×** however the shape was drawn — so ShaperBox's sustained
+                       200% riser was not expressible at all. One re-anchoring caused both.
+                       MEASURED AFTER: flat at the top 1.000× with no lag · flat at half 1.000× held a constant
+                       half-cycle behind · rising 0→1 a sustained **2.000×** · falling at the guideline 0.000×. */
+                    double behind = (double) (1.0f - s) * cyc * rangeMul * (double) TL.depth;   // 1 = now · 0 = a full Range ago
+                    if (behind < 0.0) behind = 0.0;                                             // the future is still unreadable
                     double behindF = behind * fpb; const double maxB = (double) (ringFilled_ > 4 ? ringFilled_ - 4 : 0);
-                    if (behindF > maxB) behindF = maxB;
+                    /* 🚨 tp86 — AN OFFSET THE BUFFER CANNOT MEET GOES LIVE, IT DOES NOT FREEZE AT THE EDGE.
+                       Max: "I press play and it drops out and then it comes in two bars later — I hate that
+                       shit, ShaperBox doesn't do that, it's very reactive."  He is right and this was the
+                       cause. Clamping to `maxB` pins the read to the OLDEST sample in the ring, and the oldest
+                       sample does not move — the read position stands still while the write head runs away
+                       from it, so the whole first bar was a frozen near-DC smear. MEASURED: a constant
+                       half-bar offset rendered -24.8 dBFS for exactly one bar and then snapped to -9.0.
+                       Falling back to the PRESENT keeps the audio playing at full level and full speed until
+                       there is enough history to honour the shape, and the jump law crossfades the one step
+                       where the effect engages. Nothing ever drops out. */
+                    if (behindF > maxB) behindF = 0.0;
                     // tp72 — GLIDE (the Target tab's second knob): instead of cutting to a new read position, the head SLEWS
                     // there at a bounded speed — the transition is heard as a pitch bend (a tape scrub, a Gross Beat
                     // "slide"). At 0 the jump law below cuts as before.
@@ -399,8 +423,8 @@ public:
                             tsXfN_ = std::max (48, (int) (sr_ * 0.001 * (0.5 + TL.L->k[0] * 4.5))); tsXf_ = tsXfN_;
                             double p2 = p + 1.5 / kShaperT; p2 -= std::floor (p2);
                             const float s2 = readShape (*TL.L, p2);
-                            double bt = (p2 * cyc - (double) s2 * cyc * rangeMul) * (double) TL.depth; if (bt < 0.0) bt = 0.0;
-                            stepTarget_ = std::min (bt * fpb, maxB);
+                            double bt = (double) (1.0f - s2) * cyc * rangeMul * (double) TL.depth; if (bt < 0.0) bt = 0.0;   // tp86 — the same offset model, or the jump lands somewhere else
+                            stepTarget_ = (bt * fpb > maxB) ? 0.0 : bt * fpb;   // tp86 — the same rule for the jump's target: live, never frozen at the edge
                         }
                         behindF = stepTarget_;
                     }

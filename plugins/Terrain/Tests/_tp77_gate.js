@@ -594,6 +594,31 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  ok(q38.isBrowser && q38.selHidden && q38.opened && q38.colours && q38.white && q38.vinyl,
     '[38] 🚨 the Noise lane\'s type chip opens the two-pane LIBRARY browser (its native dropdown hidden, as the Filter\'s is), with the thirteen colours as its first category', JSON.stringify(q38));
 
+ // ── [39] tp86 — THE STOP GUIDELINE IS DRAWN ON THE TIME LANE, AND IT MOVES WITH RANGE ──────────
+ //  The shape is the time OFFSET now, so "which angle is stopped" is something you have to be able to SEE —
+ //  the tutorial leans on that grey line for every gesture in it. rate = 1 + slope × Range, so the stopped
+ //  gradient falls 1/Range across the cycle: at Range ×1 it crosses the whole box, at ×2 it stops half way.
+ //  It must not appear on any other lane, where the vertical does not mean time at all.
+ const q39=await p.evaluate(async()=>{
+   const card=document.querySelector('.ti-card.shp-ext'); const S=window.__tiDice.chop.S;
+   const w=(ms)=>new Promise(r=>setTimeout(r,ms));
+   const guide=()=>{ const f=card.querySelector('.screen .field svg'); if(!f) return null;
+     const l=[...f.querySelectorAll('line')].find(e=>e.getAttribute('stroke-dasharray')==='3 3');
+     if(!l) return null;
+     return { x1:+l.getAttribute('x1'), y1:+l.getAttribute('y1'), x2:+l.getAttribute('x2'), y2:+l.getAttribute('y2'),
+              hatch:!!f.querySelector('path[fill^="url(#shtg"]') }; };
+   S.set('lane',1); await w(300);
+   S.set('k2_1',0.5); await w(300); const atOne=guide();      // Range ×1
+   S.set('k2_1',0.75); await w(300); const atTwo=guide();     // Range ×2 — the stop gradient halves
+   S.set('lane',0); await w(300); const onVol=guide();
+   S.set('lane',1); S.set('k2_1',0.5); await w(200);
+   return {atOne,atTwo,onVol};
+ });
+ const g1=q39.atOne, g2=q39.atTwo;
+ ok(!!g1 && g1.hatch && g1.y2>g1.y1 && !!g2 && (g2.y2-g2.y1) < (g1.y2-g1.y1)*0.75 && !q39.onVol,
+    '🚨 [39] the TIME lane draws the STOP guideline — the gradient that reads 0%, Cableguys\' grey line — and cross-hatches the buffer it cannot reach yet; the line SHALLOWS as Range doubles, and no other lane has one',
+    JSON.stringify({rangeX1:g1,rangeX2:g2,volume:q39.onVol}));
+
  ok(errs.length===0,'[14] the page threw nothing', errs.slice(0,3).join(' | ')||'clean');
  await b.close(); console.log('\n  '+pass+' passed, '+fail+' failed\n'); process.exit(fail?1:0);
 })();
