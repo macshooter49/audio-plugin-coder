@@ -1,7 +1,35 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp80** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp81** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp81 (2026-09-21) — THE ROSTER CLOSES BUT ONE · FOUR TARGETS ON EVERY LANE
+Max: "still owed: Tape, Granular, Bode and Noise … I want everyone to have four targets, exactly four."
+
+**Three more lends** — Tape · Granular · Bode — through the same `ShaperExt::fx` door. Sixteen kinds, eight chain
+positions. ⚠️ Granular and Bode expose no `typeNames()`, so their menus are COPIES of the rack's lists at
+PluginProcessor.cpp:6596 / :7096 and must move with the page's `LNMODE`.
+🔑 **The shape and the blend arrive APART now** (`fx(kind, s, k, mode, blend, …)`). Pre-multiplying forced every kind
+to spend its shape on wet amount — right for a reverb (the shape IS the send), wrong for Bode, where the shape is the
+INTERVAL and the wet stays put.
+**FOUR TARGETS ON ALL SIXTEEN.** The fourth on each original lane: Volume Hold · Time Tone · Filter Punch · Pan Tilt ·
+Repeat Tone · Drive Knee · Phaser Centre · Crush Stereo. ⚠️ Filter's Punch and Drive's Knee were already in the rack
+engines and had never been reached — the two lend signatures gained an argument, nothing was written.
+🚨 **A DEFAULT IS BEHAVIOUR.** Hold booted at the table's existing 0.5, held the gate open, and every Volume bar in
+the offline proof went red at once. Every fourth target boots neutral now (Hold 0, Punch 0, Stereo 0, Centre 0.2 =
+the 200 Hz the phaser always swept from, Tone/Tilt 0.5).
+⚠️ Crush had NO width: both channels shared one hold counter. Stereo gives the right its own.
+
+`FlowShaper_test.cpp` 35/35 (T27 each new fourth target audible — ⚠️ measured over BOTH channels, since a left-only
+reading called Crush Stereo inaudible; T27b Punch/Knee arrive at their engine), `_tp77_gate.js` 33/33,
+`au_shaper_lock.cpp` 9/9, `_tp61_gate.js` 16/16.
+
+⚠️ **OWED.** (1) **NOISE, and it is NOT a lend** — every other effect is a self-contained engine class, but the noise
+generator lives inside `SynthVoice`'s render (a switch on `noiseType_`, 13 colours). A Noise lane needs it lifted into
+its own header used by both, with a bit-identical null on the synth before it ships. (2) That the eight borrowed kinds
+SOUND right is still uncertified: the AU cert cannot place a kind, because the chain lives in the shaperJson blob, not
+in parameters — **make the eight positions eight CHOICE PARAMETERS** (it also buys host automation of the chain).
+(3) Time against ShaperBox 3 / Gross Beat beyond the pitch law.
 
 ## tp80 (2026-09-21) — THE ROSTER: FIVE RACK EFFECTS BECOME SHAPER LANES
 Max: "we're going to make each of these effects available to shape … reverb, tape, widen, multiband, granular,

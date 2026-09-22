@@ -209,8 +209,8 @@ int main()
         struct FakeExt : ShaperExt
         {
             int fCalls[3] = { 0, 0, 0 }, fEng[3] = { -1, -1, -1 }, dCalls[2] = { 0, 0 }, dMode[2] = { -1, -1 }; float lastCut = -1;
-            bool filter (int which, int engine, float cut01, float, float, float, int, float, float& l, float& r) noexcept override { ++fCalls[which]; fEng[which] = engine; lastCut = cut01; l *= 0.5f; r *= 0.5f; return true; }
-            bool drive  (int which, int mode, float, float, int, float, float, float& l, float& r) noexcept override { ++dCalls[which]; dMode[which] = mode; l *= 0.25f; r *= 0.25f; return true; }
+            bool filter (int which, int engine, float cut01, float, float, float, int, float, float, float& l, float& r) noexcept override { ++fCalls[which]; fEng[which] = engine; lastCut = cut01; l *= 0.5f; r *= 0.5f; return true; }
+            bool drive  (int which, int mode, float, float, int, float, float, float, float& l, float& r) noexcept override { ++dCalls[which]; dMode[which] = mode; l *= 0.25f; r *= 0.25f; return true; }
             bool fx (int, float, const float*, int, float, float&, float&) noexcept override { return false; }
         } ext;
         FlowShaper g; g.prepare (SR); g.setExt (&ext); auto st = state();
@@ -365,8 +365,8 @@ int main()
             int calls[kShaperLanes] = {}; float lastS[kShaperLanes] = {}, lastMix[kShaperLanes] = {};
             float lastK[kShaperLanes][4] = {}; int lastMode[kShaperLanes] = {};
             bool armed = true;
-            bool filter (int, int, float, float, float, float, int, float, float&, float&) noexcept override { return false; }
-            bool drive  (int, int, float, float, int, float, float, float&, float&) noexcept override { return false; }
+            bool filter (int, int, float, float, float, float, int, float, float, float&, float&) noexcept override { return false; }
+            bool drive  (int, int, float, float, int, float, float, float, float&, float&) noexcept override { return false; }
             bool fx (int kind, float s, const float* k, int mode, float mix, float& l, float& r) noexcept override
             {
                 if (kind < 0 || kind >= kShaperLanes) return false;
@@ -379,31 +379,31 @@ int main()
         FlowShaper g; g.prepare (SR); g.setExt (&ext); auto st = state();
         /* the five lent kinds, all placed in the chain, plus one ORDINARY kind so the bar also proves that a
            lane which does its own work in FlowShaper never comes through this door. */
-        static const int lent[5] = { 8, 9, 10, 11, 12 };   // Reverb · Delay · Chorus · Widen · Multiband
-        for (int q = 0; q < 5; ++q) st->slot[q] = lent[q];
-        st->slot[5] = 0; st->slot[6] = 2; st->slot[7] = 5;   // Volume · Filter · Drive
-        for (int q = 0; q < 5; ++q)
+        static const int lent[8] = { 8, 9, 10, 11, 12, 13, 14, 15 };   // Reverb · Delay · Chorus · Widen · Multiband · Tape · Granular · Bode
+        for (int q = 0; q < 7; ++q) st->slot[q] = lent[q];
+        st->slot[7] = 0;   // and one NATIVE lane in the chain, lit, which must never come through this door
+        for (int q = 0; q < 7; ++q)
         { auto& L = st->lanes[lent[q]]; L.on = true; L.depth = 1; L.blend = 1; L.mode = 1 + q;
           for (int w = 0; w < 4; ++w) L.k[w] = 0.1f * (float) (w + 1); fill (L, one); }
         auto& VV = st->lanes[0]; VV.on = true; VV.depth = 1; VV.blend = 1; fill (VV, one);   // a native lane, lit
         auto a = run (g, st, 0.0, 0.25, sig440);
         bool placedRan = true, kOk = true, modeOk = true, sOk = true, mixOk = true;
-        for (int q = 0; q < 5; ++q)
+        for (int q = 0; q < 7; ++q)
         { const int K = lent[q]; if (ext.calls[K] == 0) placedRan = false;
           if (std::fabs (ext.lastS[K] - 1.0f) > 0.01f) sOk = false;            // shape `one` at depth 1
           if (std::fabs (ext.lastMix[K] - 1.0f) > 0.01f) mixOk = false;        // s * blend
           if (ext.lastMode[K] != 1 + q) modeOk = false;
           for (int w = 0; w < 4; ++w) if (std::fabs (ext.lastK[K][w] - 0.1f * (float) (w + 1)) > 1e-4f) kOk = false; }
         const bool nativeStayedHome = ext.calls[0] == 0;   // Volume is lit and placed, and must NOT use fx()
-        char buf[280]; std::snprintf (buf, sizeof buf, "T25 the lent lanes: %d of 5 reached fx() with the shape, the four target knobs, the type and the mix; the lit Volume lane used fx() %d times; level %.1f dB",
-                                      placedRan ? 5 : 0, ext.calls[0], db (rms (a.L, 2000, 6000)));
+        char buf[280]; std::snprintf (buf, sizeof buf, "T25 the lent lanes: %d of 7 reached fx() with the shape, the four target knobs, the type and the mix; the lit Volume lane used fx() %d times; level %.1f dB",
+                                      placedRan ? 7 : 0, ext.calls[0], db (rms (a.L, 2000, 6000)));
         check (placedRan && nativeStayedHome && kOk && modeOk && sOk && mixOk, buf);
         // an UNARMED engine must be a wire, not a mute — the lane passes the audio through
         LentExt off; off.armed = false;
         FlowShaper g2; g2.prepare (SR); g2.setExt (&off); auto st2 = state();
-        for (int q = 0; q < 5; ++q) { st2->slot[q] = lent[q]; auto& L = st2->lanes[lent[q]]; L.on = true; L.depth = 1; L.blend = 1; fill (L, one); }
+        for (int q = 0; q < 8; ++q) { st2->slot[q] = lent[q]; auto& L = st2->lanes[lent[q]]; L.on = true; L.depth = 1; L.blend = 1; fill (L, one); }
         auto b = run (g2, st2, 0.0, 0.25, sig440);
-        char buf2[200]; std::snprintf (buf2, sizeof buf2, "T25b five UNARMED lent lanes pass the audio through at %.1f dB (a mute would read -inf)", db (rms (b.L, 2000, 6000)));
+        char buf2[200]; std::snprintf (buf2, sizeof buf2, "T25b eight UNARMED lent lanes pass the audio through at %.1f dB (a mute would read -inf)", db (rms (b.L, 2000, 6000)));
         check (db (rms (b.L, 2000, 6000)) > -10.0, buf2);   /* the 440 Hz test tone is 0.5 peak, so untouched IS about -9 dB; a mute reads -inf */
     }
     // ── T26: tp80 — 🚨 A LANE'S PARAMETERS MUST NOT LAND ON ANOTHER LANE ──
@@ -430,6 +430,60 @@ int main()
         const double open_ = db (rms (L, 4800, 19200)), shut = db (rms (L, 62400, 76800));   // the shape's first half, then its second
         char buf[220]; std::snprintf (buf, sizeof buf, "T26 pushing all %d lanes leaves the lit one alone: the gate reads %.1f dB open against %.1f dB shut", kShaperLanes, open_, shut);
         check (open_ - shut > 30.0, buf);
+    }
+    // ── T27: tp81 — 🚨 EVERY LANE HAS FOUR TARGETS, AND THE FOURTH ONE DOES SOMETHING ──
+    //  Max: "I want everyone to have four targets. It's not three, not two, exactly four … so that means four
+    //  parameters night and day, you know, crazy ones." A knob that exists and cannot be heard is the failure
+    //  this bar is for. Six of the eight are new DSP in this header and are measured; the other two (Filter's
+    //  Punch, Drive's Knee) are controls the rack ENGINES already had and the lane simply never reached, so for
+    //  those the thing to prove is that the value arrives — the engines' own proofs own their sound.
+    {
+        struct SpyExt : ShaperExt
+        {
+            float punch = -1, knee = -1;
+            bool filter (int, int, float, float, float, float, int, float, float pu, float& l, float& r) noexcept override
+            { punch = pu; l *= 0.7f; r *= 0.7f; return true; }
+            bool drive (int, int, float, float, int, float, float kn, float, float& l, float& r) noexcept override
+            { knee = kn; l *= 0.7f; r *= 0.7f; return true; }
+            bool fx (int, float, const float*, int, float, float&, float&) noexcept override { return false; }
+        } spy;
+        // the six that are ours: light the lane alone, sweep its fourth knob end to end, and listen
+        struct Case { int kind; int knob; const char* name; float lo; float hi; };
+        static const Case C[6] = { { 0, 3, "Volume Hold", 0.0f, 1.0f }, { 1, 3, "Time Tone",   0.0f, 1.0f },
+                                   { 3, 3, "Pan Tilt",    0.0f, 1.0f }, { 4, 3, "Repeat Tone", 0.0f, 1.0f },
+                                   { 6, 3, "Phaser Centre", 0.0f, 1.0f }, { 7, 3, "Crush Stereo", 0.0f, 1.0f } };
+        bool allHeard = true; char worst[200] = ""; double least = 1e9;
+        for (const auto& c : C)
+        {
+            auto runAt = [&] (float kv) -> Run
+            {
+                FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+                auto& L = st->lanes[c.kind]; L.on = true; L.depth = 1; L.blend = 1; L.k[c.knob] = kv;
+                if (c.kind == 7) { L.mode = 0; L.k[0] = 1.0f; L.k[1] = 0.6f; }      // a coarse, slow crush to hear the stereo split
+                if (c.kind == 0) fill (L, [] (double x) { return x < 0.15 ? 1.0f : 0.0f; });   // a short opening, so Hold has something to hold
+                else if (c.kind == 1) fill (L, [] (double x) { return (float) (0.5 * x); });   // a halftime read, so Tone has something to colour
+                else if (c.kind == 4) fill (L, [] (double x) { return x < 0.5 ? 0.8f : 0.0f; });
+                else fill (L, [] (double x) { return (float) x; });
+                return run (g, st, 0.0, 1.0, sig440);
+            };
+            const Run a = runAt (c.lo), b = runAt (c.hi);
+            /* BOTH channels: Crush's Stereo moves the RIGHT one by design, so a left-only reading called the
+               one knob that is explicitly about the image "inaudible". */
+            double diff = 0;
+            for (size_t q = 4000; q < a.L.size() && q < b.L.size(); ++q)
+                diff = std::max (diff, std::max ((double) std::fabs (a.L[q] - b.L[q]), (double) std::fabs (a.R[q] - b.R[q])));
+            if (diff < least) { least = diff; std::snprintf (worst, sizeof worst, "%s moved the output by only %.4f", c.name, diff); }
+            if (diff < 0.01) allHeard = false;
+        }
+        char buf[260]; std::snprintf (buf, sizeof buf, "T27 the six NEW fourth targets are all audible — the quietest: %s", worst);
+        check (allHeard, buf);
+        // and the two borrowed ones ARRIVE at their engine
+        FlowShaper g2; g2.prepare (SR); g2.setExt (&spy); auto st2 = state();
+        auto& F = st2->lanes[2]; F.on = true; F.depth = 1; F.blend = 1; F.k[5] = 0.83f; fill (F, one);
+        auto& D = st2->lanes[5]; D.on = true; D.depth = 1; D.blend = 1; D.k[4] = 0.31f; fill (D, one);
+        run (g2, st2, 0.0, 0.25, sig440);
+        char buf2[220]; std::snprintf (buf2, sizeof buf2, "T27b Filter Punch reached the engine as %.2f (set 0.83) and Drive Knee as %.2f (set 0.31)", spy.punch, spy.knee);
+        check (std::fabs (spy.punch - 0.83f) < 1e-3f && std::fabs (spy.knee - 0.31f) < 1e-3f, buf2);
     }
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);

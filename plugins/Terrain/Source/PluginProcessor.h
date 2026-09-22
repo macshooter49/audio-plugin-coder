@@ -2086,18 +2086,18 @@ private:
         void prepare (double sampleRate) { sr = sampleRate; for (auto& f : flt) if (f) { f->prepare (sr, 512); } for (auto& d : dst) if (d) d->prepare (sr); }
         void armFilter (int w) { if (w < 0 || w > 2 || flt[w]) return; auto e = std::make_unique<tw::FilterFxEngine>(); e->prepare (sr, 512); flt[w] = std::move (e); fltLive[w].store (flt[w].get(), std::memory_order_release); }
         void armDist   (int w) { if (w < 0 || w > 1 || dst[w]) return; auto e = std::make_unique<tw::DistortionEngine>(); e->prepare (sr); e->setMix (1.0f); dst[w] = std::move (e); dstLive[w].store (dst[w].get(), std::memory_order_release); }
-        bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, float spread, float& l, float& r) noexcept override
+        bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, float spread, float punch, float& l, float& r) noexcept override
         {
             if (which < 0 || which >= 3) return false;   // tp79 — `fltLive[which & 3]` could read one PAST a 3-element array; every call site passes 0..2 today, but the mask was wrong for the width and this struct is about to gain slots
             auto* e = fltLive[which].load (std::memory_order_acquire); if (e == nullptr) return false;
-            tw::FilterFxEngine::Params p; p.engine = engine; p.cut = cut01; p.res = res; p.drive = drive; p.poles = poles; p.charIdx = charIdx; p.spread = spread; p.wide = false;
+            tw::FilterFxEngine::Params p; p.engine = engine; p.cut = cut01; p.res = res; p.drive = drive; p.poles = poles; p.charIdx = charIdx; p.spread = spread; p.punch = punch; p.wide = false;
             p.env = 0.5f; p.sweep = 0.0f; p.track = 0.0f; p.mix = 1.0f;   // the shape IS the motion: no follower, no LFO, no key
             e->processSample (l, r, p); return true;
         }
-        bool drive (int which, int mode, float drive01, float tone, int character, float bias, float mix, float& l, float& r) noexcept override
+        bool drive (int which, int mode, float drive01, float tone, int character, float bias, float knee, float mix, float& l, float& r) noexcept override
         {
             auto* d = dstLive[which & 1].load (std::memory_order_acquire); if (d == nullptr) return false;
-            d->setMode (mode); d->setDrive (drive01); d->setTone (tone); d->setCharacter (character); d->setBias (bias); d->setMix (mix);
+            d->setMode (mode); d->setDrive (drive01); d->setTone (tone); d->setCharacter (character); d->setBias (bias); d->setKnee (knee); d->setMix (mix);
             float ol = 0, orr = 0; d->processSample (l, r, ol, orr); l = ol; r = orr; return true;
         }
 
@@ -2119,6 +2119,10 @@ private:
         std::unique_ptr<tw::TerrainChorusFx>   cho; std::atomic<tw::TerrainChorusFx*>   choLive { nullptr };
         std::unique_ptr<tw::TerrainWidenFx>    wid; std::atomic<tw::TerrainWidenFx*>    widLive { nullptr };
         std::unique_ptr<tw::TerrainSplitterFx> spl; std::atomic<tw::TerrainSplitterFx*> splLive { nullptr };
+        std::unique_ptr<tw::TapeFxEngine>      tpe; std::atomic<tw::TapeFxEngine*>      tpeLive { nullptr };
+        std::unique_ptr<tw::GranularFxEngine>  grn; std::atomic<tw::GranularFxEngine*>  grnLive { nullptr };
+        std::unique_ptr<tw::TerrainBodeFx>     bod; std::atomic<tw::TerrainBodeFx*>     bodLive { nullptr };
+        int grnUsed = 0;   // the granular's grain budget counter — it wants somewhere to keep score
         // the Reverb lane's four rooms, each built only if its type is the one chosen
         std::unique_ptr<RoomReverb>    rvRoom;    std::unique_ptr<PlateReverb>   rvPlate;
         std::unique_ptr<HallReverb>    rvHall;    std::unique_ptr<ShimmerReverb> rvShim;
@@ -2128,6 +2132,9 @@ private:
         void armChorus  () { if (cho) return; auto e = std::make_unique<tw::TerrainChorusFx>();   e->prepare (sr, 512); cho = std::move (e); choLive.store (cho.get(), std::memory_order_release); }
         void armWiden   () { if (wid) return; auto e = std::make_unique<tw::TerrainWidenFx>();    e->prepare (sr, 512); wid = std::move (e); widLive.store (wid.get(), std::memory_order_release); }
         void armSplit   () { if (spl) return; auto e = std::make_unique<tw::TerrainSplitterFx>(); e->prepare (sr, 512); spl = std::move (e); splLive.store (spl.get(), std::memory_order_release); }
+        void armTape    () { if (tpe) return; auto e = std::make_unique<tw::TapeFxEngine>();      e->prepare (sr); tpe = std::move (e); tpeLive.store (tpe.get(), std::memory_order_release); }
+        void armBode    () { if (bod) return; auto e = std::make_unique<tw::TerrainBodeFx>();     e->prepare (sr, 3); bod = std::move (e); bodLive.store (bod.get(), std::memory_order_release); }
+        void armGrain   () { if (grn) return; auto e = std::make_unique<tw::GranularFxEngine>();  e->prepare (sr); e->setGrainBudget (&grnUsed, 48); grn = std::move (e); grnLive.store (grn.get(), std::memory_order_release); }
         void armReverb  (int type)
         {
             const int t = type < 0 ? 0 : (type > 3 ? 3 : type); if ((rvBuilt.load (std::memory_order_acquire) >> t) & 1) return;
@@ -2138,9 +2145,11 @@ private:
             rvBuilt.fetch_or (1 << t, std::memory_order_release);
         }
 
-        bool fx (int kind, float s, const float* k, int mode, float mix, float& l, float& r) noexcept override
+        bool fx (int kind, float s, const float* k, int mode, float blend, float& l, float& r) noexcept override
         {
-            const float m = mix < 0.0f ? 0.0f : (mix > 1.0f ? 1.0f : mix);
+            const float bl = blend < 0.0f ? 0.0f : (blend > 1.0f ? 1.0f : blend);
+            const float sh = s < 0.0f ? 0.0f : (s > 1.0f ? 1.0f : s);
+            const float m  = sh * bl;   // for the kinds where the shape IS the wet amount (a send)
             switch ((wc::ShaperLaneId) kind)
             {
                 case wc::ShaperLaneId::Reverb:
@@ -2173,7 +2182,7 @@ private:
                     auto* e = choLive.load (std::memory_order_acquire); if (e == nullptr) return false;
                     tw::TerrainChorusFx::Params p; p.type = mode < 0 ? 0 : mode;
                     p.rate = k[0]; p.depth = k[1]; p.feedback = k[2]; p.b3 = k[3];
-                    p.mix = m;                       // THE SHAPE IS THE DEPTH OF THE EFFECT, through its own mix
+                    p.mix = m;                       // a send: the shape is how much chorus there is
                     e->setParams (p); e->processStereo (&l, &r, 1); return true;
                 }
                 case wc::ShaperLaneId::Widen:
@@ -2181,7 +2190,7 @@ private:
                     auto* e = widLive.load (std::memory_order_acquire); if (e == nullptr) return false;
                     tw::TerrainWidenFx::Params p; p.type = mode < 0 ? 0 : mode;
                     p.amount = k[0]; p.width = k[1]; p.rate = k[2]; p.b2 = k[3];
-                    p.mix = m;                       // THE SHAPE OPENS AND CLOSES THE STEREO FIELD
+                    p.mix = m;                       // a send: the shape opens and closes the stereo field
                     e->setParams (p); e->processStereo (&l, &r, 1); return true;
                 }
                 case wc::ShaperLaneId::Multi:
@@ -2190,8 +2199,39 @@ private:
                     tw::TerrainSplitterFx::Params p; p.type = mode < 0 ? 0 : mode;
                     p.split = k[0]; p.slope = (int) (k[1] * 3.99f); p.spread = k[2];
                     // THE SHAPE TILTS THE BANDS: at 0 the low end carries, at 1 the top does.
-                    p.balance = 0.5f + (s - 0.5f) * (0.2f + 1.6f * k[3]);
-                    p.mix = m; e->setParams (p);
+                    p.balance = 0.5f + (sh - 0.5f) * (0.2f + 1.6f * k[3]);
+                    p.mix = bl; e->setParams (p);   // the shape is the TILT here, not the wet amount, so the wet stays put
+                    float ol = 0, orr = 0; e->processStereo (l, r, ol, orr); l = ol; r = orr; return true;
+                }
+                case wc::ShaperLaneId::Tape:
+                {
+                    auto* e = tpeLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    tw::TapeFxEngine::Params p; p.type = mode < 0 ? 0 : mode;
+                    p.flutter = k[0]; p.drive = k[1]; p.age = k[2]; p.width = k[3];
+                    p.delayOn = false;               // the echo stays off — this lane is the MACHINE, not its repeats
+                    p.mix = m;                       // a send: the shape is how much tape there is
+                    e->setParams (p); float ol = 0, orr = 0; e->process (l, r, ol, orr); l = ol; r = orr; return true;
+                }
+                case wc::ShaperLaneId::Grain:
+                {
+                    auto* e = grnLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    tw::GranularFxParams p; p.type = mode < 0 ? 0 : mode;
+                    p.size = k[0]; p.density = k[1]; p.pitch = (k[2] - 0.5f) * 48.0f; p.width = k[3];
+                    p.scan = 0.0f;                   // the shape is the motion: no head rate of its own
+                    e->setParams (p);
+                    float wl = 0, wr = 0; e->processSample (l, r, wl, wr);
+                    l += wl * m; r += wr * m; return true;   // wet only — the cloud blooms where it is drawn
+                }
+                case wc::ShaperLaneId::Bode:
+                {
+                    auto* e = bodLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    tw::TerrainBodeFx::Params p; p.type = mode < 0 ? 0 : mode;
+                    /* ⚠️ THE ONLY KIND WHERE THE SHAPE IS NOT THE SEND. A frequency shifter's rhythm is the
+                       INTERVAL, so the shape swings `shift` around its 0.5 no-shift detent by k[0], and the wet
+                       level sits still at the lane's blend. This is what the tp81 shape/blend split is for. */
+                    p.shift = 0.5f + (sh - 0.5f) * (0.1f + 1.8f * k[0]);
+                    p.fdbk = k[1]; p.spread = k[2]; p.blur = k[3];
+                    p.mix = bl; e->setParams (p);
                     float ol = 0, orr = 0; e->processStereo (l, r, ol, orr); l = ol; r = orr; return true;
                 }
                 default: return false;   // Volume / Time / Filter / Pan / Repeat / Drive / Phaser / Crush do their own work in FlowShaper

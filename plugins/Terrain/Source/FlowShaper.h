@@ -58,13 +58,15 @@ namespace wc
     armed lazily, only when a lane of that kind is actually lit (the tp63 law — Delay, Granular and Bode each
     carry ~8.4 MB of ring at 48 k and a card drawing a volume gate must never pay for them). */
 static constexpr int kShaperSlots = 8;           // positions in the chain
-static constexpr int kShaperLanes = 13;          // KINDS (one lane struct, one parameter set, one clock each)
+static constexpr int kShaperLanes = 16;          // KINDS (one lane struct, one parameter set, one clock each)
 static constexpr int kShaperT     = 2048;        // the baked table: one cycle, end to end (index kShaperT = the value AT the cycle's end)
 enum class ShaperLaneId : int { Volume = 0, Time, Filter, Pan, Repeat, Drive, Phaser, Crush,
-                                Reverb, Delay, Chorus, Widen, Multi };
-/* ⚠️ A KIND ONLY EXISTS HERE ONCE ITS ENGINE IS ACTUALLY LENT. Tape, Granular, Bode and Noise are on Max's
-   roster and their engines all ship in the rack, but a kind that appears on the card and does nothing is worse
-   than one that is not there yet — so they arrive with their lends, not before. */
+                                Reverb, Delay, Chorus, Widen, Multi, Tape, Grain, Bode };
+/* ⚠️ A KIND ONLY EXISTS HERE ONCE ITS ENGINE IS ACTUALLY LENT — a kind that appears on the card and does
+   nothing is worse than one that is not there yet. NOISE is the last one owed and is NOT here, because unlike
+   every effect above it there is no standalone noise engine to borrow: the generator lives inside SynthVoice's
+   render, so it has to be lifted out into its own header (used by BOTH, proven bit-identical on the synth)
+   before a lane can have it. That is surgery on the instrument's core, not a lend. */
 
 // the rate ladder — one cycle of the shape, in beats (4 = 1 bar)
 static constexpr float kShaperRateBeats[8] = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f };
@@ -79,10 +81,14 @@ enum class ShaperTrig : int { Sync = 0, Free, Audio, Midi };
 struct ShaperExt
 {
     virtual ~ShaperExt() = default;
-    virtual bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, float spread, float& l, float& r) noexcept = 0;
+    /** tp81 — `punch` is FilterFxEngine's own envelope kick, which the Filter lane never reached; it is that
+        lane's fourth target. Nothing new was written for it — the engine has always had it. */
+    virtual bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, float spread, float punch, float& l, float& r) noexcept = 0;
     /** mix: the lane's wet/dry — the rack's distortion delays its wet by its resampler and aligns the dry INSIDE, so the
         engine owns the mix and the lane replaces (a crossfade outside would comb). The lane passes blend × fade-in. */
-    virtual bool drive  (int which, int mode, float drive01, float tone, int character, float bias, float mix, float& l, float& r) noexcept = 0;
+    /** tp81 — `knee` is DistortionEngine::setKnee, the clipper's corner. Same story: already there, never reached,
+        and it is the Drive lane's fourth target. */
+    virtual bool drive  (int which, int mode, float drive01, float tone, int character, float bias, float knee, float mix, float& l, float& r) noexcept = 0;
     /** tp80 — ONE DOOR FOR EVERY BORROWED RACK EFFECT. Max: "we're going to make each of these effects available
         to shape … I just want you to make mini versions of these that I can shape."
 
@@ -96,11 +102,14 @@ struct ShaperExt
                 a chorus's depth, a shifter's interval), and the processor owns that mapping.
         `k`     the Target tab's knobs, k[0..3] — four per kind, Max: "I want everyone to have exactly four".
         `mode`  the lane's type choice (a reverb type, a tape machine, a noise colour).
-        `mix`   the lane's own wet/dry, already multiplied by the shape and the fade-in. THE ENGINE OWNS THE MIX
-                and returns l/r fully blended, exactly as drive() does and for the same reason: several of these
-                delay their wet internally and align the dry inside, so a crossfade applied out here would comb.
+        `blend` the lane's own wet/dry, on its own. ⚠️ tp81 — this used to arrive ALREADY multiplied by the shape,
+                which quietly forced every kind to spend the shape on its wet amount. That is right for a reverb
+                or a delay (the shape is the send) and wrong for a frequency shifter, where the shape wants to be
+                the INTERVAL while the wet level stays put. The two arrive apart now and each case decides.
+                THE ENGINE STILL OWNS THE MIX and returns l/r fully blended, exactly as drive() does and for the
+                same reason: several of these align their dry internally, so a crossfade out here would comb.
         Returns false when that engine has not been armed yet, and the lane passes the audio through untouched. */
-    virtual bool fx (int kind, float s, const float* k, int mode, float mix, float& l, float& r) noexcept = 0;
+    virtual bool fx (int kind, float s, const float* k, int mode, float blend, float& l, float& r) noexcept = 0;
 };
 
 // the Phaser lane's roster: indices into the rack's filter roster (tw::filters::Type / FLT_ENGINES), modes 2.. of the lane
@@ -139,13 +148,19 @@ struct ShaperLane
 //   Pan     Width · Bass · Haas                 Repeat  Seam · Decay · Pitch          Drive   Tone · Makeup · Bias(k3) · Char(k2)
 //   Phaser  Feedback · Stereo · Drive           Crush   Bits · Rate · Tone
 static constexpr float kShaperKDefault[kShaperLanes][6] = {
-    { 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f }, { 0.5f, 0.0f, 0.0f, 0.5f, 0.5f, 0.5f },
-    { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 0.5f },
+    /* ⚠️ tp81 — A NEW TARGET MUST BOOT NEUTRAL. Hold at its old 0.5 held the gate open and every Volume bar in
+       the offline proof went red at once: the knob was new, but the LANE was not, and a default is behaviour.
+       Volume Hold 0 (off) · Filter Punch 0 (off) · Phaser Centre 0.2 (= the 200 Hz it always swept from) ·
+       Crush Stereo 0 (both channels on one counter, the old mono grit) · the Tone / Tilt pair 0.5 (flat). */
+    { 0.5f, 0.5f, 0.0f, 0.0f, 0.5f, 0.5f }, { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f }, { 0.5f, 0.0f, 0.0f, 0.5f, 0.5f, 0.5f },
+    { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.2f, 0.5f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.0f, 0.5f, 0.5f },
     /* tp80 — the nine borrowed lanes, four targets each (see ShaperExt::fx):
        Reverb  Size · Decay · Tone · Diffuse      Delay  Time · Feedback · Tone · Width
-       Chorus  Rate · Depth · Feedback · Voice   Widen  Amount · Width · Rate · Axis       Multi  Split · Slope · Spread · Range */
+       Chorus  Rate · Depth · Feedback · Voice   Widen  Amount · Width · Rate · Axis       Multi  Split · Slope · Spread · Range
+       Tape    Wow · Flutter · Drive · Age       Grain  Size · Density · Pitch · Spread    Bode   Range · Feedback · Spread · Blur */
     { 0.45f, 0.5f, 0.4f, 0.7f, 0.5f, 0.5f },  { 0.375f, 0.35f, 0.5f, 0.6f, 0.5f, 0.5f },
-    { 0.35f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f },  { 0.5f, 0.5f, 0.35f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.5f, 0.5f, 0.6f, 0.5f, 0.5f } };
+    { 0.35f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f },  { 0.5f, 0.5f, 0.35f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.5f, 0.5f, 0.6f, 0.5f, 0.5f },
+    { 0.3f, 0.3f, 0.3f, 0.2f, 0.5f, 0.5f },   { 0.25f, 0.4f, 0.5f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.3f, 0.6f, 0.0f, 0.5f, 0.5f } };
 struct ShaperState
 {
     ShaperLane lanes[kShaperLanes];
@@ -388,6 +403,19 @@ public:
                     const double pos = (double) ringW_ - behindF;
                     float tl = rd (ring->L, ring->n, pos, ringW_), tr = rd (ring->R, ring->n, pos, ringW_);
                     if (tsXf_ > 0) { const float w = (float) tsXf_ / (float) tsXfN_; tl = tl * (1 - w) + rd (ring->L, ring->n, tsOld_, ringW_) * w; tr = tr * (1 - w) + rd (ring->R, ring->n, tsOld_, ringW_) * w; tsOld_ += 1.0; --tsXf_; }
+                    /* tp81 — TONE (k3), the Time lane's fourth target: a one-pole on what the head reads. Below
+                       0.5 it darkens the repeat, above it lifts the top back out. 0.5 is exactly flat. */
+                    {
+                        const float tn = TL.L->k[3];
+                        if (std::fabs (tn - 0.5f) > 0.01f)
+                        {
+                            const float fc = 250.0f + 14000.0f * tn * tn;
+                            const float a = 1.0f - std::exp (-2.0f * 3.14159265f * fc / (float) sr_);
+                            tmLp_[0] += a * (tl - tmLp_[0]); tmLp_[1] += a * (tr - tmLp_[1]);
+                            if (tn < 0.5f) { tl = tmLp_[0]; tr = tmLp_[1]; }
+                            else { const float g = (tn - 0.5f) * 3.0f; tl += (tl - tmLp_[0]) * g; tr += (tr - tmLp_[1]) * g; }
+                        }
+                    }
                     tsPos_ = pos;
                     l = l + (tl - l) * TL.L->blend; r = r + (tr - r) * TL.L->blend;
                     vizPh_[1] = (float) p; vizV_[1] = s;
@@ -428,6 +456,19 @@ public:
                         if (inLoop < seam) { const float w = 0.5f - 0.5f * std::cos ((float) (inLoop / seam) * 3.14159265f); const double rp2 = rp + (RP.mode == 1 ? -repLen_ : repLen_); rl = rl * w + rd (ring->L, ring->n, rp2, ringW_) * (1 - w); rr = rr * w + rd (ring->R, ring->n, rp2, ringW_) * (1 - w); }
                         rl *= gain; rr *= gain;
                         repPos_ += 1.0; repRead_ += rate; if (repRead_ >= (double) repLen_ * (pass + 1)) repRead_ = (double) repLen_ * (pass + 1);   // a pitched pass ends where the unpitched one does
+                        /* tp81 — TONE (k3), the Repeat lane's fourth target: a one-pole on what the head reads. Below
+                           0.5 it darkens the slice, above it lifts the top back out. 0.5 is exactly flat. */
+                        {
+                            const float tn = RP.L->k[3];
+                            if (std::fabs (tn - 0.5f) > 0.01f)
+                            {
+                                const float fc = 250.0f + 14000.0f * tn * tn;
+                                const float a = 1.0f - std::exp (-2.0f * 3.14159265f * fc / (float) sr_);
+                                rpLp_[0] += a * (rl - rpLp_[0]); rpLp_[1] += a * (rr - rpLp_[1]);
+                                if (tn < 0.5f) { rl = rpLp_[0]; rr = rpLp_[1]; }
+                                else { const float g = (tn - 0.5f) * 3.0f; rl += (rl - rpLp_[0]) * g; rr += (rr - rpLp_[1]) * g; }
+                            }
+                        }
                         const float mixr = RP.L->blend;
                         l = l + (rl - l) * mixr; r = r + (rr - r) * mixr;
                     }
@@ -445,7 +486,7 @@ public:
                     const float tone = DR.L->k[0], makeup = 0.25f + 1.5f * DR.L->k[1];
                     float wl = l, wr = r;
                     const float fadeIn = s < 0.25f ? s * 4.0f : 1.0f;   // a wire at shape 0, whatever the type does at drive 0
-                    if (ext != nullptr && ext->drive (0, DR.mode, s, tone, (int) (DR.L->k[2] * 7.99f), DR.L->k[3], DR.L->blend * fadeIn, wl, wr))
+                    if (ext != nullptr && ext->drive (0, DR.mode, s, tone, (int) (DR.L->k[2] * 7.99f), DR.L->k[3], DR.L->k[4], DR.L->blend * fadeIn, wl, wr))
                     { l = wl * makeup; r = wr * makeup; vizPh_[5] = (float) p; vizV_[5] = s; return;   /* tp79 — the label this jumped to sat at this block's own tail */ }
                     else
                     {   // the built-in: a tanh family. At shape 0 the lane is a WIRE (tanh alone would already colour a -6 dBFS
@@ -478,10 +519,10 @@ public:
                     const float s = smoothed (7, readShape (*CR.L, p), CR.L->smooth) * CR.depth;
                     float wl = l, wr = r; bool done = false;
                     if (CR.mode >= 3 && CR.mode <= 6 && ext != nullptr)
-                        done = ext->filter (2, kShaperCrushRoster[CR.mode - 3], 1.0f - 0.9f * s, 0.3f + 0.6f * CR.L->k[0], 0.0f, 1.0f, 0, 0.0f, wl, wr);
+                        done = ext->filter (2, kShaperCrushRoster[CR.mode - 3], 1.0f - 0.9f * s, 0.3f + 0.6f * CR.L->k[0], 0.0f, 1.0f, 0, 0.0f, 0.0f, wl, wr);
                     else if (CR.mode >= 7 && CR.mode <= 9 && ext != nullptr)
                     {
-                        done = ext->drive (1, kShaperCrushDist[CR.mode - 7], s, 0.5f + 0.5f * CR.L->k[1], (int) (CR.L->k[0] * 7.99f), 0.5f, CR.L->blend * (s < 0.25f ? s * 4.0f : 1.0f), wl, wr);
+                        done = ext->drive (1, kShaperCrushDist[CR.mode - 7], s, 0.5f + 0.5f * CR.L->k[1], (int) (CR.L->k[0] * 7.99f), 0.5f, 0.5f, CR.L->blend * (s < 0.25f ? s * 4.0f : 1.0f), wl, wr);
                         if (done) { l = wl; r = wr; vizPh_[7] = (float) p; vizV_[7] = s; return;   /* tp79 — the label this jumped to sat at this block's own tail */ }   // the engine mixed its own dry
                     }
                     if (! done)
@@ -489,8 +530,14 @@ public:
                         const int m = CR.mode <= 2 ? CR.mode : 0;
                         const float bits = m == 2 ? 16.0f : 16.0f - (4.0f + 8.0f * CR.L->k[0]) * s; const float q = std::pow (2.0f, bits - 1.0f);
                         const int hold = m == 1 ? 1 : 1 + (int) (s * (2.0f + 30.0f * CR.L->k[1]));   // Mode: Bits + Rate · Bits · Rate
-                        if (holdN_ <= 0) { holdL_ = std::round (l * q) / q; holdR_ = std::round (r * q) / q; holdN_ = hold; }
-                        --holdN_;
+                        /* tp81 — STEREO (k3), the Crush lane's fourth target: the right channel holds on its OWN
+                           counter, up to twice as long, so the aliasing sits across the image instead of dead
+                           centre. At 0 both counters are the same number and this is bit-for-bit the old mono
+                           grit. (The two channels were sharing holdN_, which is why crush had no width at all.) */
+                        const int holdR = 1 + (int) ((float) (hold - 1) * (1.0f + CR.L->k[3]));
+                        if (holdN_  <= 0) { holdL_ = std::round (l * q) / q; holdN_  = hold;  }
+                        if (holdNR_ <= 0) { holdR_ = std::round (r * q) / q; holdNR_ = holdR; }
+                        --holdN_; --holdNR_;
                         wl = holdL_; wr = holdR_;
                     }
                     const float tone = CR.L->k[2];
@@ -514,7 +561,7 @@ public:
                     const float s = smoothed (2, readShape (*FL.L, p), FL.L->smooth);
                     const float cut01 = 1.0f - 0.9f * FL.depth * (1.0f - s);   // 20·1000^cut01 Hz: 1 = 20 kHz, 0.1 = 40 Hz
                     float wl = l, wr = r;
-                    if (! (ext != nullptr && ext->filter (0, FL.mode, cut01, FL.L->k[0], FL.L->k[1], FL.L->k[2], (int) (FL.L->k[3] * 5.99f), FL.L->k[4], wl, wr)))
+                    if (! (ext != nullptr && ext->filter (0, FL.mode, cut01, FL.L->k[0], FL.L->k[1], FL.L->k[2], (int) (FL.L->k[3] * 5.99f), FL.L->k[4], FL.L->k[5], wl, wr)))
                     {
                         const float fc = 20.0f * std::pow (1000.0f, cut01);
                         const float g = std::tan (3.14159265f * std::min (fc, (float) sr_ * 0.45f) / (float) sr_);
@@ -545,7 +592,7 @@ public:
                     const float s = smoothed (6, readShape (*PH.L, p), PH.L->smooth);
                     float wl = l, wr = r;
                     const int ri = PH.mode - 2 < kShaperPhaserRosterN ? PH.mode - 2 : 0;
-                    if (ext != nullptr && ext->filter (1, kShaperPhaserRoster[ri], 0.2f + 0.7f * s * PH.depth, 0.15f + 0.8f * PH.L->k[0], PH.L->k[2], 1.0f, 0, PH.L->k[1], wl, wr))
+                    if (ext != nullptr && ext->filter (1, kShaperPhaserRoster[ri], (0.14f + 0.30f * PH.L->k[3]) + 0.7f * s * PH.depth, 0.15f + 0.8f * PH.L->k[0], PH.L->k[2], 1.0f, 0, PH.L->k[1], 0.0f, wl, wr))
                     { l = l + (wl - l) * PH.L->blend; r = r + (wr - r) * PH.L->blend; phDone = true; }
                     vizPh_[6] = (float) p; vizV_[6] = s;
                 }
@@ -571,7 +618,8 @@ public:
                     const double p = lanePhase (PH, 6, beat);
                     const float s = smoothed (6, readShape (*PH.L, p), PH.L->smooth);
                     const float fb = 0.2f + 0.72f * PH.L->k[0];
-                    const float fc = 200.0f * std::pow (40.0f, s * PH.depth);
+                    // tp81 — CENTRE (k3), the Phaser lane's fourth target: where the sweep starts, 60 Hz .. 1 kHz
+                    const float fc = (40.0f + 800.0f * PH.L->k[3]) * std::pow (40.0f, s * PH.depth);   // k3 = 0.2 lands on the 200 Hz it always started from
                     const float st = PH.L->k[1] * 0.35f;   // stereo: the right channel's centre sits a little higher
                     for (int c = 0; c < 2; ++c)
                     {
@@ -608,6 +656,21 @@ public:
                         else { const float th = (pan + 1.0f) * 0.78539816f; gl = std::cos (th) * 1.41421356f; gr = std::sin (th) * 1.41421356f; }
                         wl *= gl; wr *= gr;
                     }
+                    /* tp81 — TILT (k3), the Pan lane's fourth target: the highs swing wider than the lows, or the
+                       other way. A pan with a spectrum to it, which is what makes a stereo move feel like a room
+                       rather than a knob. 0.5 leaves the field exactly as the pan left it. */
+                    {
+                        const float ti = PN.L->k[3];
+                        if (std::fabs (ti - 0.5f) > 0.01f)
+                        {
+                            const float a = 1.0f - std::exp (-2.0f * 3.14159265f * 700.0f / (float) sr_);
+                            pnLo_[0] += a * (wl - pnLo_[0]); pnLo_[1] += a * (wr - pnLo_[1]);
+                            const float hL = wl - pnLo_[0], hR = wr - pnLo_[1], g = (ti - 0.5f) * 2.0f;
+                            const float mH = 0.5f * (hL + hR), sH = 0.5f * (hL - hR) * (1.0f + g);
+                            const float mL = 0.5f * (pnLo_[0] + pnLo_[1]), sL = 0.5f * (pnLo_[0] - pnLo_[1]) * (1.0f - g);
+                            wl = (mH + sH) + (mL + sL); wr = (mH - sH) + (mL - sL);
+                        }
+                    }
                     // tp74 — Haas (k2): the side the pan leaves is delayed up to 15 ms × the pan, so a swing has depth as well as level
                     haasL_[haasW_] = wl; haasR_[haasW_] = wr;
                     if (PN.L->k[2] > 0.01f && PN.mode != 2)
@@ -636,7 +699,16 @@ public:
                 {
                     const double p = lanePhase (VL, 0, beat);
                     float s = readShape (*VL.L, p); if (VL.mode == 1) s = 1.0f - s;
-                    const float gRaw = 1.0f - VL.depth * (1.0f - s);
+                    float gRaw = 1.0f - VL.depth * (1.0f - s);
+                    /* tp81 — HOLD (k3), the Volume lane's fourth target: the gate stays open after the shape has
+                       already fallen, up to 250 ms, so a short drawn opening can ring on. At 0, the old behaviour. */
+                    if (VL.L->k[3] > 0.01f)
+                    {
+                        if (gRaw >= volHoldV_) { volHoldV_ = gRaw; volHoldN_ = (int) ((float) sr_ * 0.25f * VL.L->k[3]); }
+                        else if (volHoldN_ > 0) { --volHoldN_; gRaw = volHoldV_; }
+                        else volHoldV_ = gRaw;
+                    }
+                    else { volHoldV_ = gRaw; volHoldN_ = 0; }
                     const float base = 0.2f + 250.0f * VL.L->smooth * VL.L->smooth;
                     const float ms = base * (0.1f + 1.9f * (gRaw > smooth_[0] ? VL.L->k[0] : VL.L->k[1]));
                     const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));
@@ -659,7 +731,7 @@ public:
                 const double p = lanePhase (V, K, beat);
                 const float s = smoothed (K, readShape (*V.L, p), V.L->smooth) * V.depth;
                 float wl = l, wr = r;
-                if (ext != nullptr && ext->fx (K, s, V.L->k, V.mode, s * V.L->blend, wl, wr)) { l = wl; r = wr; }
+                if (ext != nullptr && ext->fx (K, s, V.L->k, V.mode, V.L->blend, wl, wr)) { l = wl; r = wr; }
                 vizPh_[K] = (float) p; vizV_[K] = s;
             };
             for (int sl = 0; sl < kShaperSlots; ++sl)
@@ -673,7 +745,8 @@ public:
                     case 5: applyDrive(); break;
                     case 6: applyPhaser(); break;
                     case 7: applyCrush(); break;
-                    case 8: case 9: case 10: case 11: case 12: applyLent (slot[sl]); break;   // Reverb · Delay · Chorus · Widen · Multiband
+                    case  8: case  9: case 10: case 11:
+                    case 12: case 13: case 14: case 15: applyLent (slot[sl]); break;   // Reverb · Delay · Chorus · Widen · Multiband · Tape · Granular · Bode
                     default: break;
                 }
             /* ⚠️ tp79 — THE RING'S WRITE HEAD ADVANCES ONCE PER SAMPLE, FOR EVERYONE, OUTSIDE THE DISPATCH.
@@ -728,7 +801,9 @@ private:
     Ch ch_[2]; std::vector<AP> phL_, phR_;
     std::array<float, kShaperLanes> smooth_ {};
     double tsPos_ = 0, tsOld_ = 0, tsLastBehind_ = 0, stepTarget_ = 0, tsPrevTgt_ = -1.0; int tsXf_ = 0, tsXfN_ = 1; bool stepping_ = false;
-    float holdL_ = 0, holdR_ = 0; int holdN_ = 0;
+    float holdL_ = 0, holdR_ = 0; int holdN_ = 0, holdNR_ = 0;   // tp81 — the right channel crushes on its OWN counter (Crush's Stereo)
+    float volHoldV_ = 0; int volHoldN_ = 0;                       // tp81 — the Volume lane's Hold
+    float tmLp_[2] = {}, rpLp_[2] = {}, pnLo_[2] = {};            // tp81 — Time's Tone, Repeat's Tone, Pan's Tilt
     float flL_[2048] = {}, flR_[2048] = {}; int flW_ = 0;   // the Flanger mode's delay line (~43 ms at 48 k)
     bool repHold_ = false; int repLen_ = 0, repStartW_ = 0; double repPos_ = 0, repRead_ = 0;
     double tsSlew_ = -1.0;                       // tp72 — the Time lane's glided read position (-1 = not gliding)

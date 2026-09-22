@@ -124,8 +124,8 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
     '[3] the brush dropdown: Line stamps a flat at the pointer\'s height into its grid cell; with Point a plain click adds NOTHING and a DOUBLE-click adds a point that Snap lands on the grid (0.625 = 10/16); Free draw is water — the stroke\'s points sit at their own x (not on any grid) and on the curve that was drawn, and only the collinear ones go; the shape chip then reads Custom', JSON.stringify(r3));
  // ── [4] the push ──
  const r4=await p.evaluate(()=>{ const last=window.__shpJson[window.__shpJson.length-1]; const o=JSON.parse(last[1]); return {inst:last[0],lanes:o.lanes.length,sense:o.sense,keys:Object.keys(o.lanes[2]).sort().join(','),k:o.lanes[2].k.length,kf:o.lanes[2].k.join(','),pts:o.lanes.every(L=>L.pts.length>=2&&L.pts[0][0]===0&&L.pts[L.pts.length-1][0]===1)}; });
- ok(r4.inst===0 && r4.lanes===13 && r4.sense===0.5 && r4.keys==='blend,floor,grid,k,phase,pts,smooth,swing,tension' && r4.k===6 && r4.kf==='0.3,0,1,0,0,0.5' && r4.pts,
-    '🚨 [4] every edit pushes setShaperJson(inst, {sense, lanes:[13 × {pts (pinned 0..1), smooth, phase, tension, floor, blend, swing, grid, k[6]}]}); the Filter lane\'s k boots Reso .3 / Drive 0 / Poles 24 dB / Tube / Spread 0', JSON.stringify(r4));
+ ok(r4.inst===0 && r4.lanes===16 && r4.sense===0.5 && r4.keys==='blend,floor,grid,k,phase,pts,smooth,swing,tension' && r4.k===6 && r4.kf==='0.3,0,1,0,0,0' && r4.pts,
+    '🚨 [4] every edit pushes setShaperJson(inst, {sense, lanes:[16 × {pts (pinned 0..1), smooth, phase, tension, floor, blend, swing, grid, k[6]}]}); the Filter lane\'s k boots Reso .3 / Drive 0 / Poles 24 dB / Tube / Spread 0 / Punch 0', JSON.stringify(r4));
 
  // ── [5] parameters + the dice ──
  const r5=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const t=card.querySelectorAll('.fx .fxb'); const out={};
@@ -188,16 +188,17 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    S.set('k0_2',0.3); S.set('k2_2',1); S.set('sk_k2_2',3); T[0].click(); [...card.querySelectorAll('.tab')].find(t=>t.textContent==='Shape').click();
    return {lanes:out, k0:k[0], k2:k2[2]}; });
  const L9=r9.lanes;
- ok(L9[0].title==='Volume' && !L9[0].on && L9[0].knobs.join()==='Attack,Release,Punch' && L9[0].steps.join()==='Mode' && L9[0].stepVals.join()==='Gain'
-    && L9[1].title==='Time' && L9[1].knobs.join()==='Fade,Glide,Range' && !L9[1].rightShown
-    && L9[2].title==='Filter' && L9[2].knobs.join()==='Reso,Drive,Spread' && L9[2].steps.join()==='Poles,Char' && L9[2].stepVals.join()==='24 dB,Tube'
-    && L9[3].title==='Pan' && L9[3].knobs.join()==='Width,Bass,Haas' && L9[3].steps.join()==='Law'
-    && L9[4].title==='Repeat' && L9[4].knobs.join()==='Seam,Decay,Pitch' && L9[4].steps.join()==='Mode'
-    && L9[5].title==='Drive' && L9[5].knobs.join()==='Tone,Makeup,Bias' && L9[5].steps.join()==='Char'
-    && L9[6].title==='Phaser' && L9[6].knobs.join()==='Feedbk,Stereo,Drive' && !L9[6].rightShown
-    && L9[7].title==='Crush' && L9[7].knobs.join()==='Bits,Rate,Tone' && !L9[7].rightShown
-    && Math.abs(r9.k0-0.8)<1e-6 && Math.abs(r9.k2-1/3)<1e-6,
-    '🚨 [9] the Target tab: THREE knobs a lane, no On (Volume Attack/Release/Punch + Mode · Time Fade/Glide/Range · Filter Reso/Drive/Spread + Poles/Char · Pan Width/Bass/Haas + Law · Repeat Seam/Decay/Pitch + Mode · Drive Tone/Makeup/Bias + Char · Phaser Feedbk/Stereo/Drive · Crush Bits/Rate/Tone); a knob or a step writes the lane\'s k', JSON.stringify({f:L9[2],k0:r9.k0,k2:r9.k2}));
+ ok(L9[0].title==='Volume' && !L9[0].on && L9[0].knobs.join()==='Attack,Release,Punch,Hold' && L9[0].steps.join()==='Mode' && L9[0].stepVals.join()==='Gain'
+    && L9[1].title==='Time' && L9[1].knobs.join()==='Fade,Glide,Range,Tone' && !L9[1].rightShown
+    && L9[2].title==='Filter' && L9[2].knobs.join()==='Reso,Drive,Spread,Punch' && L9[2].steps.join()==='Poles,Char' && L9[2].stepVals.join()==='24 dB,Tube'
+    && L9[3].title==='Pan' && L9[3].knobs.join()==='Width,Bass,Haas,Tilt' && L9[3].steps.join()==='Law'
+    && L9[4].title==='Repeat' && L9[4].knobs.join()==='Seam,Decay,Pitch,Tone' && L9[4].steps.join()==='Mode'
+    && L9[5].title==='Drive' && L9[5].knobs.join()==='Tone,Makeup,Bias,Knee' && L9[5].steps.join()==='Char'
+    && L9[6].title==='Phaser' && L9[6].knobs.join()==='Feedbk,Stereo,Drive,Centre' && !L9[6].rightShown
+    && L9[7].title==='Crush' && L9[7].knobs.join()==='Bits,Rate,Tone,Stereo' && !L9[7].rightShown
+    && [0,1,2,3,4,5,6,7].every(function(q){ return L9[q].knobs.length===4; })   /* L9 is keyed by index, not an array */
+     && Math.abs(r9.k0-0.8)<1e-6 && Math.abs(r9.k2-1/3)<1e-6,
+    '🚨 [9] the Target tab: FOUR knobs on EVERY lane (tp81 — Hold · Tone · Punch · Tilt · Tone · Knee · Centre · Stereo; Filter Punch and Drive Knee were already in the rack engines and had never been reached, the other six are new DSP and FlowShaper_test T27 proves each audible), no On (Volume Attack/Release/Punch + Mode · Time Fade/Glide/Range · Filter Reso/Drive/Spread + Poles/Char · Pan Width/Bass/Haas + Law · Repeat Seam/Decay/Pitch + Mode · Drive Tone/Makeup/Bias + Char · Phaser Feedbk/Stereo/Drive · Crush Bits/Rate/Tone); a knob or a step writes the lane\'s k', JSON.stringify({f:L9[2],k0:r9.k0,k2:r9.k2}));
 
  // ── [10] the Clock tab: Rate / Grid / Trigger as the Glitch\'s OUT-style dropdowns; Sense beside them ──
  const r10=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const w=(ms)=>new Promise(r=>setTimeout(r,ms));
