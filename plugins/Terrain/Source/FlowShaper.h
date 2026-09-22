@@ -77,6 +77,49 @@ static constexpr int   kShaperRateDefault = 4;   // 1 bar
    not guessed: the lane has to read 0.00 dB against the same render with it dark. */
 static constexpr float kPhMakeup = 0.85f;   // measured: unscaled +7.45 dB · halved +1.43 dB · x0.85 lands on 0
 
+/* 🚨 tp90 — THE LOUDNESS LAW, PER TYPE. Max: "nothing should be making anything quieter or louder … unless
+   they're shaped, or the volume knob or the drive knob." Every type of a lane is its own engine voicing, so
+   each one sits at its own level: the audit (Tests/au_shaper_level.cpp) measured the Phaser's 28 types from
+   -10.6 to +5.8 dB, the Tape's from -15.5 to -0.2, the Chorus's every one below -2. This table is the trim
+   that puts each back at unity (Multiband: at its +5.5 dB push, the same push for every type).
+
+   ⚠️ CALIBRATED, NOT GUESSED, AND ON TWO SOURCES. Each entry is minus the MEAN of what the type did to a held
+   chord and to broadband noise, knobs at rest, shape open. One source is not enough: a sustained sine and
+   its own echo partly cancel, so the same Delay read -3.07 dB on a sine chord and +2.88 on noise.
+   ⚠️ The trim rides the amount of the effect that is IN (in dB, so half the send is half the trim), which
+   keeps a closed shape a wire. Lanes that are not here are exempt by design — see the audit's header.
+   Regenerate with Tests/au_shaper_level.cpp's CAL lines; never hand-edit one number. */
+static constexpr int kShaperTrimTypes = 28;
+static constexpr float kShaperTrimDb[kShaperLanes][kShaperTrimTypes] = {
+    /* TRIM-TABLE-BEGIN */
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    { 0.38f, 2.44f, -0.90f, -0.48f, 0.15f, 2.29f, 5.93f, 6.78f, 3.64f, 2.91f, 6.50f, 6.03f, 5.32f, 4.26f, 3.71f, 3.54f, 3.81f, 4.07f, -0.64f, 2.46f, -3.24f, 4.12f, -3.25f, -3.21f, -3.21f, -4.81f, -0.64f, 0.65f },
+    { -0.02f, 0.04f, 0.20f, 7.83f, 11.23f, -2.59f, 6.03f, 4.36f, 2.84f, 12.45f },
+    { 1.31f, -2.16f, -2.29f, -4.15f },
+    { 0.20f, -0.14f, -0.15f, 0.86f },
+    { 5.33f, 5.75f, 6.85f, 6.30f, 5.67f, 4.21f, 5.85f, 9.74f },
+    { 0.10f, 3.45f, 0.41f, 0.61f, 0.32f, 1.37f },
+    { -0.88f, 3.29f, 1.02f, -5.41f, 0.50f },
+    { 6.37f, 13.12f, 12.50f, 17.56f, 4.01f },
+    { -0.50f, -0.37f, -0.47f, -0.97f, 0.09f, -0.98f, -1.15f, -0.67f },
+    { 0.51f, 1.61f, 0.75f, 4.29f, 0.95f, 2.98f, 4.55f, -1.82f },
+    {}
+    /* TRIM-TABLE-END */
+};
+inline float shaperTrim (int lane, int mode, float amt) noexcept
+{
+    if (lane < 0 || lane >= kShaperLanes || mode < 0 || mode >= kShaperTrimTypes) return 1.0f;
+    const float db = kShaperTrimDb[lane][mode];
+    if (db == 0.0f) return 1.0f;
+    const float a = amt < 0.0f ? 0.0f : (amt > 1.0f ? 1.0f : amt);
+    return std::exp (db * a * 0.115129255f);   // 10^(dB·a/20)
+}
+
 enum class ShaperTrig : int { Sync = 0, Free, Audio, Midi };
 
 /** tp72 — the rack's engines, lent to the lanes. The processor implements this; a slot that is not armed yet
@@ -202,7 +245,7 @@ public:
         for (auto& c : ch_) c = Ch{};
         phL_.assign (6, AP{}); phR_.assign (6, AP{});
         smooth_.fill (0.0f); tsPos_ = 0.0; tsOld_ = 0.0; tsLastBehind_ = 0.0; stepping_ = false; tsXf_ = 0; tsXfN_ = 1; holdN_ = 0;
-        repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0; repRead_ = 0.0; tsSlew_ = -1.0;
+        repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0; repRead_ = 0.0; repLastP_ = 0.0; tsSlew_ = -1.0;
         ringW_ = 0; ringFilled_ = 0; soundAge_ = 0; silentRun_ = 0; tsRatio_ = 1.0; tsPrevBehind_ = -1.0;
         blInit();   // tp88 — the band-limit table, built off the audio thread
         for (auto& f : freePh_) f = 0.0; envFast_ = envSlow_ = 0.0f; refr_ = 0; noteAt_ = -1;
@@ -514,7 +557,13 @@ public:
                     const double p = lanePhase (RP, 4, beat);
                     const float s = readShape (*RP.L, p) * RP.depth;
                     const bool want = s > 0.02f;
-                    if (want && ! repHold_)
+                    /* 🚨 tp90 — A SHAPE HELD UP ACROSS THE LOOP POINT NEVER LET GO. Capture only happened on the
+                       rising edge of `want`, so a flat-top shape captured ONE slice and looped it forever — and
+                       if the lane lit in the silence before the first note, that slice was silence: the level
+                       audit read the whole lane at -226 dB on a held chord. The grid restarts at every cycle, so
+                       the slice does too: a wrap of the lane's phase is a fresh capture. */
+                    const bool wrapped = p < repLastP_ - 0.5; repLastP_ = p;
+                    if (want && (! repHold_ || wrapped))
                     {   // capture at this grid step's start: the slice began at the last grid line
                         const double stepBeats = cyc / (double) (RP.L->grid > 0 ? RP.L->grid : 16);
                         const double sinceStep = std::fmod (beat, stepBeats) * fpb;
@@ -615,7 +664,8 @@ public:
                     else if (CR.mode >= 7 && CR.mode <= 9 && ext != nullptr)
                     {
                         done = ext->drive (1, kShaperCrushDist[CR.mode - 7], s, 0.5f + 0.5f * CR.L->k[1], (int) (CR.L->k[0] * 7.99f), 0.5f, 0.5f, CR.L->blend * (s < 0.25f ? s * 4.0f : 1.0f), wl, wr);
-                        if (done) { l = wl; r = wr; vizPh_[7] = (float) p; vizV_[7] = s; return;   /* tp79 — the label this jumped to sat at this block's own tail */ }   // the engine mixed its own dry
+                        if (done) { const float tg = shaperTrim (7, CR.mode, s * CR.L->blend);   // tp90 — the crush is IN as far as the shape is
+                                    l = wl * tg; r = wr * tg; vizPh_[7] = (float) p; vizV_[7] = s; return;   /* tp79 — the label this jumped to sat at this block's own tail */ }   // the engine mixed its own dry
                     }
                     if (! done)
                     {
@@ -639,7 +689,8 @@ public:
                         crushLp_[0] += a * (wl - crushLp_[0]); crushLp_[1] += a * (wr - crushLp_[1]);
                         const float in = s < 0.25f ? s * 4.0f : 1.0f; wl += (crushLp_[0] - wl) * in; wr += (crushLp_[1] - wr) * in;
                     }
-                    l = l + (wl - l) * CR.L->blend; r = r + (wr - r) * CR.L->blend;
+                    { const float tg = shaperTrim (7, CR.mode, s * CR.L->blend);   // tp90
+                      l = (l + (wl - l) * CR.L->blend) * tg; r = (r + (wr - r) * CR.L->blend) * tg; }
                     vizPh_[7] = (float) p; vizV_[7] = s;
                 }
             };
@@ -685,7 +736,8 @@ public:
                     float wl = l, wr = r;
                     const int ri = PH.mode - 2 < kShaperPhaserRosterN ? PH.mode - 2 : 0;
                     if (ext != nullptr && ext->filter (1, kShaperPhaserRoster[ri], (0.14f + 0.30f * PH.L->k[3]) + 0.7f * s * PH.depth, 0.15f + 0.8f * PH.L->k[0], PH.L->k[2], 1.0f, 0, PH.L->k[1], 0.0f, wl, wr))
-                    { l = l + (wl - l) * PH.L->blend; r = r + (wr - r) * PH.L->blend; phDone = true; }
+                    { const float tg = shaperTrim (6, PH.mode, PH.L->blend);   // tp90 — the per-type level law
+                      l = (l + (wl - l) * PH.L->blend) * tg; r = (r + (wr - r) * PH.L->blend) * tg; phDone = true; }
                     vizPh_[6] = (float) p; vizV_[6] = s;
                 }
                 if (PH.on && ! phDone && PH.mode == 1)
@@ -706,6 +758,7 @@ public:
                         if (c) r = (r + (w - x * 0.15f) * mx) * gN; else l = (l + (w - x * 0.15f) * mx) * gN;
                     }
                     flW_ = (flW_ + 1) & 2047;
+                    { const float tg = shaperTrim (6, 1, PH.L->blend); l *= tg; r *= tg; }   // tp90
                     vizPh_[6] = (float) p; vizV_[6] = s;
                 }
                 else if (PH.on && ! phDone)
@@ -733,6 +786,7 @@ public:
                         const float gN = kPhMakeup / (1.0f + mx);
                         if (c) r = (r + y * mx) * gN; else l = (l + y * mx) * gN;
                     }
+                    { const float tg = shaperTrim (6, 0, PH.L->blend); l *= tg; r *= tg; }   // tp90
                     vizPh_[6] = (float) p; vizV_[6] = s;
                 }
             };
@@ -971,7 +1025,7 @@ private:
     float volHoldV_ = 0; int volHoldN_ = 0;                       // tp81 — the Volume lane's Hold
     float tmLp_[2] = {}, rpLp_[2] = {}, pnLo_[2] = {};            // tp81 — Time's Tone, Repeat's Tone, Pan's Tilt
     float flL_[2048] = {}, flR_[2048] = {}; int flW_ = 0;   // the Flanger mode's delay line (~43 ms at 48 k)
-    bool repHold_ = false; int repLen_ = 0, repStartW_ = 0; double repPos_ = 0, repRead_ = 0;
+    bool repHold_ = false; int repLen_ = 0, repStartW_ = 0; double repPos_ = 0, repRead_ = 0, repLastP_ = 0;
     double tsSlew_ = -1.0;                       // tp72 — the Time lane's glided read position (-1 = not gliding)
     std::atomic<ShaperExt*> ext_ { nullptr };    // tp72 — the rack's engines, lent by the processor
     double freePh_[kShaperLanes] = {};           // tp72 — the Free / MIDI / Audio lanes' own clocks (one per KIND)

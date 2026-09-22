@@ -2228,7 +2228,8 @@ private:
                                  case 1: rvPlate->processSample (l, r, wl, wr); break;
                                  case 2: rvHall ->processSample (l, r, wl, wr); break;
                                  default:rvShim ->processSample (l, r, wl, wr); break; }
-                    l += wl * m; r += wr * m; return true;   // the reverbs return WET only, so the send is the mix
+                    { const float tg = wc::shaperTrim (8, t, m); l = (l + wl * m) * tg; r = (r + wr * m) * tg; }   // tp90 — the per-type level law
+                    return true;   // the reverbs return WET only, so the send is the mix
                 }
                 case wc::ShaperLaneId::Delay:
                 {
@@ -2239,7 +2240,8 @@ private:
                     e->setFeedback (k[1] * 1.05f); e->setTone (k[2]); e->setWidth (k[3] * 1.6f);
                     e->setLink (true); e->setPing (k[3] > 0.75f);
                     float wl = 0, wr = 0; e->processSample (l, r, wl, wr);
-                    l += wl * m; r += wr * m; return true;   // wet only
+                    { const float tg = wc::shaperTrim (9, mode, m); l = (l + wl * m) * tg; r = (r + wr * m) * tg; }   // tp90
+                    return true;   // wet only
                 }
                 case wc::ShaperLaneId::Chorus:
                 {
@@ -2247,7 +2249,9 @@ private:
                     tw::TerrainChorusFx::Params p; p.type = mode < 0 ? 0 : mode;
                     p.rate = k[0]; p.depth = k[1]; p.feedback = k[2]; p.b3 = k[3];
                     p.mix = m;                       // a send: the shape is how much chorus there is
-                    e->setParams (p); e->processStereo (&l, &r, 1); return true;
+                    e->setParams (p); e->processStereo (&l, &r, 1);
+                    { const float tg = wc::shaperTrim (10, mode, m); l *= tg; r *= tg; }   // tp90
+                    return true;
                 }
                 case wc::ShaperLaneId::Widen:
                 {
@@ -2255,7 +2259,9 @@ private:
                     tw::TerrainWidenFx::Params p; p.type = mode < 0 ? 0 : mode;
                     p.amount = k[0]; p.width = k[1]; p.rate = k[2]; p.b2 = k[3];
                     p.mix = m;                       // a send: the shape opens and closes the stereo field
-                    e->setParams (p); e->processStereo (&l, &r, 1); return true;
+                    e->setParams (p); e->processStereo (&l, &r, 1);
+                    { const float tg = wc::shaperTrim (11, mode, m); l *= tg; r *= tg; }   // tp90
+                    return true;
                 }
                 case wc::ShaperLaneId::Multi:
                 {
@@ -2276,7 +2282,9 @@ private:
                     p.topLift   = k[1];
                     p.b5        = k[3];                    // the crossover spread
                     p.mix       = bl;
-                    e->setParams (p); e->processStereo (&l, &r, 1); return true;
+                    e->setParams (p); e->processStereo (&l, &r, 1);
+                    { const float tg = wc::shaperTrim (12, mode, sh * bl); l *= tg; r *= tg; }   // tp90 — the push is IN as far as the shape is
+                    return true;
                 }
                 case wc::ShaperLaneId::Tape:
                 {
@@ -2285,7 +2293,9 @@ private:
                     p.flutter = k[0]; p.drive = k[1]; p.age = k[2]; p.width = k[3];
                     p.delayOn = false;               // the echo stays off — this lane is the MACHINE, not its repeats
                     p.mix = m;                       // a send: the shape is how much tape there is
-                    e->setParams (p); float ol = 0, orr = 0; e->process (l, r, ol, orr); l = ol; r = orr; return true;
+                    e->setParams (p); float ol = 0, orr = 0; e->process (l, r, ol, orr);
+                    { const float tg = wc::shaperTrim (13, mode, m); l = ol * tg; r = orr * tg; }   // tp90
+                    return true;
                 }
                 case wc::ShaperLaneId::Grain:
                 {
@@ -2295,7 +2305,8 @@ private:
                     p.scan = 0.0f;                   // the shape is the motion: no head rate of its own
                     e->setParams (p);
                     float wl = 0, wr = 0; e->processSample (l, r, wl, wr);
-                    l += wl * m; r += wr * m; return true;   // wet only — the cloud blooms where it is drawn
+                    { const float tg = wc::shaperTrim (14, mode, m); l = (l + wl * m) * tg; r = (r + wr * m) * tg; }   // tp90
+                    return true;   // wet only — the cloud blooms where it is drawn
                 }
                 case wc::ShaperLaneId::Bode:
                 {
@@ -2307,7 +2318,9 @@ private:
                     p.shift = 0.5f + (sh - 0.5f) * (0.1f + 1.8f * k[0]);
                     p.fdbk = k[1]; p.spread = k[2]; p.blur = k[3];
                     p.mix = bl; e->setParams (p);
-                    float ol = 0, orr = 0; e->processStereo (l, r, ol, orr); l = ol; r = orr; return true;
+                    float ol = 0, orr = 0; e->processStereo (l, r, ol, orr);
+                    { const float tg = wc::shaperTrim (15, mode, bl); l = ol * tg; r = orr * tg; }   // tp90
+                    return true;
                 }
                 case wc::ShaperLaneId::Noise:
                 {

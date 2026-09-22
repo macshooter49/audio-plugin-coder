@@ -1,38 +1,24 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  au_shaper_cert2.cpp — tp85 · THE CERTIFICATION BATTERY'S SECOND HALF, IN THE INSTALLED AU.
+//  au_shaper_level.cpp — tp89 · tp90 · THE LOUDNESS LAW, IN THE INSTALLED AU.
 //
-//  tp83 certified that each borrowed lane is AUDIBLE and RHYTHMIC (au_shaper_fx.cpp). What it could
-//  not reach was everything the lane is made of: the four target knobs, the type menu, the seam when
-//  a send opens and shuts, and whether the two lanes that feed back on themselves stay bounded. All
-//  four were out of reach for one reason — the knobs are not parameters. They live in the shaperJson
-//  blob, which only the interface writes.
+//  Max: "nothing should be making anything quieter or louder … unless they're shaped, or the volume
+//  knob or the drive knob." Each lane is lit alone, shape pinned OPEN, knobs at rest, every TYPE in
+//  turn, and compared with the same render dark — on TWO sources, because one lies:
+//    · a held chord from the synth (nearly pure sines), and
+//    · the Noise lane's PINK hiss chained AHEAD of the lane under test (no notes).
+//  A sustained sine plus its own echo partly cancels, so a Delay reads -3 dB on the chord and +2.6 on
+//  noise. The verdict is the MEAN of the two, within 1 dB of the lane's target (0 dB; Multiband's push
+//  +5.5), and a peak under 2x the same source dry. Exit code 1 if any type fails.
 //
-//  🔑 THE UNLOCK, and it is the tp83 lesson a second time: THE BLOB IS ALREADY REACHABLE, AS A PRESET.
-//  getStateInformation writes shaperJson0..3 into the plugin's state, and a host sets that state
-//  through kAudioUnitProperty_ClassInfo. So this file does what a DAW does when it loads a patch —
-//  read the state, put a lane in it, hand it back — and every k[] is suddenly measurable from outside
-//  with the REAL engines running. No new parameters, no test-only door in the plugin.
+//  Every take writes all EIGHT chain slots: a repeated kind makes sanitise() fall back to kinds 0..7
+//  and the lane (or the Noise source) silently leaves the chain.
+//  The CAL lines it prints regenerate FlowShaper.h's kShaperTrimDb (see the note there).
 //
-//  WHAT IS CERTIFIED HERE
-//   [2][3] THE PATCH SURVIVES THE ROUND TRIP. Save → load → save must not lose a property. This bar
-//          exists because writing it FOUND A SHIPPED DATA LOSS (tp84's dangling else, below).
-//   [4..]  EVERY TARGET IS AUDIBLE. Each borrowed lane's four knobs, swept end to end with the shape
-//          pinned open so the knob is the only thing moving, against the log-spaced Goertzel bank.
-//          A knob that exists but cannot be heard is a knob that is not wired.
-//   [13..] EVERY TYPE IS ITS OWN. Each entry in a lane's type menu is compared with every other. The
-//          weakest pair is named in the bar, so a menu of aliases cannot pass as a menu of effects.
-//   [22]   NO SEAM. A hard gate — the send slamming shut and open on the sixteenth — must not put a
-//          step in the output. Measured as the largest sample-to-sample jump against the same render
-//          with the lane dark, which is what a click actually is.
-//   [23]   THE TWO THAT FEED BACK STAY BOUNDED. Delay and Bode held at full feedback for twelve
-//          seconds: finite, under a ceiling, and not still growing at the end.
+//  NOT JUDGED, and why: Volume IS the volume · Time and Repeat replay their input · Filter's job is to
+//  take energy away · Pan's Linear law is -3 dB at the edge by definition · Drive is the drive knob.
 //
-//  STILL NOT CERTIFIED, and stated rather than hidden: that a LOADED NOISE SAMPLE plays. The selection
-//  travels in the preset (shpNoiseSel0..3) but the PROCESSOR never re-reads the file — the editor does,
-//  when it opens. So a headless render cannot load one, and neither can this harness. See Tests/README.
-//
-//  clang++ -O2 -std=c++17 Tests/au_shaper_cert2.cpp -o /tmp/aucert2 -framework AudioToolbox \
-//          -framework AudioUnit -framework CoreFoundation -framework CoreAudio && /tmp/aucert2
+//  clang++ -O2 -std=c++17 Tests/au_shaper_level.cpp -o /tmp/aulevel -framework AudioToolbox \
+//          -framework AudioUnit -framework CoreFoundation -framework CoreAudio && /tmp/aulevel
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -334,17 +320,29 @@ static std::string oneLane (int lane)
 int main()
 {
     Au a; if (! a.open()) { printf ("  !! no Terrain AU\n"); return 2; }
-    printf ("\ntp89 — DOES ANY LANE CHANGE THE LEVEL? (each lane alone, shape pinned open, knobs at rest)\n\n");
+    printf ("\ntp89/tp90 — DOES ANY LANE CHANGE THE LEVEL? (each lane alone, shape pinned open, knobs at rest)\n");
+    printf ("  first: the chord alone, each lane on its boot type — REFERENCE; the verdict is the two-source table\n\n");
     a.pump (1.2); a.render (30, 0.0, false);
     a.set ("Flow Chain 1", 2.0f); a.pump (0.8); a.render (20, 0.0, false);
 
     auto allDark = [&] { for (int q = 0; q < 17; ++q) a.set (std::string ("Shaper ") + kAll[q] + " On", 0.0f); };
+    /* 🚨 tp90 — THE CHAIN IS EIGHT DISTINCT KINDS OR IT IS NOT THE CHAIN. ShaperState::sanitise() falls back to
+       kinds 0..7 when any two positions repeat, so setting only slot 1 (or 1 and 2) leaves a duplicate further
+       down and silently swaps the whole chain: the first cut of this audit read every lane past Crush at
+       exactly +0.00 on the chord (the lane had fallen out) and the Noise source at -229 dB behind Phaser and
+       Crush (Noise had). Every take now writes all eight. */
+    auto setChain = [&] (int first, int second)
+    {
+        std::vector<int> ch; ch.push_back (first); if (second >= 0 && second != first) ch.push_back (second);
+        for (int k = 0; k < 17 && ch.size() < 8; ++k) if (std::find (ch.begin(), ch.end(), k) == ch.end()) ch.push_back (k);
+        for (int q = 0; q < 8; ++q) a.setIndex ("Shaper Slot " + std::to_string (q + 1), ch[(size_t) q], 17);
+    };
     //  a held chord, measured after it settles. Time and Repeat read the PAST, so a steady source is the
     //  only fair one — a shifted read of a steady chord is still the same chord at the same level.
     auto take = [&] (int lane, int mode, std::vector<float>& out)
     {
         a.putShaper (oneLane (lane < 0 ? 0 : lane));
-        allDark (); a.setIndex ("Shaper Slot 1", lane < 0 ? 0 : lane, 17);
+        allDark (); setChain (lane < 0 ? 0 : lane, -1);
         if (lane >= 0)
         { a.set (std::string ("Shaper ") + kAll[lane] + " On", 1.0f);
           a.set (std::string ("Shaper ") + kAll[lane] + " Depth", 1.0f);
@@ -353,8 +351,40 @@ int main()
         a.pump (0.9); a.render ((int) (SR * 0.6 / BLK), 0.0, false);
         a.note (48, 100); a.note (55, 100); a.note (60, 100);
         std::vector<float> rr2; a.render ((int) (SR * 5.0 / BLK), 0.0, true, &out, &rr2);
-        for (size_t q = 0; q < out.size() && q < rr2.size(); ++q) out[q] = 0.5f * (out[q] + rr2[q]);   // the MID: a pan is not a mute
+        /* tp90 — STEREO POWER, not the mid. The mid read a constant-power pan as -3.01 dB and a wide delay
+           as -3.05 dB: both were energy moved into the SIDE, which the ear hears as exactly as loud. Each
+           sample becomes sqrt((L^2 + R^2) / 2), so a mono source reads its own level and a hard pan reads 0. */
+        for (size_t q = 0; q < out.size() && q < rr2.size(); ++q)
+        { const float L = out[q], R = rr2[q]; out[q] = std::sqrt (0.5f * (L * L + R * R)) * ((L + R) < 0.0f ? -1.0f : 1.0f); }
         a.note (48, 0); a.note (55, 0); a.note (60, 0); a.render (40, 5.0, true);
+    };
+    /* tp90 — THE SECOND SOURCE. A held chord that is nearly pure sines is a LUCKY source for anything with
+       a delay in it: the offline check put the same Delay at -3.07 dB on a sine chord, -0.13 on a saw chord
+       and +2.88 on noise — a sustained sine plus its own echo partly cancels, by phase coincidence. So every
+       trim is calibrated on TWO sources, the chord and the Noise lane's broadband hiss chained AHEAD of the
+       lane under test, and set to their mean. No notes are played: the hiss is the whole input. */
+    auto takeNoise = [&] (int lane, int mode, std::vector<float>& out)
+    {
+        std::string j = "{\"tv\":2,\"lanes\":[";
+        for (int i = 0; i < 17; ++i)
+        { if (i) j += ",";
+          if (i == 16 || i == lane) j += "{\"pts\":[[0,1,0],[1,1,0]],\"smooth\":0.2,\"phase\":0,\"tension\":0.5,\"floor\":0,\"blend\":1,\"swing\":0,\"grid\":16}";
+          else j += "{}"; }
+        a.putShaper (j + "]}");
+        allDark (); setChain (16, lane < 0 ? 0 : lane);
+        //  PINK, not white: white puts most of its energy above 5 kHz, so every lane with a low-pass in it (all of
+        //  Tape, most of Chorus) read 10-24 dB down on it. Pink falls at -3 dB/octave, the long-run average of music.
+        a.set ("Shaper Noise On", 1.0f); a.set ("Shaper Noise Depth", 1.0f); a.setIndex ("Shaper Noise Mode", 1, 13);
+        if (lane >= 0)
+        { a.set (std::string ("Shaper ") + kAll[lane] + " On", 1.0f);
+          a.set (std::string ("Shaper ") + kAll[lane] + " Depth", 1.0f);
+          const std::string m = std::string ("Shaper ") + kAll[lane] + " Mode";
+          if (mode >= 0 && a.has (m)) a.setIndex (m, mode, a.choiceCount (m)); }
+        a.pump (0.9); a.render ((int) (SR * 0.6 / BLK), 0.0, false);
+        std::vector<float> rr2; a.render ((int) (SR * 5.0 / BLK), 0.0, true, &out, &rr2);
+        for (size_t q = 0; q < out.size() && q < rr2.size(); ++q)
+        { const float L = out[q], R = rr2[q]; out[q] = std::sqrt (0.5f * (L * L + R * R)) * ((L + R) < 0.0f ? -1.0f : 1.0f); }
+        a.set ("Shaper Noise On", 0.0f); a.render (40, 5.0, true);
     };
     auto peakOf = [] (const std::vector<float>& x, size_t A, size_t B2)
     { double m = 0; for (size_t i = A; i < B2 && i < x.size(); ++i) m = std::max (m, (double) std::fabs (x[i])); return m; };
@@ -369,21 +399,49 @@ int main()
     {
         std::vector<float> w; take (ln, -1, w);
         const double r = rmsDb (w, A, B2) - dRms, pk = peakOf (w, A, B2) / (dPk + 1e-12);
-        const char* flag = "";
-        if (ln == 16) flag = "(Noise ADDS signal — exempt)";
-        else if (std::fabs (r) > 1.0) { flag = "<<< BREAKS THE LEVEL LAW"; ++broken; }
-        if (ln != 16 && pk > 1.35 && std::fabs (r) <= 1.0) flag = "<<< peak lifts without the rms: CLIPPING";
+        /* tp90 — this first table is the CHORD ALONE, each lane on its boot type, and it is REFERENCE ONLY. One
+           sustained sine chord is a lucky source for anything with a delay in it (Delay reads -2.85 dB here and
+           +2.6 on noise), so the verdict is the two-source table below. */
+        const char* flag = ln == 16 ? "(Noise ADDS signal — exempt)" : "";
+        (void) broken;
         printf ("  %-11s %+9.2f dB %9.2fx  %s\n", kAll[ln], r, pk, flag);
     }
-    // ── and every PHASER type, since that is the one he named ──
-    printf ("\n  THE PHASER'S TYPES — he says the flange ones go quiet and the phaser itself distorts:\n");
-    const int N = a.choiceCount ("Shaper Phaser Mode");
-    printf ("  %-6s %10s %10s\n", "type", "rms", "peak");
-    for (int t = 0; t < N; ++t)
-    { std::vector<float> w; take (6, t, w);
-      const double r = rmsDb (w, A, B2) - dRms, pk = peakOf (w, A, B2) / (dPk + 1e-12);
-      printf ("  %-6d %+9.2f dB %9.2fx  %s\n", t, r, pk,
-              std::fabs (r) > 1.0 ? (r < 0 ? "<<< QUIET" : "<<< LOUD") : (pk > 1.35 ? "<<< peak only: CLIPPING" : "")); }
-    printf ("\n  %d lanes break the level law.\n\n", broken);
-    a.close(); return 0;
+    // ── tp90 — EVERY TYPE OF EVERY TRIMMED LANE, ON BOTH SOURCES. A lane's level is set per type (each type
+    //    is its own engine voicing), so a lane that passes on type 0 has proved nothing about type 6.
+    //    NOT TRIMMED, and why: Volume IS the volume · Time and Repeat replay the input · Filter's job is to
+    //    remove energy (a high-pass at rest SHOULD take out a C3 chord) · Pan's Linear law is -3 dB at the
+    //    edge by definition · Drive is the drive knob, which Max exempted by name. ──
+    std::vector<float> nDry; takeNoise (-1, -1, nDry);
+    const double nRms = rmsDb (nDry, A, B2), nPk = peakOf (nDry, A, B2);
+    printf ("\n  noise reference: %.2f dBFS rms\n", nRms);
+    printf ("  EVERY TYPE, BOTH SOURCES (pass: the MEAN within 1 dB of its target, and the peak under 2x its own source dry)\n");
+    printf ("  %-10s %4s %9s %9s %9s %8s\n", "lane", "type", "chord", "noise", "mean", "pk x");
+    int badTypes = 0;
+    const int kTrimmed[10] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+    for (int ln : kTrimmed)
+    {
+        const std::string m = std::string ("Shaper ") + kAll[ln] + " Mode";
+        const int N = a.has (m) ? a.choiceCount (m) : 1;
+        for (int t = 0; t < N; ++t)
+        {
+            std::vector<float> w, wn; take (ln, t, w); takeNoise (ln, t, wn);
+            const double rc = rmsDb (w, A, B2) - dRms, rn = rmsDb (wn, A, B2) - nRms, mean = 0.5 * (rc + rn);
+            //  a peak is judged against the SAME source dry: pink noise at this level already peaks near full
+            //  scale by itself, so an absolute ceiling flagged every noise take. Doubling the crest is the fault.
+            const double pk = std::max (peakOf (w, A, B2) / (dPk + 1e-12), peakOf (wn, A, B2) / (nPk + 1e-12));
+            //  Multiband's push is the product (tp89) — its target is +5.5 dB, the same for every type
+            const double target = (ln == 12) ? 5.5 : 0.0;
+            //  ...and a lane whose TARGET is a push is judged on its crest, not on the push itself: +5.5 dB of rms
+            //  alone lifts a peak 1.88x, so Multiband's peak is measured against its own target gain.
+            const double pkN = pk / std::pow (10.0, target / 20.0);
+            const bool bad = std::fabs (mean - target) > 1.0 || pkN >= 2.0;
+            if (bad) ++badTypes;
+            printf ("  %-10s %4d %+8.2f %+8.2f %+8.2f %7.3f  %s\n", kAll[ln], t, rc, rn, mean, pkN,
+                    bad ? (pkN >= 2.0 ? "<<< PEAK DOUBLED" : (mean < target ? "<<< QUIET" : "<<< LOUD")) : "");
+            printf ("CAL %d %d %.3f %.3f\n", ln, t, rc, rn);
+        }
+    }
+    printf ("\n  %d lane types break the level law.\n", badTypes);
+    //  (the Phaser-only table that followed here through tp89 is the Phaser rows above, now on both sources)
+    a.close(); return badTypes ? 1 : 0;
 }

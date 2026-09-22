@@ -229,7 +229,8 @@ int main()
         char buf[220]; std::snprintf (buf, sizeof buf, "T17 ROSTER HOOKS: filter(0) engine %d ×%d, phaser filter(1) engine %d ×%d, crush filter(2) engine %d ×%d, drive(0) mode %d ×%d, level %.1f dB (the fakes scale to -30)",
                                       ext.fEng[0], ext.fCalls[0], ext.fEng[1], ext.fCalls[1], ext.fEng[2], ext.fCalls[2], ext.dMode[0], ext.dCalls[0], db (rms (a.L, 2000, 6000)));
         check (ext.fEng[0] == 4 && ext.fCalls[0] == 6144 && ext.fEng[1] == 19 && ext.fCalls[1] == 6144 && ext.fEng[2] == 83 && ext.fCalls[2] == 6144 && ext.dMode[0] == 9 && ext.dCalls[0] == 6144
-               && std::fabs (db (rms (a.L, 2000, 6000)) - (db (0.5 / std::sqrt (2.0)) - 30.1)) < 1.0, buf);
+               //  tp90 — plus the per-type level trims of the two lit roster types, straight from the table
+               && std::fabs (db (rms (a.L, 2000, 6000)) - (db (0.5 / std::sqrt (2.0)) - 30.1 + kShaperTrimDb[6][2] + kShaperTrimDb[7][4])) < 1.0, buf);
         // and with the crush lane on a distortion type: drive slot 1
         FlowShaper g2; g2.prepare (SR); g2.setExt (&ext); auto st2 = state(); auto& C2 = st2->lanes[7]; C2.on = true; C2.depth = 1; C2.mode = 8; fill (C2, one);
         run (g2, st2, 0.0, 0.25, sig440);
@@ -745,6 +746,37 @@ int main()
             char buf[330]; std::snprintf (buf, sizeof buf,
                 "T36 DOUBLE SPEED DOES NOT ALIAS: read at 2x, the bins above SR/4 stay empty and the band below it comes through at level — %s", got.c_str());
             check (ok, buf);
+        }
+        // ── T37 🚨 A REPEAT HELD OPEN RE-CAPTURES EVERY CYCLE — IT NEVER LOOPS ONE SLICE FOREVER ──
+        {
+            /* tp90 — the level audit lit Repeat with its shape pinned open on a held chord and read -226 dB.
+               Capture only happened on the RISING edge of the shape, so a flat top captured ONE slice and
+               looped it for good; the lane had lit in the silence before the chord, so the slice was silence.
+               The grid restarts every cycle, and so does the slice now. */
+            auto run = [&] (bool lane) -> double
+            { FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+              auto& P = st->lanes[4]; P.on = lane; P.depth = 1; P.blend = 1; P.rate = 4;
+              P.fill ([] (double) { return 1.0f; });
+              g.setState (st);
+              const double PRE = 2.0, PLAY = 8.0; const int N = (int) (SR * (PRE + PLAY));
+              std::vector<float> L ((size_t) N), R ((size_t) N);
+              for (int i = 0; i < N; ++i)
+              { const double t = (double) i / SR - PRE; float v = 0.0f;
+                if (t >= 0) v = (float) (0.22*std::sin(2*M_PI*130.81*t) + 0.18*std::sin(2*M_PI*196.0*t) + 0.15*std::sin(2*M_PI*261.63*t));
+                L[(size_t) i] = R[(size_t) i] = v; }
+              int done = 0; double ppq = 0.0; const int B = 512;
+              while (done < N)
+              { const int n = std::min (B, N - done); const bool playing = (done >= (int) (SR * PRE));
+                g.process (L.data() + done, R.data() + done, n, ppq, BPM, playing, 1.0f);
+                if (playing) ppq += n / FPB; done += n; }
+              double e = 0; const size_t a = (size_t) (SR * (PRE + 4.0));
+              for (size_t i = a; i < L.size(); ++i) e += (double) L[i] * L[i];
+              return 10.0 * std::log10 (e / (double) (L.size() - a) + 1e-24); };
+            const double dry = run (false), wet = run (true);
+            char buf[260]; std::snprintf (buf, sizeof buf,
+                "T37 A REPEAT HELD OPEN RE-CAPTURES EVERY CYCLE: silence, then a chord, shape flat at the top — the repeat reads %+.2f dB against dry (it used to be -226 dB: one silent slice, looped forever)",
+                wet - dry);
+            check (std::fabs (wet - dry) < 3.0, buf);
         }
         // ── T33 FADE CLOSES THE SEAM AT A STEP ──
         {
