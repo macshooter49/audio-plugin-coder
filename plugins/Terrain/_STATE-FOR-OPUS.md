@@ -23,7 +23,14 @@ sample's NAME, and the card asks `getNoiseSampleSel` on open so it survives a re
 `_tp77_gate.js` 34/34, `au_shaper_fx.cpp` 13/13, `au_shaper_lock.cpp` 9/9, `FlowShaper_test.cpp` 36/36,
 `TerrainNoise_test.cpp` 15/15.
 
-⚠️ **OWED.** (1) The battery's other half: every target swept end to end, every type proven distinct, a click check
+⚠️ **CLEAN-UP FINDING (2026-09-21, end of session).** Sweeping every gate file against Tests/README.md turned up
+five that no row referenced. Four pass. 🚨 **`_fb606_wtnav_gate.js` fails 5 of 26 at HEAD** — and running it against
+the page at `775d213` (before tp77) gives the **identical five failures**, so it is pre-existing and nothing to do
+with the Shaper work. One symptom, not five: the sample-browser's right-click menu never opens (`rows: []`, a 0×0
+rect), so Locate / Remove Folder / ON TOP / DOM order / the clamp all fall together. It is referenced in the README
+now so it stops rotting — the `_tp71_gate.js` lesson: a gate no row points at is a gate nobody runs.
+
+⚠️ **OWED.** (1) **Fix `_fb606_wtnav_gate.js`** — the wavetable/sample browser's right-click menu. (2) The battery's other half: every target swept end to end, every type proven distinct, a click check
 when a send opens, Delay / Bode bounded at full feedback. (2) A bar that a LOADED SAMPLE changes the Noise lane's
 output in the real plugin — [38] proves the browser, not the playback (the headless natives return no library).
 (3) Taste is not certified and cannot be. (4) Time against ShaperBox 3 beyond the pitch law.
