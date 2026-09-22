@@ -124,8 +124,8 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
     '[3] the brush dropdown: Line stamps a flat at the pointer\'s height into its grid cell; with Point a plain click adds NOTHING and a DOUBLE-click adds a point that Snap lands on the grid (0.625 = 10/16); Free draw is water — the stroke\'s points sit at their own x (not on any grid) and on the curve that was drawn, and only the collinear ones go; the shape chip then reads Custom', JSON.stringify(r3));
  // ── [4] the push ──
  const r4=await p.evaluate(()=>{ const last=window.__shpJson[window.__shpJson.length-1]; const o=JSON.parse(last[1]); return {inst:last[0],lanes:o.lanes.length,sense:o.sense,keys:Object.keys(o.lanes[2]).sort().join(','),k:o.lanes[2].k.length,kf:o.lanes[2].k.join(','),pts:o.lanes.every(L=>L.pts.length>=2&&L.pts[0][0]===0&&L.pts[L.pts.length-1][0]===1)}; });
- ok(r4.inst===0 && r4.lanes===8 && r4.sense===0.5 && r4.keys==='blend,floor,grid,k,phase,pts,smooth,swing,tension' && r4.k===6 && r4.kf==='0.3,0,1,0,0,0.5' && r4.pts,
-    '🚨 [4] every edit pushes setShaperJson(inst, {sense, lanes:[8 × {pts (pinned 0..1), smooth, phase, tension, floor, blend, swing, grid, k[6]}]}); the Filter lane\'s k boots Reso .3 / Drive 0 / Poles 24 dB / Tube / Spread 0', JSON.stringify(r4));
+ ok(r4.inst===0 && r4.lanes===13 && r4.sense===0.5 && r4.keys==='blend,floor,grid,k,phase,pts,smooth,swing,tension' && r4.k===6 && r4.kf==='0.3,0,1,0,0,0.5' && r4.pts,
+    '🚨 [4] every edit pushes setShaperJson(inst, {sense, lanes:[13 × {pts (pinned 0..1), smooth, phase, tension, floor, blend, swing, grid, k[6]}]}); the Filter lane\'s k boots Reso .3 / Drive 0 / Poles 24 dB / Tube / Spread 0', JSON.stringify(r4));
 
  // ── [5] parameters + the dice ──
  const r5=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const t=card.querySelectorAll('.fx .fxb'); const out={};
@@ -546,7 +546,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    const snap=JSON.stringify(S.v);                       // what a preset stores
    const live=kinds().join(',');
    S.set('slot','0,0,1,2,3,4,5,6'); await new Promise(r=>setTimeout(r,250)); const dup=kinds().join(',');
-   S.set('slot','9,1,2,3,4,5,6,7'); await new Promise(r=>setTimeout(r,250)); const over=kinds().join(',');
+   S.set('slot','99,1,2,3,4,5,6,7'); await new Promise(r=>setTimeout(r,250)); const over=kinds().join(',');   /* tp80 — 9 is Delay now; out of range means past the ROSTER */
    S.set('slot','');                await new Promise(r=>setTimeout(r,250)); const empty=kinds().join(',');
    const o=JSON.parse(snap); for(const k in o) S.set(k,o[k]); await new Promise(r=>setTimeout(r,300));
    return { live, restored:kinds().join(','), dup, over, empty, carried:'slot' in o }; });

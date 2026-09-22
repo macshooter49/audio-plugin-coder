@@ -2100,6 +2100,103 @@ private:
             d->setMode (mode); d->setDrive (drive01); d->setTone (tone); d->setCharacter (character); d->setBias (bias); d->setMix (mix);
             float ol = 0, orr = 0; d->processSample (l, r, ol, orr); l = ol; r = orr; return true;
         }
+
+        /* ══ tp80 — THE BORROWED RACK ═══════════════════════════════════════════════════════════════════════
+           Max: "we're going to make each of these effects available to shape … I just want you to make mini
+           versions of these that I can shape." They are not mini and they are not new: each one is the SHIPPED
+           rack engine, a second private instance owned here, exactly as the Filter and Drive lanes already
+           borrow FilterFxEngine and DistortionEngine. Nothing about their sound is re-implemented.
+
+           ⚠️ ARM ONLY WHAT A LIT LANE ASKS FOR (the tp63 law). A Delay is ~8.4 MB of ring at 48 k and a
+           Granular the same again; a card drawing a volume gate must never pay for either. Every arm below is
+           idempotent, allocates and prepares ON THE MESSAGE THREAD, and publishes through a release store that
+           the audio thread acquires — a bare unique_ptr::get() is not a fence.
+
+           The shape drives the ONE control that makes each effect rhythmic, and the four Target knobs are the
+           rest of it. The engine owns the wet/dry (it is handed `mix` = shape x blend) for the same reason
+           drive() does: several of these align their dry internally, so a crossfade out here would comb. */
+        std::unique_ptr<DelayEngine>           dly; std::atomic<DelayEngine*>           dlyLive { nullptr };
+        std::unique_ptr<tw::TerrainChorusFx>   cho; std::atomic<tw::TerrainChorusFx*>   choLive { nullptr };
+        std::unique_ptr<tw::TerrainWidenFx>    wid; std::atomic<tw::TerrainWidenFx*>    widLive { nullptr };
+        std::unique_ptr<tw::TerrainSplitterFx> spl; std::atomic<tw::TerrainSplitterFx*> splLive { nullptr };
+        // the Reverb lane's four rooms, each built only if its type is the one chosen
+        std::unique_ptr<RoomReverb>    rvRoom;    std::unique_ptr<PlateReverb>   rvPlate;
+        std::unique_ptr<HallReverb>    rvHall;    std::unique_ptr<ShimmerReverb> rvShim;
+        std::atomic<int> rvBuilt { 0 };   // bit per type, release-stored after the engine is prepared
+
+        void armDelay   () { if (dly) return; auto e = std::make_unique<DelayEngine>();           e->prepare (sr); dly = std::move (e); dlyLive.store (dly.get(), std::memory_order_release); }
+        void armChorus  () { if (cho) return; auto e = std::make_unique<tw::TerrainChorusFx>();   e->prepare (sr, 512); cho = std::move (e); choLive.store (cho.get(), std::memory_order_release); }
+        void armWiden   () { if (wid) return; auto e = std::make_unique<tw::TerrainWidenFx>();    e->prepare (sr, 512); wid = std::move (e); widLive.store (wid.get(), std::memory_order_release); }
+        void armSplit   () { if (spl) return; auto e = std::make_unique<tw::TerrainSplitterFx>(); e->prepare (sr, 512); spl = std::move (e); splLive.store (spl.get(), std::memory_order_release); }
+        void armReverb  (int type)
+        {
+            const int t = type < 0 ? 0 : (type > 3 ? 3 : type); if ((rvBuilt.load (std::memory_order_acquire) >> t) & 1) return;
+            switch (t) { case 0: if (! rvRoom)  { rvRoom  = std::make_unique<RoomReverb>();    rvRoom ->prepare (sr); } break;
+                         case 1: if (! rvPlate) { rvPlate = std::make_unique<PlateReverb>();   rvPlate->prepare (sr); } break;
+                         case 2: if (! rvHall)  { rvHall  = std::make_unique<HallReverb>();    rvHall ->prepare (sr); } break;
+                         default:if (! rvShim)  { rvShim  = std::make_unique<ShimmerReverb>(); rvShim ->prepare (sr); } break; }
+            rvBuilt.fetch_or (1 << t, std::memory_order_release);
+        }
+
+        bool fx (int kind, float s, const float* k, int mode, float mix, float& l, float& r) noexcept override
+        {
+            const float m = mix < 0.0f ? 0.0f : (mix > 1.0f ? 1.0f : mix);
+            switch ((wc::ShaperLaneId) kind)
+            {
+                case wc::ShaperLaneId::Reverb:
+                {
+                    // THE SHAPE OPENS THE SEND: the tail blooms exactly where it is drawn.
+                    const int t = mode < 0 ? 0 : (mode > 3 ? 3 : mode);
+                    if (! ((rvBuilt.load (std::memory_order_acquire) >> t) & 1)) return false;
+                    float wl = 0, wr = 0;
+                    /* Size · Decay · Tone · Diffusion — the four every room here answers to. (Damping and Width
+                       are NOT shared: Hall spells it setHighDamping, Shimmer reuses that slot for setShimmer.) */
+                    switch (t) { case 0: rvRoom ->setSize (k[0]); rvRoom ->setDecay (k[1]); rvRoom ->setTone (k[2]); rvRoom ->setDiffusion (k[3]); rvRoom ->processSample (l, r, wl, wr); break;
+                                 case 1: rvPlate->setSize (k[0]); rvPlate->setDecay (k[1]); rvPlate->setTone (k[2]); rvPlate->setDiffusion (k[3]); rvPlate->processSample (l, r, wl, wr); break;
+                                 case 2: rvHall ->setSize (k[0]); rvHall ->setDecay (k[1]); rvHall ->setTone (k[2]); rvHall ->setDiffusion (k[3]); rvHall ->processSample (l, r, wl, wr); break;
+                                 default:rvShim ->setSize (k[0]); rvShim ->setDecay (k[1]); rvShim ->setTone (k[2]); rvShim ->setDiffusion (k[3]); rvShim ->processSample (l, r, wl, wr); break; }
+                    l += wl * m; r += wr * m; return true;   // the reverbs return WET only, so the send is the mix
+                }
+                case wc::ShaperLaneId::Delay:
+                {
+                    auto* e = dlyLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    // THE SHAPE THROWS: draw where the echo is fed and the repeats land on the grid.
+                    e->setType (mode < 0 ? 0 : (mode > 3 ? 3 : mode));
+                    e->setTimeMs (10.0f + 1990.0f * k[0] * k[0]);   // 10 ms .. 2 s, squared so the short end is usable
+                    e->setFeedback (k[1] * 1.05f); e->setTone (k[2]); e->setWidth (k[3] * 1.6f);
+                    e->setLink (true); e->setPing (k[3] > 0.75f);
+                    float wl = 0, wr = 0; e->processSample (l, r, wl, wr);
+                    l += wl * m; r += wr * m; return true;   // wet only
+                }
+                case wc::ShaperLaneId::Chorus:
+                {
+                    auto* e = choLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    tw::TerrainChorusFx::Params p; p.type = mode < 0 ? 0 : mode;
+                    p.rate = k[0]; p.depth = k[1]; p.feedback = k[2]; p.b3 = k[3];
+                    p.mix = m;                       // THE SHAPE IS THE DEPTH OF THE EFFECT, through its own mix
+                    e->setParams (p); e->processStereo (&l, &r, 1); return true;
+                }
+                case wc::ShaperLaneId::Widen:
+                {
+                    auto* e = widLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    tw::TerrainWidenFx::Params p; p.type = mode < 0 ? 0 : mode;
+                    p.amount = k[0]; p.width = k[1]; p.rate = k[2]; p.b2 = k[3];
+                    p.mix = m;                       // THE SHAPE OPENS AND CLOSES THE STEREO FIELD
+                    e->setParams (p); e->processStereo (&l, &r, 1); return true;
+                }
+                case wc::ShaperLaneId::Multi:
+                {
+                    auto* e = splLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    tw::TerrainSplitterFx::Params p; p.type = mode < 0 ? 0 : mode;
+                    p.split = k[0]; p.slope = (int) (k[1] * 3.99f); p.spread = k[2];
+                    // THE SHAPE TILTS THE BANDS: at 0 the low end carries, at 1 the top does.
+                    p.balance = 0.5f + (s - 0.5f) * (0.2f + 1.6f * k[3]);
+                    p.mix = m; e->setParams (p);
+                    float ol = 0, orr = 0; e->processStereo (l, r, ol, orr); l = ol; r = orr; return true;
+                }
+                default: return false;   // Volume / Time / Filter / Pan / Repeat / Drive / Phaser / Crush do their own work in FlowShaper
+            }
+        }
     };
     ShaperRoster                shpRoster_[wc::kFlowInstances];
     std::atomic<float>          shpVizPh_[wc::kFlowInstances][wc::kShaperLanes] {}, shpVizV_[wc::kFlowInstances][wc::kShaperLanes] {};

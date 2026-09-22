@@ -211,6 +211,7 @@ int main()
             int fCalls[3] = { 0, 0, 0 }, fEng[3] = { -1, -1, -1 }, dCalls[2] = { 0, 0 }, dMode[2] = { -1, -1 }; float lastCut = -1;
             bool filter (int which, int engine, float cut01, float, float, float, int, float, float& l, float& r) noexcept override { ++fCalls[which]; fEng[which] = engine; lastCut = cut01; l *= 0.5f; r *= 0.5f; return true; }
             bool drive  (int which, int mode, float, float, int, float, float, float& l, float& r) noexcept override { ++dCalls[which]; dMode[which] = mode; l *= 0.25f; r *= 0.25f; return true; }
+            bool fx (int, float, const float*, int, float, float&, float&) noexcept override { return false; }
         } ext;
         FlowShaper g; g.prepare (SR); g.setExt (&ext); auto st = state();
         auto& F = st->lanes[2]; F.on = true; F.depth = 1; F.mode = 4; fill (F, one);                 // Acid 303
@@ -274,7 +275,7 @@ int main()
             auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.blend = 1; V.smooth = 0.2f; fill (V, gate2);
             auto& C = st->lanes[7]; C.on = true; C.depth = 1; C.blend = 1; C.mode = 1; C.k[0] = 1.0f; C.k[2] = 1.0f;   // k0 = 1 is the COARSEST bit depth (measured: at k0 = 0 the two orders differ by 0.0005, which proves nothing)
             fill (C, [] (double) { return 1.0f; });
-            for (int q = 0; q < kShaperLanes; ++q) st->slot[q] = order[q];
+            for (int q = 0; q < kShaperSlots; ++q) st->slot[q] = order[q];
             return run (g, st, 0.0, 0.5, sig440);
         };
         static const int volFirst[8] = { 0, 7, 1, 2, 3, 4, 5, 6 };   // Volume at position 0, Crush at position 1
@@ -283,7 +284,7 @@ int main()
         double worst = 0; for (size_t q = 2000; q < a.L.size() && q < b.L.size(); ++q) worst = std::max (worst, (double) std::fabs (a.L[q] - b.L[q]));
         char buf[220]; std::snprintf (buf, sizeof buf, "T21 CHAIN ORDER IS AUDIBLE: gate->crush against crush->gate differ by %.4f peak (same two lanes, same shapes, only the position moved)", worst);
         check (worst > 0.05, buf);
-        ShaperState fresh; bool ident = true; for (int q = 0; q < kShaperLanes; ++q) ident = ident && fresh.slot[q] == q;
+        ShaperState fresh; bool ident = true; for (int q = 0; q < kShaperSlots; ++q) ident = ident && fresh.slot[q] == q;
         check (ident, "T21b a fresh state's chain is the tile order, 0..7 — the card reads left to right");
     }
     // ── T22: tp79 — sanitise() is the wall in front of a switch the AUDIO THREAD indexes with this array ──
@@ -352,6 +353,83 @@ int main()
         const double rate = ((double) L[(size_t) (i0 + w)] - (double) L[(size_t) i0]) * N / w;
         char buf[200]; std::snprintf (buf, sizeof buf, "T24 the ring advances for TIME ALONE (Repeat off): a 0.5 slope reads at %.3f, not stuck at unity", rate);
         check (std::fabs (rate - 0.5) < 0.02, buf);
+    }
+    // ── T25: tp80 — 🚨 THE NINE LENT LANES REACH THEIR ENGINE, WITH THE SHAPE AS THE RHYTHM ──
+    //  Max: "we're going to make each of these effects available to shape … reverb, tape, widen, multiband,
+    //  granular, delay, bode, chorus … and a noise engine too." Every one of them arrives through the single
+    //  ShaperExt::fx door, so this proves the door: the right kind, the shape's value, the four target knobs,
+    //  the lane's type, the mix — and that an UNARMED engine leaves the audio untouched instead of silencing it.
+    {
+        struct LentExt : ShaperExt
+        {
+            int calls[kShaperLanes] = {}; float lastS[kShaperLanes] = {}, lastMix[kShaperLanes] = {};
+            float lastK[kShaperLanes][4] = {}; int lastMode[kShaperLanes] = {};
+            bool armed = true;
+            bool filter (int, int, float, float, float, float, int, float, float&, float&) noexcept override { return false; }
+            bool drive  (int, int, float, float, int, float, float, float&, float&) noexcept override { return false; }
+            bool fx (int kind, float s, const float* k, int mode, float mix, float& l, float& r) noexcept override
+            {
+                if (kind < 0 || kind >= kShaperLanes) return false;
+                ++calls[kind]; lastS[kind] = s; lastMix[kind] = mix; lastMode[kind] = mode;
+                for (int q = 0; q < 4; ++q) lastK[kind][q] = k[q];
+                if (! armed) return false;
+                l *= 0.5f; r *= 0.5f; return true;
+            }
+        } ext;
+        FlowShaper g; g.prepare (SR); g.setExt (&ext); auto st = state();
+        /* the five lent kinds, all placed in the chain, plus one ORDINARY kind so the bar also proves that a
+           lane which does its own work in FlowShaper never comes through this door. */
+        static const int lent[5] = { 8, 9, 10, 11, 12 };   // Reverb · Delay · Chorus · Widen · Multiband
+        for (int q = 0; q < 5; ++q) st->slot[q] = lent[q];
+        st->slot[5] = 0; st->slot[6] = 2; st->slot[7] = 5;   // Volume · Filter · Drive
+        for (int q = 0; q < 5; ++q)
+        { auto& L = st->lanes[lent[q]]; L.on = true; L.depth = 1; L.blend = 1; L.mode = 1 + q;
+          for (int w = 0; w < 4; ++w) L.k[w] = 0.1f * (float) (w + 1); fill (L, one); }
+        auto& VV = st->lanes[0]; VV.on = true; VV.depth = 1; VV.blend = 1; fill (VV, one);   // a native lane, lit
+        auto a = run (g, st, 0.0, 0.25, sig440);
+        bool placedRan = true, kOk = true, modeOk = true, sOk = true, mixOk = true;
+        for (int q = 0; q < 5; ++q)
+        { const int K = lent[q]; if (ext.calls[K] == 0) placedRan = false;
+          if (std::fabs (ext.lastS[K] - 1.0f) > 0.01f) sOk = false;            // shape `one` at depth 1
+          if (std::fabs (ext.lastMix[K] - 1.0f) > 0.01f) mixOk = false;        // s * blend
+          if (ext.lastMode[K] != 1 + q) modeOk = false;
+          for (int w = 0; w < 4; ++w) if (std::fabs (ext.lastK[K][w] - 0.1f * (float) (w + 1)) > 1e-4f) kOk = false; }
+        const bool nativeStayedHome = ext.calls[0] == 0;   // Volume is lit and placed, and must NOT use fx()
+        char buf[280]; std::snprintf (buf, sizeof buf, "T25 the lent lanes: %d of 5 reached fx() with the shape, the four target knobs, the type and the mix; the lit Volume lane used fx() %d times; level %.1f dB",
+                                      placedRan ? 5 : 0, ext.calls[0], db (rms (a.L, 2000, 6000)));
+        check (placedRan && nativeStayedHome && kOk && modeOk && sOk && mixOk, buf);
+        // an UNARMED engine must be a wire, not a mute — the lane passes the audio through
+        LentExt off; off.armed = false;
+        FlowShaper g2; g2.prepare (SR); g2.setExt (&off); auto st2 = state();
+        for (int q = 0; q < 5; ++q) { st2->slot[q] = lent[q]; auto& L = st2->lanes[lent[q]]; L.on = true; L.depth = 1; L.blend = 1; fill (L, one); }
+        auto b = run (g2, st2, 0.0, 0.25, sig440);
+        char buf2[200]; std::snprintf (buf2, sizeof buf2, "T25b five UNARMED lent lanes pass the audio through at %.1f dB (a mute would read -inf)", db (rms (b.L, 2000, 6000)));
+        check (db (rms (b.L, 2000, 6000)) > -10.0, buf2);   /* the 440 Hz test tone is 0.5 peak, so untouched IS about -9 dB; a mute reads -inf */
+    }
+    // ── T26: tp80 — 🚨 A LANE'S PARAMETERS MUST NOT LAND ON ANOTHER LANE ──
+    //  setLaneCtl indexed with `lane & 7`, a mask sized to the eight lanes that existed when it was written.
+    //  The moment the roster grew, lanes 8..12 wrapped onto 0..4 and pushed their own OFF state over Volume,
+    //  Time, Filter, Pan and Repeat: the whole Shaper went silent while every parameter still read correctly.
+    //  Push every lane the way the processor does, with only Volume lit, and Volume must still gate.
+    {
+        FlowShaper g; g.prepare (SR); auto st = state();
+        auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.blend = 1;
+        fill (V, [] (double x) { return x < 0.5 ? 1.0f : 0.0f; });
+        g.setState (st);
+        const int N = (int) (SR * 2.0); std::vector<float> L ((size_t) N), R ((size_t) N);   // one whole 1-bar cycle at 120 BPM
+        int done = 0; double ppq = 0.0; const int B = 256;
+        while (done < N)
+        {
+            const int n = std::min (B, N - done);
+            for (int i = 0; i < n; ++i) { L[(size_t) (done + i)] = R[(size_t) (done + i)] = sig440 (done + i); }
+            // exactly what the processor does every block: push ALL kinds, lit or not, in index order
+            for (int ln = 0; ln < kShaperLanes; ++ln) g.setLaneCtl (ln, ln == 0, 1.0f, kShaperRateDefault, 0, 0);
+            g.process (L.data() + done, R.data() + done, n, ppq, BPM, true);
+            ppq += n / FPB; done += n;
+        }
+        const double open_ = db (rms (L, 4800, 19200)), shut = db (rms (L, 62400, 76800));   // the shape's first half, then its second
+        char buf[220]; std::snprintf (buf, sizeof buf, "T26 pushing all %d lanes leaves the lit one alone: the gate reads %.1f dB open against %.1f dB shut", kShaperLanes, open_, shut);
+        check (open_ - shut > 30.0, buf);
     }
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);

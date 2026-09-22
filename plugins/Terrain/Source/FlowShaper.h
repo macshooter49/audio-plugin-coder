@@ -48,9 +48,23 @@
 
 namespace wc
 {
-static constexpr int kShaperLanes = 8;
+/** tp80 — KINDS AND POSITIONS ARE NO LONGER THE SAME NUMBER.
+    There are eight POSITIONS in the chain (eight tiles on the card) and seventeen KINDS a position can hold.
+    Max: "we're going to make each of these effects available to shape … reverb, tape, widen, multiband,
+    granular, delay, bode, chorus … and a noise engine too, we already have our noise sample library."
+    A kind still cannot appear twice, so each one keeps exactly one set of parameters, one set of DSP state and
+    one clock — everything stays indexed by KIND, and `slot[]` just says which eight are in the chain and in
+    what order. The nine that are not placed cost their (small) lane struct and nothing else: their engines are
+    armed lazily, only when a lane of that kind is actually lit (the tp63 law — Delay, Granular and Bode each
+    carry ~8.4 MB of ring at 48 k and a card drawing a volume gate must never pay for them). */
+static constexpr int kShaperSlots = 8;           // positions in the chain
+static constexpr int kShaperLanes = 13;          // KINDS (one lane struct, one parameter set, one clock each)
 static constexpr int kShaperT     = 2048;        // the baked table: one cycle, end to end (index kShaperT = the value AT the cycle's end)
-enum class ShaperLaneId : int { Volume = 0, Time, Filter, Pan, Repeat, Drive, Phaser, Crush };
+enum class ShaperLaneId : int { Volume = 0, Time, Filter, Pan, Repeat, Drive, Phaser, Crush,
+                                Reverb, Delay, Chorus, Widen, Multi };
+/* ⚠️ A KIND ONLY EXISTS HERE ONCE ITS ENGINE IS ACTUALLY LENT. Tape, Granular, Bode and Noise are on Max's
+   roster and their engines all ship in the rack, but a kind that appears on the card and does nothing is worse
+   than one that is not there yet — so they arrive with their lends, not before. */
 
 // the rate ladder — one cycle of the shape, in beats (4 = 1 bar)
 static constexpr float kShaperRateBeats[8] = { 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f };
@@ -69,6 +83,24 @@ struct ShaperExt
     /** mix: the lane's wet/dry — the rack's distortion delays its wet by its resampler and aligns the dry INSIDE, so the
         engine owns the mix and the lane replaces (a crossfade outside would comb). The lane passes blend × fade-in. */
     virtual bool drive  (int which, int mode, float drive01, float tone, int character, float bias, float mix, float& l, float& r) noexcept = 0;
+    /** tp80 — ONE DOOR FOR EVERY BORROWED RACK EFFECT. Max: "we're going to make each of these effects available
+        to shape … I just want you to make mini versions of these that I can shape."
+
+        Rather than a virtual per engine, the lane hands over what it knows and the PROCESSOR — which is where the
+        engines live — decides what to drive with it. That keeps this header free of any engine's Params struct
+        (so the offline proof still builds with no JUCE) and makes a new kind eight lines here instead of a block.
+
+        `kind`  ShaperLaneId — which engine
+        `s`     the shape's read value, 0..1, already smoothed and scaled by the lane's Depth. This is THE
+                rhythm: it drives the one control that makes the effect move (a reverb's send, a delay's throw,
+                a chorus's depth, a shifter's interval), and the processor owns that mapping.
+        `k`     the Target tab's knobs, k[0..3] — four per kind, Max: "I want everyone to have exactly four".
+        `mode`  the lane's type choice (a reverb type, a tape machine, a noise colour).
+        `mix`   the lane's own wet/dry, already multiplied by the shape and the fade-in. THE ENGINE OWNS THE MIX
+                and returns l/r fully blended, exactly as drive() does and for the same reason: several of these
+                delay their wet internally and align the dry inside, so a crossfade applied out here would comb.
+        Returns false when that engine has not been armed yet, and the lane passes the audio through untouched. */
+    virtual bool fx (int kind, float s, const float* k, int mode, float mix, float& l, float& r) noexcept = 0;
 };
 
 // the Phaser lane's roster: indices into the rack's filter roster (tw::filters::Type / FLT_ENGINES), modes 2.. of the lane
@@ -108,7 +140,12 @@ struct ShaperLane
 //   Phaser  Feedback · Stereo · Drive           Crush   Bits · Rate · Tone
 static constexpr float kShaperKDefault[kShaperLanes][6] = {
     { 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f }, { 0.5f, 0.0f, 0.0f, 0.5f, 0.5f, 0.5f },
-    { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 0.5f } };
+    { 0.3f, 0.0f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f }, { 0.5f, 0.5f, 1.0f, 0.5f, 0.5f, 0.5f },
+    /* tp80 — the nine borrowed lanes, four targets each (see ShaperExt::fx):
+       Reverb  Size · Decay · Tone · Diffuse      Delay  Time · Feedback · Tone · Width
+       Chorus  Rate · Depth · Feedback · Voice   Widen  Amount · Width · Rate · Axis       Multi  Split · Slope · Spread · Range */
+    { 0.45f, 0.5f, 0.4f, 0.7f, 0.5f, 0.5f },  { 0.375f, 0.35f, 0.5f, 0.6f, 0.5f, 0.5f },
+    { 0.35f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f },  { 0.5f, 0.5f, 0.35f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.5f, 0.5f, 0.6f, 0.5f, 0.5f } };
 struct ShaperState
 {
     ShaperLane lanes[kShaperLanes];
@@ -122,16 +159,16 @@ struct ShaperState
         on screen showed; a fresh card now lights no lane at all, so a new patch cannot hear the difference.)
         It travels in the shaperJson blob with the breakpoints — drawn, not automated — so no parameter was added
         and no saved patch lost one. */
-    int slot[kShaperLanes] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+    int slot[kShaperSlots] = { 0, 1, 2, 3, 4, 5, 6, 7 };
     ShaperState() { for (int ln = 0; ln < kShaperLanes; ++ln) for (int q = 0; q < 6; ++q) lanes[ln].k[q] = kShaperKDefault[ln][q]; }
     /** A blob can be old, partial or hand-edited, and this array INDEXES A SWITCH on the audio thread. Anything
-        that is not a permutation of 0..kShaperLanes-1 falls back to the identity. */
+        that is not eight DISTINCT kinds in range falls back to the first eight. */
     static void sanitise (int* sl) noexcept
     {
         bool seen[kShaperLanes] = {}; bool ok = true;
-        for (int i = 0; i < kShaperLanes; ++i)
+        for (int i = 0; i < kShaperSlots; ++i)
         { const int v = sl[i]; if (v < 0 || v >= kShaperLanes || seen[v]) { ok = false; break; } seen[v] = true; }
-        if (! ok) for (int i = 0; i < kShaperLanes; ++i) sl[i] = i;
+        if (! ok) for (int i = 0; i < kShaperSlots; ++i) sl[i] = i;
     }
 };
 
@@ -169,10 +206,16 @@ public:
 
     /** Audio thread, per block: the lane's parameters (On / Depth / Rate / Mode) override the snapshot's. */
     void setLaneCtl (int lane, bool on, float depth, int rate, int mode, int trig = 0) noexcept
-    { auto& c = ctl_[lane & 7]; c.set = true; c.on = on; c.depth = depth; c.rate = rate; c.mode = mode; c.trig = trig; }
+    { /* ⚠️ tp80 — THIS WAS `ctl_[lane & 7]`. The mask was sized to the eight lanes that existed when it was
+         written, so the moment the roster grew the five new lanes wrapped straight onto the first five and wrote
+         their own (OFF) state over Volume, Time, Filter, Pan and Repeat — the whole Shaper went inert while every
+         parameter still read correct. A mask is not a bounds check; it silently aliases instead of rejecting.
+         (The same shape of bug sat in ShaperRoster::filter's `fltLive[which & 3]`, fixed at tp79.) */
+      if ((unsigned) lane >= (unsigned) kShaperLanes) return;
+      auto& c = ctl_[lane]; c.set = true; c.on = on; c.depth = depth; c.rate = rate; c.mode = mode; c.trig = trig; }
     // ── viz: the phase each lane is at (0..1) and the value it read, for the screen's playhead ──
-    float vizPhase (int lane) const noexcept { return vizPh_[lane & 7]; }
-    float vizValue (int lane) const noexcept { return vizV_[lane & 7]; }
+    float vizPhase (int lane) const noexcept { return vizPh_[(unsigned) lane < (unsigned) kShaperLanes ? lane : 0]; }
+    float vizValue (int lane) const noexcept { return vizV_[(unsigned) lane < (unsigned) kShaperLanes ? lane : 0]; }
 
     // tp72 — the lane's Smooth (0.2 → 40 ms one-pole) on the value every shaped lane reads; the Volume lane has its own
     // attack / release law below, the Time and Repeat lanes read the raw shape (their jumps are the point)
@@ -231,7 +274,7 @@ public:
         const bool anyRing = (TL.on || RP.on) && ring != nullptr;
         // tp79 — the chain, read once per block: which kind sits at each position. Sanitised on the way in, so
         // the per-sample switch can never be handed an index it cannot answer.
-        int slot[kShaperLanes]; for (int q = 0; q < kShaperLanes; ++q) slot[q] = S0->slot[q];
+        int slot[kShaperSlots]; for (int q = 0; q < kShaperSlots; ++q) slot[q] = S0->slot[q];
         ShaperState::sanitise (slot);
         // filter coefficients per block (the cutoff moves per sample, but the type / resonance per block)
         const float res = 1.0f - 0.95f * FL.L->k[0], kres = 2.0f * res;
@@ -607,7 +650,19 @@ public:
                     vizPh_[0] = (float) p; vizV_[0] = s;
                 }
             };
-            for (int sl = 0; sl < kShaperLanes; ++sl)
+            /* tp80 — THE LENT LANES. Every rack effect a position can hold runs through one helper: read the
+               shape, hand it to the processor's engine, take back what it returns. The differences between a
+               reverb and a frequency shifter are all on the far side of ShaperExt::fx, where the engines are. */
+            auto applyLent = [&] (int K)
+            {
+                const LaneView& V = view_[K]; if (! V.on) return;
+                const double p = lanePhase (V, K, beat);
+                const float s = smoothed (K, readShape (*V.L, p), V.L->smooth) * V.depth;
+                float wl = l, wr = r;
+                if (ext != nullptr && ext->fx (K, s, V.L->k, V.mode, s * V.L->blend, wl, wr)) { l = wl; r = wr; }
+                vizPh_[K] = (float) p; vizV_[K] = s;
+            };
+            for (int sl = 0; sl < kShaperSlots; ++sl)
                 switch (slot[sl])
                 {
                     case 0: applyVolume(); break;
@@ -618,6 +673,7 @@ public:
                     case 5: applyDrive(); break;
                     case 6: applyPhaser(); break;
                     case 7: applyCrush(); break;
+                    case 8: case 9: case 10: case 11: case 12: applyLent (slot[sl]); break;   // Reverb · Delay · Chorus · Widen · Multiband
                     default: break;
                 }
             /* ⚠️ tp79 — THE RING'S WRITE HEAD ADVANCES ONCE PER SAMPLE, FOR EVERYONE, OUTSIDE THE DISPATCH.
@@ -670,17 +726,17 @@ private:
     std::shared_ptr<Ring> ringOwner_; std::atomic<Ring*> ring_ { nullptr };
     int ringW_ = 0, ringFilled_ = 0;
     Ch ch_[2]; std::vector<AP> phL_, phR_;
-    std::array<float, 8> smooth_ {};
+    std::array<float, kShaperLanes> smooth_ {};
     double tsPos_ = 0, tsOld_ = 0, tsLastBehind_ = 0, stepTarget_ = 0, tsPrevTgt_ = -1.0; int tsXf_ = 0, tsXfN_ = 1; bool stepping_ = false;
     float holdL_ = 0, holdR_ = 0; int holdN_ = 0;
     float flL_[2048] = {}, flR_[2048] = {}; int flW_ = 0;   // the Flanger mode's delay line (~43 ms at 48 k)
     bool repHold_ = false; int repLen_ = 0, repStartW_ = 0; double repPos_ = 0, repRead_ = 0;
     double tsSlew_ = -1.0;                       // tp72 — the Time lane's glided read position (-1 = not gliding)
     std::atomic<ShaperExt*> ext_ { nullptr };    // tp72 — the rack's engines, lent by the processor
-    double freePh_[8] = {};                      // tp72 — the Free / MIDI / Audio lanes' own clocks
+    double freePh_[kShaperLanes] = {};           // tp72 — the Free / MIDI / Audio lanes' own clocks (one per KIND)
     float envFast_ = 0, envSlow_ = 0; int refr_ = 0, noteAt_ = -1;
     float crushLp_[2] = {}, bassLp_[2] = {}, volEnv_ = 1.0f, volPrev_ = 1.0f, punchEnv_ = 0.0f; int punchRefr_ = 0;
     float haasL_[1024] = {}, haasR_[1024] = {}; int haasW_ = 0;   // tp74 — the Pan lane's Haas delay
-    float vizPh_[8] = {}, vizV_[8] = {};
+    float vizPh_[kShaperLanes] = {}, vizV_[kShaperLanes] = {};
 };
 } // namespace wc

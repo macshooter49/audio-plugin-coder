@@ -1,7 +1,35 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp79** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp80** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp80 (2026-09-21) — THE ROSTER: FIVE RACK EFFECTS BECOME SHAPER LANES
+Max: "we're going to make each of these effects available to shape … reverb, tape, widen, multiband, granular,
+delay, bode, chorus … and a noise engine too … I want everyone to have exactly four targets."
+
+**Kinds and positions are no longer the same number:** `kShaperSlots` = 8 chain positions, `kShaperLanes` = 13 kinds.
+The chain is eight DISTINCT kinds out of the roster. A kind already down SWAPS positions; one not down REPLACES what
+is there — that is how a Reverb enters the chain at all.
+**One door:** `ShaperExt::fx (kind, s, k, mode, mix, l, r)`. The lane hands over the shape value, its four target
+knobs, its type and its mix; the PROCESSOR decides what to drive. FlowShaper.h stays free of every engine's Params
+struct (the offline proof still builds with no JUCE) and a new kind is eight lines.
+**Nothing re-implemented:** Reverb (Room/Plate/Hall/Shimmer), Delay, Chorus, Widen, Multiband are the shipped rack
+engines, a private second instance each in `ShaperRoster`, armed lazily like Filter and Drive. Type lists come from
+the engines' own `typeNames()` (the splitter's three "Reserved" slots trimmed).
+
+🚨 **`setLaneCtl` INDEXED `ctl_[lane & 7]`.** A mask sized to the old lane count: lanes 8..12 wrapped onto 0..4 and
+pushed their OFF state over Volume, Time, Filter, Pan and Repeat. **The whole Shaper went inert in the real plugin
+while every parameter still read correctly** (AU cert 5/9, dry passing through). A mask is not a bounds check — it
+aliases silently. Same shape as `fltLive[which & 3]`, fixed one batch earlier. `T26` exists for it.
+
+`FlowShaper_test.cpp` 33/33, `_tp77_gate.js` 33/33, `au_shaper_lock.cpp` 9/9, `_tp61_gate.js` 16/16.
+
+⚠️ **OWED.** (1) That each of the five SOUNDS right in the plugin is NOT certified: the AU cert cannot place a kind
+because the chain lives in the shaperJson blob, not in parameters. **Make the eight positions eight CHOICE PARAMETERS**
+— it unlocks the cert and gives Max host automation of the chain. (2) Tape · Granular · Bode · **Noise** still owed;
+every engine ships (`tw::TapeFxEngine`, `tw::GranularFxEngine`, `tw::TerrainBodeFx`, the noise library), so each is
+one more lend. (3) The original eight lanes still carry three knobs plus steps; Max wants EXACTLY four everywhere.
+(4) Time measured properly against ShaperBox 3 / Gross Beat beyond the pitch law.
 
 ## tp79 (2026-09-21) — THE SHAPER IS A CHAIN YOU ARRANGE · TIME'S PITCH LAW IS BACK
 Max: "these are in a chain obviously … I right click on Time, boom, Multiband … I want to put Bode second, Pan third
