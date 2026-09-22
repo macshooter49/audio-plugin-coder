@@ -177,15 +177,15 @@ int main()
     a.pump (0.8); a.render (10, 0.0, false);
     chk (okp, "[0] the Shaper sits in Flow Chain 1 (the Chop slot)");
 
-    static const char* const kAll[17] = { "Volume","Time","Filter","Pan","Repeat","Drive","Phaser","Crush",
-                                          "Reverb","Delay","Chorus","Widen","Multiband","Tape","Granular","Bode","Noise" };
+    static const char* const kAll[18] = { "Volume","Time","Filter","Pan","Repeat","Drive","Phaser","Crush",
+                                          "Reverb","Delay","Chorus","Widen","Multiband","Tape","Granular","Bode","Noise", "Flanger" };
     // every lane dark to begin with, and the chain back on the tile order
     auto reset = [&] {
-        for (int q = 0; q < 17; ++q) a.set (std::string ("Shaper ") + kAll[q] + " On", 0.0f);
-        for (int q = 0; q < 8; ++q)  a.setIndex (std::string ("Shaper Slot ") + std::to_string (q + 1), q, 17);
+        for (int q = 0; q < 18; ++q) a.set (std::string ("Shaper ") + kAll[q] + " On", 0.0f);
+        for (int q = 0; q < 8; ++q)  a.setIndex (std::string ("Shaper Slot ") + std::to_string (q + 1), q, 18);
         a.pump (0.4); a.render (20, 0.0, false);
     };
-    chk (a.setIndex ("Shaper Slot 1", 8, 17), "[1] the chain is PARAMETERS — a kind can be placed at a position from outside the interface (this is what unlocked everything below)");
+    chk (a.setIndex ("Shaper Slot 1", 8, 18), "[1] the chain is PARAMETERS — a kind can be placed at a position from outside the interface (this is what unlocked everything below)");
 
     // ── the battery ───────────────────────────────────────────────────────────────────────────
     //  Two bars at 120 BPM with a held C4. The borrowed lanes boot on a SINE over one bar, so the shape
@@ -198,7 +198,7 @@ int main()
     auto measure = [&] (int kind) -> Res
     {
         const std::string on = std::string ("Shaper ") + kAll[kind] + " On";
-        reset (); a.setIndex ("Shaper Slot 1", kind, 17); a.pump (0.5);
+        reset (); a.setIndex ("Shaper Slot 1", kind, 18); a.pump (0.5);
         std::vector<float> wet, wetR, dry, dryR;
         a.set (on, 1.0f); a.pump (0.5);
         a.note (60, 100); a.render (BLOCKS, 0.0, true, &wet, &wetR); a.note (60, 0); a.render (120, 4.0, true);
@@ -227,7 +227,7 @@ int main()
 
     // ── the three with a signature of their own ───────────────────────────────────────────────
     {   // MULTIBAND tilts the bands — the ratio is the claim, not "the spectrum changed"
-        reset (); a.setIndex ("Shaper Slot 1", 12, 17); a.set ("Shaper Multiband On", 1.0f); a.pump (0.6);
+        reset (); a.setIndex ("Shaper Slot 1", 12, 18); a.set ("Shaper Multiband On", 1.0f); a.pump (0.6);
         std::vector<float> x; a.note (60, 100); a.render (BLOCKS, 0.0, true, &x); a.note (60, 0); a.render (120, 4.0, true);
         const double t = bandRatio (x, TROUGH, WIN), pk = bandRatio (x, PEAK, WIN);
         char b[230]; std::snprintf (b, sizeof b, "[10] Multiband TILTS WITH THE SHAPE: high-against-low %.4f in the shape's trough against %.4f at its peak (ratio %.2fx)",
@@ -235,14 +235,14 @@ int main()
         chk (pk > t * 1.25 || t > pk * 1.25, b);
     }
     {   // TAPE's signature is the harmonics it adds, not the level it sits at
-        reset (); a.setIndex ("Shaper Slot 1", 13, 17); a.set ("Shaper Tape On", 1.0f); a.pump (0.6);
+        reset (); a.setIndex ("Shaper Slot 1", 13, 18); a.set ("Shaper Tape On", 1.0f); a.pump (0.6);
         std::vector<float> x; a.note (60, 100); a.render (BLOCKS, 0.0, true, &x); a.note (60, 0); a.render (120, 4.0, true);
         const double t = thd (x, TROUGH, WIN, 261.63), pk = thd (x, PEAK, WIN, 261.63);
         char b[230]; std::snprintf (b, sizeof b, "[11] Tape COLOURS WITH THE SHAPE: harmonics-against-fundamental %.4f in the shape's trough against %.4f at its peak", t, pk);
         chk (pk > t * 1.2, b);
     }
     {   // BODE moves a pure tone OFF its own frequency — no other lane here can do that
-        reset (); a.setIndex ("Shaper Slot 1", 15, 17); a.set ("Shaper Bode On", 1.0f);
+        reset (); a.setIndex ("Shaper Slot 1", 15, 18); a.set ("Shaper Bode On", 1.0f);
         a.set ("Shaper Bode Mode", 0.0f); a.pump (0.6);
         std::vector<float> x; a.note (60, 100); a.render (BLOCKS, 0.0, true, &x); a.note (60, 0); a.render (120, 4.0, true);
         const double at261 = goertzel (x, PEAK, WIN, 261.63);          // C4, the note being held
@@ -252,7 +252,7 @@ int main()
         chk (off > at261 * 0.25, b);
     }
     {   // WIDEN raises the sides against the middle — the one claim it makes
-        reset (); a.setIndex ("Shaper Slot 1", 11, 17);
+        reset (); a.setIndex ("Shaper Slot 1", 11, 18);
         std::vector<float> wl, wr, dl, dr;
         a.set ("Shaper Widen On", 1.0f); a.pump (0.5);
         a.note (60, 100); a.render (BLOCKS, 0.0, true, &wl, &wr); a.note (60, 0); a.render (120, 4.0, true);
@@ -263,7 +263,7 @@ int main()
         chk (sw > sd + 0.02, b);
     }
     {   // NOISE makes sound out of SILENCE — the only lane that adds signal rather than processing it
-        reset (); a.setIndex ("Shaper Slot 1", 16, 17);
+        reset (); a.setIndex ("Shaper Slot 1", 16, 18);
         std::vector<float> off, on;
         a.render (BLOCKS, 0.0, true, &off);                      // no note at all, lane dark
         a.set ("Shaper Noise On", 1.0f); a.pump (0.6);
@@ -271,6 +271,23 @@ int main()
         const double q = rmsDb (off, PEAK, PEAK + WIN), l = rmsDb (on, PEAK, PEAK + WIN);
         char b[220]; std::snprintf (b, sizeof b, "[14] Noise SOUNDS WITH NOTHING PLAYING: %.1f dBFS lit against %.1f dBFS dark, with no note held — the only lane that adds signal", l, q);
         chk (l > q + 20.0, b);
+    }
+    {   /* tp91 — FLANGER: THE COMB MOVES WITH THE LINE. The generic bar asks for more effect at the shape's peak
+           than in its trough, which is the wrong claim here — the comb is full-strength at both ends of the drawing;
+           what the line does is MOVE it. So: the lit render's spectrum in the trough against its spectrum at the
+           peak, beyond the held note's own drift between the same two windows (the dark render's). */
+        reset (); a.setIndex ("Shaper Slot 1", 17, 18); a.pump (0.5);
+        std::vector<float> wet, dry;
+        a.set ("Shaper Flanger On", 1.0f); a.pump (0.6);
+        a.note (60, 100); a.render (BLOCKS, 0.0, true, &wet); a.note (60, 0); a.render (120, 4.0, true);
+        a.set ("Shaper Flanger On", 0.0f); a.pump (0.5);
+        a.note (60, 100); a.render (BLOCKS, 0.0, true, &dry); a.note (60, 0); a.render (120, 4.0, true);
+        std::vector<float> wT (wet.begin() + (long) TROUGH, wet.begin() + (long) (TROUGH + WIN)), wP (wet.begin() + (long) PEAK, wet.begin() + (long) (PEAK + WIN));
+        std::vector<float> dT (dry.begin() + (long) TROUGH, dry.begin() + (long) (TROUGH + WIN)), dP (dry.begin() + (long) PEAK, dry.begin() + (long) (PEAK + WIN));
+        const double moveW = specChangeDb (wT, wP, 0, WIN), moveD = specChangeDb (dT, dP, 0, WIN), lit = specChangeDb (wet, dry, PEAK, WIN);
+        char b[260]; std::snprintf (b, sizeof b, "[15] Flanger's COMB MOVES WITH THE LINE: trough against peak the lit spectrum moves %.1f dB (the note alone drifts %.1f), and the lane is %.1f dB from dark",
+                                    moveW, moveD, lit);
+        chk (moveW > moveD + 6.0 && lit > 1.5, b);
     }
     reset ();
     printf ("\n  %d passed, %d failed\n\n", npass, nfail);

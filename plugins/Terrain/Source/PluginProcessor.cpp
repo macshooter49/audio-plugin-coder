@@ -3098,7 +3098,8 @@ void TerrainAudioProcessor::timerCallback()
           const auto& TP = shpRefs_[i][13]; const auto& GR = shpRefs_[i][14]; const auto& BO = shpRefs_[i][15];
           if (lit (TP)) ro.armTape();
           if (lit (GR)) ro.armGrain();    // ⚠️ ~8.4 MB of ring, and its prepare() allocates — message thread only, which is where this runs
-          if (lit (BO)) ro.armBode(); }
+          if (lit (BO)) ro.armBode();
+          if (lit (shpRefs_[i][17])) ro.armFlanger(); }   // tp91
         if (lit (C) && modeOf (C) >= 7) ro.armDist (1);
     }
 
@@ -7335,8 +7336,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     {
         // tp80 — five borrowed rack effects join the eight native lanes. Their type lists come from the ENGINES
         // themselves (typeNames()), never retyped here, so a name cannot drift out of sync with the roster.
-        static const char* const kLn[17]  = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE", "NOISE" };
-        static const char* const kLnN[17] = { "Volume", "Time", "Filter", "Pan", "Repeat", "Drive", "Phaser", "Crush", "Reverb", "Delay", "Chorus", "Widen", "Multiband", "Tape", "Granular", "Bode", "Noise" };
+        static const char* const kLn[18]  = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE", "NOISE", "FLANGE" };
+        static const char* const kLnN[18] = { "Volume", "Time", "Filter", "Pan", "Repeat", "Drive", "Phaser", "Crush", "Reverb", "Delay", "Chorus", "Widen", "Multiband", "Tape", "Granular", "Bode", "Noise", "Flanger" };
+        /* tp91 — the Flanger lane's thirty-two voicings, read from the ENGINE (typeNames × charNames), never retyped:
+           Tape Zero · Jet · BBD · Endless, eight characters each. Envelope and Step are not here — their modulator
+           IS the type, and on this lane the drawn line replaces the modulator. */
+        juce::StringArray flaModes;
+        for (int t = 0; t < 4; ++t) for (int c = 0; c < tw::TerrainFlangerFx::kNumChars; ++c)
+            flaModes.add (juce::String (tw::TerrainFlangerFx::typeNames()[t]) + juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 "))
+                          + juce::String (tw::TerrainFlangerFx::charNames (t)[c]));
         auto fromEngine = [] (const char* const* names, int n) { juce::StringArray a; for (int q = 0; q < n; ++q) a.add (names[q]); return a; };
         // tp72 — THE TYPES ARE THE ROSTERS. Filter = the rack's 118 engines (terrainFilterEngineNames, index = tw::filters::Type);
         //        Drive = the rack's 23 distortions (index = DistortionEngine::Mode); Phaser = the two built-ins then the roster's
@@ -7344,7 +7352,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         //        distortion's digital family. Volume adds Duck, Pan adds Width, Repeat adds Reverse. Plus TRIG per lane.
         const juce::StringArray fltNames = terrainFilterEngineNames();
         juce::StringArray phaserModes { "Phaser", "Flanger" }; for (int q = 0; q < wc::kShaperPhaserRosterN; ++q) phaserModes.add (fltNames[wc::kShaperPhaserRoster[q]]);
-        const juce::StringArray kModes[17] = {
+        const juce::StringArray kModes[18] = {
             juce::StringArray { "Gain", "Duck" },
             juce::StringArray { "1 cycle", "1/2 cycle", "2 cycles" },
             fltNames,
@@ -7368,8 +7376,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                one list: the Noise lane hears exactly what the synth's noise module hears. */
             juce::StringArray { "White Noise", "Pink Noise", "Brown Noise", "Geiger", "Tape Hiss", "Tape Hum",
                                 "Tape Air", "Tape Crackle", "Clean Vinyl", "Dirty Vinyl",
-                                "Space Open", "Space Helium", "Space Wind" } };
-        static const int kModeDef[17] = { 0, 0, 0, 0, 0, 5, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1 };   // Drive boots on Soft Clip; Reverb on Plate; Tape on Cassette; Noise on Pink
+                                "Space Open", "Space Helium", "Space Wind" },
+            flaModes };
+        static const int kModeDef[18] = { 0, 0, 0, 0, 0, 5, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 8 };   // Drive boots on Soft Clip; Reverb on Plate; Tape on Cassette; Noise on Pink; Flanger on Jet · Silver
         const juce::StringArray rates { "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars", "8 bars" };
         const juce::StringArray trigs { "Sync", "Free", "Audio", "MIDI" };
         for (int ln = 0; ln < wc::kShaperLanes; ++ln)
@@ -7384,7 +7393,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         /* tp83 — THE CHAIN, AS EIGHT PARAMETERS. Which kind occupies each position used to live only in the
            shaperJson blob, so the host could not automate the order and — the reason this moved — no offline
            harness could PLACE a kind, which left every borrowed effect uncertifiable by measurement. Eight
-           choices, one per position, each listing all seventeen kinds; the default is the tile order. */
+           choices, one per position, each listing every kind (eighteen since tp91); the default is the tile order. */
         juce::StringArray slotNames; for (int q = 0; q < wc::kShaperLanes; ++q) slotNames.add (kLnN[q]);
         for (int sl = 0; sl < wc::kShaperSlots; ++sl)
             layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -17614,7 +17623,7 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
             case 0: case 2: case 3: case 6:
             case  8: case  9: case 10: case 11:
             case 12: case 13: case 14:
-            case 15: case 16: addSine(); break;   // tp80 — the borrowed lanes open on a sine too
+            case 15: case 16: case 17: addSine(); break;   // tp80 — the borrowed lanes open on a sine too (tp91: the Flanger's sine IS the classic sweep)
             /* tp86 — TIME's neutral is a FLAT LINE AT THE TOP, because the shape is now the OFFSET back
                from now and the top line is the present. It was a unity ramp while the shape meant an
                absolute position. Same sound at rest — no offset, normal speed — drawn ShaperBox's way. */
@@ -17644,7 +17653,7 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
     {
         const juce::var sv = root.getProperty ("slot", juce::var());
         if (auto* arr = sv.getArray())
-            for (int q = 0; q < wc::kShaperLanes && q < arr->size(); ++q) st->slot[q] = (int) arr->getUnchecked (q);
+            for (int q = 0; q < wc::kShaperSlots && q < arr->size(); ++q) st->slot[q] = (int) arr->getUnchecked (q);   // tp91 — was bounded by kShaperLanes: a list longer than 8 wrote past slot[]
     }
     wc::ShaperState::sanitise (st->slot);
     for (int ln = 0; ln < wc::kShaperLanes; ++ln)
@@ -17693,7 +17702,7 @@ void TerrainAudioProcessor::setShaperJson (int inst, const juce::String& json)
 }
 void TerrainAudioProcessor::cacheShaperRefs()
 {
-    static const char* const kLn[wc::kShaperLanes] = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE", "NOISE" };
+    static const char* const kLn[wc::kShaperLanes] = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE", "NOISE", "FLANGE" };
     for (int i = 0; i < wc::kFlowInstances; ++i)
     {
         const juce::String pre = i == 0 ? juce::String ("FLOW_CHOP_") : "FLOW_CHOP" + juce::String (i + 1) + "_";

@@ -212,8 +212,8 @@ static double slewOutlier (const std::vector<float>& x)
   return mx / (p99 + 1e-12); }
 
 // ── the lanes ─────────────────────────────────────────────────────────────────────────────────
-static const char* const kAll[17] = { "Volume","Time","Filter","Pan","Repeat","Drive","Phaser","Crush",
-                                      "Reverb","Delay","Chorus","Widen","Multiband","Tape","Granular","Bode","Noise" };
+static const char* const kAll[18] = { "Volume","Time","Filter","Pan","Repeat","Drive","Phaser","Crush",
+                                      "Reverb","Delay","Chorus","Widen","Multiband","Tape","Granular","Bode","Noise", "Flanger" };
 struct Lane { int kind; const char* t[4]; float k[4]; };
 //  the four targets and their resting values, mirroring kShaperKDefault in FlowShaper.h
 static const Lane kBorrowed[9] = {
@@ -231,7 +231,7 @@ static const Lane kBorrowed[9] = {
 static std::string laneJson (int lane, const char* pts, const float k[6], float smooth = 0.2f)
 {
     std::string j = "{\"lanes\":[";
-    for (int i = 0; i < 17; ++i)
+    for (int i = 0; i < 18; ++i)
     {
         if (i) j += ",";
         if (i == lane)
@@ -252,7 +252,7 @@ static std::string laneJson (int lane, const char* pts, const float k[6], float 
 static std::string twoLaneJson (int la, const float ka[6], int lb, const float kb[6])
 {
     std::string j = "{\"lanes\":[";
-    for (int i = 0; i < 17; ++i)
+    for (int i = 0; i < 18; ++i)
     {
         if (i) j += ",";
         const float* k = (i == la) ? ka : (i == lb) ? kb : nullptr;
@@ -311,7 +311,7 @@ static const char* const PTS_GATE = "[[0,0,0],[0.4999,0,0],[0.5,1,0],[1,1,0]]"; 
 static std::string oneLane (int lane)
 {
     std::string j = "{\"tv\":2,\"lanes\":[";
-    for (int i = 0; i < 17; ++i)
+    for (int i = 0; i < 18; ++i)
     { if (i) j += ",";
       if (i == lane) j += "{\"pts\":[[0,1,0],[1,1,0]],\"smooth\":0.2,\"phase\":0,\"tension\":0.5,\"floor\":0,\"blend\":1,\"swing\":0,\"grid\":16}";
       else j += "{}"; }
@@ -325,7 +325,7 @@ int main()
     a.pump (1.2); a.render (30, 0.0, false);
     a.set ("Flow Chain 1", 2.0f); a.pump (0.8); a.render (20, 0.0, false);
 
-    auto allDark = [&] { for (int q = 0; q < 17; ++q) a.set (std::string ("Shaper ") + kAll[q] + " On", 0.0f); };
+    auto allDark = [&] { for (int q = 0; q < 18; ++q) a.set (std::string ("Shaper ") + kAll[q] + " On", 0.0f); };
     /* 🚨 tp90 — THE CHAIN IS EIGHT DISTINCT KINDS OR IT IS NOT THE CHAIN. ShaperState::sanitise() falls back to
        kinds 0..7 when any two positions repeat, so setting only slot 1 (or 1 and 2) leaves a duplicate further
        down and silently swaps the whole chain: the first cut of this audit read every lane past Crush at
@@ -334,8 +334,8 @@ int main()
     auto setChain = [&] (int first, int second)
     {
         std::vector<int> ch; ch.push_back (first); if (second >= 0 && second != first) ch.push_back (second);
-        for (int k = 0; k < 17 && ch.size() < 8; ++k) if (std::find (ch.begin(), ch.end(), k) == ch.end()) ch.push_back (k);
-        for (int q = 0; q < 8; ++q) a.setIndex ("Shaper Slot " + std::to_string (q + 1), ch[(size_t) q], 17);
+        for (int k = 0; k < 18 && ch.size() < 8; ++k) if (std::find (ch.begin(), ch.end(), k) == ch.end()) ch.push_back (k);
+        for (int q = 0; q < 8; ++q) a.setIndex ("Shaper Slot " + std::to_string (q + 1), ch[(size_t) q], 18);
     };
     //  a held chord, measured after it settles. Time and Repeat read the PAST, so a steady source is the
     //  only fair one — a shifted read of a steady chord is still the same chord at the same level.
@@ -366,7 +366,7 @@ int main()
     auto takeNoise = [&] (int lane, int mode, std::vector<float>& out)
     {
         std::string j = "{\"tv\":2,\"lanes\":[";
-        for (int i = 0; i < 17; ++i)
+        for (int i = 0; i < 18; ++i)
         { if (i) j += ",";
           if (i == 16 || i == lane) j += "{\"pts\":[[0,1,0],[1,1,0]],\"smooth\":0.2,\"phase\":0,\"tension\":0.5,\"floor\":0,\"blend\":1,\"swing\":0,\"grid\":16}";
           else j += "{}"; }
@@ -395,7 +395,7 @@ int main()
     printf ("  dry reference: %.2f dBFS rms, peak %.3f\n\n", dRms, dPk);
     printf ("  %-11s %10s %10s %s\n", "lane", "rms", "peak", "");
     int broken = 0;
-    for (int ln = 0; ln < 17; ++ln)
+    for (int ln = 0; ln < 18; ++ln)
     {
         std::vector<float> w; take (ln, -1, w);
         const double r = rmsDb (w, A, B2) - dRms, pk = peakOf (w, A, B2) / (dPk + 1e-12);
@@ -417,9 +417,11 @@ int main()
     printf ("  EVERY TYPE, BOTH SOURCES (pass: the MEAN within 1 dB of its target, and the peak under 2x its own source dry)\n");
     printf ("  %-10s %4s %9s %9s %9s %8s\n", "lane", "type", "chord", "noise", "mean", "pk x");
     int badTypes = 0;
-    const int kTrimmed[10] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+    const int kTrimmed[11] = { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17 };   // tp91 — and the Flanger lane's 32 voicings
+    const char* only = getenv ("LEVEL_LANE");   // LEVEL_LANE=17 measures one lane's types (a calibration pass for one lane)
     for (int ln : kTrimmed)
     {
+        if (only != nullptr && atoi (only) != ln) continue;
         const std::string m = std::string ("Shaper ") + kAll[ln] + " Mode";
         const int N = a.has (m) ? a.choiceCount (m) : 1;
         for (int t = 0; t < N; ++t)

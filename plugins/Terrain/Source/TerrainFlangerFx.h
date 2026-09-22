@@ -232,6 +232,18 @@ public:
 
     void setParams (const Params& p) noexcept { p_ = p; ++pGen_; }   // fb636 — pGen_ keys the cookBlock memo
 
+    /* tp91 — THE SHAPER'S DRAWN SWEEP. Max wants a Flanger lane of its own, and ShaperBox's LiquidShaper is
+       the model: the drawn line IS the sweep (its Centre), not a send. So the lane replaces this engine's own
+       modulator with the line it reads, one value a sample, −1..+1 per channel. It is a separate door from
+       setParams on purpose: the line moves every sample, and a parameter push re-cooks ~10 transcendentals.
+       ⚠️ The rack card never calls this, so the card is untouched sample for sample (extOn_ stays false).
+       The value glides on the engine's own 15 ms smoother — a drawn GATE is a step, and a delay read that
+       steps is a click. Endless takes it as the position along its sawtooth (the barber-pole, drawn);
+       Envelope and Step have no sweep to replace — their modulator IS the type — so the lane does not offer them. */
+    void setSweep (float l, float r) noexcept
+    { extTL_ = clampf (l, -1.0f, 1.0f); extTR_ = clampf (r, -1.0f, 1.0f);
+      if (! extOn_) { extSL_ = extTL_; extSR_ = extTR_; extOn_ = true; } }
+
     // ═════════════════════════════════════════════════════════════════════════
     //  IN PLACE. Owns its own equal-power dry/wet from Params::mix.
     // ═════════════════════════════════════════════════════════════════════════
@@ -313,6 +325,11 @@ public:
             // ── 3. THE MODULATOR — one master clock, offsets derived at read time ─
             ph_ += inc_; if (ph_ >= 1.0f) ph_ -= 1.0f;
             sawPh_ += sawInc_; if (sawPh_ >= 1.0f) sawPh_ -= 1.0f;
+            if (extOn_)
+            {   // tp91 — the drawn sweep, glided (see setSweep)
+                extSL_ += kSm_ * (extTL_ - extSL_); extSR_ += kSm_ * (extTR_ - extSR_);
+                if (type_ == Endless) { const float q = 0.5f * (extSL_ + 1.0f); sawPh_ = q < 0.0f ? 0.0f : (q > 0.9999f ? 0.9999f : q); }
+            }
 
             float modL = 0.0f, modR = 0.0f;
             modulator (c, inL, inR, modL, modR);
@@ -894,6 +911,12 @@ private:
     // ═════════════════════════════════════════════════════════════════════════
     void modulator (const CharSpec& c, float inL, float inR, float& mL, float& mR) noexcept
     {
+        if (extOn_ && type_ != Envelope && type_ != Step)
+        {   // tp91 — the Shaper lane's line is the sweep; the character's counter-run still applies
+            mL = extSL_; mR = extSR_;
+            if (c.flags & F_COUNTER_LR) mR = -mR;
+            return;
+        }
         if (type_ == Envelope)
         {
             const float relC = 1.0f - std::exp (-1.0f / (envRelSec_ * fs_));   // fb419 — Rate owns it now
@@ -1233,6 +1256,7 @@ private:
 
     float rateHz_ = 0.35f, inc_ = 0.0f, sawInc_ = 0.0f;
     float ph_ = 0.0f, sawPh_ = 0.0f;
+    bool  extOn_ = false; float extTL_ = 0.0f, extTR_ = 0.0f, extSL_ = 0.0f, extSR_ = 0.0f;   // tp91 — the drawn sweep
     float bs_ = 0.0f, bv_ = 0.0f;
     float envIn_ = 0.0f, gate_ = 0.0f, lvlSm_ = 0.0f;
     float envF_[2] { 0.0f, 0.0f };

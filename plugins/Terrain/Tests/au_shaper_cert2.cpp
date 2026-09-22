@@ -226,8 +226,8 @@ static double slewOutlier (const std::vector<float>& x)
   return mx / (p99 + 1e-12); }
 
 // ── the lanes ─────────────────────────────────────────────────────────────────────────────────
-static const char* const kAll[17] = { "Volume","Time","Filter","Pan","Repeat","Drive","Phaser","Crush",
-                                      "Reverb","Delay","Chorus","Widen","Multiband","Tape","Granular","Bode","Noise" };
+static const char* const kAll[18] = { "Volume","Time","Filter","Pan","Repeat","Drive","Phaser","Crush",
+                                      "Reverb","Delay","Chorus","Widen","Multiband","Tape","Granular","Bode","Noise", "Flanger" };
 struct Lane { int kind; const char* t[4]; float k[4]; };
 //  the four targets and their resting values, mirroring kShaperKDefault in FlowShaper.h
 static const Lane kBorrowed[9] = {
@@ -245,7 +245,7 @@ static const Lane kBorrowed[9] = {
 static std::string laneJson (int lane, const char* pts, const float k[6], float smooth = 0.2f)
 {
     std::string j = "{\"lanes\":[";
-    for (int i = 0; i < 17; ++i)
+    for (int i = 0; i < 18; ++i)
     {
         if (i) j += ",";
         if (i == lane)
@@ -266,7 +266,7 @@ static std::string laneJson (int lane, const char* pts, const float k[6], float 
 static std::string twoLaneJson (int la, const float ka[6], int lb, const float kb[6])
 {
     std::string j = "{\"lanes\":[";
-    for (int i = 0; i < 17; ++i)
+    for (int i = 0; i < 18; ++i)
     {
         if (i) j += ",";
         const float* k = (i == la) ? ka : (i == lb) ? kb : nullptr;
@@ -323,14 +323,14 @@ int main()
     chk (a.set ("Flow Chain 1", 2.0f), "[0] the Shaper sits in Flow Chain 1 (the Chop slot)");
     a.pump (0.6); a.render (10, 0.0, false);
 
-    auto allDark = [&] { for (int q = 0; q < 17; ++q) a.set (std::string ("Shaper ") + kAll[q] + " On", 0.0f); };
+    auto allDark = [&] { for (int q = 0; q < 18; ++q) a.set (std::string ("Shaper ") + kAll[q] + " On", 0.0f); };
     //  place one kind at position 1 and light it; every other lane dark.
     /* ⚠️ ARM, THEN WAIT. The roster builds a lent engine ON DEMAND — `if (! ((rvBuilt >> t) & 1)) return
        false` — and until it is built the lane passes the audio straight through. A measurement taken
        across that boundary compares NO REVERB with a reverb, which is why Reverb's Tone read 15.1 dB on
        one run and 0.9 dB on the next: not a measurement, a race. Light the lane, let the message thread
        finish, and throw the first render away. */
-    auto solo = [&] (int kind) { allDark (); a.setIndex ("Shaper Slot 1", kind, 17);
+    auto solo = [&] (int kind) { allDark (); a.setIndex ("Shaper Slot 1", kind, 18);
                                  a.set (std::string ("Shaper ") + kAll[kind] + " On", 1.0f);
                                  a.set (std::string ("Shaper ") + kAll[kind] + " Depth", 1.0f);
                                  a.pump (0.9); a.render ((int) (SR * 0.5 / BLK), 0.0, false); a.pump (0.3); };
@@ -349,7 +349,7 @@ int main()
     {
         float kn[6] = { 0.5f, 0.5f, 1.0f, 0.0f, 0.5f, 0.5f };          // white, flat, no scan
         std::string j = "{\"lanes\":[";
-        for (int i = 0; i < 17; ++i)
+        for (int i = 0; i < 18; ++i)
         {
             if (i) j += ",";
             char b[470];
@@ -361,7 +361,7 @@ int main()
             j += b;
         }
         a.putShaper (j + "]}");
-        allDark (); a.setIndex ("Shaper Slot 1", 16, 17); a.setIndex ("Shaper Slot 2", kind, 17);
+        allDark (); a.setIndex ("Shaper Slot 1", 16, 18); a.setIndex ("Shaper Slot 2", kind, 18);
         a.set ("Shaper Noise On", 1.0f); a.set ("Shaper Noise Depth", 1.0f);
         a.setIndex ("Shaper Noise Mode", 0, 13); a.setIndex ("Shaper Noise Rate", 4, 8);   // a 4-beat cycle = 2 s at 120
         a.set (std::string ("Shaper ") + kAll[kind] + " On", 1.0f);

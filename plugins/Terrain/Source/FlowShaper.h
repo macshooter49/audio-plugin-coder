@@ -58,10 +58,16 @@ namespace wc
     armed lazily, only when a lane of that kind is actually lit (the tp63 law — Delay, Granular and Bode each
     carry ~8.4 MB of ring at 48 k and a card drawing a volume gate must never pay for them). */
 static constexpr int kShaperSlots = 8;           // positions in the chain
-static constexpr int kShaperLanes = 17;          // KINDS (one lane struct, one parameter set, one clock each)
+static constexpr int kShaperLanes = 18;          // KINDS (one lane struct, one parameter set, one clock each)
 static constexpr int kShaperT     = 2048;        // the baked table: one cycle, end to end (index kShaperT = the value AT the cycle's end)
 enum class ShaperLaneId : int { Volume = 0, Time, Filter, Pan, Repeat, Drive, Phaser, Crush,
-                                Reverb, Delay, Chorus, Widen, Multi, Tape, Grain, Bode, Noise };
+                                Reverb, Delay, Chorus, Widen, Multi, Tape, Grain, Bode, Noise, Flanger };
+/* tp91 — FLANGER, a lane of its own. Max: "flanger is a whole different beast than a phaser and it deserves its
+   own dedicated panel." It is a LEND like the other borrowed kinds — the rack card's TerrainFlangerFx, thirty-two of
+   its voicings (Tape Zero · Jet · BBD · Endless, eight characters each) — and like ShaperBox's LiquidShaper the
+   drawn line is the SWEEP (the comb's Centre), fed through TerrainFlangerFx::setSweep, never a send. Targets:
+   Feedback (bipolar, 0.5 = none) · Centre · Range · Stereo. The Phaser lane's own flange types stay where saved
+   patches expect them. */
 /* tp82 — NOISE closes the roster, and it is the one that was not a lend: there was no standalone noise engine
    to borrow, because the generator lived inside SynthVoice's render. It was lifted into TerrainNoise.h, which
    the instrument and this lane now share (one generator, not two), and Source/TerrainNoise_test.cpp proves the
@@ -89,7 +95,7 @@ static constexpr float kPhMakeup = 0.85f;   // measured: unscaled +7.45 dB · ha
    ⚠️ The trim rides the amount of the effect that is IN (in dB, so half the send is half the trim), which
    keeps a closed shape a wire. Lanes that are not here are exempt by design — see the audit's header.
    Regenerate with Tests/au_shaper_level.cpp's CAL lines; never hand-edit one number. */
-static constexpr int kShaperTrimTypes = 28;
+static constexpr int kShaperTrimTypes = 32;   // tp91 — the Flanger lane's 32 voicings
 static constexpr float kShaperTrimDb[kShaperLanes][kShaperTrimTypes] = {
     /* TRIM-TABLE-BEGIN */
     {},
@@ -108,7 +114,8 @@ static constexpr float kShaperTrimDb[kShaperLanes][kShaperTrimTypes] = {
     { 6.37f, 13.12f, 12.50f, 17.56f, 4.01f },
     { -0.50f, -0.37f, -0.47f, -0.97f, 0.09f, -0.98f, -1.15f, -0.67f },
     { 0.51f, 1.61f, 0.75f, 4.29f, 0.95f, 2.98f, 4.55f, -1.82f },
-    {}
+    {},
+    { 2.80f, -0.37f, 2.50f, 3.19f, 1.84f, 3.84f, 2.89f, 3.00f, -1.11f, -1.19f, -1.31f, 2.52f, -0.70f, -1.33f, -2.07f, -0.61f, 3.26f, 2.18f, 3.98f, 4.01f, 3.28f, 2.43f, 4.49f, 5.38f, 1.92f, 2.04f, 1.26f, 1.21f, 1.87f, 2.47f, 0.92f, -0.67f }
     /* TRIM-TABLE-END */
 };
 inline float shaperTrim (int lane, int mode, float amt) noexcept
@@ -209,7 +216,10 @@ static constexpr float kShaperKDefault[kShaperLanes][6] = {
     { 0.45f, 0.5f, 0.4f, 0.7f, 0.5f, 0.5f },  { 0.375f, 0.35f, 0.5f, 0.6f, 0.5f, 0.5f },
     { 0.35f, 0.5f, 0.0f, 0.5f, 0.5f, 0.5f },  { 0.5f, 0.5f, 0.35f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.25f, 0.0f, 0.5f, 0.5f, 0.5f },
     { 0.3f, 0.3f, 0.3f, 0.2f, 0.5f, 0.5f },   { 0.25f, 0.4f, 0.5f, 0.5f, 0.5f, 0.5f },   { 0.5f, 0.3f, 0.6f, 0.0f, 0.5f, 0.5f },
-    { 0.6f, 0.6f, 1.0f, 0.0f, 0.5f, 0.5f } };
+    { 0.6f, 0.6f, 1.0f, 0.0f, 0.5f, 0.5f },
+    /* tp91 — Flanger  Feedback · Centre · Range · Stereo. Feedback 0.75 is +35 % regeneration on the engine's bipolar
+       scale: the jet is audible from the first draw, and 0.5 is there for a dry comb. */
+    { 0.75f, 0.5f, 0.6f, 0.3f, 0.5f, 0.5f } };
 struct ShaperState
 {
     ShaperLane lanes[kShaperLanes];
@@ -904,7 +914,7 @@ public:
                     case 7: applyCrush(); break;
                     case  8: case  9: case 10: case 11:
                     case 12: case 13: case 14:
-                    case 15: case 16: applyLent (slot[sl]); break;   // Reverb · Delay · Chorus · Widen · Multiband · Tape · Granular · Bode · Noise
+                    case 15: case 16: case 17: applyLent (slot[sl]); break;   // Reverb · Delay · Chorus · Widen · Multiband · Tape · Granular · Bode · Noise · Flanger
                     default: break;
                 }
             /* ⚠️ tp79 — THE RING'S WRITE HEAD ADVANCES ONCE PER SAMPLE, FOR EVERYONE, OUTSIDE THE DISPATCH.

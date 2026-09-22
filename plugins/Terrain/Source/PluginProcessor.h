@@ -2144,6 +2144,8 @@ private:
         std::unique_ptr<tw::TapeFxEngine>      tpe; std::atomic<tw::TapeFxEngine*>      tpeLive { nullptr };
         std::unique_ptr<tw::GranularFxEngine>  grn; std::atomic<tw::GranularFxEngine*>  grnLive { nullptr };
         std::unique_ptr<tw::TerrainBodeFx>     bod; std::atomic<tw::TerrainBodeFx*>     bodLive { nullptr };
+        std::unique_ptr<tw::TerrainFlangerFx>  fla; std::atomic<tw::TerrainFlangerFx*>  flaLive { nullptr };   // tp91 — the Flanger lane
+        int   flaLastT_ = -1; float flaLastK_[4] = { -1.f, -1.f, -1.f, -1.f }, flaLastBl_ = -1.f;   // tp91 — push Params only when a knob MOVES
         int grnUsed = 0;   // the granular's grain budget counter — it wants somewhere to keep score
         /* tp82 — NOISE needs no lazy arm and no atomic. Every other engine here carries megabytes of ring and is
            built on the message thread; TerrainNoise is a handful of floats with no heap at all, so it simply IS. */
@@ -2177,6 +2179,7 @@ private:
         void armSplit   () { if (spl) return; auto e = std::make_unique<tw::TerrainSplitterFx>(); e->prepare (sr, 512); spl = std::move (e); splLive.store (spl.get(), std::memory_order_release); }
         void armOtt     () { if (ott) return; auto e = std::make_unique<tw::TerrainOttFx>();      e->prepare (sr, 512); ott = std::move (e); ottLive.store (ott.get(), std::memory_order_release); }
         void armTape    () { if (tpe) return; auto e = std::make_unique<tw::TapeFxEngine>();      e->prepare (sr); tpe = std::move (e); tpeLive.store (tpe.get(), std::memory_order_release); }
+        void armFlanger () { if (fla) return; auto e = std::make_unique<tw::TerrainFlangerFx>();  e->prepare (sr, 512); fla = std::move (e); flaLive.store (fla.get(), std::memory_order_release); }
         void armBode    () { if (bod) return; auto e = std::make_unique<tw::TerrainBodeFx>();     e->prepare (sr, 3); bod = std::move (e); bodLive.store (bod.get(), std::memory_order_release); }
         void armGrain   () { if (grn) return; auto e = std::make_unique<tw::GranularFxEngine>();  e->prepare (sr); e->setGrainBudget (&grnUsed, 48); grn = std::move (e); grnLive.store (grn.get(), std::memory_order_release); }
         void armReverb  (int type)
@@ -2320,6 +2323,37 @@ private:
                     p.mix = bl; e->setParams (p);
                     float ol = 0, orr = 0; e->processStereo (l, r, ol, orr);
                     { const float tg = wc::shaperTrim (15, mode, bl); l = ol * tg; r = orr * tg; }   // tp90
+                    return true;
+                }
+                case wc::ShaperLaneId::Flanger:
+                {
+                    /* tp91 — THE RACK'S FLANGER, AND THE LINE IS THE SWEEP (ShaperBox's LiquidShaper: "the LFO-modulated
+                       Centre parameter controls the frequency of the first peak"). The engine's own modulator is
+                       replaced by the drawn line through setSweep(); the wet level sits at the lane's blend, like Bode.
+                       Types are thirty-two voicings: Tape Zero · Jet · BBD · Endless (the engine's types 0..3, the ones
+                       that HAVE a sweep to draw), eight characters each. */
+                    auto* e = flaLive.load (std::memory_order_acquire); if (e == nullptr) return false;
+                    const int t = mode < 0 ? 0 : (mode > 31 ? 31 : mode);
+                    bool ch = (t != flaLastT_) || (bl != flaLastBl_);
+                    for (int q = 0; q < 4; ++q) if (k[q] != flaLastK_[q]) ch = true;
+                    if (ch)
+                    {   // a parameter push re-cooks the engine's coefficients, so it happens when a knob MOVES, not per sample
+                        flaLastT_ = t; flaLastBl_ = bl; for (int q = 0; q < 4; ++q) flaLastK_[q] = k[q];
+                        tw::TerrainFlangerFx::Params p;
+                        p.type = t / 8; p.character = t % 8;
+                        p.feedback = k[0];               // FEEDBACK — bipolar, 0.5 is none, 0 is −97 % (hollow), 1 is +97 % (jet)
+                        p.b1       = k[1];               // CENTRE — the Manual delay the sweep swings around (Tape Zero: where the null sits)
+                        p.depth    = k[2];               // RANGE — how far the line swings it
+                        p.b2       = k[3];               // STEREO, for Endless: the right channel's offset along the saw
+                        p.mix      = bl;                 // the rack card's defaults for the rest: its Width, Damping, Bounce, Drive, Low Cut
+                        e->setParams (p);
+                    }
+                    //  the bottom of the drawing is the longest delay (the lowest comb), the top the shortest.
+                    //  STEREO (k3): the right channel's sweep narrows, stops, then counter-runs — a full mirror at 100 %.
+                    const float md = 1.0f - 2.0f * sh;
+                    e->setSweep (md, md * (1.0f - 2.0f * k[3]));
+                    e->processStereo (&l, &r, 1);
+                    { const float tg = wc::shaperTrim (17, t, bl); l *= tg; r *= tg; }   // tp90's per-type level law
                     return true;
                 }
                 case wc::ShaperLaneId::Noise:
