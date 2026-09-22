@@ -13,6 +13,7 @@
 #include <cmath>
 #include <complex>
 #include <algorithm>
+#include <cstring>
 using namespace wc;
 static int g_checks = 0, g_fail = 0;
 static void check (bool ok, const char* what) { ++g_checks; if (! ok) { ++g_fail; std::printf ("  FAIL: %s\n", what); } }
@@ -657,6 +658,48 @@ int main()
                 "T34 PRESS PLAY AND NOTHING DROPS OUT: flat, a constant offset, a stutter, a full rise and halftime all hold full level from the FIRST sixteenth — an offset the ring cannot meet yet plays the PRESENT, it does not freeze at the buffer's edge%s%s",
                 ok ? "" : " — WRONG: ", worst);
             check (ok, buf);
+        }
+        // ── T35 🚨 A PHRASE CHOPS FROM ITS FIRST NOTE — IT NEVER REPLAYS THE SILENCE BEFORE IT ──
+        {
+            /* Max, on his own 16-tread shape: "it's supposed to either shift pitches or stutter, right now
+               it's just doing a bunch of DROPOUT CLICKS."  Reproduced: with the plugin sitting open (a ring
+               full of silence) and a phrase starting, the lane reached BACK PAST THE FIRST NOTE and
+               faithfully replayed the nothing that was there — MEASURED at 2.5 s of silence, in pieces,
+               inside the first 3 s. `ringFilled_` could not catch it: it counts samples WRITTEN, and the
+               ring was full — of silence. The offset is held inside `soundAge_` now, the age of the oldest
+               sample belonging to the sound that is playing. */
+            static const float TR[16] = { 0.93f,0.78f,0.62f,0.72f,0.50f,0.38f,0.55f,0.45f,
+                                          0.62f,0.30f,0.22f,0.58f,0.75f,0.35f,0.28f,0.62f };
+            FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+            auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 5;   // 2 bars, as he had it
+            T.k[0] = 0.3f; T.k[1] = 0.0f; T.k[2] = 0.5f; T.k[3] = 0.5f;
+            T.fill ([] (double p) { int k = (int) (p * 16.0); if (k < 0) k = 0; if (k > 15) k = 15; return TR[k]; });
+            g.setState (st);
+            const double PRE = 10.0, PLAY = 12.0;                  // ten seconds open and silent, then a phrase
+            const int N = (int) (SR * (PRE + PLAY));
+            std::vector<float> L ((size_t) N), R ((size_t) N);
+            for (int i = 0; i < N; ++i)
+            { const double t = (double) i / SR - PRE; float v = 0.0f;
+              if (t >= 0) v = (float) (0.22*std::sin(2*M_PI*130.81*t) + 0.18*std::sin(2*M_PI*196.0*t) + 0.15*std::sin(2*M_PI*261.63*t));
+              L[(size_t) i] = R[(size_t) i] = v; }
+            int done = 0; double ppq = 0.0; const int B = 512;
+            while (done < N)
+            { const int n = std::min (B, N - done); const bool playing = (done >= (int) (SR * PRE));
+              g.process (L.data() + done, R.data() + done, n, ppq, BPM, playing, 1.0f);
+              if (playing) ppq += n / FPB; done += n; }
+            //  a HOLE is a run of identical samples — silence, or a stuck read head
+            int holes = 0; double longest = 0, longestAt = 0; float held = 0;
+            size_t i = (size_t) (SR * PRE) + 1, runStart = i;
+            for (; i < L.size(); ++i)
+              if (L[i] != L[i-1])
+              { const double len = (double) (i - runStart) / SR;
+                if (len > 0.005) { ++holes; if (len > longest) { longest = len; longestAt = (double) runStart / SR - PRE; held = L[runStart]; } }
+                runStart = i; }
+            char buf[330]; std::snprintf (buf, sizeof buf,
+                "T35 A PHRASE CHOPS FROM ITS FIRST NOTE: ten seconds open and silent, then a chord through his own 16-tread shape at 2 bars — %d holes longer than 5 ms%s",
+                holes, holes ? "" : " (it used to be 2.5 s of silence inside the first three seconds)");
+            if (holes) { char w[150]; std::snprintf (w, sizeof w, " — worst %.0f ms at %.2f s holding %+.5f", longest*1000.0, longestAt, held); std::strncat (buf, w, sizeof buf - std::strlen (buf) - 1); }
+            check (holes == 0, buf);
         }
         // ── T33 FADE CLOSES THE SEAM AT A STEP ──
         {

@@ -199,7 +199,7 @@ public:
         phL_.assign (6, AP{}); phR_.assign (6, AP{});
         smooth_.fill (0.0f); tsPos_ = 0.0; tsOld_ = 0.0; tsLastBehind_ = 0.0; stepping_ = false; tsXf_ = 0; tsXfN_ = 1; holdN_ = 0;
         repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0; repRead_ = 0.0; tsSlew_ = -1.0;
-        ringW_ = 0; ringFilled_ = 0;
+        ringW_ = 0; ringFilled_ = 0; soundAge_ = 0; silentRun_ = 0;
         for (auto& f : freePh_) f = 0.0; envFast_ = envSlow_ = 0.0f; refr_ = 0; noteAt_ = -1;
         for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f; volPrev_ = 1.0f; punchEnv_ = 0.0f; punchRefr_ = 0;
         for (auto& h : haasL_) h = 0.0f; for (auto& h : haasR_) h = 0.0f; haasW_ = 0;
@@ -327,6 +327,24 @@ public:
             }
             // ── the ring hears the INPUT (Time and Repeat read from it) ──
             if (anyRing) { ring->L[(size_t) ringW_] = l; ring->R[(size_t) ringW_] = r; }
+            /* 🚨 tp87 — HOW MUCH SOUND IS IN THE RING, not how many samples were written. Max: "it's
+               supposed to either shift pitches or stutter, right now it's just doing a bunch of DROPOUT
+               CLICKS."  MEASURED and reproduced: on his 16-tread shape the first three seconds of a phrase
+               were 2.5 s of SILENCE in pieces — the lane was reaching back past the moment the sound
+               started and faithfully replaying the nothing that was there. `ringFilled_` could not catch
+               it because it counts samples WRITTEN, and an instrument that has been sitting open has a ring
+               completely full of silence. `soundAge_` is the age of the oldest sample that belongs to the
+               sound now playing, so the offset can be held inside it and the lane chops what you are
+               ACTUALLY playing from the first note.
+               ⚠️ A short gap is part of the music — a drum loop is mostly gaps — so only a silence run
+               longer than a second counts as "the sound has not started"; anything shorter keeps counting. */
+            {
+                const float lvl = std::max (std::fabs (l), std::fabs (r));
+                if (lvl > 1.0e-4f) silentRun_ = 0;
+                else if (silentRun_ < (int) sr_ * 2) ++silentRun_;
+                if (silentRun_ > (int) sr_) soundAge_ = 0;                       // a second of nothing: the sound has not started
+                else if (ring != nullptr && soundAge_ < ring->n) ++soundAge_;
+            }
 
             // ══ tp79 — THE CHAIN IS THE SLOT ORDER ════════════════════════════════════════════════════
             //  Max: "these are in a chain obviously, so these can actually be per-routable … I right click on
@@ -373,7 +391,11 @@ public:
                        half-cycle behind · rising 0→1 a sustained **2.000×** · falling at the guideline 0.000×. */
                     double behind = (double) (1.0f - s) * cyc * rangeMul * (double) TL.depth;   // 1 = now · 0 = a full Range ago
                     if (behind < 0.0) behind = 0.0;                                             // the future is still unreadable
-                    double behindF = behind * fpb; const double maxB = (double) (ringFilled_ > 4 ? ringFilled_ - 4 : 0);
+                    double behindF = behind * fpb;
+                    /* tp87 — the wall is whichever is smaller: what the ring HOLDS, and what of it is the
+                       sound now playing. Past either, the lane plays the PRESENT (tp86) rather than
+                       freezing — so a phrase starts chopping immediately and fills in as it gets history. */
+                    const double maxB = std::min ((double) (ringFilled_ > 4 ? ringFilled_ - 4 : 0), (double) soundAge_);
                     /* 🚨 tp86 — AN OFFSET THE BUFFER CANNOT MEET GOES LIVE, IT DOES NOT FREEZE AT THE EDGE.
                        Max: "I press play and it drops out and then it comes in two bars later — I hate that
                        shit, ShaperBox doesn't do that, it's very reactive."  He is right and this was the
@@ -834,6 +856,7 @@ private:
     std::shared_ptr<const ShaperState> stateOwner_[2]; unsigned stateSeq_ = 0;
     std::shared_ptr<Ring> ringOwner_; std::atomic<Ring*> ring_ { nullptr };
     int ringW_ = 0, ringFilled_ = 0;
+    int soundAge_ = 0, silentRun_ = 0;   // tp87 — how much of the ring is the sound that is playing now
     Ch ch_[2]; std::vector<AP> phL_, phR_;
     std::array<float, kShaperLanes> smooth_ {};
     double tsPos_ = 0, tsOld_ = 0, tsLastBehind_ = 0, stepTarget_ = 0, tsPrevTgt_ = -1.0; int tsXf_ = 0, tsXfN_ = 1; bool stepping_ = false;
