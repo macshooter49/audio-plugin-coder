@@ -32,7 +32,9 @@ const SRC = process.argv[2] || '/Users/macshooter/Developer/VST-Plugins/audio-pl
 //      FB606_MUT=empty    stop dropping categories with no tables in them         → NO EMPTY fails
 const MUT = process.env.FB606_MUT || '';
 const MUTS = {
-  synmenu: [ 'if (mi.length) window.__tpbFolderMenu (cat.label, mi, e.clientX, e.clientY);',
+  // tp85 — the anchor moved when the opener became INSTANCE-mangled (window[G('__tpbFolderMenu')]).
+  // A mutation that no longer matches its anchor is a mutation that never ran.
+  synmenu: [ "if (mi.length) window[G('__tpbFolderMenu')] (cat.label, mi, e.clientX, e.clientY);",
              'if (mi.length && window.__synShowMenu) window.__synShowMenu (cat.label, mi, e.clientX, e.clientY);' ],
   flat:    [ '    function wtRelSegs (it, rootPath) {\n      var r = null;',
              '    function wtRelSegs (it, rootPath) {\n      return [];\n      var r = null;' ],
@@ -145,12 +147,24 @@ const HELP = () => {
     return { back:mid(b), fwd:mid(f), hp:mid(h), backCol:b?getComputedStyle(b).color:null, fwdCol:f?getComputedStyle(f).color:null }; };
   window.__hitBack = () => { const b = document.querySelector('.tpb-panel [title="Back"]'); if (!b) return 'no back'; b.click(); return 'ok'; };
   window.__hitFwd  = () => { const f = document.querySelector('.tpb-panel [title="Forward"]'); if (!f) return 'no fwd'; f.click(); return 'ok'; };
+  /* tp85 — the opener registers its closer under the INSTANCE-mangled name (__tpbMenuClose2 on the
+     second panel), so the bare name the bars used to call was null and every close was a no-op. */
+  window.__closeMenus = () => { Object.keys(window).filter((k) => /^__tpbMenuClose\d*$/.test(k))
+    .forEach((k) => { try { if (window[k]) window[k](); } catch (e) {} }); return 'closed'; };
   window.__search  = (q) => { const s = document.querySelector('.tpb-srch'); if (!s) return null; s.value = q; s.oninput();
     return (window.__items()||[]).map((r) => r.name); };
   // right-click a category row at a chosen screen point
   window.__ctx = (nm, x, y) => { const c = (window.__cats()||[]).find((r) => r.name === nm); if (!c) return 'no cat ' + nm;
     c.el.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:x, clientY:y })); return 'ok'; };
-  window.__menu = () => { const m = document.querySelector('.pmenu'); if (!m) return null;
+  /* tp85 — THE PAGE NOW HOSTS FIVE .pmenu SINGLETONS (quick, ctx, sug, tip) and the folder menu is
+     a SIXTH, created fresh at body level by __tpbFolderMenu. querySelector('.pmenu') returned the
+     FIRST in DOM order — the CLOSED quick-menu host — so every bar below read an empty 0x0 box and
+     went red while the real menu was open and correct. "The menu" means THE ONE THAT IS OPEN, and
+     openCount rides along so a second open menu can never hide inside a green bar. */
+  window.__openMenus = () => [...document.querySelectorAll('.pmenu')].filter((e) => {
+    const q = e.getBoundingClientRect();
+    return getComputedStyle(e).display !== 'none' && q.width > 0 && q.height > 0; });
+  window.__menu = () => { const open = window.__openMenus(); const m = open[open.length - 1]; if (!m) return null;
     const r = m.getBoundingClientRect();
     const rows = [...m.querySelectorAll('.pi')].map((d) => d.textContent.trim());
     // 🚨 THE MEASUREMENT THAT MATTERS: what is actually PAINTED at the menu row's own pixel?
@@ -160,7 +174,8 @@ const HELP = () => {
                hitTag: hit ? (hit.className && String(hit.className).slice(0,24)) || hit.tagName : 'null' }; });
     const panel = document.querySelector('.tpb-panel');
     const pr = panel ? panel.getBoundingClientRect() : null;
-    return { rows, probes, rect:{ x:Math.round(r.x), y:Math.round(r.y), w:Math.round(r.width), h:Math.round(r.height) },
+    return { rows, probes, openCount: open.length,
+             rect:{ x:Math.round(r.x), y:Math.round(r.y), w:Math.round(r.width), h:Math.round(r.height) },
              overlapsPanel: !!(pr && r.x < pr.right && r.right > pr.x && r.y < pr.bottom && r.bottom > pr.y),
              zMenu:getComputedStyle(m).zIndex, zPanel:panel?getComputedStyle(panel).zIndex:null,
              menuAfterPanel: !!(panel && (panel.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING)),
@@ -290,8 +305,9 @@ const HELP = () => {
   await pg.evaluate(() => { window.__hitBack(); }); await settle(140);
   await pg.evaluate(() => window.__ctx('MASTER', 300, 300)); await settle(120);
   const m = await pg.evaluate(() => window.__menu());
-  chk(!!m && m.rows.length === 2 && m.rows.join('|') === 'Locate Folder|Remove Folder',
-      'USER FOLDER — right-click offers Locate + Remove', m ? m.rows.join(' · ') : 'no .pmenu');
+  chk(!!m && m.rows.length === 2 && m.rows.join('|') === 'Locate Folder|Remove Folder' && m.openCount === 1,
+      'USER FOLDER — right-click offers Locate + Remove, and it is the ONLY menu open',
+      m ? (m.rows.join(' · ') + '   open menus ' + m.openCount) : 'no open .pmenu');
   chk(!!m && m.overlapsPanel && m.probes.every((p) => p.hitInMenu),
       '🚨 ON TOP — with the menu OVERLAPPING the browser, the pixel at every menu row belongs to the MENU',
       m ? ('overlaps panel ' + m.overlapsPanel + ' · elementFromPoint per row ' + JSON.stringify(m.probes)) : '—');
@@ -301,7 +317,7 @@ const HELP = () => {
   chk(!!m && m.panelStillOpen, 'THE BROWSER STAYS OPEN under its own menu', m ? ('.tpb-panel present: ' + m.panelStillOpen) : '—');
 
   // ── 8  FACTORY GETS NO REMOVE ───────────────────────────────────────────────────────────────
-  await pg.evaluate(() => { if (window.__tpbMenuClose) window.__tpbMenuClose(); });
+  await pg.evaluate(() => window.__closeMenus());
   await pg.evaluate(() => window.__ctx('Cinematic', 300, 300)); await settle(120);
   const mf = await pg.evaluate(() => window.__menu());
   chk(!!mf && mf.rows.indexOf('Locate Folder') >= 0 && mf.rows.indexOf('Remove Folder') < 0,
@@ -309,7 +325,7 @@ const HELP = () => {
       mf ? ('rows: ' + JSON.stringify(mf.rows)) : 'no menu at all');
 
   // ── 9  THE CLAMP ────────────────────────────────────────────────────────────────────────────
-  await pg.evaluate(() => { if (window.__tpbMenuClose) window.__tpbMenuClose(); });
+  await pg.evaluate(() => window.__closeMenus());
   await pg.evaluate(() => window.__ctx('MASTER', 818, 654)); await settle(120);
   const mc = await pg.evaluate(() => window.__menu());
   chk(!!mc && mc.rect.x >= 6 && mc.rect.y >= 6 && (mc.rect.x + mc.rect.w) <= mc.vw - 6 && (mc.rect.y + mc.rect.h) <= mc.vh - 6,
@@ -317,7 +333,7 @@ const HELP = () => {
       mc ? ('rect ' + JSON.stringify(mc.rect) + ' in ' + mc.vw + '×' + mc.vh) : 'no menu');
 
   // ── 11  CPU — "A folder with hundreds of files is the normal case now." MEASURED, not asserted.
-  await pg.evaluate(() => { if (window.__tpbMenuClose) window.__tpbMenuClose(); if (window.__tpbClose) window.__tpbClose(); });
+  await pg.evaluate(() => { window.__closeMenus(); if (window.__tpbClose) window.__tpbClose(); });
   const stress = await pg.evaluate(() => {
     const items = []; const SUB = ['Bass','Leads','Pads','Keys','FX','Perc','Drones','Vox','Metal','Glass','Dust','Wind'];
     for (let i = 0; i < 480; i++) { const d = SUB[i % SUB.length];
