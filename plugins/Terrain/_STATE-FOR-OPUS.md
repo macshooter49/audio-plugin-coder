@@ -1,7 +1,46 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp78** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp79** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp79 (2026-09-21) — THE SHAPER IS A CHAIN YOU ARRANGE · TIME'S PITCH LAW IS BACK
+Max: "these are in a chain obviously … I right click on Time, boom, Multiband … I want to put Bode second, Pan third
+… stop starting off with the volume on … change the shape to a sine, that gate looks ugly … Phaser and Cycle is purple
+on purple … our time is broken, I want it to sound exactly like ShaperBox 3 — every time my grid goes somewhere, the
+pitch moves."
+
+**THE CHAIN.** The eight lane blocks were a FIXED sequence (Time·Repeat·Drive·Crush·Filter·Phaser·Pan·Volume) nothing
+on screen showed. They are lifted into lambdas and dispatched in `ShaperState::slot[]` order, so the tile row IS the
+signal chain and a right-click places a lane at a position. A kind cannot appear twice, so every pick is a SWAP — and
+that is why the views stay indexed by KIND and the reorder needed **no state surgery**: one set of parameters, one set
+of DSP state, one clock per lane, all still at their own index. The order rides the `shaperJson` blob, so **no new
+parameter and no saved patch lost one**. `sanitise()` guards the switch the audio thread indexes.
+
+🚨 **GLIDE WAS DESTROYING TIME'S PITCH LAW.** The shape is the read position ⇒ its SLOPE is the playback rate ⇒ pitch.
+Glide slew-limited the read position's TOTAL motion, clamping the pitch: measured, at Glide 0.7 the rate sat at 0.818
+for EVERY shape. Now the target's own velocity passes through (pitch) and only the error a discontinuity leaves is
+slew-limited (the slide). Measured after: 1.000 / 0.750 / 0.500 / 0.250, Glide off and on.
+🚨 **The ring read is CATMULL-ROM.** ⚠️ A cubic reads two samples AHEAD and the ring's future is unwritten — a read on
+the write head (what unity does) interpolated towards stale memory and unity measured 0.964. Within two samples of the
+head it falls back to linear, so unity stays bit-identical.
+⚠️ **A regression this batch made and caught:** the lift swallowed the ring's write-head advance into the Repeat
+lambda. It still ran every sample, but at whatever POSITION Repeat occupied — wrong once the chain is reorderable. It
+is outside the dispatch now.
+
+**Also:** nothing lit at boot, default shape a sine (the C++ seed's "sine" was still tp77's three-point SPIKE — now
+`SINE9` verbatim), ribbons white, `ShaperRoster::filter` bounds-checked (`& 3` against a 3-element array).
+
+`_tp77_gate.js` 33/33, `FlowShaper_test.cpp` 30/30, `au_shaper_lock.cpp` 9/9 (re-aimed: it leaned on the old defaults
+without setting them), `_tp61_gate.js` 16/16, older page gates green.
+
+⚠️ **STILL OWED — Max's roster.** He wants each rack effect shapeable in a lane: Reverb · Delay · Tape · Chorus ·
+Widen · Multiband · Granular · Bode · **Noise** (his late addition, off the existing noise library), flanger folded
+into Phaser, four targets each, night and day. NOT wanted: EQ, Compress, Utility, Splitter, standalone Flanger.
+**The DSP is already written** — every one exists as a self-contained engine class, all already multi-instance
+(`tw::TerrainChorusFx`, `tw::TerrainWidenFx`, `tw::TerrainSplitterFx` (zero-heap), `tw::TapeFxEngine`,
+`tw::GranularFxEngine`, `tw::TerrainBodeFx`, `DelayEngine`/`MoogDelay`, the nine reverbs) — so each new kind is a
+`ShaperExt` lend + a lazy arm in `ShaperRoster`, exactly as filter and drive already do. Watch the footprint: Delay,
+Granular and Bode are ~8.4 MB of ring EACH at 48 k, so arm only a lit lane of that kind.
 
 ## tp78 (2026-09-21) — THE CHOP MENU'S SELECTOR SAYS THE NUMBER, NOT "ALL"
 Max: "whenever we right click one of our slices … instead of it saying ALL in the selector, can it just be the number

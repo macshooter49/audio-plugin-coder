@@ -258,6 +258,101 @@ int main()
         char buf[160]; std::snprintf (buf, sizeof buf, "T20 PAN Haas: with the pan 80 %% right the left side lags the right by %d samples (%.1f ms)", bestLag, bestLag / SR * 1000.0);
         check (bestLag >= 400 && bestLag <= 700, buf);
     }
+    // ── T21: tp79 — THE CHAIN IS THE SLOT ORDER, and order has to be AUDIBLE or the feature is a label ──
+    //  Max: "these are in a chain obviously … I want to put Bode second, I want to put Pan third."
+    //  A deep gate in front of a distortion is not the same sound as the same gate behind it: the distortion's
+    //  curve is driven by whatever level reaches it, so gating first changes what it has to work on. No ext here,
+    //  so this is the BUILT-IN drive — the proof does not depend on the rack being armed.
+    {
+        //  A bit-crusher quantises to FIXED levels, so it is the least ambiguous order test there is: crush a loud
+        //  signal and then turn it down, and the steps come down with it; turn it down FIRST and the same steps are
+        //  now enormous next to what is left. Same two lanes, same shapes — only the position moves.
+        auto gate2 = [] (double x) { return x < 0.5 ? 1.0f : 0.25f; };
+        auto build = [&] (const int* order) -> Run
+        {
+            FlowShaper g; g.prepare (SR); auto st = state();
+            auto& V = st->lanes[0]; V.on = true; V.depth = 1; V.blend = 1; V.smooth = 0.2f; fill (V, gate2);
+            auto& C = st->lanes[7]; C.on = true; C.depth = 1; C.blend = 1; C.mode = 1; C.k[0] = 1.0f; C.k[2] = 1.0f;   // k0 = 1 is the COARSEST bit depth (measured: at k0 = 0 the two orders differ by 0.0005, which proves nothing)
+            fill (C, [] (double) { return 1.0f; });
+            for (int q = 0; q < kShaperLanes; ++q) st->slot[q] = order[q];
+            return run (g, st, 0.0, 0.5, sig440);
+        };
+        static const int volFirst[8] = { 0, 7, 1, 2, 3, 4, 5, 6 };   // Volume at position 0, Crush at position 1
+        static const int crshFirst[8] = { 7, 0, 1, 2, 3, 4, 5, 6 };  // the same two, swapped
+        const Run a = build (volFirst), b = build (crshFirst);
+        double worst = 0; for (size_t q = 2000; q < a.L.size() && q < b.L.size(); ++q) worst = std::max (worst, (double) std::fabs (a.L[q] - b.L[q]));
+        char buf[220]; std::snprintf (buf, sizeof buf, "T21 CHAIN ORDER IS AUDIBLE: gate->crush against crush->gate differ by %.4f peak (same two lanes, same shapes, only the position moved)", worst);
+        check (worst > 0.05, buf);
+        ShaperState fresh; bool ident = true; for (int q = 0; q < kShaperLanes; ++q) ident = ident && fresh.slot[q] == q;
+        check (ident, "T21b a fresh state's chain is the tile order, 0..7 — the card reads left to right");
+    }
+    // ── T22: tp79 — sanitise() is the wall in front of a switch the AUDIO THREAD indexes with this array ──
+    {
+        int dup[8]   = { 0, 0, 1, 2, 3, 4, 5, 6 };   // a kind twice
+        int over[8]  = { 0, 1, 2, 3, 4, 5, 6, 99 };  // out of range
+        int under[8] = { -1, 1, 2, 3, 4, 5, 6, 7 };  // negative
+        int good[8]  = { 7, 6, 5, 4, 3, 2, 1, 0 };   // a real permutation — must be left alone
+        ShaperState::sanitise (dup); ShaperState::sanitise (over); ShaperState::sanitise (under); ShaperState::sanitise (good);
+        bool fixed = true; for (int q = 0; q < 8; ++q) fixed = fixed && dup[q] == q && over[q] == q && under[q] == q;
+        bool kept = true;  for (int q = 0; q < 8; ++q) kept = kept && good[q] == 7 - q;
+        check (fixed && kept, "T22 a duplicate, an out-of-range and a negative slot each fall back to the identity; a real permutation is untouched");
+    }
+    // ── T23: tp79 — 🚨 THE SHAPE'S SLOPE IS THE PLAYBACK RATE, AND PLAYBACK RATE IS PITCH ──
+    //  Max: "our time is broken … I want ours to sound exactly like ShaperBox 3 — every time my grid goes
+    //  somewhere, the fucking pitch moves." That IS the law (Gross Beat's, TimeShaper's): the shape is the read
+    //  position, so a ramp of slope 0.5 reads at half speed and comes back an octave down.
+    //  Measured without a spectrum: the input's VALUE IS ITS OWN SAMPLE INDEX, so the output value says exactly
+    //  which input sample was read, and the slope of that is the playback rate. No estimator to be fooled by.
+    {
+        static float g_sl = 1.0f;
+        auto rateFor = [&] (float slope, float glide) -> double
+        {
+            g_sl = slope;
+            FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+            auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 4;
+            T.k[0] = 0.3f; T.k[1] = glide; T.k[2] = 0.5f;
+            fill (T, [] (double x) { return (float) (g_sl * x); });
+            g.setState (st);
+            const int N = (int) (SR * 2.2); std::vector<float> L ((size_t) N), R ((size_t) N);
+            for (int i = 0; i < N; ++i) L[(size_t) i] = R[(size_t) i] = (float) i / (float) N;
+            int done = 0; double ppq = 0.0; const int B = 256;
+            while (done < N)
+            { const int n = std::min (B, N - done); g.process (L.data() + done, R.data() + done, n, ppq, BPM, true); ppq += n / FPB; done += n; }
+            const int i0 = (int) (SR * 1.3), w = 2000;
+            return ((double) L[(size_t) (i0 + w)] - (double) L[(size_t) i0]) * N / w;
+        };
+        bool ok = true; char worst[160] = "";
+        for (float sl : { 1.0f, 0.75f, 0.5f, 0.25f })
+            for (float gl : { 0.0f, 0.7f })
+            { const double got = rateFor (sl, gl);
+              if (std::fabs (got - sl) > 0.02) { ok = false; std::snprintf (worst, sizeof worst, "slope %.2f glide %.1f -> rate %.3f", sl, gl, got); } }
+        char buf[260]; std::snprintf (buf, sizeof buf, "T23 TIME: the playback rate IS the shape's slope at 1, 0.75, 0.5 and 0.25 — with Glide off AND on%s%s",
+                                      ok ? " (measured within 0.02)" : " — WRONG at ", worst);
+        check (ok, buf);
+        //  ⚠️ Glide used to clamp the read position's TOTAL motion, which clamped the pitch: every slope came out
+        //  at 0.818. It now limits only the catch-up after a discontinuity, so the slope passes through.
+    }
+    // ── T24: tp79 — the ring's write head advances for the TIME lane alone ──
+    //  The regression this bar exists for: lifting the lanes into slot-dispatched lambdas swallowed the head's
+    //  advance into the REPEAT block, so with only Time lit the buffer never moved and the lane played at unity
+    //  rate whatever was drawn. Every other check in this file still passed, which is why this one is here.
+    {
+        static float g_sl2 = 0.5f;
+        FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+        auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 4; T.k[1] = 0.0f; T.k[2] = 0.5f;
+        auto& RP = st->lanes[4]; RP.on = false;            // REPEAT stays OFF: Time must move the head by itself
+        fill (T, [] (double x) { return (float) (g_sl2 * x); });
+        g.setState (st);
+        const int N = (int) (SR * 2.0); std::vector<float> L ((size_t) N), R ((size_t) N);
+        for (int i = 0; i < N; ++i) L[(size_t) i] = R[(size_t) i] = (float) i / (float) N;
+        int done = 0; double ppq = 0.0; const int B = 256;
+        while (done < N)
+        { const int n = std::min (B, N - done); g.process (L.data() + done, R.data() + done, n, ppq, BPM, true); ppq += n / FPB; done += n; }
+        const int i0 = (int) (SR * 1.3), w = 2000;
+        const double rate = ((double) L[(size_t) (i0 + w)] - (double) L[(size_t) i0]) * N / w;
+        char buf[200]; std::snprintf (buf, sizeof buf, "T24 the ring advances for TIME ALONE (Repeat off): a 0.5 slope reads at %.3f, not stuck at unity", rate);
+        check (std::fabs (rate - 0.5) < 0.02, buf);
+    }
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

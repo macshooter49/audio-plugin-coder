@@ -52,7 +52,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
      rows:[...card.querySelectorAll('.pane .gboxrow')].length, boxes:[...card.querySelectorAll('.pane.on .gbox .gbl')].map(e=>e.textContent),
      tilePaths:tile?tile.querySelectorAll('svg path').length:-1, tileCircles:tile?tile.querySelectorAll('svg circle').length:-1, tileTitle:tile?tile.getAttribute('title'):null, tileAnim:tile?!!tile.querySelector('animateTransform, animate'):false, tileSine:tile?!!tile.querySelector('path.shpWave'):false, tileClip:tile?!!tile.querySelector('clipPath'):false,
      caps:[...scr.querySelectorAll('div:not(.mv-ov):not(.mv-c):not(.field)')].map(e=>e.textContent.trim()).filter(t=>t&&!/Point|Gate|Ladder/.test(t)) }; });
- ok(!r0.err && r0.boot && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===124 && r0.field && r0.lent && r0.chips.join('|')==='Point|Gate 1/16|' && r0.chevs===2 && r0.icons===0 && r0.selects===3 && r0.chipPx<=7.5 && r0.barH<=18 && r0.togs===0 && r0.tabCaps==='none' && r0.ttCaps==='none' && r0.lbCaps==='none' && r0.tileCaps==='uppercase' && r0.curInk==='rgb(91, 33, 182)' && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
+ ok(!r0.err && r0.boot && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===124 && r0.field && r0.lent && r0.chips.join('|')==='Point|Sine|' && r0.chevs===2 && r0.icons===0 && r0.selects===3 && r0.chipPx<=7.5 && r0.barH<=18 && r0.togs===0 && r0.tabCaps==='none' && r0.ttCaps==='none' && r0.lbCaps==='none' && r0.tileCaps==='uppercase' && r0.curInk==='rgb(91, 33, 182)' && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
     '🚨 [0] the page BOOTED whole (the frame dispatcher, the wind clock and the filter roster are all there — a parse error in any script block fails here); the Glitch chassis (316 wide, the screen now 124 px, eight tiles with dots, Shape / Target / Clock, two boxes a row, the chain) with the LFO\'s field in the screen and a small bar (≤ 7.5 px chips, ≤ 18 px tall, three NATIVE dropdowns, no glyphs); no On toggle anywhere; no caps but the tiles; the lit + selected Volume tile is white-filled with dark ink', JSON.stringify(r0));
  ok(r0.tilePaths===1 && r0.tileCircles===0 && r0.tileTitle==='Shaper' && !r0.tileAnim && r0.tileSine && !r0.tileClip, '[0b] the tile\'s emblem is ONE sawtooth path between fixed ends — no clip, no SMIL, nothing else on it', JSON.stringify({paths:r0.tilePaths,circles:r0.tileCircles,title:r0.tileTitle,anim:r0.tileAnim,sine:r0.tileSine,clip:r0.tileClip}));
  const nm=await p.evaluate(()=>{ try{ return (function(){ const s=document.documentElement.outerHTML; return /FLOWNAME=\{arp:'Arp',drift:'Robin',chop:'Shaper'/.test(s); })(); }catch(e){ return false; } });
@@ -71,8 +71,8 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
    const cs=getComputedStyle(svg().querySelector('.sh-grid line')); const gridInk={stroke:cs.stroke,w:cs.strokeWidth};
    card.querySelectorAll('.fx .fxb')[0].click(); await new Promise(r=>setTimeout(r,200));
    return {ptsVol,cdVol,hits,same,vb,ptsTime,mono,changed:d0!==d1,grid,gridInk}; });
- ok(r1.ptsVol===32 && r1.cdVol===16 && r1.hits===48 && r1.same && r1.vb==='0 0 456 196' && r1.ptsTime===2 && r1.mono && r1.grid.v===20 && r1.grid.maj===2 && /^rgba\(255, 255, 255, 0\.06[0-9]?\)$/.test(r1.gridInk.stroke) && r1.gridInk.w==='0.6px',
-    '🚨 [1] the stroke IS the LFO\'s shPathD of the lane\'s points (byte-equal), the LFO\'s 456 × 196 field, its nodes / curve dots / hit targets, its grid ink (white .065, .6 wide); Volume boots as a 1/16 gate (32 nodes), Time as a unity ramp (2 nodes, monotone)', JSON.stringify(r1));
+ ok(r1.ptsVol===9 && r1.cdVol===8 && r1.hits===17 && r1.same && r1.vb==='0 0 456 196' && r1.ptsTime===2 && r1.mono && r1.grid.v===20 && r1.grid.maj===2 && /^rgba\(255, 255, 255, 0\.06[0-9]?\)$/.test(r1.gridInk.stroke) && r1.gridInk.w==='0.6px',
+    '🚨 [1] the stroke IS the LFO\'s shPathD of the lane\'s points (byte-equal), the LFO\'s 456 × 196 field, its nodes / curve dots / hit targets, its grid ink (white .065, .6 wide); Volume boots as a SINE (tp79 — 9 nodes, Max: \'I don\\\'t want to see that gate\'), Time as a unity ramp (2 nodes, monotone)', JSON.stringify(r1));
 
  // ── [2] the bar: the type chip = the rosters through the rack\'s browser; the shape chip = the LFO\'s dropdown ──
  const r2=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext'); const T=card.querySelectorAll('.fx .fxb'); const w=(ms)=>new Promise(r=>setTimeout(r,ms));
@@ -93,7 +93,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  ok(r2.filt==='Ladder LP 24' && r2.filtVis && r2.filtCats && r2.filtCats[0]==='Ladder' && r2.filtN===118 && r2.filtAfter==='Acid 303' && Math.abs((r2.filtParam||0)-4/117)<0.002
     && r2.drive==='Soft Clip' && r2.driveOpts===23 && r2.driveAfter==='Hard Clip' && Math.abs((r2.driveParam||0)-6/22)<0.01
     && r2.ph==='Phaser' && r2.phOpts===28 && r2.cr==='Bits + Rate' && r2.crOpts===10 && r2.filtSelHidden
-    && r2.timeShape==='Unity' && !r2.timeTypeVis && r2.menuRows && r2.menuRows.indexOf('Unity')===0 && r2.menuRows.indexOf('Half time')===1 && r2.menuRows.indexOf('Custom')===r2.menuRows.length-1 && r2.menuRows.length>=12 && r2.timeAfter==='Half time' && r2.restamped && r2.volShape==='Gate 1/16' && !r2.volTypeVis,
+    && r2.timeShape==='Unity' && !r2.timeTypeVis && r2.menuRows && r2.menuRows.indexOf('Unity')===0 && r2.menuRows.indexOf('Half time')===1 && r2.menuRows.indexOf('Custom')===r2.menuRows.length-1 && r2.menuRows.length>=12 && r2.timeAfter==='Half time' && r2.restamped && r2.volShape==='Sine' && !r2.volTypeVis,
     '🚨 [2] the Filter\'s type chip opens the RACK\'S two-pane browser (118 in the filter\'s categories) and picking writes the MODE parameter; Drive (23) / Phaser (28) / Crush (10) are native dropdowns writing theirs; the shape chip is a native dropdown (Time: the presets + Custom) and restamps; Volume / Time carry no type chip', JSON.stringify(r2));
 
  // ── [3] brushes: the brush chip\'s dropdown; the LFO field takes the strokes ──
@@ -504,6 +504,62 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
     && q34.selOnly.bd==='rgb(183, 148, 255)' && q34.selOnly.ink==='rgb(255, 255, 255)'
     && !/183, 148, 255/.test(q34.ndStroke||'') && !/183, 148, 255/.test(q34.paneNd.plain) && /255, 255, 255/.test(q34.paneNd.sel),
     '[34] a LIT tile is plain white — no border, no ring; an unlit SELECTED tile keeps the purple outline with white ink; and the breakpoint dots are pure white in BOTH renderers (the purple is the selected node\'s alone)', JSON.stringify(q34));
+
+ // ══ tp79 ══════════════════════════════════════════════════════════════════════════════════════
+ // ── [35] 🚨 A TILE IS A POSITION IN THE CHAIN. Max: "these are in a chain obviously, so these can
+ //        actually be per-routable … we right click on the buttons … I right click on Time, boom …
+ //        I want to put Bode second, I want to put Pan third." Eight kinds in eight positions, so a
+ //        kind is never duplicated and every pick SWAPS two positions ("I just put it in second").
+ //        The order has to reach the DSP, so this reads it back out of setShaperJson's own blob. ──
+ const q35=await p.evaluate(async()=>{ const c=window.__flowCardOf('chop',1); c.open(); await new Promise(r=>setTimeout(r,600));
+   const card=document.querySelector('.ti-card.shp-ext.open');
+   const names=()=>[...card.querySelectorAll('.fx .fxb')].map(e=>e.textContent.trim());
+   const kinds=()=>[...card.querySelectorAll('.fx .fxb')].map(e=>e.getAttribute('data-l'));
+   const blob=()=>{ const j=window.__shpJson; return j&&j.length?JSON.parse(j[j.length-1][1]).slot:null; };
+   const before=names(), kBefore=kinds(), slotBefore=blob();
+   /* right-click position 1 (the second tile) and place the lane that currently sits at position 5 */
+   const t=[...card.querySelectorAll('.fx .fxb')];
+   t[1].dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:300,clientY:300}));
+   await new Promise(r=>setTimeout(r,350));
+   const menu=document.querySelector('#syn-ctx-menu.act, body > .syn-ctx-menu.act, .syn-ctx-menu.act');
+   if(!menu) return {err:'no menu on a tile right-click'};
+   const rows=[...menu.querySelectorAll('.syn-ctx-item')].filter(e=>e.textContent.trim().length);
+   const labels=rows.map(e=>e.textContent.trim());
+   const want=before[5];   /* the SHORT name on the tile; the menu rows carry the long one */
+   const target=rows.find(e=>{ const x=e.textContent.trim().toLowerCase(); return x.startsWith(want.toLowerCase()); });
+   if(!target) return {err:'no row for '+want, labels};
+   target.click(); await new Promise(r=>setTimeout(r,450));
+   const after=names(), kAfter=kinds(), slotAfter=blob();
+   return { before, after, kBefore, kAfter, slotBefore, slotAfter, labels,
+            swapped: after[1]===before[5] && after[5]===before[1],
+            othersHeld: before.every((n,i)=>(i===1||i===5)?true:after[i]===n) }; });
+ ok(!q35.err && q35.swapped && q35.othersHeld && Array.isArray(q35.slotAfter) && q35.slotAfter.length===8
+    && q35.slotAfter.join(',')===q35.kAfter.join(',') && q35.slotBefore.join(',')==='0,1,2,3,4,5,6,7'
+    && new Set(q35.slotAfter).size===8,
+    '[35] 🚨 right-clicking a tile offers the eight lanes; picking one SWAPS the two positions, every other position holds, and the new chain reaches the processor in setShaperJson\'s slot list (still a permutation)', JSON.stringify(q35).slice(0,600));
+
+ // ── [36] the chain is state like any other: it survives a snapshot round trip, and a list that is not
+ //        a permutation reads as the tile order rather than indexing anything. ──
+ const q36=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext.open');
+   const S=window.__tiDice.chop.S;
+   const kinds=()=>[...card.querySelectorAll('.fx .fxb')].map(e=>+e.getAttribute('data-l'));
+   const snap=JSON.stringify(S.v);                       // what a preset stores
+   const live=kinds().join(',');
+   S.set('slot','0,0,1,2,3,4,5,6'); await new Promise(r=>setTimeout(r,250)); const dup=kinds().join(',');
+   S.set('slot','9,1,2,3,4,5,6,7'); await new Promise(r=>setTimeout(r,250)); const over=kinds().join(',');
+   S.set('slot','');                await new Promise(r=>setTimeout(r,250)); const empty=kinds().join(',');
+   const o=JSON.parse(snap); for(const k in o) S.set(k,o[k]); await new Promise(r=>setTimeout(r,300));
+   return { live, restored:kinds().join(','), dup, over, empty, carried:'slot' in o }; });
+ ok(q36.carried && q36.restored===q36.live && q36.dup==='0,1,2,3,4,5,6,7' && q36.over==='0,1,2,3,4,5,6,7' && q36.empty==='0,1,2,3,4,5,6,7',
+    '[36] the chain rides the card\'s state (so presets and snapshots carry it) and a duplicate, an out-of-range or an empty list all read as the tile order', JSON.stringify(q36));
+
+ // ── [37] tp79 — the boot Max asked for: nothing lit, and the shape is a sine, not that gate ──
+ const q37=await p.evaluate(()=>{ const card=document.querySelector('.ti-card.shp-ext');
+   const src=document.documentElement.outerHTML;
+   return { initOn:/init\['on'\+i\]=0;/.test(src), defVol:/var DEFSHAPE=\{vol:'sine'/.test(src),
+            ribbon:getComputedStyle(card.querySelector('.gbl')).color }; });
+ ok(q37.initOn && q37.defVol && /255, 255, 255/.test(q37.ribbon) && !/0\.5[0-9]?\)/.test(q37.ribbon),
+    '[37] a fresh card lights NO lane and opens on a sine, and the box ribbons are white on their purple chip', JSON.stringify(q37));
 
  ok(errs.length===0,'[14] the page threw nothing', errs.slice(0,3).join(' | ')||'clean');
  await b.close(); console.log('\n  '+pass+' passed, '+fail+' failed\n'); process.exit(fail?1:0);

@@ -98,6 +98,12 @@ int main()
     printf ("\ntp71 — THE SHAPER IS DAW-LOCKED (installed AU, a host transport, the Volume lane's 1/16 gate)\n\n");
     a.pump (1.0); a.render (20, 0.0, false);
     bool okp = a.set ("Flow Chain 1", 2.0f);   // the Chop slot = the Shaper
+    /* ⚠️ tp79 — TURN THE LANE ON. This cert used to lean on the Volume lane being lit BY DEFAULT, and on its
+       default shape being a 1/16 gate. Max asked for neither ("please stop starting off with the volume on …
+       change the shape to a sine, I don't want to see that gate"), so both defaults moved and three bars here
+       started reading a flat dry signal. A test that depends on an unstated default is the brittle part, so the
+       lane is lit explicitly now and the bars below read the SINE that a fresh card actually carries. */
+    a.set ("Shaper Volume On", 1.0f); a.pump (0.6);
     a.pump (0.8); a.render (10, 0.0, false);
     chk (okp, "[0] the Shaper sits in Flow Chain 1 (the Chop slot)");
     // the note: held through each take, released and let go between takes
@@ -107,15 +113,29 @@ int main()
     // [1] from the bar line
     take (0.0, true, (int) (STEP * 8 / BLK) + 1, x);
     char b[200]; snprintf (b, sizeof b, "steps 0..3: %.1f %.1f %.1f %.1f dBFS", stepDb (x, 0), stepDb (x, 1), stepDb (x, 2), stepDb (x, 3));
-    chk (stepDb (x, 0) > -30 && stepDb (x, 1) < stepDb (x, 0) - 22 && stepDb (x, 2) > -30 && stepDb (x, 3) < stepDb (x, 2) - 22, "🚨 [1] play from bar 1: sixteenth 0 ON, 1 OFF, 2 ON, 3 OFF — the gate rides the transport from the first samples", b);
+    const double first0 = stepDb (x, 0);   // the bar line's own trough, for [2] to beat
+    /* the default shape is a sine over one bar: sixteenth 0 sits in its trough (gain 0) and the level climbs
+       out of it. So "read at the DAW's position from the first samples" now reads as a RISE, not an alternation. */
+    chk (stepDb (x, 0) < stepDb (x, 1) - 3 && stepDb (x, 1) < stepDb (x, 2) - 2 && stepDb (x, 2) < stepDb (x, 3) && stepDb (x, 3) > -30,
+         "🚨 [1] play from bar 1: the shape is read from the FIRST samples — sixteenth 0 sits in the sine's trough and 1, 2, 3 climb out of it", b);
     // [2] play pressed a sixteenth in
     x.clear(); take (0.25, true, (int) (STEP * 8 / BLK) + 1, x);
     snprintf (b, sizeof b, "steps 0..3 from ppq 0.25: %.1f %.1f %.1f %.1f dBFS", stepDb (x, 0), stepDb (x, 1), stepDb (x, 2), stepDb (x, 3));
-    chk (stepDb (x, 0) < stepDb (x, 1) - 25 && stepDb (x, 1) > -30, "🚨 [2] play pressed a sixteenth in: the first sixteenth heard is OFF, the next ON — the shape is read at the DAW's position, not from the press", b);
+    /* pressed a sixteenth in, the first thing heard must be the shape AT SIXTEENTH 1 — already out of the
+       trough — not the shape restarted from the press. That is the whole DAW-locked claim. */
+    chk (stepDb (x, 0) > first0 + 3 && stepDb (x, 0) < stepDb (x, 1) && stepDb (x, 1) < stepDb (x, 2),
+         "🚨 [2] play pressed a sixteenth in: the first sixteenth heard is the shape at THAT position (already above the bar line's trough), not the shape restarted from the press", b);
     // [3] stopped
     x.clear(); take (3.37, false, (int) (STEP * 4 / BLK) + 1, x);
     snprintf (b, sizeof b, "stopped at ppq 3.37: steps 0..2: %.1f %.1f %.1f dBFS", stepDb (x, 0), stepDb (x, 1), stepDb (x, 2));
-    chk (stepDb (x, 0) > -30 && stepDb (x, 1) > -30 && stepDb (x, 2) > -30, "[3] transport stopped: the gate holds phase 0 (on) and nothing free-runs", b);
+    /* stopped, the lane holds phase 0 — the sine's trough — and, crucially, does not free-run: three consecutive
+       sixteenths read the SAME level. (Before tp79 phase 0 was a gate's open step, so this asked for level.) */
+    /* what "nothing free-runs" looks like on a sine: the lane is pinned at phase 0, which is the sine's TROUGH,
+       so the level can only fall away with the note's own release — it must never CLIMB back out, which is what a
+       free-running clock would do as it walked up the shape. (Under the old gate, phase 0 was an open step, so
+       this bar asked for level instead; the subject is the same.) */
+    chk (stepDb (x, 1) <= stepDb (x, 0) + 1.0 && stepDb (x, 2) <= stepDb (x, 1) + 1.0,
+         "[3] transport stopped: the lane holds phase 0 and nothing free-runs — the level never climbs back out of the shape's trough", b);
     // [4] the lane off
     a.set ("Shaper Volume On", 0.0f); a.pump (0.3);
     x.clear(); take (0.0, true, (int) (STEP * 4 / BLK) + 1, x);
@@ -157,7 +177,10 @@ int main()
     a.set ("Shaper Drive On", 0.0f); a.set ("Shaper Volume On", 1.0f); a.set ("Shaper Volume Trigger", 1.0f); a.pump (0.6);
     x.clear(); take (5.37, false, (int) (STEP * 8 / BLK) + 1, x);
     snprintf (b, sizeof b, "stopped transport, Trigger MIDI: sixteenths from the note %.1f %.1f %.1f %.1f dBFS", stepDb (x, 0), stepDb (x, 1), stepDb (x, 2), stepDb (x, 3));
-    chk (stepDb (x, 0) > -30 && stepDb (x, 1) < stepDb (x, 0) - 25 && stepDb (x, 2) > -30 && stepDb (x, 3) < stepDb (x, 2) - 25, "[8] Trigger = MIDI: the gate runs from the note-on with the transport stopped (ON / OFF / ON / OFF from the note)", b);
+    /* the lane's own clock restarts AT the note, so the sine starts in its trough and climbs away from it even
+       though the transport never moved — that is the trigger running on its own. */
+    chk (stepDb (x, 0) < stepDb (x, 1) - 3 && stepDb (x, 1) < stepDb (x, 2) - 2 && stepDb (x, 2) < stepDb (x, 3),
+         "[8] Trigger = MIDI: the shape runs from the NOTE-ON with the transport stopped — it starts in the sine's trough and climbs", b);
     a.set ("Shaper Volume Trigger", 0.0f); a.pump (0.3);
     printf ("\n  %d passed, %d failed\n\n", npass, nfail);
     a.close(); return nfail ? 1 : 0;

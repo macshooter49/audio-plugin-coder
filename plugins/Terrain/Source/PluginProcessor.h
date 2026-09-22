@@ -2088,7 +2088,8 @@ private:
         void armDist   (int w) { if (w < 0 || w > 1 || dst[w]) return; auto e = std::make_unique<tw::DistortionEngine>(); e->prepare (sr); e->setMix (1.0f); dst[w] = std::move (e); dstLive[w].store (dst[w].get(), std::memory_order_release); }
         bool filter (int which, int engine, float cut01, float res, float drive, float poles, int charIdx, float spread, float& l, float& r) noexcept override
         {
-            auto* e = fltLive[which & 3].load (std::memory_order_acquire); if (e == nullptr) return false;
+            if (which < 0 || which >= 3) return false;   // tp79 — `fltLive[which & 3]` could read one PAST a 3-element array; every call site passes 0..2 today, but the mask was wrong for the width and this struct is about to gain slots
+            auto* e = fltLive[which].load (std::memory_order_acquire); if (e == nullptr) return false;
             tw::FilterFxEngine::Params p; p.engine = engine; p.cut = cut01; p.res = res; p.drive = drive; p.poles = poles; p.charIdx = charIdx; p.spread = spread; p.wide = false;
             p.env = 0.5f; p.sweep = 0.0f; p.track = 0.0f; p.mix = 1.0f;   // the shape IS the motion: no follower, no LFO, no key
             e->processSample (l, r, p); return true;

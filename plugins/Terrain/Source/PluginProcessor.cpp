@@ -7344,7 +7344,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         for (int ln = 0; ln < 8; ++ln)
         {
             const juce::String pid = juce::String ("FLOW_CHOP_") + kLn[ln], nm = juce::String ("Shaper ") + kLnN[ln];
-            layout.add (std::make_unique<juce::AudioParameterBool>   (juce::ParameterID { pid + "_ON", 1 },    nm + " On",    ln == 0));
+            layout.add (std::make_unique<juce::AudioParameterBool>   (juce::ParameterID { pid + "_ON", 1 },    nm + " On",    false));   // tp79 — Max: "please stop starting off with the volume on". A fresh card is SILENT until a lane is lit.
             layout.add (std::make_unique<juce::AudioParameterFloat>  (juce::ParameterID { pid + "_DEPTH", 1 }, nm + " Depth", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_RATE", 1 },  nm + " Rate",  rates, wc::kShaperRateDefault));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_MODE", 1 },  nm + " Mode",  kModes[ln], kModeDef[ln]));
@@ -17541,27 +17541,48 @@ void TerrainAudioProcessor::rebuildShaperState (int inst)
 {
     inst = juce::jlimit (0, wc::kFlowInstances - 1, inst);
     auto st = std::make_shared<wc::ShaperState>();
-    // the defaults — what a fresh card draws: a 1/16 gate on Volume, unity on Time, a sine on Filter / Pan / Phaser,
-    // a flat half on Repeat (1/16 slices), a ramp on Drive, stairs on Crush
-    static const int kDefN[8] = { 33, 2, 3, 3, 2, 2, 3, 9 };
+    // the defaults — what a fresh card draws: a SINE on Volume / Filter / Pan / Phaser (tp79 — Max: "change the shape
+    // to a triangle or a sine wave, I don't want to see that gate, that gate looks very ugly whenever we first load
+    // it up"), unity on Time, a flat half on Repeat (1/16 slices), a ramp on Drive, stairs on Crush.
+    //
+    // ⚠️ tp79 — THE SINE HERE IS THE PAGE'S SINE9, NOT A SPIKE. The curve between two breakpoints is the exponential
+    //    bias() at line 1914, which cannot draw a cosine across three points, so the old seed
+    //    { (0,0,-0.6) (0.5,1,0.6) (1,0,0) } was exactly the spike tp77 replaced on the page — and this copy was
+    //    missed, so a state restored before the page pushed its own blob baked a spike where the editor draws a sine.
+    //    Nine points on the eighths, each segment's curve fitted to the cosine it covers: the page's SINE9, verbatim.
     auto seed = [&] (int ln, std::vector<float>& xs, std::vector<float>& ys, std::vector<float>& cs)
     {
         xs.clear(); ys.clear(); cs.clear();
         auto add = [&] (float x, float y, float c) { xs.push_back (x); ys.push_back (y); cs.push_back (c); };
+        auto addSine = [&]
+        {
+            static const float X[9] = { 0.0f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1.0f };
+            static const float Y[9] = { 0.0f, 0.1464f, 0.5f, 0.8536f, 1.0f, 0.8536f, 0.5f, 0.1464f, 0.0f };
+            static const float C[9] = { -0.252f, -0.041f, 0.041f, 0.252f, -0.252f, -0.041f, 0.041f, 0.252f, 0.0f };
+            for (int i = 0; i < 9; ++i) add (X[i], Y[i], C[i]);
+        };
         switch (ln)
         {
-            case 0:  for (int i = 0; i < 16; ++i) { const float x0 = i / 16.0f, x1 = (i + 1) / 16.0f; add (x0, (i & 1) ? 0.f : 1.f, 0); add (x1 - 0.0001f, (i & 1) ? 0.f : 1.f, 0); } add (1.f, 0.f, 0); break;
+            case 0: case 2: case 3: case 6: addSine(); break;
             case 1:  add (0, 0, 0); add (1, 1, 0); break;
-            case 2: case 3: case 6: add (0, 0, -0.6f); add (0.5f, 1, 0.6f); add (1, 0, 0); break;
             case 4:  add (0, 0.5f, 0); add (1, 0.5f, 0); break;
             case 5:  add (0, 0, 0); add (1, 1, 0); break;
             default: for (int i = 0; i < 8; ++i) { add (i / 8.0f, i / 7.0f, 0); add ((i + 1) / 8.0f - 0.0001f, i / 7.0f, 0); } add (1.f, 1.f, 0); break;
         }
-        juce::ignoreUnused (kDefN);
     };
     juce::var root = juce::JSON::parse (shaperJson_[inst]);
     const juce::var lanesV = root.isObject() ? root.getProperty ("lanes", juce::var()) : juce::var();
     if (root.isObject()) st->sense = juce::jlimit (0.0f, 1.0f, (float) (double) root.getProperty ("sense", 0.5));   // tp72 — the Audio trigger's sensitivity
+    // tp79 — THE CHAIN, out of the blob. slot[p] = the kind at position p. An older blob has no "slot" at all and
+    // keeps the identity, which is the tile order. sanitise() is the wall: this array indexes a switch on the audio
+    // thread, so anything that is not a permutation of 0..7 falls back to the identity rather than reaching it.
+    if (root.isObject())
+    {
+        const juce::var sv = root.getProperty ("slot", juce::var());
+        if (auto* arr = sv.getArray())
+            for (int q = 0; q < wc::kShaperLanes && q < arr->size(); ++q) st->slot[q] = (int) arr->getUnchecked (q);
+    }
+    wc::ShaperState::sanitise (st->slot);
     for (int ln = 0; ln < wc::kShaperLanes; ++ln)
     {
         wc::ShaperLane& L = st->lanes[ln];
