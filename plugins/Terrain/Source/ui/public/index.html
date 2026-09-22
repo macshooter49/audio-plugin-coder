@@ -37177,8 +37177,12 @@ restoreThemeFromBackend();
       /* tp80 — EIGHT POSITIONS, THIRTEEN KINDS: the chain is eight DISTINCT kinds out of the roster, not a
          permutation of all of them. An old list, a short one or a hand-edited one reads as the first eight. */
       var SLOTS=8;
-      function chainOf(S){ var a=String(S.v.slot||'').split(',').map(function(x){ return x|0; }), seen={}, ok=a.length===SLOTS;
-        for(var q=0;ok&&q<a.length;q++){ if(a[q]<0||a[q]>=LN.length||seen[a[q]]){ ok=false; break; } seen[a[q]]=1; }
+      /* tp83 — the chain is EIGHT PARAMETERS now (FLOW_CHOP_SLOT1..8), one per position, mirrored into S.v.slotk0..7
+         like every other parameter on this card. It used to be a comma string in the blob, which meant the host could
+         not automate the order and no offline harness could PLACE a kind — which is what left the borrowed effects
+         uncertifiable. Still proven distinct before anything indexes with it. */
+      function chainOf(S){ var a=[], seen={}, ok=true;
+        for(var q=0;q<SLOTS;q++){ var v=S.v['slotk'+q]|0; if(v<0||v>=LN.length||seen[v]){ ok=false; break; } seen[v]=1; a.push(v); }
         if(!ok){ a=[]; for(var w=0;w<SLOTS;w++) a.push(w); }
         return a; }
       var RATES=['1/16','1/8','1/4','1/2','1 bar','2 bars','4 bars','8 bars'], RATEB=[.25,.5,1,2,4,8,16,32], GRIDS=[2,3,4,6,8,12,16,24,32], LGRIDS=[1,2,3,4,6,8], TRIGS=['Sync','Free','Audio','MIDI'];
@@ -37256,7 +37260,8 @@ restoreThemeFromBackend();
         /* tp79 — THE CHAIN. `slot` is a comma list: the KIND at each position, first position first. It rides
            S.v, so TIC.presets / slotsChain (which snapshot JSON.stringify(S.v)) carry it with no extra work, and
            lanesJson() hands the same list to the processor. */
-        var init={ lane:0, tool:0, snap:1, lgrid:3, sense:.5, slot:'0,1,2,3,4,5,6,7' };
+        var init={ lane:0, tool:0, snap:1, lgrid:3, sense:.5 };
+        for(var sq=0;sq<SLOTS;sq++) init['slotk'+sq]=sq;   /* tp83 — the chain, one parameter a position */
         LN.forEach(function(l,i){ init['on'+i]=0; init['depth'+i]=1;   /* tp79 — Max: "please stop starting off with the volume on"; the FLOW_CHOP_*_ON parameters default false to match */ init['rate'+i]=4; init['mode'+i]=MODEDEF[l[0]]; init['trig'+i]=0;
           init['smooth'+i]=.2; init['phase'+i]=0; init['tension'+i]=.5; init['floor'+i]=0; init['blend'+i]=1; init['swing'+i]=0; init['grid'+i]=6;
           for(var q=0;q<6;q++) init['k'+q+'_'+i]=KDEF[l[0]][q];
@@ -37271,7 +37276,7 @@ restoreThemeFromBackend();
           feedbk:'Feedback', stereo:'Spread the two sides', bits:'How coarse the bits get', 'rate ':'How low the sample rate gets', on:'This lane runs', attack:'The rising edge', release:'The falling edge', mode:'', law:'', range:'' };
         var pushT=null, pushT2=null, touched=false, natSet=null, natGet=null;
         try{ if(window.Juce&&window.Juce.getNativeFunction){ natSet=window.Juce.getNativeFunction('setShaperJson'); natGet=window.Juce.getNativeFunction('getShaperJson'); } }catch(e){}
-        function lanesJson(){ var o={lanes:[],sense:S.v.sense,slot:chainOf(S)};   /* tp79 — the chain rides the blob with the breakpoints: drawn, not automated (wc::ShaperState::slot) */ LN.forEach(function(l,i){ var pts; try{ pts=JSON.parse(S.v['pts'+i]); }catch(e){ pts=stock(DEFSHAPE[l[0]]); }
+        function lanesJson(){ var o={lanes:[],sense:S.v.sense,slot:chainOf(S)};   /* tp83 — the chain is PARAMETERS now (FLOW_CHOP_SLOT1..8); this copy rides along only as the snapshot's fallback order */ LN.forEach(function(l,i){ var pts; try{ pts=JSON.parse(S.v['pts'+i]); }catch(e){ pts=stock(DEFSHAPE[l[0]]); }
           o.lanes.push({ pts:pts, smooth:S.v['smooth'+i], phase:S.v['phase'+i], tension:S.v['tension'+i], floor:S.v['floor'+i], blend:S.v['blend'+i], swing:S.v['swing'+i], grid:gridOf(i), k:[S.v['k0_'+i],S.v['k1_'+i],S.v['k2_'+i],S.v['k3_'+i],S.v['k4_'+i],S.v['k5_'+i]] }); });
           return JSON.stringify(o); }
         function pushNow(){ if(!natSet)return; try{ natSet(INST, lanesJson()); }catch(e){} }
@@ -37538,9 +37543,10 @@ restoreThemeFromBackend();
                positions with whatever is here (Max: "I just put it in second"), and one that is NOT down
                REPLACES what is here — which is how a Reverb gets into the chain at all. */
             var a=chainOf(S), at=a.indexOf(k); if(at===p)return; if(at>=0) a[at]=a[p]; a[p]=k;
-            S.set('slot',a.join(',')); S.set('lane',k); push(); paintBank(); paint(); } }); });
+            for(var q=0;q<SLOTS;q++) S.set('slotk'+q,a[q]);
+            S.set('lane',k); push(); paintBank(); paint(); } }); });
           rows.push({ isHeader:true, label:'Chain' });
-          rows.push({ label:'Reset order', white:true, onPick:function(){ S.set('slot','0,1,2,3,4,5,6,7'); push(); paintBank(); paint(); } });
+          rows.push({ label:'Reset order', white:true, onPick:function(){ for(var q=0;q<SLOTS;q++) S.set('slotk'+q,q); push(); paintBank(); paint(); } });
           window.__synShowMenu('', rows, e.clientX, e.clientY); }
         function paintBank(){ var i=lane(), c=chainOf(S);
           TIC.EA(fxEl.querySelectorAll('.fxb'),function(b,p){ var k=c[p];
@@ -37585,11 +37591,12 @@ restoreThemeFromBackend();
           if(k==='sense'){ push(); return; }
           /* tp79 — the chain changed (a pick, a preset recall, a snapshot restore): the tiles wear whichever kind
              now sits at each position, and the processor gets the new order. */
-          if(k==='slot'){ paintBank(); push(); paint(); return; }
+          if(/^slotk\d$/.test(k)){ paintBank(); push(); paint(); return; }
           if(/^(on|mode|rate)\d$/.test(k)){ paintBank(); paint(); return; } });
 
         /* ── the parameters: On / Depth / Rate / Mode / Trigger per lane, through the shim ── */
-        (function(){ var BIND={}; LN.forEach(function(l,i){ BIND['on'+i]=[PFX+LNP[i]+'_ON',1]; BIND['depth'+i]=[PFX+LNP[i]+'_DEPTH',0]; BIND['rate'+i]=[PFX+LNP[i]+'_RATE',RATES.length-1]; BIND['mode'+i]=[PFX+LNP[i]+'_MODE',MODESTEPS[l[0]]]; BIND['trig'+i]=[PFX+LNP[i]+'_TRIG',TRIGS.length-1]; });
+        (function(){ var BIND={}; for(var sq=0;sq<SLOTS;sq++) BIND['slotk'+sq]=[PFX+'SLOT'+(sq+1),LN.length-1];   /* tp83 — the chain's own parameters */
+          LN.forEach(function(l,i){ BIND['on'+i]=[PFX+LNP[i]+'_ON',1]; BIND['depth'+i]=[PFX+LNP[i]+'_DEPTH',0]; BIND['rate'+i]=[PFX+LNP[i]+'_RATE',RATES.length-1]; BIND['mode'+i]=[PFX+LNP[i]+'_MODE',MODESTEPS[l[0]]]; BIND['trig'+i]=[PFX+LNP[i]+'_TRIG',TRIGS.length-1]; });
           TIC.stampMod(sh.card,BIND,S);
           Object.keys(BIND).forEach(function(key){ var pid=BIND[key][0], steps=BIND[key][1], h=null;
             if(window.__synSliderShim) h=window.__synSliderShim(pid, steps?(S.v[key]/steps):S.v[key]); if(!h)return;

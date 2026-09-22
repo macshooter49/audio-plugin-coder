@@ -2074,6 +2074,7 @@ private:
     std::shared_ptr<wc::ShaperState> shaperState_[wc::kFlowInstances];    // the baked snapshot the audio thread reads
     struct ShpLaneRefs { std::atomic<float>* on = nullptr; std::atomic<float>* depth = nullptr; std::atomic<float>* rate = nullptr; std::atomic<float>* mode = nullptr; std::atomic<float>* trig = nullptr; };
     ShpLaneRefs                 shpRefs_[wc::kFlowInstances][wc::kShaperLanes] {};
+    std::atomic<float>*         shpSlotRefs_[wc::kFlowInstances][wc::kShaperSlots] {};   // tp83 — the chain's own eight parameters
     // ══ tp72 — THE ROSTERS LENT TO THE LANES. Max: "ladder filter, acid 303 … we can also choose all of our distortions".
     //    The Filter / Phaser / Crush lanes borrow the rack's FilterFxEngine (the 118-engine roster, the fb642 lift law, the
     //    swap dip), the Drive / Crush lanes the rack's DistortionEngine (23 types, 2× oversampled). Engines are ARMED

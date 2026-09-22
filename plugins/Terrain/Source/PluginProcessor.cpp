@@ -7381,6 +7381,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_MODE", 1 },  nm + " Mode",  kModes[ln], kModeDef[ln]));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_TRIG", 1 },  nm + " Trigger", trigs, 0));
         }
+        /* tp83 — THE CHAIN, AS EIGHT PARAMETERS. Which kind occupies each position used to live only in the
+           shaperJson blob, so the host could not automate the order and — the reason this moved — no offline
+           harness could PLACE a kind, which left every borrowed effect uncertifiable by measurement. Eight
+           choices, one per position, each listing all seventeen kinds; the default is the tile order. */
+        juce::StringArray slotNames; for (int q = 0; q < wc::kShaperLanes; ++q) slotNames.add (kLnN[q]);
+        for (int sl = 0; sl < wc::kShaperSlots; ++sl)
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                juce::ParameterID { juce::String ("FLOW_CHOP_SLOT") + juce::String (sl + 1), 1 },
+                juce::String ("Shaper Slot ") + juce::String (sl + 1), slotNames, sl));
     }
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.6111f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);   // fb115: grid default = 1/16 (TIME IS TRUTHFUL)
     addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);  // VARY = fire CHANCE; 0 = never fires (silent), 0.5 = glitches out of the box
@@ -15795,6 +15804,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (R.on == nullptr) continue;
             sh.setLaneCtl (ln, R.on->load() > 0.5f, juce::jlimit (0.0f, 1.0f, R.depth->load()), (int) R.rate->load(), (int) R.mode->load(), R.trig != nullptr ? (int) R.trig->load() : 0);
         }
+        /* tp83 — and the chain itself, from its own eight parameters */
+        { int sl[wc::kShaperSlots]; bool any = false;
+          for (int q = 0; q < wc::kShaperSlots; ++q)
+          { auto* sp = shpSlotRefs_[inst][q]; sl[q] = sp != nullptr ? (int) sp->load() : q; if (sp != nullptr) any = true; }
+          if (any) sh.setSlots (sl); }
         if (flowNoteAt >= 0) sh.noteOn (flowNoteAt);   // tp72 — the MIDI trigger restarts at the note's own sample
         float* cl = flowStageL;   // tp30 — this card's own capture bus (the whole master when every pill is on)
         float* cr = flowStageR;
@@ -17667,6 +17681,8 @@ void TerrainAudioProcessor::cacheShaperRefs()
             R.on = apvts.getRawParameterValue (id + "_ON"); R.depth = apvts.getRawParameterValue (id + "_DEPTH");
             R.rate = apvts.getRawParameterValue (id + "_RATE"); R.mode = apvts.getRawParameterValue (id + "_MODE"); R.trig = apvts.getRawParameterValue (id + "_TRIG");
         }
+        for (int q = 0; q < wc::kShaperSlots; ++q)
+            shpSlotRefs_[i][q] = apvts.getRawParameterValue (pre + "SLOT" + juce::String (q + 1));   // tp83 — the chain's parameters
     }
 }
 

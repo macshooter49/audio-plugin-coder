@@ -539,20 +539,28 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
     && new Set(q35.slotAfter).size===8,
     '[35] 🚨 right-clicking a tile offers the eight lanes; picking one SWAPS the two positions, every other position holds, and the new chain reaches the processor in setShaperJson\'s slot list (still a permutation)', JSON.stringify(q35).slice(0,600));
 
- // ── [36] the chain is state like any other: it survives a snapshot round trip, and a list that is not
- //        a permutation reads as the tile order rather than indexing anything. ──
+ // ── [36] tp83 — THE CHAIN IS EIGHT PARAMETERS NOW (FLOW_CHOP_SLOT1..8), one per position, mirrored into
+ //        the card's state like every other parameter. It used to be a comma string in the blob, which meant the
+ //        host could not automate the order and no offline harness could PLACE a kind — which is exactly what
+ //        left the borrowed effects uncertifiable. A list that is not eight distinct kinds still reads as the
+ //        tile order rather than indexing anything. ──
  const q36=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext.open');
    const S=window.__tiDice.chop.S;
    const kinds=()=>[...card.querySelectorAll('.fx .fxb')].map(e=>+e.getAttribute('data-l'));
    const snap=JSON.stringify(S.v);                       // what a preset stores
    const live=kinds().join(',');
-   S.set('slot','0,0,1,2,3,4,5,6'); await new Promise(r=>setTimeout(r,250)); const dup=kinds().join(',');
-   S.set('slot','99,1,2,3,4,5,6,7'); await new Promise(r=>setTimeout(r,250)); const over=kinds().join(',');   /* tp80 — 9 is Delay now; out of range means past the ROSTER */
-   S.set('slot','');                await new Promise(r=>setTimeout(r,250)); const empty=kinds().join(',');
+   const carried=[0,1,2,3,4,5,6,7].every(q=>('slotk'+q) in JSON.parse(snap));
+   const param=!!(window.__params && ('FLOW_CHOP_SLOT1' in window.__params));
+   S.set('slotk1',S.v.slotk0); await new Promise(r=>setTimeout(r,250)); const dup=kinds().join(',');   // the same kind twice
+   /* ⚠️ a position can no longer HOLD an out-of-range kind: the parameter clamps it to the roster's last one
+      before the chain ever sees it. So what this proves is that the clamp leaves the chain valid — eight
+      distinct kinds, all in range — not that the fallback fires, because nothing can make it fire from here. */
+   S.set('slotk1',99);         await new Promise(r=>setTimeout(r,250)); const over=kinds();
    const o=JSON.parse(snap); for(const k in o) S.set(k,o[k]); await new Promise(r=>setTimeout(r,300));
-   return { live, restored:kinds().join(','), dup, over, empty, carried:'slot' in o }; });
- ok(q36.carried && q36.restored===q36.live && q36.dup==='0,1,2,3,4,5,6,7' && q36.over==='0,1,2,3,4,5,6,7' && q36.empty==='0,1,2,3,4,5,6,7',
-    '[36] the chain rides the card\'s state (so presets and snapshots carry it) and a duplicate, an out-of-range or an empty list all read as the tile order', JSON.stringify(q36));
+   return { live, restored:kinds().join(','), dup, over, carried, param }; });
+ const okOver = Array.isArray(q36.over) && q36.over.length===8 && new Set(q36.over).size===8 && q36.over.every(v=>v>=0&&v<17);
+ ok(q36.carried && q36.restored===q36.live && q36.dup==='0,1,2,3,4,5,6,7' && okOver,
+    '[36] the chain is eight parameters the card mirrors (so presets and the host both carry it); a duplicated position reads as the tile order, and an out-of-range one is clamped to a real kind before the chain sees it', JSON.stringify(q36));
 
  // ── [37] tp79 — the boot Max asked for: nothing lit, and the shape is a sine, not that gate ──
  const q37=await p.evaluate(()=>{ const card=document.querySelector('.ti-card.shp-ext');

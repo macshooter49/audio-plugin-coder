@@ -221,6 +221,13 @@ public:
     /** Message thread: publish a new state snapshot (the audio thread swaps to it at the next block). */
     void setState (std::shared_ptr<const ShaperState> s) { stateOwner_[(stateSeq_++) & 1] = s; state_.store (s.get(), std::memory_order_release); }
 
+    /** tp83 — THE CHAIN IS PARAMETERS NOW. It used to travel only in the shaperJson blob, which meant the host
+        could not automate it and — the reason this moved — no offline harness could PLACE a kind, so none of the
+        borrowed effects could be certified by ear-equivalent measurement. Eight choice parameters, pushed here
+        every block exactly as the lane controls are. Until something pushes, the snapshot's own order stands. */
+    void setSlots (const int* s) noexcept
+    { for (int q = 0; q < kShaperSlots; ++q) slotCtl_[q] = s[q]; ShaperState::sanitise (slotCtl_); slotSet_ = true; }
+
     /** Audio thread, per block: the lane's parameters (On / Depth / Rate / Mode) override the snapshot's. */
     void setLaneCtl (int lane, bool on, float depth, int rate, int mode, int trig = 0) noexcept
     { /* ⚠️ tp80 — THIS WAS `ctl_[lane & 7]`. The mask was sized to the eight lanes that existed when it was
@@ -291,7 +298,8 @@ public:
         const bool anyRing = (TL.on || RP.on) && ring != nullptr;
         // tp79 — the chain, read once per block: which kind sits at each position. Sanitised on the way in, so
         // the per-sample switch can never be handed an index it cannot answer.
-        int slot[kShaperSlots]; for (int q = 0; q < kShaperSlots; ++q) slot[q] = S0->slot[q];
+        int slot[kShaperSlots];
+        for (int q = 0; q < kShaperSlots; ++q) slot[q] = slotSet_ ? slotCtl_[q] : S0->slot[q];
         ShaperState::sanitise (slot);
         // filter coefficients per block (the cutoff moves per sample, but the type / resonance per block)
         const float res = 1.0f - 0.95f * FL.L->k[0], kres = 2.0f * res;
@@ -796,6 +804,7 @@ private:
     struct LaneView { const ShaperLane* L = nullptr; bool on = false; float depth = 1.0f; int rate = kShaperRateDefault, mode = 0, trig = 0; };
     struct Ctl { bool set = false, on = false; float depth = 1.0f; int rate = kShaperRateDefault, mode = 0, trig = 0; };
     LaneView view_[kShaperLanes]; Ctl ctl_[kShaperLanes];
+    int slotCtl_[kShaperSlots] = { 0, 1, 2, 3, 4, 5, 6, 7 }; bool slotSet_ = false;   // tp83 — the chain, from its parameters
     double sr_ = 48000.0;
     std::atomic<const ShaperState*> state_ { nullptr };
     std::shared_ptr<const ShaperState> stateOwner_[2]; unsigned stateSeq_ = 0;

@@ -1,7 +1,38 @@
 # TERRAIN — STATE FOR OPUS
 
-**HEAD = tp82** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
+**HEAD = tp83** (see `git log -1`), pushed to `feature/terrain-instrument`, `windows-test` and `main`.
 Both Mac formats rebuilt from this tree and installed. Release target: **2026-10-10**.
+
+## tp83 (2026-09-21) — THE CHAIN IS PARAMETERS · THE NINE BORROWED EFFECTS ARE SOUND-CERTIFIED
+**The unblock:** the chain lived only in the shaperJson blob, so the host could not automate the order and no
+harness could PLACE a kind — which is what left every borrowed effect uncertifiable. Eight choice parameters now
+(`FLOW_CHOP_SLOT1..8`, all seventeen kinds each), pushed to the DSP per block, mirrored into the card's state,
+cloned to instances 2..4 by the existing `FLOW_CHOP_` tap.
+
+**`Tests/au_shaper_fx.cpp` (13/13)** — each lane against the same render with the lane dark, as a MAGNITUDE-spectrum
+change over a log Goertzel bank (magnitude, not samples: the fb283 trap), then the same measurement in the shape's
+TROUGH against its PEAK, because always-on is not a Shaper lane.
+Reverb 14.7 dB · Delay 10.7 · Chorus 8.9 · Widen 8.9 · Granular 23.6 · Bode 46.1, each moving more at the peak.
+
+🚨 **THE BATTERY FOUND ITS OWN BLIND SPOT.** Multiband and Tape failed the generic bar (0.1 dB / −1.1 dB) and
+NEITHER was broken. A band TILT is invisible to a magnitude metric — tilted one way and tilted the other are both
+"changed" by the same amount — and Tape's claim is the harmonics it ADDS, not its level. By their own signature:
+**Multiband 1.90× high-against-low trough→peak, Tape 0.034 → 0.235 THD.** ⚠️ The metric must be the one the CLAIM
+is about, or it fails working code and passes broken code with equal confidence.
+
+Named signatures: Bode moves 19.9 dB off a held C4's own frequency · Widen side-against-mid 0.0000 → 0.3984 ·
+**Noise sounds with nothing playing** (−240 → −15.3 dBFS), the only lane that adds signal.
+
+`au_shaper_fx.cpp` 13/13, `au_shaper_lock.cpp` 9/9, `FlowShaper_test.cpp` 36/36, `TerrainNoise_test.cpp` 15/15,
+`_tp77_gate.js` 33/33.
+
+⚠️ **OWED.** (1) **THE NOISE LANE'S BROWSER** — Max: "noise needs to have the browser of all 200+ sounds we have."
+The library and its two-pane browser already exist for the synth's noise module (`listNoiseImports` / factory list,
+index.html:41082; `tw::SampleBuffer noiseSampleBuffer_`; `SynthVoice::setNoiseSampleSource`). The Shaper's lane needs
+its OWN buffer + selection + the looping reader, then the browser on its type chip. (2) The battery's remaining
+half: every target swept end to end, every type distinct, a click check on a send opening, Delay / Bode bounded at
+full feedback. (3) Taste is not certified and cannot be — that is Max's ear. (4) Time against ShaperBox 3 beyond the
+pitch law.
 
 ## tp82 (2026-09-21) — THE NOISE LANE · THE ROSTER IS CLOSED
 Max: "it should just be like ShaperBox's noise engine, nothing too complicated … we already have a whole bunch of
