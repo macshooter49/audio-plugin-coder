@@ -256,7 +256,7 @@ public:
         phL_.assign (6, AP{}); phR_.assign (6, AP{});
         smooth_.fill (0.0f); tsPos_ = 0.0; tsOld_ = 0.0; tsLastBehind_ = 0.0; stepping_ = false; tsXf_ = 0; tsXfN_ = 1; holdN_ = 0;
         repHold_ = false; repLen_ = 0; repPos_ = 0; repStartW_ = 0; repRead_ = 0.0; repLastP_ = 0.0; tsSlew_ = -1.0;
-        ringW_ = 0; ringFilled_ = 0; soundAge_ = 0; silentRun_ = 0; tsRatio_ = 1.0; tsPrevBehind_ = -1.0;
+        ringW_ = 0; ringFilled_ = 0; soundAge_ = 0; silentRun_ = 0; tsRatio_ = 1.0; tsPrevBehind_ = -1.0; tsRate_ = 1.0;
         blInit();   // tp88 — the band-limit table, built off the audio thread
         for (auto& f : freePh_) f = 0.0; envFast_ = envSlow_ = 0.0f; refr_ = 0; noteAt_ = -1;
         for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f; volPrev_ = 1.0f; punchEnv_ = 0.0f; punchRefr_ = 0; fltPrev_ = 0.0f; fltPunch_ = 0.0f; fltRefr_ = 0;
@@ -308,6 +308,25 @@ public:
         smooth_[ln] = v + (smooth_[ln] - v) * a; return smooth_[ln];
     }
     // ── the shape reader: a lane's shape at a phase, with its phase offset, swing and tension ──
+    /* 🚨 tp95 — THE TIME LANE'S READ HEAD WAS JITTERING, AND JITTER IS THE "BITCRUSH". Max: "time depth at 100%
+       still has that weird bitcrushed sound when there's ramps." The offset is shape × cycle × Range × Depth, and
+       the shape came back as a 32-bit float: at a 4-bar cycle that multiplies its last-digit rounding by up to
+       384 000 samples — ~0.01 of a sample of RANDOM read-head motion every sample. Read-head jitter is phase
+       noise: MEASURED −47 dB of grit under a 5 kHz tone on a 4-bar ramp, −67 dB on a 1-beat one (the cycle
+       length was the tell), and it scaled with Depth, which is why 100 sounded crushed and 50 cleaner. The
+       Time lane reads its shape here in DOUBLE, end to end; every other lane keeps the float read below. */
+    static double readShapeD (const ShaperLane& L, double ph) noexcept
+    {
+        ph -= std::floor (ph);
+        if (L.swing > 0.0f) { const double s = L.swing * 0.45; ph = ph < 0.5 ? ph * (1.0 + s) : 0.5 * (1.0 + s) + (ph - 0.5) * (1.0 - s); }
+        double ph2 = ph + (double) L.phase; ph2 -= std::floor (ph2);
+        const double x = ph2 * kShaperT; int i = (int) x; if (i > kShaperT - 1) i = kShaperT - 1; const double f = x - i;
+        double v = (double) L.table[i] + ((double) L.table[i + 1] - (double) L.table[i]) * f;
+        const double tn = L.tension;
+        if (tn < 0.5)      v = std::pow (v, 1.0 + (0.5 - tn) * 3.0);
+        else if (tn > 0.5) v = 1.0 - std::pow (1.0 - v, 1.0 + (tn - 0.5) * 3.0);
+        return v < (double) L.floor_ ? (double) L.floor_ : v;
+    }
     static float readShape (const ShaperLane& L, double ph) noexcept
     {
         ph -= std::floor (ph);
@@ -429,8 +448,8 @@ public:
                 {
                     const double cyc = kShaperRateBeats[TL.rate & 7];
                     const double p = lanePhase (TL, 1, beat);
-                    const float s = readShape (*TL.L, p);
-                    const float rangeMul = (TL.mode == 1 ? 0.5f : TL.mode == 2 ? 2.0f : 1.0f) * std::pow (4.0f, (TL.L->k[2] - 0.5f) * 2.0f);   // Range: the step × the knob (k2: ¼ … ×4, 0.5 = ×1)
+                    const double s = readShapeD (*TL.L, p);   // tp95 — double: see readShapeD
+                    const double rangeMul = (TL.mode == 1 ? 0.5 : TL.mode == 2 ? 2.0 : 1.0) * std::pow (4.0, ((double) TL.L->k[2] - 0.5) * 2.0);   // Range: the step × the knob (k2: ¼ … ×4, 0.5 = ×1)
                     /* 🚨 tp86 — THE SHAPE IS THE TIME OFFSET, NOT AN ABSOLUTE POSITION IN THE CYCLE.
                        ShaperBox 3's TimeShaper (and Gross Beat) read the vertical as HOW FAR BACK FROM NOW: the
                        top line is the present, so a FLAT line plays NORMALLY, a line falling at the grey
@@ -447,7 +466,7 @@ public:
                        200% riser was not expressible at all. One re-anchoring caused both.
                        MEASURED AFTER: flat at the top 1.000× with no lag · flat at half 1.000× held a constant
                        half-cycle behind · rising 0→1 a sustained **2.000×** · falling at the guideline 0.000×. */
-                    double behind = (double) (1.0f - s) * cyc * rangeMul * (double) TL.depth;   // 1 = now · 0 = a full Range ago
+                    double behind = (1.0 - s) * cyc * rangeMul * (double) TL.depth;   // 1 = now · 0 = a full Range ago
                     if (behind < 0.0) behind = 0.0;                                             // the future is still unreadable
                     double behindF = behind * fpb;
                     /* tp87 — the wall is whichever is smaller: what the ring HOLDS, and what of it is the
@@ -502,8 +521,8 @@ public:
                             stepping_ = true; tsOld_ = tsPos_ + 1.0;
                             tsXfN_ = std::max (48, (int) (sr_ * 0.001 * (0.5 + TL.L->k[0] * 4.5))); tsXf_ = tsXfN_;
                             double p2 = p + 1.5 / kShaperT; p2 -= std::floor (p2);
-                            const float s2 = readShape (*TL.L, p2);
-                            double bt = (double) (1.0f - s2) * cyc * rangeMul * (double) TL.depth; if (bt < 0.0) bt = 0.0;   // tp86 — the same offset model, or the jump lands somewhere else
+                            const double s2 = readShapeD (*TL.L, p2);
+                            double bt = (1.0 - s2) * cyc * rangeMul * (double) TL.depth; if (bt < 0.0) bt = 0.0;   // tp86 — the same offset model, or the jump lands somewhere else
                             stepTarget_ = (bt * fpb > maxB) ? 0.0 : bt * fpb;   // tp86 — the same rule for the jump's target: live, never frozen at the edge
                         }
                         behindF = stepTarget_;
@@ -526,19 +545,27 @@ public:
                       if (std::fabs (dRate) <= 4.0)
                       { const double r = std::fabs (1.0 - dRate);
                         const double want = r < 1.0 ? 1.0 : (r > 8.0 ? 8.0 : r);
-                        tsRatio_ += (want - tsRatio_) * 0.01; } }
+                        tsRatio_ += (want - tsRatio_) * 0.01;
+                        tsRate_  += ((r > 8.0 ? 8.0 : r) - tsRate_) * 0.01; } }   // tp95 — the same rate, NOT clamped at unity
+                    /* tp95 — AND BELOW UNITY THE READ UPSAMPLES, which leaves IMAGES. tp88 band-limited only the fast side;
+                       a slowing ramp (a tape stop, a half-speed fall) went through the cubic, whose images fold back
+                       inharmonic: MEASURED −49 dB at 0.25x and −54 dB at 0.5x under a 5 kHz tone. The same windowed sinc
+                       at a hair past unity (cutoff ~21.8 kHz) is an interpolator that rejects them. Within ±2 % of normal
+                       speed the cubic stays: there is nothing to fold, and it costs a fifth as much. */
+                    const bool slowBL = tsRate_ < 0.98;
+                    const double blR = slowBL ? 1.1 : tsRatio_;
                     const double pos = (double) ringW_ - behindF;
                     float tl, tr;
-                    if (tsRatio_ > 1.02)   // above unity the read DECIMATES, so it has to be band-limited
-                    { tl = rdBL (ring->L, ring->n, behindF, ringW_, tsRatio_, maxB);
-                      tr = rdBL (ring->R, ring->n, behindF, ringW_, tsRatio_, maxB); }
+                    if (tsRatio_ > 1.02 || slowBL)   // above unity the read DECIMATES and below it UPSAMPLES: both are band-limited
+                    { tl = rdBL (ring->L, ring->n, behindF, ringW_, blR, maxB);
+                      tr = rdBL (ring->R, ring->n, behindF, ringW_, blR, maxB); }
                     else
                     { tl = rd (ring->L, ring->n, pos, ringW_); tr = rd (ring->R, ring->n, pos, ringW_); }
                     if (tsXf_ > 0)
                     { const float w = (float) tsXf_ / (float) tsXfN_;
                       const double obh = (double) ringW_ - tsOld_;
-                      const float ol = (tsRatio_ > 1.02) ? rdBL (ring->L, ring->n, obh, ringW_, tsRatio_, maxB) : rd (ring->L, ring->n, tsOld_, ringW_);
-                      const float orr = (tsRatio_ > 1.02) ? rdBL (ring->R, ring->n, obh, ringW_, tsRatio_, maxB) : rd (ring->R, ring->n, tsOld_, ringW_);
+                      const float ol = (tsRatio_ > 1.02 || slowBL) ? rdBL (ring->L, ring->n, obh, ringW_, blR, maxB) : rd (ring->L, ring->n, tsOld_, ringW_);
+                      const float orr = (tsRatio_ > 1.02 || slowBL) ? rdBL (ring->R, ring->n, obh, ringW_, blR, maxB) : rd (ring->R, ring->n, tsOld_, ringW_);
                       tl = tl * (1 - w) + ol * w; tr = tr * (1 - w) + orr * w; tsOld_ += 1.0; --tsXf_; }
                     /* tp81 — TONE (k3), the Time lane's fourth target: a one-pole on what the head reads. Below
                        0.5 it darkens the repeat, above it lifts the top back out. 0.5 is exactly flat. */
@@ -555,7 +582,7 @@ public:
                     }
                     tsPos_ = pos;
                     l = l + (tl - l) * TL.L->blend; r = r + (tr - r) * TL.L->blend;
-                    vizPh_[1] = (float) p; vizV_[1] = s;
+                    vizPh_[1] = (float) p; vizV_[1] = (float) s;
                 }
             };
             auto applyRepeat = [&] ()
@@ -1052,6 +1079,7 @@ private:
     int ringW_ = 0, ringFilled_ = 0;
     int soundAge_ = 0, silentRun_ = 0;   // tp87 — how much of the ring is the sound that is playing now
     double tsRatio_ = 1.0, tsPrevBehind_ = -1.0;   // tp88 — the playback rate the band-limit follows
+    double tsRate_ = 1.0;                          // tp95 — the same rate, unclamped, so a SLOW read is band-limited too
     Ch ch_[2]; std::vector<AP> phL_, phR_;
     std::array<float, kShaperLanes> smooth_ {};
     double tsPos_ = 0, tsOld_ = 0, tsLastBehind_ = 0, stepTarget_ = 0, tsPrevTgt_ = -1.0; int tsXf_ = 0, tsXfN_ = 1; bool stepping_ = false;

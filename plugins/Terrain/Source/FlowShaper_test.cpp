@@ -778,6 +778,38 @@ int main()
                 wet - dry);
             check (std::fabs (wet - dry) < 3.0, buf);
         }
+        // ── T38 🚨 A RAMP AT FULL DEPTH IS CLEAN — NO JITTER, NO IMAGES ──
+        {
+            /* tp95 — Max: "time depth at 100% still has that weird bitcrushed sound when there's ramps." Two causes, both
+               measured with a 5 kHz tone and everything NOT at the expected pitch counted as dirt:
+                 1. the shape was read as a 32-bit float and multiplied by up to 384 000 samples, so its rounding became
+                    ~0.01 of a sample of random read-head motion — phase noise: −47 dB on a 4-bar 2x ramp (−67 at 1 beat);
+                 2. a SLOWING ramp upsampled through the cubic and its images folded back: −49 dB at 0.25x.
+               Now the Time lane reads its shape in double and band-limits both directions: ≥ 82 dB everywhere. */
+            static float slope = 0.0f;
+            auto dirtDb = [&] (float a) -> double
+            { slope = a;
+              FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+              auto& T = st->lanes[1]; T.on = true; T.depth = 1; T.blend = 1; T.rate = 6;   // a 4-bar cycle
+              T.k[0] = 0.3f; T.k[1] = 0.0f; T.k[2] = 0.5f; T.k[3] = 0.5f;
+              T.fill ([] (double p) { return slope >= 0 ? (float) (slope * p) : (float) std::min (1.0, std::max (0.0, 1.0 + slope * p)); });
+              g.setState (st);
+              const int N = (int) (SR * 20.0); std::vector<float> L ((size_t) N), R ((size_t) N);
+              for (int i = 0; i < N; ++i) L[(size_t) i] = R[(size_t) i] = (float) (0.3 * std::sin (2.0 * M_PI * 5000.0 * i / SR));
+              int done = 0; double ppq = 0.0;
+              while (done < N) { const int n = std::min (512, N - done); g.process (L.data() + done, R.data() + done, n, ppq, BPM, true, 1.0f); ppq += n / FPB; done += n; }
+              const size_t A = (size_t) (SR * 16.8), W = 16384; const double want = 5000.0 * (1.0 + a);
+              auto e = [&] (double f) { const double w = 2.0 * M_PI * f / SR, c = 2.0 * std::cos (w); double s1 = 0, s2 = 0;
+                  for (size_t i = 0; i < W; ++i) { const double h = 0.5 - 0.5 * std::cos (2.0 * M_PI * i / (W - 1)); const double s0 = L[A + i] * h + c * s1 - s2; s2 = s1; s1 = s0; }
+                  return s1 * s1 + s2 * s2 - c * s1 * s2; };
+              double in = 0, out = 0; for (double f = 40; f < 22000; f += SR / W) { const double v = e (f); if (std::fabs (f - want) < 60) in += v; else out += v; }
+              return 10.0 * std::log10 (in / (out + 1e-30)); };
+            const double fast = dirtDb (1.0f), slow = dirtDb (-0.75f);
+            char buf[300]; std::snprintf (buf, sizeof buf,
+                "T38 A RAMP AT FULL DEPTH IS CLEAN: a 4-bar ramp at 2x keeps its grit %.1f dB under the tone (was 47: float read-head jitter), a 0.25x slow-down %.1f dB (was 49: cubic images)",
+                fast, slow);
+            check (fast > 75.0 && slow > 75.0, buf);
+        }
         // ── T33 FADE CLOSES THE SEAM AT A STEP ──
         {
             //  a stutter in this model is a DESCENDING STAIRCASE: each tread is flat (normal speed) and each
