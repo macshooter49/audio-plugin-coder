@@ -259,7 +259,7 @@ public:
         ringW_ = 0; ringFilled_ = 0; soundAge_ = 0; silentRun_ = 0; tsRatio_ = 1.0; tsPrevBehind_ = -1.0;
         blInit();   // tp88 — the band-limit table, built off the audio thread
         for (auto& f : freePh_) f = 0.0; envFast_ = envSlow_ = 0.0f; refr_ = 0; noteAt_ = -1;
-        for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f; volPrev_ = 1.0f; punchEnv_ = 0.0f; punchRefr_ = 0;
+        for (auto& c : crushLp_) c = 0.0f; for (auto& b : bassLp_) b = 0.0f; volEnv_ = 1.0f; volPrev_ = 1.0f; punchEnv_ = 0.0f; punchRefr_ = 0; fltPrev_ = 0.0f; fltPunch_ = 0.0f; fltRefr_ = 0;
         for (auto& h : haasL_) h = 0.0f; for (auto& h : haasR_) h = 0.0f; haasW_ = 0;
     }
     /** The processor lends the rack's engines (may be null: every lane then runs its built-in). Set once, before processing. */
@@ -712,7 +712,16 @@ public:
                 {
                     const double p = lanePhase (FL, 2, beat);
                     const float s = smoothed (2, readShape (*FL.L, p), FL.L->smooth);
-                    const float cut01 = 1.0f - 0.9f * FL.depth * (1.0f - s);   // 20·1000^cut01 Hz: 1 = 20 kHz, 0.1 = 40 Hz
+                    float cut01 = 1.0f - 0.9f * FL.depth * (1.0f - s);   // 20·1000^cut01 Hz: 1 = 20 kHz, 0.1 = 40 Hz
+                    /* tp92 — PUNCH (k5) WAS DEAD. It reached the engine as FilterFxEngine::Params::punch, a BOOL that turns
+                       its envelope follower into a transient detector — and this lane runs that follower at zero depth,
+                       so 0.03 and 0.97 were the same nothing (the plugin sweep read it at its own noise floor). Now it is
+                       what the Volume lane's Punch is: every OPENING of the drawn cutoff overshoots, up to +2.5 octaves,
+                       and decays in 12 ms — the spit on a filter gate's attack. */
+                    fltPrev_ += (s - fltPrev_) * (1.0f - std::exp (-1.0f / ((float) sr_ * 0.005f)));
+                    if (fltRefr_ > 0) --fltRefr_; else if (s - fltPrev_ > 0.15f) { fltPunch_ = 1.0f; fltRefr_ = (int) (sr_ * 0.02); }
+                    if (FL.L->k[5] > 0.01f) { fltPunch_ *= std::exp (-1.0f / ((float) sr_ * 0.012f)); cut01 = std::min (1.0f, cut01 + 0.25f * FL.L->k[5] * fltPunch_); }
+                    else fltPunch_ = 0.0f;
                     float wl = l, wr = r;
                     if (! (ext != nullptr && ext->filter (0, FL.mode, cut01, FL.L->k[0], FL.L->k[1], FL.L->k[2], (int) (FL.L->k[3] * 5.99f), FL.L->k[4], FL.L->k[5], wl, wr)))
                     {
@@ -755,13 +764,20 @@ public:
                     const double p = lanePhase (PH, 6, beat);
                     const float s = smoothed (6, readShape (*PH.L, p), PH.L->smooth);
                     const float fb = 0.2f + 0.72f * PH.L->k[0], st = PH.L->k[1] * 0.5f;
-                    const float dms = 0.3f + 7.7f * s * PH.depth;
+                    /* tp92 — CENTRE (k3) WAS DEAD ON THIS TYPE: the built-in flanger never read it. It scales where the sweep
+                       sits, ×0.7 .. ×5, and at its rest (0.2) the factor is exactly 1 — every saved patch sounds as it did.
+                       Held under 36 ms so the ×1.15 stereo stretch stays inside the 2048-sample line. */
+                    const float dms = std::min (36.0f, (0.3f + 7.7f * s * PH.depth) * std::exp2 ((PH.L->k[3] - 0.2f) * 3.0f));
                     for (int c = 0; c < 2; ++c)
                     {
                         float* D = c ? flR_ : flL_; const float dsm = dms * (c ? (1.0f + st * 0.3f) : (1.0f - st * 0.3f));
                         const float rp = (float) flW_ - dsm * (float) sr_ * 0.001f; const int i0 = (int) std::floor (rp); const float f = rp - (float) i0;
                         const float w = D[(i0 + 4096) & 2047] * (1 - f) + D[(i0 + 1 + 4096) & 2047] * f;
-                        const float x = c ? r : l; D[flW_ & 2047] = x + w * fb;
+                        const float x = c ? r : l;
+                        /* tp92 — DRIVE (k2) WAS DEAD ON THE TWO BUILT-INS: only the roster types were handed it. The Filter
+                           lane's own built-in drive, recycled: the saturation goes INTO the line, so the regeneration growls. */
+                        const float xd = PH.L->k[2] > 0.0f ? std::tanh (x * (1.0f + 6.0f * PH.L->k[2])) / (1.0f + PH.L->k[2]) : x;
+                        D[flW_ & 2047] = xd + w * fb;
                         /* tp89 — and the built-in flanger was the same unscaled sum (+7.03 dB, 1.99x peak). */
                         const float mx = PH.L->blend;
                         const float gN = kPhMakeup / (1.0f + mx);
@@ -783,7 +799,9 @@ public:
                     {
                         auto& A = c ? phR_ : phL_; const float fcc = fc * (c ? (1.0f + st) : (1.0f - st));
                         const float t = std::tan (3.14159265f * std::min (fcc, (float) sr_ * 0.45f) / (float) sr_), gg = (1.0f - t) / (1.0f + t);
-                        const float x = (c ? r : l) + ch_[c].phfb * fb * 0.6f; float y = x;
+                        float x = (c ? r : l) + ch_[c].phfb * fb * 0.6f;
+                        if (PH.L->k[2] > 0.0f) x = std::tanh (x * (1.0f + 6.0f * PH.L->k[2])) / (1.0f + PH.L->k[2]);   // tp92 — Drive, as above
+                        float y = x;
                         for (int q = 0; q < 6; ++q) { AP& st2 = A[(size_t) q]; const float o = -gg * y + st2.x1 + gg * st2.y1; st2.x1 = y; st2.y1 = o; y = o; }
                         ch_[c].phfb = y;
                         /* 🚨 tp89 — A PHASER IS DRY PLUS ALLPASS, AND SUMMING THEM AT FULL LEVEL APPROACHES 2x.
@@ -877,7 +895,13 @@ public:
                     }
                     else { volHoldV_ = gRaw; volHoldN_ = 0; }
                     const float base = 0.2f + 250.0f * VL.L->smooth * VL.L->smooth;
-                    const float ms = base * (0.1f + 1.9f * (gRaw > smooth_[0] ? VL.L->k[0] : VL.L->k[1]));
+                    /* tp92 — ATTACK / RELEASE HAD NO TOP. Both were a multiple of the lane's Smooth, so at its rest (0.2)
+                       the whole knob spanned ~1-19 ms and at a sharp Smooth under a millisecond: the offline sweep read
+                       Attack 0.16 dB and Release 0.30 dB of envelope, end to end, on a 1/16 gate. The upper half now opens
+                       to +400 ms — a real swell, a real tail. Below the middle, and at the rest point, nothing moved. */
+                    const float kt = gRaw > smooth_[0] ? VL.L->k[0] : VL.L->k[1];
+                    const float up = kt > 0.5f ? (kt - 0.5f) * 2.0f : 0.0f;
+                    const float ms = base * (0.1f + 1.9f * kt) + 400.0f * up * up;
                     const float a = std::exp (-1.0f / ((float) sr_ * ms * 0.001f));
                     smooth_[0] = gRaw + (smooth_[0] - gRaw) * a; float g = 1.0f + (smooth_[0] - 1.0f) * VL.L->blend;
                     // tp74 — Punch (k2): every opening of the gate gets a 12 ms overshoot, up to +150 % — the transient a gate is for
@@ -1041,6 +1065,7 @@ private:
     double freePh_[kShaperLanes] = {};           // tp72 — the Free / MIDI / Audio lanes' own clocks (one per KIND)
     float envFast_ = 0, envSlow_ = 0; int refr_ = 0, noteAt_ = -1;
     float crushLp_[2] = {}, bassLp_[2] = {}, volEnv_ = 1.0f, volPrev_ = 1.0f, punchEnv_ = 0.0f; int punchRefr_ = 0;
+    float fltPrev_ = 0.0f, fltPunch_ = 0.0f; int fltRefr_ = 0;   // tp92 — the Filter lane's Punch
     float haasL_[1024] = {}, haasR_[1024] = {}; int haasW_ = 0;   // tp74 — the Pan lane's Haas delay
     float vizPh_[kShaperLanes] = {}, vizV_[kShaperLanes] = {};
 };

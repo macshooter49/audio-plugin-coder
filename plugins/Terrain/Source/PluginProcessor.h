@@ -2112,7 +2112,21 @@ private:
         bool drive (int which, int mode, float drive01, float tone, int character, float bias, float knee, float mix, float& l, float& r) noexcept override
         {
             auto* d = dstLive[which & 1].load (std::memory_order_acquire); if (d == nullptr) return false;
-            d->setMode (mode); d->setDrive (drive01); d->setTone (tone); d->setCharacter (character); d->setBias (bias); d->setKnee (knee); d->setMix (mix);
+            d->setMode (mode); d->setDrive (drive01); d->setTone (tone); d->setCharacter (character); d->setMix (mix);
+            /* 🚨 tp92 — BIAS WAS A DEAD WIRE. setBias() stores a value no family reads any more: since fb319/fb345
+               each family takes its offset from its OWN control — CLIP's back slot 5 "Bias", SHAPER's slot 6
+               "Bias", and on DIODE / FOLD / ANALOG the front SIG knob (Asym / Bias). Measured offline: Bias end to
+               end moved 0.0 dB on every type. So the lane's Bias goes where each family keeps its bias, and Knee
+               where each keeps its knee. At rest (0.5 / 0.5) every family receives exactly what it did before. */
+            switch (tw::DistortionEngine::familyOf (mode))
+            {
+                case tw::DistortionEngine::FAM_CLIP:   d->setP (4, bias); d->setKnee (knee); break;   // Bias slot · the clip knee
+                case tw::DistortionEngine::FAM_SHAPER: d->setP (5, bias); d->setKnee (knee); break;
+                case tw::DistortionEngine::FAM_DIODE:  d->setKnee (bias); d->setP (4, knee); break;   // SIG = Asym · slot 5 = the diode knee
+                case tw::DistortionEngine::FAM_ANALOG: d->setKnee (bias); d->setP (3, knee); break;   // SIG = Bias · slot 4 = Sag, the analog knee
+                case tw::DistortionEngine::FAM_FOLD:   d->setKnee (bias); d->setP (6, knee); break;   // SIG = Bias · slot 7 = Corner, the fold knee
+                default:                               d->setKnee (knee); break;
+            }
             float ol = 0, orr = 0; d->processSample (l, r, ol, orr); l = ol; r = orr; return true;
         }
 
