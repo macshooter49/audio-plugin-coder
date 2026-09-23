@@ -4402,6 +4402,21 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 loadSampleFromMemory (std::move (mb), filename);
                 complete (juce::var ("ok (memory)"));
             })
+            // ── fb-settings — the settings menu's two backends (Design/settings-mockup.html, wired) ──
+            // getDspLoad: the header CPU meter (Settings → Performance). Read-only; returns a 0..100 DSP load %.
+            .withNativeFunction("getDspLoad", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getDspLoadPercent()));
+            })
+            // setVelCurve: the velocity curve (Settings → Controllers). args[0] = c in [-1,1], or 999 = FIXED.
+            .withNativeFunction("setVelCurve", [this](const juce::Array<juce::var>& args,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.setVelCurve (static_cast<float> (static_cast<double> (args[0])));
+                complete (juce::var{});
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
