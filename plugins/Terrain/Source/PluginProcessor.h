@@ -2165,6 +2165,18 @@ private:
         std::unique_ptr<tw::TerrainBodeFx>     bod; std::atomic<tw::TerrainBodeFx*>     bodLive { nullptr };
         std::unique_ptr<tw::TerrainFlangerFx>  fla; std::atomic<tw::TerrainFlangerFx*>  flaLive { nullptr };   // tp91 — the Flanger lane
         int   flaLastT_ = -1; float flaLastK_[4] = { -1.f, -1.f, -1.f, -1.f }, flaLastBl_ = -1.f;   // tp91 — push Params only when a knob MOVES
+        /* tp97 — THE FLANGER LANE EXPOSES ONLY THE TWO NIGHT-AND-DAY DISTINCT ENGINE TYPES: Jet and BBD.
+           Removed: Tape Zero (fb634 crackle at the through-zero crossing, unfixable in this lane's file scope)
+           and Endless (a near-duplicate of Jet on this lane — 0.78 dB magnitude-spectrum divergence by the
+           perceptual harness, because the drawn line REPLACES its sawtooth modulator, the one thing that made
+           it distinct). Jet vs BBD measured 8.72 dB apart (BBD's centroid 881 Hz vs Jet's 2589 Hz). The lane's
+           16 voicings are kFlaLaneType[voicing/8] · (voicing%8). The ENGINE keeps all six types untouched
+           (the rack card still offers them, bit-exact); this lane just no longer offers the removed two.
+           ⚠️ The per-type level-trim table (FlowShaper.h kShaperTrimDb[17]) is UNCHANGED: the ORIGINAL engine
+           voicing index (engineType*8 + char) is what reaches shaperTrim, so every kept voicing still reads
+           its own calibrated trim from the same 32-entry row. */
+        static constexpr int kFlaLaneType[2]   = { tw::TerrainFlangerFx::Jet, tw::TerrainFlangerFx::Bbd };
+        static constexpr int kFlaLaneVoicings  = 16;   // 2 kept types x 8 characters
         int grnUsed = 0;   // the granular's grain budget counter — it wants somewhere to keep score
         /* tp82 — NOISE needs no lazy arm and no atomic. Every other engine here carries megabytes of ring and is
            built on the message thread; TerrainNoise is a handful of floats with no heap at all, so it simply IS. */
@@ -2349,17 +2361,19 @@ private:
                     /* tp91 — THE RACK'S FLANGER, AND THE LINE IS THE SWEEP (ShaperBox's LiquidShaper: "the LFO-modulated
                        Centre parameter controls the frequency of the first peak"). The engine's own modulator is
                        replaced by the drawn line through setSweep(); the wet level sits at the lane's blend, like Bode.
-                       Types are thirty-two voicings: Tape Zero · Jet · BBD · Endless (the engine's types 0..3, the ones
-                       that HAVE a sweep to draw), eight characters each. */
+                       tp97 — sixteen voicings: Jet · BBD (kFlaLaneType), eight characters each. Tape Zero and Endless
+                       were removed (crackle / near-duplicate; see kFlaLaneType above). */
                     auto* e = flaLive.load (std::memory_order_acquire); if (e == nullptr) return false;
-                    const int t = mode < 0 ? 0 : (mode > 31 ? 31 : mode);
+                    const int t = mode < 0 ? 0 : (mode >= kFlaLaneVoicings ? kFlaLaneVoicings - 1 : mode);   // tp97 — 16 voicings now (Jet, BBD)
+                    const int engT = kFlaLaneType[t / 8];   // the engine type this lane's voicing maps to
+                    const int engC = t % 8;                 // the character within it
                     bool ch = (t != flaLastT_) || (bl != flaLastBl_);
                     for (int q = 0; q < 4; ++q) if (k[q] != flaLastK_[q]) ch = true;
                     if (ch)
                     {   // a parameter push re-cooks the engine's coefficients, so it happens when a knob MOVES, not per sample
                         flaLastT_ = t; flaLastBl_ = bl; for (int q = 0; q < 4; ++q) flaLastK_[q] = k[q];
                         tw::TerrainFlangerFx::Params p;
-                        p.type = t / 8; p.character = t % 8;
+                        p.type = engT; p.character = engC;
                         p.feedback = k[0];               // FEEDBACK — bipolar, 0.5 is none, 0 is −97 % (hollow), 1 is +97 % (jet)
                         p.b1       = k[1];               // CENTRE — the Manual delay the sweep swings around (Tape Zero: where the null sits)
                         p.depth    = k[2];               // RANGE — how far the line swings it
@@ -2372,7 +2386,7 @@ private:
                     const float md = 1.0f - 2.0f * sh;
                     e->setSweep (md, md * (1.0f - 2.0f * k[3]));
                     e->processStereo (&l, &r, 1);
-                    { const float tg = wc::shaperTrim (17, t, bl); l *= tg; r *= tg; }   // tp90's per-type level law
+                    { const float tg = wc::shaperTrim (17, engT * 8 + engC, bl); l *= tg; r *= tg; }   // tp90's per-type level law · tp97 — read by ORIGINAL engine voicing so the trim table stays aligned
                     return true;
                 }
                 case wc::ShaperLaneId::Noise:

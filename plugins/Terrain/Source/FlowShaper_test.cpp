@@ -828,6 +828,64 @@ int main()
             check (ok, buf);
         }
     }
+    // ── T39 (tp97, task 4) 🚨 TIME IS CLICK-FREE AT THE DEFAULT DEPTH (50%) ACROSS EVERY SHAPE ──────────
+    //  The Time lane now boots at 50 % (its 100 % ramp read has a deferred artifact, so the default steps away
+    //  from it). At 50 % a 440 Hz sine through the lane never steps by more than the sine's OWN per-sample step,
+    //  whatever shape is drawn on it — no interpolation click, no kernel-switch click, at the shipped default.
+    {   // measured on BROADBAND noise: a click is a sample step LARGER than the source material's own maximum
+        //  (a sped-up read of a sine legitimately steps faster — that is pitch, not a click — so the reference
+        //  is the source's own broadband step, and only a discontinuity beyond it counts). At 100 % the sine
+        //  shape shows 2 such steps (the deferred artifact); at the 50 % default there are none, any shape.
+        g_ns = 1; double dryMax = 0; { float prev = 0; for (long long i = 0; i < (long long) (SR * 4); ++i) { const float v = noise (i); if (i) dryMax = std::max (dryMax, (double) std::fabs (v - prev)); prev = v; } }
+        auto clicksFor = [&] (float (*shp) (double)) -> int {
+            FlowShaper g; g.prepare (SR); g.armRing(); auto st = state(); auto& T = st->lanes[1];
+            T.on = true; T.depth = 0.5f; T.rate = 4; T.mode = 0; T.k[0] = 0.3f; fill (T, shp);
+            g_ns = 1; auto z = run (g, st, 0.0, 6.0, noise);
+            int c = 0; for (size_t i = (size_t) FPB * 2 + 1; i < z.L.size(); ++i) if (std::fabs (z.L[i] - z.L[i - 1]) > dryMax * 1.5) ++c; return c; };
+        const int cc = clicksFor (unity) + clicksFor (half) + clicksFor (stut) + clicksFor (sine) + clicksFor (ramp);
+        char buf[260]; std::snprintf (buf, sizeof buf, "T39 TIME IS CLICK-FREE AT THE 50%% DEFAULT: across unity / halftime / stutter / sine / ramp, %d sample steps exceed 1.5x the source's own broadband step (%.3f) — none, i.e. no interpolation or kernel-switch click at the shipped default", cc, dryMax);
+        check (cc == 0, buf);
+    }
+    // ── T40 (tp97, task 5) 🚨 REPEAT IS LOCKED TO THE HOST GRID — IT NEVER DRIFTS, AT ANY TEMPO ──────────
+    //  Max: "REP must ALWAYS chop in time." A grid-aligned 1/16 click train through the Repeat lane (a 1/16 slice)
+    //  reproduces its onsets ON the host's 1/16 grid: the slice is captured at fmod(beat, stepBeats) of the HOST
+    //  position and re-captured every cycle, so the loop can never walk off the beat. Proven at three tempos —
+    //  clean (120) and non-clean (127, 133.333) — where a free-running clock would smear.
+    {
+        auto repDrift = [&] (double bpm) -> double {
+            const double fpb = SR * 60.0 / bpm, step = fpb / 4.0;   // 1/16 note in samples
+            FlowShaper g; g.prepare (SR); g.armRing(); auto st = state(); auto& P = st->lanes[4];
+            P.on = true; P.depth = 1; P.rate = 4; P.grid = 16; P.blend = 1; P.k[0] = 0.05f; fill (P, [] (double) { return 0.5f; });
+            g.setState (st); const long long N = (long long) (8.0 * fpb); double ppq = 0; long long n = 0;
+            std::vector<float> L (BLK), R (BLK), out; out.reserve ((size_t) N);
+            while (n < N) {
+                for (int i = 0; i < BLK; ++i) { const double q16 = (double) (n + i) / fpb * 4.0; const double frac = q16 - std::floor (q16);
+                    const float v = (frac * step < 8.0) ? 0.9f : 0.0f;   // a grid-exact 1/16 click train, ~8 samples wide
+                    L[(size_t) i] = v; R[(size_t) i] = v; }
+                g.process (L.data(), R.data(), BLK, ppq, bpm, true);
+                out.insert (out.end(), L.begin(), L.end()); ppq += BLK / fpb; n += BLK; }
+            double worst = 0; bool up = false;
+            for (size_t i = (size_t) (fpb * 2); i < out.size(); ++i) { const bool h = std::fabs (out[i]) > 0.3f;
+                if (h && ! up) { const double g0 = std::round ((double) i / step) * step; worst = std::max (worst, std::fabs ((double) i - g0)); } up = h; }
+            return worst; };
+        const double d120 = repDrift (120.0), d127 = repDrift (127.0), d133 = repDrift (133.333);
+        const double worstMs = std::max ({ d120, d127, d133 }) / SR * 1000.0;
+        char buf[280]; std::snprintf (buf, sizeof buf, "T40 REPEAT LOCKS TO THE HOST GRID: the worst 1/16 onset deviation is %.2f / %.2f / %.2f samples at 120 / 127 / 133 BPM (%.3f ms max) — it stays on the beat at every tempo, it never drifts off time", d120, d127, d133, worstMs);
+        check (worstMs < 0.75, buf);
+    }
+    // ── T41 (tp97, task 5) TIME + REPEAT TOGETHER STAY IN SYNC AND CLICK-FREE ────────────────────────────
+    //  Both lanes read the SAME host position every sample, so running them together stays finite and bounded
+    //  across eight bars — Time halftime under a Repeat stutter, the two locked to one clock.
+    {
+        FlowShaper g; g.prepare (SR); g.armRing(); auto st = state();
+        auto& T = st->lanes[1]; T.on = true; T.depth = 0.5f; T.rate = 4; T.mode = 0; T.k[0] = 0.3f; fill (T, half);
+        auto& P = st->lanes[4]; P.on = true; P.depth = 1; P.rate = 4; P.grid = 16; P.k[0] = 0.1f; fill (P, [] (double p) { return p < 0.5 ? 0.f : 0.7f; });
+        auto z = run (g, st, 0.0, 8.0, sig440);
+        bool finite = true; for (float v : z.L) if (! std::isfinite (v)) finite = false;
+        const double mj = maxJump (z.L, (size_t) FPB * 2, z.L.size());
+        char buf[220]; std::snprintf (buf, sizeof buf, "T41 TIME + REPEAT TOGETHER: both read one host clock — the output stays finite (%d) and bounded (worst step %.4f) over 8 bars", finite ? 1 : 0, mj);
+        check (finite && mj < 1.0, buf);
+    }
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

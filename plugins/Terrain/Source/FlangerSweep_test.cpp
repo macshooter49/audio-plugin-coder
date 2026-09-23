@@ -71,6 +71,28 @@ static std::vector<double> logGrid (double lo, double hi, int n)
 static double rmsDb (const std::vector<float>& x, size_t a, size_t b)
 { double e = 0; for (size_t i = a; i < b; ++i) e += (double) x[i] * x[i]; return 10.0 * std::log10 (e / (double) (b - a) + 1e-30); }
 
+// ── tp97 — PERCEPTUAL METRICS for the type-distinctness verdict (fb283 law: phase-independent, ear-correlated) ──
+//    spectral centroid (brightness), magnitude-spectrum divergence between two spectra (dB), intrinsic spectral
+//    flux on a held line (movement). These decided which flanger types the Shaper lane keeps.
+static double centroidOf (const std::vector<double>& mag, const std::vector<double>& fr)
+{ double num = 0, den = 0; for (size_t b = 0; b < fr.size(); ++b) { num += fr[b] * mag[b]; den += mag[b]; } return den > 0 ? num / den : 0; }
+static double specDivDb (const std::vector<double>& A, const std::vector<double>& B)
+{ double pk = 0; for (size_t b = 0; b < A.size(); ++b) pk = std::max (pk, std::max (A[b], B[b]));
+  double s = 0; int c = 0; for (size_t b = 0; b < A.size(); ++b) if (std::max (A[b], B[b]) > 0.05 * pk) { s += std::fabs (20.0 * std::log10 ((A[b] + 1e-12) / (B[b] + 1e-12))); ++c; } return c ? s / c : 0; }
+static double fluxHeld (int t, float shape, const std::vector<double>& fr)
+{ const auto x = held (t, shape); const size_t F = 4096, hop = 2048; std::vector<double> prev; double acc = 0; int c = 0;
+  for (size_t a = (size_t) (SR * 0.4); a + F < x.size(); a += hop)
+  { std::vector<double> m (fr.size(), 0.0); for (size_t b = 0; b < fr.size(); ++b) m[b] = goertzel (x, a, F, fr[b]);
+    double e = 0; for (double v : m) e += v * v; e = std::sqrt (e) + 1e-12; for (double& v : m) v /= e;
+    if (! prev.empty()) { double d = 0; for (size_t b = 0; b < m.size(); ++b) { const double df = m[b] - prev[b]; d += df * df; } acc += std::sqrt (d); ++c; }
+    prev = m; }
+  return c ? acc / c : 0; }
+// a type's magnitude-spectrum SIGNATURE: char 0, averaged over five positions of the drawn line (its coloration family)
+static std::vector<double> typeSig (int type, const std::vector<double>& fr)
+{ std::vector<double> S (fr.size(), 0.0); const float pos[5] = { 0.1f, 0.3f, 0.5f, 0.7f, 0.9f }; int n = 0;
+  for (float sh : pos) { const auto m = spectrum (held (type * 8 + 0, sh), fr); for (size_t b = 0; b < S.size(); ++b) S[b] += m[b]; ++n; }
+  for (auto& v : S) v /= n; return S; }
+
 int main()
 {
     std::printf ("\nFlangerSweep — the Flanger lane's drawn line, on the shipped TerrainFlangerFx\n\n");
@@ -142,6 +164,27 @@ int main()
         char b[200]; std::snprintf (b, sizeof b, "[E] EVERY ONE OF THE 32 VOICINGS ANSWERS THE LINE: %d move less than 6 dB between the top and bottom of the drawing (weakest: voicing %d, %.1f dB)",
                                     dead, weakT, weakest);
         check (dead == 0, b);
+    }
+    // ── [F] tp97 — PERCEPTUAL TYPE-DISTINCTNESS: which of the four engine types are night-and-day on THIS lane,
+    //    where the drawn line REPLACES the modulator. Metrics per the fb283 law (phase-independent): magnitude-
+    //    spectrum divergence between types, spectral centroid (brightness), intrinsic spectral flux (movement).
+    //    VERDICT: the lane keeps only the distinct pair (Jet, BBD); Tape Zero and Endless were removed.
+    {
+        const char* const nm[4] = { "Tape Zero", "Jet", "BBD", "Endless" };
+        std::printf ("  ── [F] flanger TYPE perceptual comparison (char 0, dry white noise) ──\n");
+        std::vector<std::vector<double>> sig (4); double cen[4], fl[4];
+        for (int t = 0; t < 4; ++t) { sig[t] = typeSig (t, fr); cen[t] = centroidOf (sig[t], fr); fl[t] = fluxHeld (t * 8 + 0, 0.3f, fr);
+            std::printf ("      %-10s  centroid %6.0f Hz   intrinsic flux %.3f\n", nm[t], cen[t], fl[t]); }
+        const double jetBbd = specDivDb (sig[1], sig[2]);    // the two KEPT types
+        const double tzJet  = specDivDb (sig[0], sig[1]);    // removed: Tape Zero ~ Jet
+        const double endJet = specDivDb (sig[3], sig[1]);    // removed: Endless  ~ Jet
+        char b[320];
+        std::snprintf (b, sizeof b, "[F] THE KEPT TYPES ARE NIGHT-AND-DAY: Jet vs BBD = %.2f dB magnitude-spectrum divergence (centroid %.0f vs %.0f Hz) — a different instrument, not a variant",
+                       jetBbd, cen[1], cen[2]);
+        check (jetBbd > 6.0, b);
+        std::snprintf (b, sizeof b, "[F] THE REMOVED TYPES WERE NEAR-DUPLICATES OF JET: Tape Zero %.2f dB, Endless %.2f dB (both < 3 dB — the drawn line replaces the modulator that made them distinct; Tape Zero also carries fb634 crackle)",
+                       tzJet, endJet);
+        check (tzJet < 3.0 && endJet < 3.0, b);
     }
     std::printf ("\n%d checks, %d failed\n%s\n", npass + nfail, nfail, nfail ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
     return nfail ? 1 : 0;
