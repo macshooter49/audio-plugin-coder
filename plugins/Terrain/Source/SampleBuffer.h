@@ -47,8 +47,57 @@ namespace tw
         double getSampleRate() const noexcept { return nativeRate.load(); }
         void   setSampleRate (double sr) noexcept { nativeRate.store (sr); }
 
+        // ── AUTO KEY DETECTION (SampleKeyDetect) ─────────────────────────────────
+        // Set once by the loader / restore path (off the audio thread) BEFORE the
+        // buffer is stored; read lock-free per-note by the sample oscillator
+        // (SynthVoice) and the chop sampler (SamplerVoice). keyOffset() is the
+        // base-tuning offset in semitones that snaps the sample's root key to the
+        // same C as the oscillators (0 when un-pitched → a guaranteed no-op).
+        struct KeyInfo
+        {
+            bool  detected  = false;
+            int   midiNote  = -1;
+            float frequency = 0.0f;
+            float confidence = 0.0f;
+            float offsetSemis = 0.0f;
+        };
+
+        void setKeyInfo (bool detected, int midiNote, float frequency,
+                         float confidence, float offsetSemis) noexcept
+        {
+            keyDetected_.store (detected, std::memory_order_relaxed);
+            keyMidiNote_.store (midiNote, std::memory_order_relaxed);
+            keyFrequency_.store (frequency, std::memory_order_relaxed);
+            keyConfidence_.store (confidence, std::memory_order_relaxed);
+            // offset written LAST (release) so a reader that sees a fresh offset
+            // also sees the fields above; the audio thread only reads keyOffset().
+            keyOffsetSemis_.store (detected ? offsetSemis : 0.0f, std::memory_order_release);
+        }
+
+        void clearKeyInfo() noexcept { setKeyInfo (false, -1, 0.0f, 0.0f, 0.0f); }
+
+        /** Audio-thread safe: semitone base-tuning offset (0 if un-pitched/none). */
+        float keyOffset() const noexcept { return keyOffsetSemis_.load (std::memory_order_acquire); }
+
+        KeyInfo getKeyInfo() const noexcept
+        {
+            KeyInfo k;
+            k.detected    = keyDetected_.load (std::memory_order_relaxed);
+            k.midiNote    = keyMidiNote_.load (std::memory_order_relaxed);
+            k.frequency   = keyFrequency_.load (std::memory_order_relaxed);
+            k.confidence  = keyConfidence_.load (std::memory_order_relaxed);
+            k.offsetSemis = keyOffsetSemis_.load (std::memory_order_acquire);
+            return k;
+        }
+
     private:
         BufferPtr current;
         std::atomic<double> nativeRate { 0.0 };
+
+        std::atomic<float> keyOffsetSemis_ { 0.0f };
+        std::atomic<bool>  keyDetected_    { false };
+        std::atomic<int>   keyMidiNote_    { -1 };
+        std::atomic<float> keyFrequency_   { 0.0f };
+        std::atomic<float> keyConfidence_  { 0.0f };
     };
 }

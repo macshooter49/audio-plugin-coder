@@ -25,6 +25,7 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
 
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
 #include "ParametricEQ.h"
+#include "SampleKeyDetect.h"   // AUTO-KEY — snap a restored sample to the oscillators' C
 #include <cmath>
 #include <algorithm>   // LFO ARC L1 — std::sort (shape-point ordering in setSynthLfoShapes)
 #include <cstring>     // LFO ARC L1 — std::memcpy (drawn-table shared→audio copy)
@@ -18143,6 +18144,24 @@ static void tiWriteSampleSpare (const juce::AudioBuffer<float>& buf, double sr, 
     catch (...) {}
 }
 
+// AUTO-KEY — re-run root-note detection on a directly-decoded restore buffer and write
+// the snap-to-C offset onto its SampleBuffer BEFORE it is stored, so a reloaded session
+// plays in tune exactly like a fresh drop (the async loader does the same in
+// SampleLoader::detectAndApplyKey; this covers the two restore paths that decode inline
+// and never go through the loader). Off the audio thread (called during
+// setStateInformation). 0 offset when un-pitched → a guaranteed no-op. See SampleKeyDetect.h.
+static void applyRestoreKeyDetection (tw::SampleBuffer& sb,
+                                      const std::shared_ptr<juce::AudioBuffer<float>>& buf,
+                                      double rate) noexcept
+{
+    if (buf == nullptr || buf->getNumSamples() <= 0) { sb.clearKeyInfo(); return; }
+    const auto k = tw::SampleKeyDetector::detect (buf->getArrayOfReadPointers(),
+                                                  buf->getNumChannels(),
+                                                  buf->getNumSamples(), rate);
+    sb.setKeyInfo (k.voiced, k.midiNote, (float) k.frequencyHz,
+                   (float) k.confidence, (float) k.snapSemitones);
+}
+
 // Fill every sample slot the just-restored state names. Called SYNCHRONOUSLY at the end of
 // setStateInformation, for the same reason prefetchOscWavetables(4) is called there: the host can
 // start calling processBlock the instant it returns. Nothing here touches the message thread, the
@@ -18182,6 +18201,7 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
             if (tw::asset::decode (assetB64Layer_[(size_t) li], e, err) && e.audio.getNumSamples() > 0)
             {
                 auto buf = std::make_shared<juce::AudioBuffer<float>> (std::move (e.audio));
+                applyRestoreKeyDetection (L.sampleBuffer, buf, e.sampleRate > 0.0 ? e.sampleRate : 48000.0);
                 L.sampleBuffer.setSampleRate (e.sampleRate > 0.0 ? e.sampleRate : 48000.0);
                 L.sampleBuffer.store (buf);
                 if (e.name.isNotEmpty()) L.sourceFileName = e.name;
@@ -18211,6 +18231,7 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
         auto buf = decodeAudioFile (f, rate, &rch);
         if (buf == nullptr)                        { miss (tag, path, "decode-failed");              continue; }
 
+        applyRestoreKeyDetection (L.sampleBuffer, buf, rate);
         L.sampleBuffer.setSampleRate (rate);
         L.sampleBuffer.store (buf);                 // lock-free atomic_store — SampleBuffer.h:34
         L.sourceFileName = f.getFileName();
@@ -18254,6 +18275,7 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
             {
                 const int nch = e.audio.getNumChannels();
                 auto buf = std::make_shared<juce::AudioBuffer<float>> (std::move (e.audio));
+                applyRestoreKeyDetection (tgt, buf, e.sampleRate > 0.0 ? e.sampleRate : 48000.0);
                 tgt.setSampleRate (e.sampleRate > 0.0 ? e.sampleRate : 48000.0);
                 tgt.store (buf);
                 setCachedOscPayload (tiPayloadJson (*buf, e.name.isNotEmpty() ? e.name : tiAssetName (path),
@@ -18288,6 +18310,7 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
         double rate = 0.0; int rch = 0;
         auto buf = decodeAudioFile (f, rate, &rch);
         if (buf == nullptr)                      { failed ("decode-failed");              continue; }
+        applyRestoreKeyDetection (tgt, buf, rate);
         tgt.setSampleRate (rate);
         tgt.store (buf);
         setCachedOscPayload (tiPayloadJson (*buf, f.getFileName(), rate, rch), oi);

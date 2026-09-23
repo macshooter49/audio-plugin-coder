@@ -958,6 +958,10 @@ public:
 
     // PEROSC-BUFFERS — per-OSC Sample oscillator buffers (synth-side; A/B/C/D independent).
     tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)]; }
+    // AUTO-KEY — detected root-note / confidence / snap offset for a loaded sample, so the
+    // UI can show it and logs can print it. Reads the SampleBuffer's atomics (any thread).
+    tw::SampleBuffer::KeyInfo getOscSampleKeyInfo (int idx) const noexcept
+    { return oscSampleBuffers_[(size_t) juce::jlimit (0, ParameterIDs::kOscCount - 1, idx)].getKeyInfo(); }
     // NOISE IMPORT (P5) — one shared looping-sample source for the Noise module (user drop or factory sample).
     /** tp84 — instances 3.. are THE SHAPERS' Noise lanes, one buffer each. Max: "noise needs to have the browser
         of all 200+ sounds we have." Every noise-sample native already carried a trailing instance (tp43 added it

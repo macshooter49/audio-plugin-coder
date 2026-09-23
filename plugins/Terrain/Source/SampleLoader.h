@@ -5,6 +5,7 @@
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 #include "SampleBuffer.h"
+#include "SampleKeyDetect.h"   // auto root-note detection (snap loaded sample to oscillator C)
 #include <functional>
 #include <thread>
 #include <atomic>
@@ -37,7 +38,33 @@ namespace tw
             int          numChannels   = 0;
             std::vector<float> peaksMin; // size: kPeakBins
             std::vector<float> peaksMax;
+            // Auto key detection (for display/logging; the snap is already applied
+            // to the SampleBuffer). keyDetected=false ⇒ un-pitched ⇒ no snap.
+            bool         keyDetected     = false;
+            int          keyMidiNote     = -1;
+            double       keyFrequency    = 0.0;
+            double       keyConfidence   = 0.0;
+            int          keySnapSemitones = 0;
         };
+
+        // One-time root-note analysis → writes the snap offset onto the buffer AND
+        // mirrors the result into `r`. Runs on the loader's worker thread (off the
+        // audio + message threads). See SampleKeyDetect.h.
+        static void detectAndApplyKey (const std::shared_ptr<juce::AudioBuffer<float>>& buf,
+                                       double nativeRate, SampleBuffer& target, Result& r)
+        {
+            if (buf == nullptr || buf->getNumSamples() <= 0) { target.clearKeyInfo(); return; }
+            const auto k = tw::SampleKeyDetector::detect (buf->getArrayOfReadPointers(),
+                                                          buf->getNumChannels(),
+                                                          buf->getNumSamples(), nativeRate);
+            target.setKeyInfo (k.voiced, k.midiNote, (float) k.frequencyHz,
+                               (float) k.confidence, (float) k.snapSemitones);
+            r.keyDetected      = k.voiced;
+            r.keyMidiNote      = k.midiNote;
+            r.keyFrequency     = k.frequencyHz;
+            r.keyConfidence    = k.confidence;
+            r.keySnapSemitones = k.snapSemitones;
+        }
 
         // ~800px hero canvas × 2 DPR = 1600 peak slots.
         static constexpr int kPeakBins         = 1600;
@@ -149,6 +176,7 @@ namespace tw
                 }
 
                 // Atomic swap into SampleBuffer.
+                detectAndApplyKey (buf, nativeRate, target, r);   // auto snap loaded sample to oscillator C
                 target.setSampleRate (nativeRate);
                 target.store (buf);
 
@@ -256,6 +284,7 @@ namespace tw
                     r.peaksMax[b] = maxV;
                 }
 
+                detectAndApplyKey (buf, nativeRate, target, r);   // auto snap loaded sample to oscillator C
                 target.setSampleRate (nativeRate);
                 target.store (buf);
 

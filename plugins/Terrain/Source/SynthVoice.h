@@ -7570,6 +7570,7 @@ class SynthVoice : public juce::SynthesiserVoice
         tw::SampleBuffer::BufferPtr sampleHeldBuf_[4];                                    // keep each alive
         const juce::AudioBuffer<float>* sampleBufLast_[4] = { nullptr, nullptr, nullptr, nullptr };
         double sampleNativeOverOut_[4] = { 1.0, 1.0, 1.0, 1.0 };
+        double sampleKeyOffset_[4]     = { 0.0, 0.0, 0.0, 0.0 };   // AUTO-KEY snap-to-C offset (semitones), per OSC
         juce::AudioBuffer<float> sampleBlkA_, sampleBlkB_, sampleBlkC_, sampleBlkD_, warpSrc_;
         juce::AudioBuffer<float> warpPrime_;   // fb642 — the look-ahead that primes the vocoder (sized in prepare)
         const float *sampBlkAL_ = nullptr, *sampBlkAR_ = nullptr, *sampBlkBL_ = nullptr, *sampBlkBR_ = nullptr,
@@ -7810,7 +7811,7 @@ class SynthVoice : public juce::SynthesiserVoice
 
         void renderSampleOsc (std::array<tw::SampleEngine, kMaxUnison>& engs, tw::WarpProcessor& warp,
                               const SampleEngineParams& p, bool isSamp,
-                              int oct, int semi, float cent,
+                              int oct, int semi, float cent, double keyOffsetSemis,
                               juce::AudioBuffer<float>& blk,
                               const float*& outL, const float*& outR,
                               int numSamples, std::uint32_t seed, bool doNoteOn, double nativeOverOut,
@@ -7846,7 +7847,10 @@ class SynthVoice : public juce::SynthesiserVoice
             // The read ratio followed currentMidiNote_ (the note that was PRESSED), so a sample never slid. It now
             // follows glideNote_ — the pitch actually sounding, exactly what the wavetable/FM oscillators use — in every
             // loop mode, one-shot included. With no slide in progress glideNote_ IS the note, so nothing else moves.
-            const double noteSemis  = (glideNote_ - 60.0 + (double) (oct * 12 + semi)) + (double) cent * 0.01;
+            // AUTO-KEY — keyOffsetSemis snaps the sample's recorded fundamental to the
+            // oscillators' C (0 when un-pitched → identical to the old behaviour). It rides
+            // the same semitone lane as the base tuning, BEFORE the resample ratio.
+            const double noteSemis  = (glideNote_ - 60.0 + (double) (oct * 12 + semi) + keyOffsetSemis) + (double) cent * 0.01;
             const double pitchRatio = nativeOverOut * std::pow (2.0, noteSemis / 12.0);
             const int    N          = juce::jlimit (1, kMaxUnison, uniCount);
 
@@ -8069,20 +8073,24 @@ class SynthVoice : public juce::SynthesiserVoice
                     const float* const* rp = (bp && nSm > 0) ? bp->getArrayOfReadPointers() : nullptr;
                     for (auto& e : *engs[o]) e.setSample (rp, nCh, nSm, nr);
                     sampleNativeOverOut_[o] = (nr > 0.0 && sampleRate_ > 0.0) ? (nr / sampleRate_) : 1.0;
+                    // AUTO-KEY — cache the detected snap-to-C offset for this OSC's buffer
+                    // (semitones). 0 when un-pitched/none → bit-identical to before. Cheap
+                    // atomic read, only on buffer change (see SampleKeyDetect.h / SampleBuffer.h).
+                    sampleKeyOffset_[o] = (bp && nSm > 0) ? (double) sampleSource_[o]->keyOffset() : 0.0;
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, blkGateLevel (0, level_));
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, blkGateLevel (1, levelB_));
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, blkGateLevel (2, levelC_));
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, blkGateLevel (3, levelD_));
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleKeyOffset_[0], sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleKeyOffset_[1], sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleKeyOffset_[2], sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleKeyOffset_[3], sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, blkGateLevel (3, levelD_));
             sampleNoteOnPending_ = false;
         }
 
         // ════════ GRANULAR-ENGINE-VOICE — render granular OSCs' stereo blocks ════════
         void renderGranularOsc (std::array<tw::GranularEngine, kMaxUnison>& engs,
                                 const tw::GranularEngineParams& p, bool isGran,
-                                int oct, int semi, float cent,
+                                int oct, int semi, float cent, double keyOffsetSemis,
                                 juce::AudioBuffer<float>& blk,
                                 const float*& outL, const float*& outR,
                                 int numSamples, std::uint32_t seed, bool doNoteOn,
@@ -8101,7 +8109,9 @@ class SynthVoice : public juce::SynthesiserVoice
                 return;
             }
             // Base pitch: root MIDI 60 = C3; resample ratio incl native/output SR (mirrors renderSampleOsc).
-            const double noteSemis  = (double) (currentMidiNote_ - 60 + oct * 12 + semi) + (double) cent * 0.01;
+            // AUTO-KEY — keyOffsetSemis snaps the loaded sample's fundamental to the oscillators' C
+            // (0 when un-pitched → identical to the old behaviour).
+            const double noteSemis  = (double) (currentMidiNote_ - 60 + oct * 12 + semi) + keyOffsetSemis + (double) cent * 0.01;
             const double pitchRatio = nativeOverOut * std::pow (2.0, noteSemis / 12.0);
             const int    N          = juce::jlimit (1, kMaxUnison, uniCount);
             for (int u = 0; u < N; ++u)
@@ -8161,13 +8171,16 @@ class SynthVoice : public juce::SynthesiserVoice
                     const float* const* rp = (bp && nSm > 0) ? bp->getArrayOfReadPointers() : nullptr;
                     for (auto& e : *engs[o]) e.setSample (rp, nCh, nSm, nr);
                     granNativeOverOut_[o] = (nr > 0.0 && sampleRate_ > 0.0) ? (nr / sampleRate_) : 1.0;
+                    // AUTO-KEY — same snap-to-C offset (granular reads the SAME per-OSC buffers as
+                    // the Sample engine, so a loaded melodic sample stays in tune across engines).
+                    sampleKeyOffset_[o] = (bp && nSm > 0) ? (double) sampleSource_[o]->keyOffset() : 0.0;
                 }
             }
             const bool doOn = granNoteOnPending_;
-            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
-            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
-            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
-            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
+            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleKeyOffset_[0], granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleKeyOffset_[1], granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleKeyOffset_[2], granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleKeyOffset_[3], granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
             granNoteOnPending_ = false;
         }
 
