@@ -4443,18 +4443,21 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 #mod-panel .lfo-column { display:none !important; }   /* the pre-tp96 three-LFO panel: retired from view, its code left alone */
 #mm{position:absolute;inset:0;display:flex;flex-direction:column;color:var(--text-primary);font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;font-variant-numeric:tabular-nums;user-select:none;-webkit-user-select:none;}
 #mm .tb{height:38px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--menu-line);flex:none;}
+#mm .z-l{flex:1;display:flex;align-items:center;min-width:0;}
+#mm .z-c{flex:none;display:flex;align-items:center;gap:8px;}
+#mm .z-c .grp{margin-left:0;}
+#mm .z-r{flex:1;display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0;}
 #mm .sw{position:relative;flex:0 0 200px;}
 #mm .sw::before{content:'';position:absolute;left:1px;top:50%;transform:translateY(-50%);width:11px;height:11px;border:1.5px solid var(--text-secondary);border-radius:50%;pointer-events:none;}
 #mm .sw::after{content:'';position:absolute;left:10px;top:calc(50% + 4px);width:4px;height:1.5px;background:var(--text-secondary);transform:rotate(45deg);pointer-events:none;}
 #mm .search{width:100%;height:26px;border:none;border-radius:5px;padding:0 8px 0 21px;font-size:11.5px;background:transparent;color:var(--text-primary);outline:none;font-family:inherit;}
 #mm .search::placeholder{color:var(--text-muted);}
-#mm .count{font-size:10px;color:var(--text-soft);white-space:nowrap;margin:0 10px 0 4px;width:92px;}
+#mm .count{font-size:10px;color:var(--text-soft);white-space:nowrap;margin:0;width:auto;}
 #mm .count b{color:var(--text-primary);font-weight:500;}
 #mm .grp{display:flex;gap:4px;margin-left:8px;}
 #mm .ibtn{width:26px;height:26px;border:none;border-radius:5px;background:transparent;color:var(--text-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:color .15s,box-shadow .15s;}
 #mm .ibtn:hover{color:var(--text-primary);box-shadow:inset 0 0 0 1px var(--edge-soft);}
 #mm .ibtn svg{width:15px;height:15px;}
-#mm .sp{flex:1;}
 #mm .lk{font-size:9.5px;color:var(--purple-400);font-weight:500;width:44px;text-align:right;margin-right:4px;}
 #mm .tp-chip{padding:4px 9px;border:1px solid var(--edge-soft);border-radius:4px;background:transparent;font-size:9.5px;font-weight:500;color:var(--text-soft);cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap;line-height:1.2;flex:none;font-family:inherit;}
 #mm .tp-chip:hover{color:var(--text-primary);}
@@ -7962,10 +7965,10 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   var BLK={
    reg:function(r){ var b=el('<div class="blk"></div>');
      if(S.reg){ b.appendChild(el('<div class="kvp" style="padding:0 0 4px"><span class="k">Registered to</span><span class="v">'+esc(S.name)+'</span><span class="k">Email</span><span class="v">'+esc(S.email)+'</span><span class="k">Since</span><span class="v">'+esc(S.since||'—')+' <span class="dim">· this computer</span></span></div>'));
-       var a=el('<div class="acts inl"><button class="tp-btn" id="b-chg">Change name or email</button><button class="tp-btn" id="b-out">Sign out</button></div>'); b.appendChild(a);
+       var a=el('<div class="acts"><button class="tp-btn" id="b-chg">Change name or email</button><button class="tp-btn" id="b-out">Sign out</button></div>'); b.appendChild(a);
        a.querySelector('#b-chg').onclick=function(){ regSheet(1); }; a.querySelector('#b-out').onclick=function(){ signOutSheet(); }; }
      else { b.appendChild(el('<div class="note" style="margin:0 0 4px">Terrain isn’t registered on this computer yet. It takes a minute: your <b>name</b>, your <b>email</b>, then the <b>authorization code</b> we send you. Your name then signs every preset you save.</div>'));
-       var a2=el('<div class="acts inl"><button class="tp-btn pri" style="flex:none;padding:0 18px">Register Terrain</button></div>'); a2.firstChild.onclick=function(){ regSheet(1); }; b.appendChild(a2); }
+       var a2=el('<div class="acts"><button class="tp-btn pri" style="flex:none;padding:0 18px">Register Terrain</button></div>'); a2.firstChild.onclick=function(){ regSheet(1); }; b.appendChild(a2); }
      return b; },
    roles:function(r){ var d=el('<div class="sr" style="height:auto;min-height:34px;padding-top:6px;padding-bottom:6px;align-items:flex-start" data-row="roles"><div class="lbl" style="padding-top:4px"><span class="t">What you do</span></div><div class="lane" style="flex-wrap:wrap;row-gap:4px"></div></div>');
      var lane=d.querySelector('.lane');
@@ -8042,9 +8045,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
        g.appendChild(c); });
      var a=el('<div class="blk"><div class="acts"><button class="tp-btn" disabled>Load a skin…</button><button class="tp-btn" disabled>Open the skin folder</button></div></div>'); b.appendChild(a);
      return b; },
-   hero:function(){ return el('<div class="hero"><div class="wm"><span class="brand-name">Terrain</span><span class="brand-version">V1</span></div><span class="by">by Waves Crate · '+(S.reg?'registered to <b style="color:var(--sel-fg);font-weight:500">'+esc(S.name)+'</b>':'a synthesizer &amp; sampler')+'</span></div>'); },
+   hero:function(){ return el('<div class="hero"><div class="wm"><span class="brand-name">Terrain</span><span class="brand-version">V1</span></div><span class="by">by Waves Crate · '+(S.reg?'registered to <b style="color:var(--sel-fg);font-weight:500">'+esc(S.name)+'</b>':'a synthesizer and sound design engine')+'</span></div>'); },
    ver:function(r){ var info=buildInfo();
-     var b=el('<div data-row="ver"><div class="kvp"><span class="k">Version</span><span class="v">'+esc(info.ver)+'</span><span class="k">Build</span><span class="v">'+esc(info.build)+'</span><span class="k">Running as</span><span class="v">'+esc(info.wrap)+'</span><span class="k">Formats</span><span class="v">AU · VST3 · Standalone</span><span class="k">Engine</span><span class="v">Resynth <span class="dim">· JUCE 8</span></span></div></div>'); hoverable(b,r); return b; },
+     var b=el('<div data-row="ver"><div class="kvp"><span class="k">Version</span><span class="v">'+esc(info.ver)+'</span><span class="k">Build</span><span class="v">'+esc(info.build)+'</span><span class="k">Running as</span><span class="v">'+esc(info.wrap)+'</span><span class="k">Formats</span><span class="v">AU · VST3 · Standalone</span><span class="k">Engine</span><span class="v">Terrain <span class="dim">· JUCE 8</span></span></div></div>'); hoverable(b,r); return b; },
    upd:function(r){ var d=el('<div class="sr soon" data-row="upd"><div class="lbl"><span class="t">Check for updates</span><span class="tag">Soon</span></div><div class="lane"><button class="tp-btn" disabled>Check now</button><span class="val dim" style="flex:1;margin-left:6px">Last checked: never</span></div></div>');
      hoverable(d,r); return d; },
    lic:function(r){ var b=el('<div data-row="lic"><div class="kvp"><span class="k">Status</span><span class="v">'+(S.reg?'Beta <span class="dim">· '+esc(S.name)+'</span>':'<span class="err">Not registered</span>')+'</span><span class="k">Computers</span><span class="v">This computer <span class="dim">· 1 of 3</span> <span class="tag" style="margin-left:4px">Soon</span></span><span class="k">Code signing</span><span class="v">Ad-hoc <span class="dim">· Developer ID at 1.0</span></span></div><div class="blk"><div class="acts inl"><button class="tp-btn" disabled>Manage computers</button><button class="tp-btn" id="b-lic">'+(S.reg?'Account':'Register')+'</button></div></div></div>');
@@ -8058,7 +8061,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    wc:function(){ return el('<div>'
      +'<div class="mantra">Consciousness Through Sound.</div>'
      +'<div class="para"><b>Waves Crate</b> holds that creation is the highest form of evolution — that when you make music you raise your own awareness and, note by note, the awareness of everyone who hears it. We build instruments in service of that: tools where every knob means something, where 100 % is really 100 %, where nothing clicks, and where the sound always matches the number.</div>'
-     +'<div class="para"><b>Terrain</b> has been in the making since November 2025 — a synthesizer and a sampler in one window. Its <b>Resynth</b> oscillators and band-limited <b>wavetables</b> feed <b>118 measured filters</b>; the <b>Chop / Shaper</b> engine reshapes anything you feed it; a full <b>mod matrix</b> wires it all together; and the <b>Terrain Patcher</b> turns every effect into a node you can link into your own chains. One instrument, meant to be lived in.</div>'
+     +'<div class="para"><b>Terrain</b> has been in the making since November 2025 — a synthesizer and a sound design engine in one window. Its <b>Resynth</b> oscillators and band-limited <b>wavetables</b> feed <b>118 measured filters</b>; the <b>Chop / Shaper</b> engine reshapes anything you feed it; a full <b>mod matrix</b> wires it all together; and the <b>Terrain Patcher</b> turns every effect into a node you can link into your own chains. One instrument, meant to be lived in.</div>'
      +'<div class="kvp"><span class="k">Made by</span><span class="v">Waves Crate</span><span class="k">Built with</span><span class="v">JUCE 8 <span class="dim">· WebKit UI</span></span></div>'
      +'<div class="note" style="margin-top:8px">© 2026 Waves Crate. VST is a registered trademark of Steinberg Media Technologies GmbH. Audio Units and macOS are trademarks of Apple Inc.</div></div>'); }
   };
@@ -47122,13 +47125,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 
   function boot(){ var host=document.getElementById('mod-panel'); if(!host||MM) return;
     MM=el('<div id="mm" class="tp-glass basic">'
-      +'<div class="tb"><div class="sw"><input class="search" id="mm-search" type="text" placeholder="Search sources, destinations" autocomplete="off" spellcheck="false"></div>'
-      +'<div class="count" id="mm-count"></div>'
-      +'<div class="grp" id="mm-mode"><button class="tp-chip active" data-m="basic">Basic</button><button class="tp-chip" data-m="pro">Pro</button></div>'
-      +'<div class="grp" id="mm-view"><button class="tp-chip active" data-v="list">Matrix</button><button class="tp-chip" data-v="routes">Routes</button></div>'
-      +'<div class="sp"></div><span class="lk" id="mm-lock"></span>'
+      +'<div class="tb"><div class="z-l"><div class="sw"><input class="search" id="mm-search" type="text" placeholder="Search sources, destinations" autocomplete="off" spellcheck="false"></div></div>'
+      +'<div class="z-c"><div class="grp" id="mm-mode"><button class="tp-chip active" data-m="basic">Basic</button><button class="tp-chip" data-m="pro">Pro</button></div>'
+      +'<div class="grp" id="mm-view"><button class="tp-chip active" data-v="list">Matrix</button><button class="tp-chip" data-v="routes">Routes</button></div></div>'
+      +'<div class="z-r"><span class="lk" id="mm-lock"></span><div class="count" id="mm-count"></div>'
       +'<button class="ibtn" id="mm-add" title="Add a route"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>'
-      +'<button class="ibtn" id="mm-menu" title="Matrix menu — sort, lock, templates"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div>'
+      +'<button class="ibtn" id="mm-menu" title="Matrix menu — sort, lock, templates"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></div>'
       +'<div class="hd" id="mm-hd"><span class="c-g"></span><span class="c-b"></span><span class="c-s" data-sort="src">Source<i>▾</i></span>'
       +'<span class="c-cv pro" title="Source curve — bends how the source responds">Crv</span><span class="c-am">Amount</span>'
       +'<span class="c-po pro" title="Polarity — Uni pushes one way from the knob, Bi swings both ways">Pol</span>'
@@ -47138,7 +47140,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       +'<span class="c-out pro" title="Output — the final trim for this route">Output</span><span class="c-x"></span></div>'
       +'<div class="list" id="mm-list"><div id="mm-rows"></div>'
       +'<div id="mm-empty" style="display:none"><b>No routes yet</b>Drag a source onto any knob — or press +.</div>'
-      +'<div id="mm-rv"><div class="rv-in"><svg></svg></div><div class="hint">brighter = moving now · click a cable to select its route</div></div></div></div>');
+      +'<div id="mm-rv"><div class="rv-in"><svg></svg></div></div></div></div>');
     host.insertBefore(MM,host.firstChild);
     ROWS=document.getElementById('mm-rows');
     ADDR=el('<div class="tp-row addr">＋ Add route</div>'); ADDR.addEventListener('click',function(){ add({lfo:freeLfo()},0,{depth:.3}); });
