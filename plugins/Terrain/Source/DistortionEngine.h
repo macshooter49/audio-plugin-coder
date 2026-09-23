@@ -337,7 +337,11 @@ public:
         // header) or a deliberate, preset-visible move of BOTH T and the floor together. Whoever takes
         // that on: move `1.0f / kPreGain` at the post-trim and this floor in ONE commit, or the
         // level jumps. That pair is a lockstep just like Shapers.h:13's kFoldPre.
-        if (family() == FAM_FOLD) driveT_ = 1.0f + t * 62.0f;
+        /* tp93 — THE FOLDS FOLDED INTO HASH. At ×63 a chord folds into near-white hash that the Tone stage eats:
+           Linear Fold / Sine Fold / West Coast measured −19 / −16 / −25 dB at full Drive. ×17 keeps every fold
+           audible: 5–11 dB louder at the top AND the knob travels as far or further (33 / 44 / 48 dB of spectrum,
+           was 38 / 36 / 44) — the Lifeguard law's other half, measured, not traded away. */
+        if (family() == FAM_FOLD) driveT_ = 1.0f + t * 16.0f;
         else                      driveT_ = std::pow (10.0f, maxDriveDb() * std::pow (t, 0.8f) * 0.05f);
     }
     /** Which of the SIX parameter-set families the current mode belongs to. The back-8 is keyed to
@@ -1883,6 +1887,12 @@ private:
         y -= 0.20f * xfEd_[c];
         // leakage-L × winding-C resonance — RINGS on transients (why iron adds SNAP, not just warmth)
         bqEnsure (juce::jmin (t.rf, 0.9f * (float) fs_), juce::jlimit (0.5f, 8.0f, t.rq), t.rg, false);
+        /* tp93 — THE SNAP HAD NO CEILING. The output is dB/dt of a saturating core, so every flip of a hard-driven
+           core is a spike — the transformer's snap — and nothing bounded its height: +14.4 dB and a 7.3 peak (about
+           +17 dBFS) at full Drive. A soft ceiling in the shaper's own units (4 ≈ full scale after the output trim):
+           under ~1.3 it moves the signal under 1 %, so the snap stays and only the runaway goes. Full Drive now
+           +4.7 dB, peak 1.01, and the knob still travels 57 dB. */
+        y = 4.0f * std::tanh (y * 0.25f);
         return y + bqG_ * bqRun (y, c);
     }
 
@@ -2931,6 +2941,12 @@ private:
         {
             case Tube: case Tape: case Transformer: case StompBox: case Overdrive: return 30.0f;
             case LinearFold: case SineFold: case WestCoast:                        return 36.0f;
+            /* tp93 — RECTIFY RAN BACKWARDS. 48 dB of pre-gain turns any chord into a square, the absolute
+               value of a square is a CONSTANT, and the DC blocker erased it: −9.8 / −21.5 / −40.8 dB at a
+               quarter / half / full Drive (Max: the knob "gets quieter the harder you push it"). The
+               octave lives BELOW the squaring, so the knob stops there: −3.6 / −4.8 / −7.3 dB, and the
+               sound TRAVELS further across the knob than before (22.4 dB of spectrum, was 18 at 18 dB). */
+            case Rectify:                                                          return 12.0f;
             default:                                                               return 48.0f;
         }
     }
