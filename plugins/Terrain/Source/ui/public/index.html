@@ -29568,6 +29568,7 @@ function initFxSuite() {
   // ─── FX Knob Drawing (matching Terrain style) ───
   function drawFxKnob(canvas, normValue, dragging, hover, bipolar) {   /* tp11 — the Patcher grows this bitmap past DPR × its CSS box for a crisp zoom; drawing at bitmap ÷ DPR made every detail change with the zoom (Max: "it zooms in a little extra"). Draw at the canvas's OWN scale. */
     var s0 = DPR, cw = canvas ? parseFloat(canvas.style.width) : 0; if (cw > 0 && canvas.width > 0) DPR = canvas.width / cw;
+    if (canvas) canvas.__smN = normValue;   /* MOD RING — the value this face shows, for the ring's start (a bitmap cannot be read back) */
     try { return drawFxKnob0(canvas, normValue, dragging, hover, bipolar); } finally { DPR = s0; } }
   function drawFxKnob0(canvas, normValue, dragging, hover, bipolar) {
     var w = canvas.width / DPR, h = canvas.height / DPR;
@@ -33824,6 +33825,10 @@ restoreThemeFromBackend();
     '.sm-ul.byp .smu-span{opacity:.3;}.sm-ul.byp .smu-comet{display:none!important;}'+   /* fb563 (3) — bypassed: the territory stays, dimmed; no comet */
     '.smu-comet{position:absolute;top:0.75px;height:3px;pointer-events:none;background:linear-gradient(90deg,rgba(231,222,255,0),rgba(231,222,255,0.95));box-shadow:0 0 4px rgba(167,139,250,0.55);}'+   /* fb189 — F3 THE COMET (Max's pick) */
     '.smu-comet.rev{background:linear-gradient(270deg,rgba(231,222,255,0),rgba(231,222,255,0.95));}'+
+    /* MOD RING (Max, 2026-09-23) — the live value on the dial. The underline's OWN two colours, nothing new:
+       rest = the .smu-span territory ink, selected = the .sel purple. Strict purple: no glow, no shadow, no filter. */
+    '.sm-ring{fill:none;stroke:rgba(183,148,255,0.90);stroke-linecap:round;pointer-events:none;filter:none;}'+
+    '.sm-ring.sel{stroke:#B794FF;}'+
     /* fb254 — LFO identification uses the SAME purple as envelopes (Max: one color, no green/blue).
        The .sel underline already lights #B794FF for env AND LFO; selecting an LFO lights its routes. */
     '.sm-routes{position:fixed;z-index:2147483647;background:rgba(24,24,38,0.92);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid rgba(255,255,255,0.10);border-radius:8px;padding:5px 4px;min-width:128px;font:400 10px -apple-system,\'SF Pro Text\',sans-serif;color:rgba(255,255,255,0.85);}'+
@@ -33875,7 +33880,7 @@ restoreThemeFromBackend();
      card, which contains it perfectly and would answer "fully visible" for a card that is itself
      scrolled off the rack. The visible region is the INTERSECTION of the whole chain. */
   function clipElsOf(el){ if(!el||!el.parentElement) return [];
-    if(clipCache.has(el)) return clipCache.get(el);
+    if(clipCache.has(el)){ var co=clipCache.get(el), ci=0; for(;ci<co.length;ci++) if(!co[ci].contains(el)) break; if(ci===co.length) return co; }   /* MOD RING — a chain that no longer CONTAINS el is stale: the Patcher ADOPTS the rack's cards (and gives them back), so a dial first measured inside .fxr-clip kept that clip on the canvas and its mark (and ring) stayed down there */
     var n=el.parentElement, out=[];
     while(n&&n!==document.body&&n!==document.documentElement){
       var cs=null; try{ cs=getComputedStyle(n); }catch(e){}
@@ -34942,6 +34947,90 @@ restoreThemeFromBackend();
       if(a.alt)  return (window.__mvAlt!=null)?window.__mvAlt:-1; }catch(e){}
     return null; }
   window.__tiP2Value=function(S){ return p2v(S); };   /* gate hook — the value the comet would draw right now */
+  /* ═══ MOD RING (Max, 2026-09-23) ═════════════════════════════════════════════════════════════
+     "That purple line [on the Macro 2 knob] is our modulation … add that in all of our knobs — flow
+     cards, patcher, everywhere … the attenuator can still be what it is … ONLY CIRCULAR KNOBS … the
+     SAME COLOR as our underline … it should move smoothly … it must NOT take up CPU. No glow."
+     A thin arc just OUTSIDE the dial's own value arc, from where the knob is SET to where the
+     modulation has it RIGHT NOW (the mockup's .km ring, Design/mod-matrix-mockup.html). It is drawn in
+     the underline's pass below, from the comet's own numbers (kn, eff, the LFO wind-down), so the two
+     can never disagree and there is no second clock: no timer, no rAF, no native read. One <circle>
+     per modulated dial, inside the dial's EXISTING svg (fixed positions: nothing moves or resizes), and
+     it is written only when its quarter-degree geometry, its selection or its fade actually change.
+     Families (the dial's own geometry, the ring scaled from the mockup's r14→r17 / 1.4 stroke):
+       syn   #syn-panel .knob-ring .kr-svg (osc + noise knobs)    24 box, r10, 7:30 + 270°
+       rack  .fxr-dial svg (FX rack front + back, SIG) · .vm-mk  30 box, r11.5, 7:30 + 270°
+       card  .cell .ctl svg with .kf (every flow / LFO card dial) 36 box, r14, 6:00 + 360°
+       tape  .fx-knob-wrap canvas (the tape machine, a bitmap)   an overlay svg in its own wrap
+     EXCLUDED (Max: "except for the filters"): the synth filter device and the rack's Filter card —
+     their curves already move with the modulation. Anything else (pills, sliders, emblems) has no
+     family and gets no ring. */
+  var ringG=new WeakMap();
+  function ringGeom(el){ if(ringG.has(el)) return ringG.get(el); var g=null;
+    try{ var fc=el.closest('.fxr-dev');
+      if(el.closest('.device.filter')||(fc&&fc.querySelector('.fxr-core[data-core="flt"]'))) g=null;
+      else if(el.querySelector('.knob-ring')) g={f:'syn',c:12,r:12.15,w:1.0,a0:135,sw:270};
+      else if(el.classList.contains('fxr-dial')||el.querySelector('.fxr-dial')||el.querySelector('.vm-mk')) g={f:'rack',c:15,r:13.95,w:1.15,a0:135,sw:270};
+      else if(el.querySelector('.ctl svg .kf')) g={f:'card',c:18,r:17,w:1.4,a0:90,sw:360};
+      else if(el.querySelector('.fx-knob-wrap canvas.fx-knob-arc')) g={f:'tape',a0:135,sw:270};
+    }catch(e){ g=null; }
+    ringG.set(el,g); return g; }
+  function ringHost(el,g){ var s=null;
+    if(g.f==='syn') s=el.querySelector('.knob-ring .kr-svg');
+    else if(g.f==='rack'){ var dl=el.classList.contains('fxr-dial')?el:(el.querySelector('.fxr-dial')||el.querySelector('.vm-mk')); s=dl&&dl.querySelector('svg'); }
+    else if(g.f==='card'){ var kf=el.querySelector('.ctl svg .kf'); s=kf&&kf.ownerSVGElement; }
+    else if(g.f==='tape'){ var wr=el.querySelector('.fx-knob-wrap'), cv=wr&&wr.querySelector('canvas.fx-knob-arc'); if(!cv) return null;
+      s=wr.querySelector(':scope > svg.sm-ring-ov');
+      if(!s){ var W=parseFloat(cv.style.width)||cv.offsetWidth||44;   /* the canvas's CSS box; drawFxKnob's ring = r W/2−3, so this sits 1.6 outside it */
+        s=document.createElementNS('http://www.w3.org/2000/svg','svg'); s.setAttribute('class','sm-ring-ov'); s.setAttribute('viewBox','0 0 '+W+' '+W);
+        s.setAttribute('style','position:absolute;left:0;top:0;width:'+W+'px;height:'+W+'px;overflow:visible;pointer-events:none;');
+        wr.appendChild(s); }
+      g.c=parseFloat(s.getAttribute('viewBox').split(' ')[2])/2; g.r=g.c-1.4; g.w=1.2; }
+    return s; }
+  /* Where the dial's OWN arc ends (0..1), read off the arc it drew — so the ring always leaves from the
+     white arc's tip. knobNorm() answers 0 for dials with no slider state behind them (the macros, the
+     noise knobs, the tape machine, an LFO card's Rate/Phase), which would start the ring at the dial's
+     zero; the arc on screen is never wrong. null = no reading, keep knobNorm's. */
+  function dialNorm(el,g,host){ try{
+      if(g.f==='syn'){ var kv=host.__kv; if(!kv||kv.parentNode!==host) kv=host.__kv=host.querySelector('.kr-v'); if(!kv) return null; var dl=parseFloat(kv.style.strokeDasharray)/75, of=-(parseFloat(kv.style.strokeDashoffset)||0)/75;
+        if(!isFinite(dl)) return null; return (kv.ownerSVGElement.parentNode.classList.contains('kr-bip'))?((of<0.4999)?of:0.5+dl):dl; }
+      if(g.f==='card'){ var kf=host.__kf; if(!kf||kf.parentNode!==host) kf=host.__kf=host.querySelector('.kf'); var n=kf?parseFloat(kf.getAttribute('stroke-dasharray'))/88:NaN; return isFinite(n)?n:null; }
+      if(g.f==='rack'){ var pv=host.children[1]; if(!pv||pv.tagName!=='path') return null; var d=pv.getAttribute('d');   /* knobSVG: [0] track, [1] the value arc */
+        if(host.__smD===d) return host.__smN; var m=/([-\d.]+) ([-\d.]+)\s*$/.exec(d||''); if(!m) return null;
+        var a=Math.atan2(+m[2]-15,+m[1]-15)*180/Math.PI; while(a<135-0.5)a+=360;   /* the arc runs 135°→405° */
+        var mv=/A [\d.]+ [\d.]+ 0 ([01]) 1/.exec(d); if(mv&&mv[1]==='0'&&a>315) a=135;   /* a 0 % arc ends where it starts */
+        host.__smD=d; host.__smN=Math.max(0,Math.min(1,(a-135)/270)); return host.__smN; }
+      if(g.f==='tape'){ var cv=el.querySelector('canvas.fx-knob-arc'); return (cv&&cv.__smN!=null)?cv.__smN:null; }
+    }catch(e){} return null; }
+  /* The pass READS layout for every mark (a Range, the clip rects); a ring written in the middle of it would
+     dirty the style and make the NEXT mark's read pay for a recalc. So the pass only DECIDES (ringPaint) and
+     the writes land together after it (ringFlush) — the ring never forces a layout of its own. */
+  var RQ=[], RP=null;   /* RP: window.__smRingProf, read once per pass — the gate's stopwatch; null in the plugin */
+  function ringPaint(el,u,show,sel,kn,d,v,op){ if(!RP) return ringPaint0(el,u,show,sel,kn,d,v,op); var t0=performance.now(); ringPaint0(el,u,show,sel,kn,d,v,op); RP.t+=performance.now()-t0; RP.n++; }
+  function ringPaint0(el,u,show,sel,kn,d,v,op){
+    var R=u.__ring;
+    if(!show){ if(R&&R.__k!=='off'){ R.__k='off'; R.__w=null; RQ.push(R); } return; }
+    var g=ringGeom(el); if(!g) return;
+    var host=null;
+    if(!R||!R.isConnected){ host=ringHost(el,g); if(!host) return;
+      R=document.createElementNS('http://www.w3.org/2000/svg','circle'); R.setAttribute('class','sm-ring');
+      R.setAttribute('cx',g.c); R.setAttribute('cy',g.c); R.setAttribute('r',g.r); R.setAttribute('stroke-width',g.w);
+      R.setAttribute('pathLength','100'); R.setAttribute('transform','rotate('+g.a0+' '+g.c+' '+g.c+')'); R.style.display='none';
+      R.__host=host; u.__ring=R; R.__k=''; }
+    var dn=dialNorm(el,g,host||R.parentNode); if(dn!=null) kn=dn;
+    var eff=(1-d)*kn+d*v;   /* the comet's own law (eff = anchor + d·v, anchor = (1−d)·knob), anchored on the dial's tip */
+    var lo=Math.max(0,Math.min(kn,eff)), hi=Math.min(1,Math.max(kn,eff));
+    var aS=Math.round(lo*g.sw*4)/4, aL=Math.round((hi-lo)*g.sw*4)/4;   /* quarter-degree steps: the only writes are real moves */
+    if(!(aL>=1.5)){ if(R.__k!=='off'){ R.__k='off'; R.__w=null; RQ.push(R); } return; }   /* at the knob: nothing to show (and no round-cap dot) */
+    var o=(op<1)?Math.round(op*20)/20:1, key=aS+'|'+aL+'|'+(sel?1:0)+'|'+o;
+    if(R.__k===key) return; R.__k=key; R.__w=[(aL/3.6).toFixed(3)+' 100',(-aS/3.6).toFixed(3),!!sel,(o<1)?String(o):'']; RQ.push(R); }
+  function ringFlush(){ var t0=RP?performance.now():0; for(var i=0;i<RQ.length;i++){ var R=RQ[i], w=R.__w;
+      if(R.__host){ R.__host.appendChild(R); R.__host=null; }
+      if(!w){ R.style.display='none'; continue; }
+      if(R.__da!==w[0]){ R.__da=w[0]; R.setAttribute('stroke-dasharray',w[0]); } if(R.__do!==w[1]){ R.__do=w[1]; R.setAttribute('stroke-dashoffset',w[1]); }
+      if(R.__sl!==w[2]){ R.__sl=w[2]; R.classList.toggle('sel',w[2]); } if(R.__op!==w[3]){ R.__op=w[3]; R.style.opacity=w[3]; } if(R.style.display==='none') R.style.display=''; }
+    if(RP){ RP.t+=performance.now()-t0; RP.w+=RQ.length; } RQ.length=0; }
+  window.__smRingGeom=function(el){ var g=ringGeom(el); return g?g.f:null; };   /* gate hook — which family a destination's dial belongs to */
   function loop(ts){ if(window.__cardOnly==='mod')return; var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
     for(var n=1;n<=10;n++){ phase[n-1]+=dt*lfoHz(n); if(phase[n-1]>=1)phase[n-1]-=Math.floor(phase[n-1]); }   // (kept for the future "knob moves with the LFO" pass)
     var on = window.__cardOnly ? true
@@ -34950,13 +35039,13 @@ restoreThemeFromBackend();
     /* fb497 */ // this loop ALREADY read `on` — but only after building a Range and a getBoundingClientRect
     // for EVERY modulated knob, each one a forced layout. Measured at 66 ms/4 s on the front page,
     // where not one of those knobs was on screen. Ask first, measure second.
-    if(!on){ if(!__ulDown){ __ulDown=true; ulMap.forEach(function(u){ u.style.display='none'; }); } return; }
+    if(!on){ if(!__ulDown){ __ulDown=true; ulMap.forEach(function(u,el){ u.style.display='none'; ringPaint(el,u,false); }); ringFlush(); } return; }
     __ulDown=false;
     /* fb188 — badge positioning retired with the badges; the underline is the surface. */
     // fb182 S3 — underlines: one bar per modulated element; purple = the selected
     // modulator's route lives here, dim = someone else's. Repaints every frame, so
     // switching envelopes/LFOs flips the map instantly (Max's signification).
-    var seen=new Map(), sm=window.__selMod||{}, __ov=null;   /* fb560 — the overlay boxes, collected lazily: no marks, no query */
+    var seen=new Map(), sm=window.__selMod||{}, __ov=null, __smRingOff=!!window.__smRingOff; RP=window.__smRingProf||null;   /* MOD RING — __smRingOff: the gate's A/B switch for the cost measurement */   /* fb560 — the overlay boxes, collected lazily: no marks, no query */
     assigns.forEach(function(a){ var el=curEl(a); if(!el)return;
       var m=seen.get(el); if(!m){ m={sel:false,live:false}; seen.set(el,m); }
       if(!a.byp) m.live=true;   /* fb563 (3) — one un-bypassed route keeps the mark alive */
@@ -35015,8 +35104,8 @@ restoreThemeFromBackend();
       if(!r2||r2.width===0) r2=lb.getBoundingClientRect?lb.getBoundingClientRect():null;
       /* fb574 — a word in a view that is IN FLOW but visibility:hidden (the Macros view while the voice params
          show, and vice versa) has a real rect; its mark must not paint over whatever is showing in that box. */
-      try{ if(getComputedStyle(lb).visibility==='hidden'){ u.style.display='none'; return; } }catch(e){}
-      if(!on||!r2||r2.width===0){ u.style.display='none'; return; }
+      try{ if(getComputedStyle(lb).visibility==='hidden'){ u.style.display='none'; ringPaint(el,u,false); return; } }catch(e){}
+      if(!on||!r2||r2.width===0){ u.style.display='none'; ringPaint(el,u,false); return; }
       /* fb453 — THE CLIP. The rack scrolls inside .fxr-clip, and .sm-ul is position:fixed, so a
          modulated knob scrolled out of view would keep painting its bar over whichever panel now
          occupies those pixels. Fully out ⇒ down. Partly out ⇒ TRIMMED with clip-path rather than
@@ -35024,7 +35113,7 @@ restoreThemeFromBackend();
          against it; clip-path also removes the trimmed strip from hit-testing, so the hover route
          list cannot be summoned from a pixel the knob does not own. */
       var cw=clipRectOf(el);
-      if(cw&&(r2.right<=cw.left||r2.left>=cw.right||r2.bottom<=cw.top||r2.top>=cw.bottom)){ u.style.display='none'; return; }
+      if(cw&&(r2.right<=cw.left||r2.left>=cw.right||r2.bottom<=cw.top||r2.top>=cw.bottom)){ u.style.display='none'; ringPaint(el,u,false); return; }
       /* fb560 — covered? then down. Both rects are SCREEN px (getBoundingClientRect), so they are
          directly comparable; the strip is the word's width by 7px starting one px above its baseline
          box, which is exactly what .sm-ul occupies. */
@@ -35039,7 +35128,7 @@ restoreThemeFromBackend();
       var air=markAir(lb);
       if(__ov===null) __ov=overlayBoxes();
       if(__ov.length && coveredBy(r2.left, r2.bottom-1+air, r2.right, r2.bottom+6+air, __ov,
-                                  (el.closest?el.closest('.ti-card'):null))){ u.style.display='none'; return; }
+                                  (el.closest?el.closest('.ti-card'):null))){ u.style.display='none'; ringPaint(el,u,false); return; }
       u.style.display='block';
       /* fb453 — LP(): the rect is SCREEN px, a style length is re-multiplied by fb175's
          self-heal zoom when it is armed. The underline must sit on the word on that path too. */
@@ -35073,9 +35162,11 @@ restoreThemeFromBackend();
           cm.style.display='block'; cm.style.opacity=(__ce<1)?__ce.toFixed(3):'';
           if(eff>=anchor){ cm.classList.remove('rev'); cm.style.left=(Math.max(a1,eff-tl)*gw)+'px'; cm.style.width=(Math.max(0.012,Math.min(tl,eff-a1))*gw)+'px'; }
           else { cm.classList.add('rev'); cm.style.left=(eff*gw)+'px'; cm.style.width=(Math.max(0.012,Math.min(tl,anchor-eff))*gw)+'px'; }
-        } else cm.style.display='none';
-      } else { sp.style.width='0px'; cm.style.display='none'; } });
-    ulMap.forEach(function(u,el){ if(!seen.has(el)){ u.remove(); ulMap.delete(el); } });
+          if(!__smRingOff) ringPaint(el,u,m.live,m.sel,kn,d,v,__ce);   /* MOD RING — the comet's own numbers, this same pass; a bypassed knob has no comet and no ring */
+        } else { cm.style.display='none'; ringPaint(el,u,false); }
+      } else { sp.style.width='0px'; cm.style.display='none'; ringPaint(el,u,false); } });
+    ulMap.forEach(function(u,el){ if(!seen.has(el)){ if(u.__ring) u.__ring.remove(); u.remove(); ulMap.delete(el); } });
+    ringFlush();   /* MOD RING — this pass's ring writes, together, after every read */
     }
   /* fb571 — how much AIR (layout px) a mark keeps under its word, by the word's surface. One table,
      so the eye reads one rule; a new surface lands in the 2 px default unless its room says otherwise. */
