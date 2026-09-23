@@ -7163,6 +7163,39 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             #syn-panel .device.filter .dd-trigger:hover { border-color: var(--purple-500); }
             /* Filter response curve — accent the stroke + add a subtle resonance glow */
             #syn-panel .filter-display svg path { stroke: var(--purple-300, #C4B5FD); }
+
+            /* ═══ GLOBAL NUMERIC READOUT FONT — every number reads like the Chop card's
+               global-BPM number (.ti-card .big, ~line 4118): ultra-thin SF Pro Display,
+               WHITE on the dark theme / the inverse dark ink on the light theme. NUMBERS
+               ONLY — labels, captions, unit-suffixes and coloured/active states keep their
+               own rules. Weight + colour + family only; NO size/position change (fixed-
+               position law). The selectors below are the file's EXISTING value/readout
+               classes, re-listed here (after their originals) so this normalises them
+               globally without touching those rules. .ti-card .big stays as-is — it is the
+               source of the look. */
+            :root { --ti-num-ink: #2A2035; }                                    /* light theme → dark ink (the inverse) */
+            :root[data-theme="dark"] { --ti-num-ink: rgba(255,255,255,0.95); }  /* dark theme  → WHITE, like .big */
+            /* always-dark cards/engines keep WHITE numbers in BOTH themes (their ground never flips) */
+            .ti-card, #mod-engine, #mm { --ti-num-ink: rgba(255,255,255,0.95); }
+            .knob-value,
+            .mini-knob-value,
+            .fx-knob-value,
+            .delay-knob-value,
+            #syn-panel .knob-ring .kv,
+            #syn-panel .knob .knob-label.kv-live,
+            #syn-panel .voice-row b,
+            .ti-card .cell .vl,
+            .ti-card .mix b,
+            .mv-ext .mk .kv,
+            #mod-engine .mv-dep .v,
+            #mm .c-am .vl, #mm .c-out .vl, #mm .count b {
+              font-family: -apple-system, 'SF Pro Display', sans-serif;
+              font-weight: 200;
+              color: var(--ti-num-ink);
+            }
+            /* the FX-page tape knob value carries its own weight:400 (~line 43764, later + more
+               specific) — pull just its weight ultra-thin too (colour/family already inherited above) */
+            body #fxPageTape .fx-knob-value { font-weight: 200; }
 </style>
 </head>
 <body>
