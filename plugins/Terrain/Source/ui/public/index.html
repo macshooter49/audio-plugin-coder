@@ -35117,8 +35117,10 @@ restoreThemeFromBackend();
      "That purple line [on the Macro 2 knob] is our modulation … add that in all of our knobs — flow
      cards, patcher, everywhere … the attenuator can still be what it is … ONLY CIRCULAR KNOBS … the
      SAME COLOR as our underline … it should move smoothly … it must NOT take up CPU. No glow."
-     A thin arc just OUTSIDE the dial's own value arc, from where the knob is SET to where the
-     modulation has it RIGHT NOW (the mockup's .km ring, Design/mod-matrix-mockup.html). It is drawn in
+     A thin arc just OUTSIDE the dial's own value arc, anchored at the dial's MINIMUM (the far-left
+     start of the sweep) and running to where the modulation has the value RIGHT NOW — an ABSOLUTE
+     indicator (min → live modulated value), so moving the white base never moves where it starts. It
+     is drawn in
      the underline's pass below, from the comet's own numbers (kn, eff, the LFO wind-down), so the two
      can never disagree and there is no second clock: no timer, no rAF, no native read. One <circle>
      per modulated dial, inside the dial's EXISTING svg (fixed positions: nothing moves or resizes), and
@@ -35153,10 +35155,12 @@ restoreThemeFromBackend();
         wr.appendChild(s); }
       g.c=parseFloat(s.getAttribute('viewBox').split(' ')[2])/2; g.r=g.c-1.4; g.w=1.2; }
     return s; }
-  /* Where the dial's OWN arc ends (0..1), read off the arc it drew — so the ring always leaves from the
-     white arc's tip. knobNorm() answers 0 for dials with no slider state behind them (the macros, the
-     noise knobs, the tape machine, an LFO card's Rate/Phase), which would start the ring at the dial's
-     zero; the arc on screen is never wrong. null = no reading, keep knobNorm's. */
+  /* The dial's OWN base position (0..1), read off the white arc it drew — so eff (the live modulated
+     value, the ring's END) is measured from the true on-screen base. knobNorm() answers 0 for dials
+     with no slider state behind them (the macros, the noise knobs, the tape machine, an LFO card's
+     Rate/Phase), which would drop the base to zero and mis-place the end; the arc on screen is never
+     wrong. null = no reading, keep knobNorm's. (The ring always STARTS at the minimum, so this only
+     affects where it ends.) */
   function dialNorm(el,g,host){ try{
       if(g.f==='syn'){ var kv=host.__kv; if(!kv||kv.parentNode!==host) kv=host.__kv=host.querySelector('.kr-v'); if(!kv) return null; var dl=parseFloat(kv.style.strokeDasharray)/75, of=-(parseFloat(kv.style.strokeDashoffset)||0)/75;
         if(!isFinite(dl)) return null; return (kv.ownerSVGElement.parentNode.classList.contains('kr-bip'))?((of<0.4999)?of:0.5+dl):dl; }
@@ -35184,10 +35188,14 @@ restoreThemeFromBackend();
       R.setAttribute('pathLength','100'); R.setAttribute('transform','rotate('+g.a0+' '+g.c+' '+g.c+')'); R.style.display='none';
       R.__host=host; u.__ring=R; R.__k=''; }
     var dn=dialNorm(el,g,host||R.parentNode); if(dn!=null) kn=dn;
-    var eff=(1-d)*kn+d*v;   /* the comet's own law (eff = anchor + d·v, anchor = (1−d)·knob), anchored on the dial's tip */
-    var lo=Math.max(0,Math.min(kn,eff)), hi=Math.min(1,Math.max(kn,eff));
-    var aS=Math.round(lo*g.sw*4)/4, aL=Math.round((hi-lo)*g.sw*4)/4;   /* quarter-degree steps: the only writes are real moves */
-    if(!(aL>=1.5)){ if(R.__k!=='off'){ R.__k='off'; R.__w=null; RQ.push(R); } return; }   /* at the knob: nothing to show (and no round-cap dot) */
+    var eff=(1-d)*kn+d*v;   /* the comet's own law (eff = anchor + d·v, anchor = (1−d)·knob) — the LIVE modulated value */
+    /* ABSOLUTE indicator (Max, 2026-09-23): the ring is anchored at the dial's MINIMUM — the far-left
+       start of the sweep — and runs to the live modulated value. Moving the white base never moves
+       where it STARTS; only the end tracks the value. At full attenuation (eff→1) it reaches the
+       far-right (the max angle, a0 + sw). */
+    var hi=Math.max(0,Math.min(1,eff));
+    var aS=0, aL=Math.round(hi*g.sw*4)/4;   /* aS fixed at the minimum; quarter-degree steps: the only writes are real moves */
+    if(!(aL>=1.5)){ if(R.__k!=='off'){ R.__k='off'; R.__w=null; RQ.push(R); } return; }   /* at the minimum: nothing to show (and no round-cap dot) */
     var o=(op<1)?Math.round(op*20)/20:1, key=aS+'|'+aL+'|'+(sel?1:0)+'|'+o;
     if(R.__k===key) return; R.__k=key; R.__w=[(aL/3.6).toFixed(3)+' 100',(-aS/3.6).toFixed(3),!!sel,(o<1)?String(o):'']; RQ.push(R); }
   function ringFlush(){ var t0=RP?performance.now():0; for(var i=0;i<RQ.length;i++){ var R=RQ[i], w=R.__w;

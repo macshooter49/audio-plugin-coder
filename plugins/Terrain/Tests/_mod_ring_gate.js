@@ -170,6 +170,38 @@ const HELP=()=>{
  ok(r3.bad.length===0 && r3.n>0, '[3] every ring is concentric with its dial\'s value arc, sits OUTSIDE it, and stays inside the dial\'s box (the synth\'s 24 px ring: ≤ 0.7 px over, its svg is overflow:visible)', JSON.stringify(r3.bad.slice(0,5)));
  ok(r3.moved && r3.idleWrites===0, '[3b] the ring MOVES with the live value and writes NOTHING while the value holds (quarter-degree write gate)', JSON.stringify({moved:r3.moved,idleWrites:r3.idleWrites}));
 
+ // ── [3c] ABSOLUTE ANCHOR: min → the live modulated value, independent of the white base ──
+ //   The ring must ALWAYS start at the dial's minimum (the far-left start of the sweep angle) — i.e.
+ //   stroke-dashoffset 0, so the arc begins at rotate(a0). Moving the white base knob must NOT move
+ //   where the ring starts; only its END tracks the live modulated value.
+ const r3c=await p.evaluate(async()=>{ const M=window.__mr; const out={};
+   // (i) every ring on screen begins at the minimum: stroke-dashoffset reads 0 (arc starts at a0)
+   const rings=[...document.querySelectorAll('circle.sm-ring')].filter(r=>getComputedStyle(r).display!=='none');
+   out.n=rings.length;
+   out.allAtMin = rings.length>0 && rings.every(r=>Math.abs(parseFloat(r.getAttribute('stroke-dashoffset')||'0'))<1e-6);
+   out.maxOff = rings.reduce((m,r)=>Math.max(m,Math.abs(parseFloat(r.getAttribute('stroke-dashoffset')||'0'))),0);
+   // (ii) drive ONE syn knob's base (its own white .kr-v arc, non-bipolar) low→high with the mod HELD;
+   //      the start must not budge. Then move the MOD; the end must follow.
+   const R=rings.find(r=>r.closest('.knob') && r.ownerSVGElement && r.ownerSVGElement.querySelector('.kr-v')
+                        && !r.ownerSVGElement.parentNode.classList.contains('kr-bip'));
+   if(R){ const kv=R.ownerSVGElement.querySelector('.kr-v');
+     const read=()=>{ M.tick(); M.tick(); return {off:R.getAttribute('stroke-dashoffset'), da:R.getAttribute('stroke-dasharray'), shown:getComputedStyle(R).display!=='none'}; };
+     window.__mvMacro=[0.6,0.05,0.6,0.1,0.8,0.2,0.7,0.3,0.6];              // mod held across the base sweep
+     kv.style.strokeDashoffset='0'; kv.style.strokeDasharray='18.75';     // white base ≈ 0.25 (dl/75)
+     const b1=read();
+     kv.style.strokeDasharray='63.75';                                    // white base ≈ 0.85 — mod unchanged
+     const b2=read();
+     window.__mvMacro=[0.1,0.05,0.1,0.1,0.8,0.2,0.7,0.3,0.6];             // now MOVE the modulated value
+     const m2=read();
+     out.b1=b1; out.b2=b2; out.m2=m2;
+     out.startFixed = b1.shown && b2.shown && b1.off===b2.off && Math.abs(parseFloat(b1.off))<1e-6;   // base moved, start did not
+     out.endTracksMod = m2.shown && (m2.da!==b2.da);                                                  // mod moved, end followed
+   }
+   window.__mvMacro=[0.95,0.05,0.9,0.1,0.8,0.2,0.7,0.3,0.6]; M.tick();    // restore
+   return out; });
+ ok(r3c.n>0 && r3c.allAtMin && r3c.startFixed && r3c.endTracksMod,
+   '🚨 [3c] ABSOLUTE ANCHOR — every ring starts at the dial\'s MIN-sweep angle (dashoffset 0, max seen '+ (r3c.maxOff!=null?r3c.maxOff.toFixed(4):'?') +'); moving the white base does NOT move that start, while the end tracks the live modulated value', JSON.stringify(r3c));
+
  // ── [4] fixed positions ──
  const r4=await p.evaluate(async()=>{ const M=window.__mr;
    const els=[...document.querySelectorAll('circle.sm-ring')].map(r=>r.closest('.knob,.fxr-knob,.fxr-bk-knob,.vm-macro,.cell')).filter(Boolean);
