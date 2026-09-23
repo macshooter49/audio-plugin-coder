@@ -134,6 +134,14 @@ namespace tw
             activeConfig = pendingConfigValid ? pendingConfig : VoiceConfig{};
             pendingConfigValid = false;
 
+            // AUTO-KEY — snap the loaded chop sample to the oscillators' C. The
+            // detector wrote the base-tuning offset (semitones) onto the SampleBuffer
+            // at load; folding it into pitchSemitones ONCE here makes EVERY downstream
+            // consumer (updatePitchRatio + the warp engine's setPitchSemitones) snap
+            // uniformly, while the slice→key mapping (midi−rootMidiNote) is untouched.
+            // 0 when un-pitched → bit-identical to the old behaviour. Cheap atomic read.
+            activeConfig.pitchSemitones += sample.keyOffset();
+
             updatePitchRatio();
 
             // Resolve buffer bounds for this trigger. endSample == -1 means
