@@ -41,14 +41,15 @@ const PAGE=process.argv[2]||(process.cwd()+'/Source/ui/public/index.html');
  const r0=await p.evaluate(async()=>{ const calls=[]; const br=window.Juce, orig=br&&br.getNativeFunction;
    if(br&&orig){ const w=(n)=>{ const f=orig(n); return function(){ calls.push([n].concat([].slice.call(arguments))); return f?f.apply(null,arguments):undefined; }; };
      Object.defineProperty(window,'Juce',{configurable:true,value:Object.assign({},br,{getNativeFunction:w})}); }
-   const on=document.getElementById('motion-on-btn'), off=document.getElementById('motion-off-btn');
-   if(!on||!off) return {err:'no row'};
-   off.click(); await new Promise(r=>setTimeout(r,200));
+   // tp98 — the gear-panel Motion row moved into the settings overlay; __tiMotionSet is the shared canonical
+   // entry the overlay's toggle and the gates both drive (writes ti-motion-off + calls setMotionEnabled).
+   if(typeof window.__tiMotionSet!=='function') return {err:'no hook'};
+   window.__tiMotionSet(false); await new Promise(r=>setTimeout(r,200));
    const cls=document.body.classList.contains('ti-motion-off'), q=window.__tiMotionOn();
-   on.click(); await new Promise(r=>setTimeout(r,200));
+   window.__tiMotionSet(true); await new Promise(r=>setTimeout(r,200));
    return {cls, q, back:window.__tiMotionOn(), calls:calls.filter(c=>/Motion/.test(c[0])).map(c=>c[0]+'('+c.slice(1).join(',')+')')}; });
  ok(!r0.err && r0.cls===true && r0.q===false && r0.back===true && r0.calls.join(' ')==='setMotionEnabled(0) setMotionEnabled(1)',
-    '[0] the Motion row exists; Off writes body.ti-motion-off and calls setMotionEnabled(0); On restores', JSON.stringify(r0));
+    '[0] the motion setter (settings overlay) writes body.ti-motion-off and calls setMotionEnabled(0); On restores', JSON.stringify(r0));
 
  // ── [1] motion ON: the decorative envelope rises with the lane ──
  await sleep(900);

@@ -534,6 +534,15 @@
      The setting is a native preference (a marker file, every instance); body.ti-motion-off is the page's
      copy of it and __tiMotionOn() is the one question everything asks. Default ON. */
   window.__tiMotionOn = function(){ try { return ! document.body.classList.contains('ti-motion-off'); } catch (e) { return true; } };
+  /* tp98 — the old gear panel's motion/capture setters moved into the new settings overlay (#st-overlay).
+     These thin hooks stay as the public "gates" API: drive the SAME body class + native the overlay uses,
+     so a page edit that toggles motion/capture is one and the same as the overlay's toggle. */
+  window.__tiMotionSet = function(on){ try { document.body.classList.toggle('ti-motion-off', !on);
+      if(!on && window.__tiMotionRest) window.__tiMotionRest();
+      var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setMotionEnabled'):null; if(f){ try{ f(on?1:0); }catch(e){} }
+      if(window.__tiRepaint) window.__tiRepaint(); } catch (e) {} };
+  window.__tiCaptureSet = function(on){ try { document.body.classList.toggle('ti-capture-off', !on);
+      var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setCaptureEnabled'):null; if(f){ try{ f(on?1:0); }catch(e){} } } catch (e) {} };
   /* ═══ THE TERRAIN WAVEFORM (tp66) — ONE picture of audio, everywhere ═══════════════════════════════
      Max: "they're not the same thing … they look very random … we should pick something and stick with it.
      That's how plugins move." Every sample picture — the Chop hero and its warped chops, the OSC · Sample
