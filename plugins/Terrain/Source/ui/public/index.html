@@ -3986,6 +3986,18 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
   font-size:9px;letter-spacing:.4px;color:rgba(255,255,255,.9);
   cursor:pointer;padding:2px 5px;border:1px solid transparent;border-radius:6px;transition:border-color .15s ease;}
 .ti-card .h .pset .pn:hover{border-color:rgba(255,255,255,.28);}
+/* ═══ 2026-09-23 (Max) — THE PRESET (INIT) MENU IS DEAD-CENTRE on the flow-card header ══════════
+   The grip/title on the left and Mix/Dock/× on the right no longer decide where the preset sits: it
+   is pinned to the card's own centreline. The .pset spans the whole header (left:0/right:0) and
+   centres its pill; pointer-events pass through the empty space so the title (left) and Mix/Dock/×
+   (right) stay clickable, and only the pill itself catches the click. No per-element nudge — the
+   centreline law. Mix keeps margin-left:auto so it holds the right edge; on a narrow header the pill
+   ellipsises at a fixed width rather than shoving anything. Scoped to the flow cards. */
+.arp-ext .h,.gli-ext .h,.rbn-ext .h,.chop-ext .h{position:relative;}
+.arp-ext .h .pset,.gli-ext .h .pset,.rbn-ext .h .pset,.chop-ext .h .pset{
+  position:absolute;left:0;right:0;top:0;bottom:0;margin:0;flex:none;
+  justify-content:center;align-items:center;pointer-events:none;}
+.arp-ext .h .pset .pn,.gli-ext .h .pset .pn,.rbn-ext .h .pset .pn,.chop-ext .h .pset .pn{pointer-events:auto;}
 
 /* ══ tp73 — THE TERRAIN SHAPER card = THE GLITCH CARD WITH THE LFO IN ITS SCREEN (.shp-ext rides .chop-ext's chassis; the
    numbers below are the Glitch's and the LFO pane's, copied). Max: "take the exact same glitch and just replace everything
@@ -4151,6 +4163,20 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
   font-family:-apple-system,'SF Pro Display',sans-serif;line-height:.82;cursor:ns-resize;}
 .ti-card .big i{font-style:normal;font-size:16px;font-weight:200;color:rgba(255,255,255,.42);}
 .ti-card .k svg,.ti-card .kn{cursor:ns-resize;}
+/* ═══ 2026-09-23 (Max) — THE VALUE LIVES INSIDE THE KNOB (house identity) ═══════════════════════
+   Every circular card knob (.cell.k, the only cell knobCell builds) carries its number CENTRED on
+   the dot, white and ultra-thin — the exact #syn-panel .knob-ring .kv grammar (SF Pro Display 300,
+   inset:0 centre, padding-top .2em = the fb637 optical-centre fix), recycled verbatim. Only the
+   circular knobs get this; the sliders (.cell without .k) keep their value below. Fixed positions:
+   the number swaps in place, nothing else moves. */
+.ti-card .cell.k .ctl{position:relative;}
+/* only the value that knobCell nests INSIDE the dial (.ctl > .vl) moves to the centre; a card that
+   builds its own .cell.k with the value BELOW the dial (glitch Hold/Loop) keeps it there untouched. */
+.ti-card .cell.k .ctl > .vl{position:absolute;inset:0;margin:0;min-height:0;
+  display:flex;align-items:center;justify-content:center;pointer-events:none;box-sizing:border-box;
+  font-family:-apple-system,'SF Pro Display',sans-serif;font-weight:300;font-size:8.5px;
+  letter-spacing:0;line-height:1;padding-top:.2em;white-space:nowrap;
+  color:rgba(255,255,255,.92);font-variant-numeric:tabular-nums;text-transform:none;}
 
 /* hairline knob ring (r=14 · rotate 128 — the locked ring) sizes per card */
 .arp-ext .k svg{width:34px;height:34px;display:block;}
@@ -4232,7 +4258,7 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
   
   display:flex;align-items:center;justify-content:center;font-size:7px;color:rgba(255,255,255,.55);cursor:pointer;transition:border-color .12s,color .12s;}
 .ti-card .chip:hover{color:rgba(255,255,255,.85);}
-.ti-card .chip.cur{border-color:rgba(255,255,255,.85);color:#fff;   /* tp11 — white, not purple (Max) */ text-shadow:0 0 3px rgba(255,255,255,.35);}   /* fb125 button law */
+.ti-card .chip.cur{border-color:var(--purple-400);color:#fff;   /* 2026-09-23 (Max) — the chain button: PURPLE outline, white inside (was white outline, tp11). The flow-card selected-state law: purple outline, white ink, no fill. */}   /* fb125 button law */
 .ti-card .arr{color:rgba(255,255,255,.25);font-size:8px;}
 .ti-card .add{margin-left:auto;color:rgba(255,255,255,.40);font-size:10px;cursor:pointer;}
 .ti-card .add:hover{color:rgba(255,255,255,.85);}
@@ -36696,6 +36722,17 @@ restoreThemeFromBackend();
          (SynthModConfig.h flowInstDest: FlowInstBase + (n-2)*473 + (d - FlowTime)). Robin stays one. */
       try{ Object.keys(MODDEST).forEach(function(k){ var mm=/^FLOW_(ARP|SEQ|CHOP|GLI)_(.+)$/.exec(k); if(!mm) return;
         for(var n=2;n<=4;n++) MODDEST['FLOW_'+mm[1]+n+'_'+mm[2]]=window.__flowInstDest?window.__flowInstDest(n,MODDEST[k]):MODDEST[k]; }); }catch(eM){ try{ console.warn('[tp20] flow dest mirror', eM); }catch(_){} }
+      /* ═══ 2026-09-23 (Max) — WIRE THE SHAPER'S DEPTH KNOB INTO MODULATION ═══════════════════════
+         The Shaper (Chop flow card) exposes one modulation destination per lane — the lane's Depth —
+         at ModDest::ShaperDepthBase (5200) + (inst-1)*18 + lane, the exact ints the mod matrix
+         registers (SHP_DEPTH_BASE, ~line 46853) and FlowShaper.h's kind order. Publishing them here
+         makes each Depth knob a drop target AND gives it the purple .sm-ring (family 'card') like
+         every other flow card. The flowMod path already exists in the engine, so this is pure UI
+         wiring — no C++. The lane order is LNP (the Shaper's own tile order). Added AFTER the mirror
+         loop above so its FlowInst formula never rewrites these fixed 5200-base ints. */
+      (function(){ var SHPLN=['VOL','TIME','FILT','PAN','REP','DRIVE','PHASE','CRUSH','VERB','DELAY','CHORUS','WIDEN','MULTI','TAPE','GRAIN','BODE','NOISE','FLANGE'];
+        for(var inst=1;inst<=4;inst++){ var sfx=inst>1?String(inst):'';
+          for(var k=0;k<SHPLN.length;k++) MODDEST['FLOW_CHOP'+sfx+'_'+SHPLN[k]+'_DEPTH']=5200+(inst-1)*18+k; } })();
       window.__flowModDestOf=function(id){ return MODDEST[id]; };   /* tp20 — the probes read the table through this */
       function stampMod(card,BIND,S){
         /* fb145 — every continuous card control joins the LFO drop-target pool. The
@@ -36719,7 +36756,10 @@ restoreThemeFromBackend();
         try{ new MutationObserver(function(){ apply(); }).observe(card,{childList:true,subtree:true}); }catch(e){}
       }
       function knobCell(S,key,label,fmt,reset){
-        var c=el('<div class="cell k"><div class="ctl">'+knobSVG()+'</div><span class="lb">'+label+'</span><span class="vl"></span></div>');
+        /* 2026-09-23 (Max) — the value rides INSIDE the knob (house identity): the .vl lives in the
+           .ctl over the dial, centred, white and ultra-thin (see .ti-card .cell.k .vl). The label
+           stays below. Fixed positions — only the content swaps. */
+        var c=el('<div class="cell k"><div class="ctl">'+knobSVG()+'<span class="vl"></span></div><span class="lb">'+label+'</span></div>');
         c.setAttribute('data-ti-key',key);   /* fb145 — LFO drop-target identity */
         var vl=c.querySelector('.vl');
         function paint(){ setRing(c,S.v[key]); vl.textContent=(fmt||pct)(S.v[key]); }
@@ -37005,11 +37045,13 @@ restoreThemeFromBackend();
         var saveFn=NF('savePreset'), listFn=NF('getPresets'), delFn=NF('deletePreset');
         var user=[], curName='Init';
         var h=cfg.sh.card.querySelector('.h');
-        var ctl=el('<span class="pset"><span class="pa" title="Previous preset">‹</span>'
-          +'<span class="pn" title="Presets">Init</span>'
-          +'<span class="pa" title="Next preset">›</span></span>');
+        /* 2026-09-23 (Max) — NO ARROWS. The preset selector is a house DROPDOWN (the .pmenu idiom,
+           like engine-select everywhere else): the pill IS the trigger — click it, SEE the list —
+           never click-to-step through presets (the fb275 "dropdowns, not click-to-cycle" law). A
+           long name ellipsises at the pill's fixed width (no reflow). */
+        var ctl=el('<span class="pset"><span class="pn" title="Presets">Init</span></span>');
         h.insertBefore(ctl,h.querySelector('.mix'));
-        var pas=ctl.querySelectorAll('.pa'), pn=ctl.querySelector('.pn');
+        var pn=ctl.querySelector('.pn');
         /* fb623 — this card's pill name lives in the patch now. Seed from whatever is loaded, and
            register so a preset load can push the new name straight onto the pill. */
         try{ var pv0=window.__tiPills&&window.__tiPills.get(cfg.id); if(pv0){ curName=pv0; pn.textContent=pv0; } }catch(e){}
@@ -37040,8 +37082,9 @@ restoreThemeFromBackend();
         function step(d){ var L=allP(); if(!L.length)return; var i=0,j;
           for(j=0;j<L.length;j++)if(L[j].name===curName){ i=j; break; }
           apply(L[(i+d+L.length)%L.length]); }
-        pas[0].addEventListener('click',function(e){ e.stopPropagation(); step(-1); });
-        pas[1].addEventListener('click',function(e){ e.stopPropagation(); step(1); });
+        /* 2026-09-23 — the ‹ › arrows are gone; `step()` stays defined for host prev/next-preset
+           keybinds but the header no longer offers click-to-cycle (dropdown only). */
+        void step;
         function refresh(cb){ if(!listFn){ if(cb)cb(); return; }
           try{ Promise.resolve(listFn(FOLD)).then(function(x){
             try{ var a=JSON.parse(String(x||'[]')); user=[];
@@ -38278,6 +38321,12 @@ restoreThemeFromBackend();
               ['verb','Reverb','Reverb'],['delay','Delay','Delay'],['chorus','Chorus','Chorus'],['widen','Widen','Widen'],['multi','Multi','Multiband'],
               ['tape','Tape','Tape'],['grain','Grain','Granular'],['bode','Bode','Bode'],['noise','Noise','Noise'],['flange','Flange','Flanger']];   /* tp91 — Max: "flanger is a whole different beast than a phaser … it deserves its own dedicated panel" */
       var LNP=['VOL','TIME','FILT','PAN','REP','DRIVE','PHASE','CRUSH','VERB','DELAY','CHORUS','WIDEN','MULTI','TAPE','GRAIN','BODE','NOISE','FLANGE'];
+      /* 2026-09-23 (Max) — the effects picker (right-click a tile) is ALPHABETICALLY CATEGORISED:
+         each effect's family, keyed by its long name (LN[k][2]). slotMenu groups by these, sorts the
+         categories A→Z and the effects inside each A→Z. */
+      var SHP_CAT={ 'Volume':'Level','Time':'Time','Filter':'Filter','Pan':'Stereo','Repeat':'Time','Drive':'Distortion',
+        'Phaser':'Modulation','Crush':'Distortion','Reverb':'Space','Delay':'Space','Chorus':'Modulation','Widen':'Stereo',
+        'Multiband':'Filter','Tape':'Texture','Granular':'Texture','Bode':'Modulation','Noise':'Texture','Flanger':'Modulation' };
       /* ⚠️ tp81 — every FOURTH target boots NEUTRAL, or the knob changes what the lane already did: Volume Hold 0,
          Filter Punch 0, Phaser Centre 0.2 (= the 200 Hz it always swept from), Crush Stereo 0, Tone/Tilt 0.5. */
       var KDEF={ vol:[.5,.5,0,0,.5,.5], time:[.3,0,.5,.5,.5,.5], filt:[.3,0,1,0,0,0], pan:[.5,0,0,.5,.5,.5], rep:[.3,0,.5,.5,.5,.5], drive:[.5,.5,.5,.5,.5,.5], phase:[.5,.5,0,.2,.5,.5], crush:[.5,.5,1,0,.5,.5],
@@ -38782,7 +38831,32 @@ restoreThemeFromBackend();
             var N=d.n, raw=[]; for(var q=0;q<N;q++) raw.push([q/N,Math.max(0,Math.min(1,(d.d[q]+1)/2))]); raw.push([1,Math.max(0,Math.min(1,(d.d[0]+1)/2))]);
             var simp=rdp(raw,0.015); if(simp.length>110) simp=rdp(raw,0.03); if(simp.length>170) simp=rdp(raw,0.055);
             setPts(i,simp.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; })); }catch(e2){} }).catch(function(){}); }catch(e3){} }
-        function menu(e){ if(!window.__synShowMenu)return; var i=lane(), l=lkey();
+        /* ══ 2026-09-23 (Max) — THE CARD'S RIGHT-CLICK MENU, HOUSE .pmenu GLASS, AT THE CLICK ═══════════
+           A popped flow card lives in its own native window, where __synShowMenu positions against the
+           (invisible, full-size) ghost #syn-panel and lands in the SCREEN CORNER. So when the card is
+           popped we render the SAME rows as a body-level .pmenu AT THE CLICK, clamped to the viewport
+           (the exact TIC.presets / shape-picker clamp) — z beats the card, fully visible, on top of
+           everything. Docked keeps __synShowMenu untouched. (The DAW-overlap ShaperBox does is a native-
+           window limit and is out of reach from the web layer; the corner bug is what this fixes.) */
+        var pm=null;
+        function closePm(){ if(pm){ try{ pm.remove(); }catch(e){} pm=null; document.removeEventListener('pointerdown',pmOut,true); } }
+        function pmOut(ev){ if(pm&&!pm.contains(ev.target)) closePm(); }
+        function pmenuFor(rows,x,y){ closePm();
+          var m=TIC.el('<div class="pmenu"></div>');
+          rows.forEach(function(r){ if(!r)return;
+            if(r.node){ m.appendChild(r.node); return; }
+            if(r.isHeader){ var s=TIC.el('<div class="ps"></div>'); s.textContent=r.label||''; m.appendChild(s); return; }
+            var pi=TIC.el('<div class="pi'+(r.isChecked?' cur':'')+'"><span class="nm"></span></div>');
+            pi.querySelector('.nm').textContent=r.label||'';
+            if(!r.isDisabled) pi.addEventListener('click',function(ev){ ev.stopPropagation(); try{ r.onPick&&r.onPick(); }catch(e){} if(!r.keepOpen) closePm(); });
+            m.appendChild(pi); });
+          document.body.appendChild(m); pm=m;
+          var w=m.offsetWidth, h=m.offsetHeight;
+          m.style.left=Math.max(6,Math.min(window.__vw()-w-6,x))+'px';
+          m.style.top =Math.max(6,Math.min(window.__vh()-h-6,y))+'px';
+          setTimeout(function(){ document.addEventListener('pointerdown',pmOut,true); },0); return m; }
+        function showRows(rows,x,y){ if(window.__cardOnly) pmenuFor(rows,x,y); else if(window.__synShowMenu) window.__synShowMenu('',rows,x,y); }
+        function menu(e){ if(!window.__cardOnly && !window.__synShowMenu)return; var i=lane(), l=lkey();
           /* the LFO's rows, trimmed (Max: "it's a pretty big menu"): the brushes and the shapes live in the bar's dropdowns now */
           var rows=[ { node:sliderNode('Grid','grid'+i,GRIDS,function(){ push(); paint(); paintClock(); }) },
             { node:sliderNode('Level','lgrid',LGRIDS,function(){ paint(); }) },
@@ -38800,7 +38874,7 @@ restoreThemeFromBackend();
             rows.push({ label:'Remove selected', white:true, onPick:function(){ var pts=ptsOf(i), keep=pts.filter(function(q,k){ return k===0||k===pts.length-1||sel.indexOf(k)<0; }); sel=[]; setPts(i,keep); } });
             rows.push({ label:'Straighten selected', white:true, onPick:function(){ var pts=ptsOf(i); sel.forEach(function(k){ if(pts[k]) pts[k][2]=0; }); setPts(i,pts); } }); }
           rows.push({ label:'Clear', white:true, onPick:function(){ sel=[]; setPts(i,stock(l==='time'?'unity':'flat'),l==='time'?'unity':'flat'); } });
-          window.__synShowMenu('', rows, e.clientX, e.clientY); }
+          showRows(rows, e.clientX, e.clientY); }
 
         /* ── the eight targets — the Glitch's tiles: the text, the dot ── */
         var bank=TIC.el('<div><div class="fx"></div><div class="fleds">'+new Array(9).join('<i></i>')+'</div></div>');
@@ -38815,18 +38889,24 @@ restoreThemeFromBackend();
         /* tp79 — RIGHT-CLICK A TILE TO PLACE A LANE THERE. Max: "we right click on the buttons … I right click on
            Time, boom … I want to put Bode second, I want to put Pan third." Eight kinds, eight positions, so a kind
            is never duplicated and every pick is a SWAP — which is exactly Max's "I just put it in second". */
-        function slotMenu(e,p){ if(!window.__synShowMenu)return; var c=chainOf(S), here=c[p];
+        function slotMenu(e,p){ if(!window.__cardOnly && !window.__synShowMenu)return; var c=chainOf(S), here=c[p];
           var rows=[{ isHeader:true, label:'Position '+(p+1)+' in the chain' }];
-          LN.forEach(function(l,k){ rows.push({ label:l[2], white:true, isChecked:k===here, onPick:function(){
+          function place(k){
             /* tp80 — two cases, because the roster is longer than the chain: a kind ALREADY down trades
                positions with whatever is here (Max: "I just put it in second"), and one that is NOT down
                REPLACES what is here — which is how a Reverb gets into the chain at all. */
             var a=chainOf(S), at=a.indexOf(k); if(at===p)return; if(at>=0) a[at]=a[p]; a[p]=k;
             for(var q=0;q<SLOTS;q++) S.set('slotk'+q,a[q]);
-            S.set('lane',k); push(); paintBank(); paint(); } }); });
+            S.set('lane',k); push(); paintBank(); paint(); }
+          /* 2026-09-23 (Max) — the effects list is ALPHABETICALLY CATEGORISED (SHP_CAT): categories A→Z,
+             the effects inside each A→Z. The pick still SWAPS the kind into this position (tp79/tp80). */
+          var byCat={}; LN.forEach(function(l,k){ var cat=SHP_CAT[l[2]]||'Other'; (byCat[cat]=byCat[cat]||[]).push({k:k,name:l[2]}); });
+          Object.keys(byCat).sort().forEach(function(cat){ rows.push({ isHeader:true, label:cat });
+            byCat[cat].sort(function(a,b){ return a.name<b.name?-1:1; }).forEach(function(it){
+              rows.push({ label:it.name, white:true, isChecked:it.k===here, onPick:(function(k){ return function(){ place(k); }; })(it.k) }); }); });
           rows.push({ isHeader:true, label:'Chain' });
           rows.push({ label:'Reset order', white:true, onPick:function(){ for(var q=0;q<SLOTS;q++) S.set('slotk'+q,q); push(); paintBank(); paint(); } });
-          window.__synShowMenu('', rows, e.clientX, e.clientY); }
+          showRows(rows, e.clientX, e.clientY); }
         function paintBank(){ var i=lane(), c=chainOf(S);
           TIC.EA(fxEl.querySelectorAll('.fxb'),function(b,p){ var k=c[p];
             if(b.getAttribute('data-l')!==String(k)){ b.setAttribute('data-l',String(k)); b.textContent=LN[k][1]; b.title=LN[k][2]+' — right-click to place another lane here'; b.classList.toggle('long',LN[k][1].length>5); }
