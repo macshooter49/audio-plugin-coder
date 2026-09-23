@@ -7223,6 +7223,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   <!-- HEADER -->
   <div id="header">
     <div class="header-left">
+      <!-- CPU% on the LEFT balances the version on the right; TERRAIN stays centred. Ultra-thin white
+           (the BPM-number style). Shown only when Settings → Performance → CPU meter is On. -->
+      <span class="brand-cpu" id="hdr-cpu" style="display:none"></span>
       <span class="brand-name">Terrain</span>
       <span class="brand-version">V1</span>
     </div>
@@ -7293,57 +7296,901 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     </div>
   </div>
 
-  <!-- SETTINGS PANEL -->
-  <div id="settings-panel" style="display:none">
-    <div class="settings-overlay"></div>
-    <div class="settings-content">
-      <div class="settings-header">
-        <span>Settings</span>
-        <button class="settings-close" id="settings-close">&times;</button>
+  <!-- ══════════════════════════════════════════════════════════════════════════════════════
+       SETTINGS OVERLAY — the approved settings menu (Design/settings-mockup.html), wired.
+       RECYCLED, verbatim, from the preset browser: the #tp-b glass sheet, the .pmenu, .tp-chip,
+       .tp-btn, .tp-in fields, the Save sheet grammar, #tp-toast. Everything is SCOPED under
+       #st-overlay so nothing collides with the live preset browser (which owns #tp-b / #tp-sheet
+       / #tp-toast / .pmenu). The body-level menu is .st-menu (a private copy of .pmenu).
+       Follows: centerline · fixed-positions · recycle-existing · state-persists · no-clicks.
+  ═══════════════════════════════════════════════════════════════════════════════════════════ -->
+  <style id="st-css">
+  /* header CPU meter (LEFT of TERRAIN; V1 stays right) — the ultra-thin white BPM-number style */
+  .brand-cpu{font-size:10px;letter-spacing:1.2px;font-weight:200;color:rgba(255,255,255,.82);margin-right:2px;padding-top:3px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .brand-cpu i{font-style:normal;font-weight:200;color:rgba(255,255,255,.42);margin-left:2px;}
+  /* the settings TERRAIN header band = the SAME dark-glass as the sheet (don't recolour it differently) */
+  body.st-open #header{background:var(--menu-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);}
+
+  /* the private menu — a copy of .pmenu (4033-4053) so the settings never touch the preset browser's */
+  .st-menu{position:fixed;z-index:2147483646;min-width:176px;max-width:206px;max-height:340px;overflow-y:auto;
+    background:rgba(22,20,34,0.72);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+    border:1px solid rgba(255,255,255,0.11);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);
+    padding:5px;font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;}
+  .st-menu .ps{font-size:9px;font-weight:500;letter-spacing:0;color:rgba(255,255,255,.50);padding:8px 9px 3px;}
+  .st-menu .pi{display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:9.5px;letter-spacing:.5px;color:rgba(255,255,255,.5);transition:.1s;}
+  .st-menu .pi .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .st-menu .pi:hover{color:rgba(255,255,255,.86);background:rgba(255,255,255,0.05);}
+  .st-menu .pi.cur{color:#FFFFFF;background:rgba(255,255,255,0.07);}
+  .st-menu .pi.cur::before{content:'\2022';color:#fff;font-size:9px;line-height:1;flex:none;}
+  .st-menu .pi .ct{color:rgba(255,255,255,.26);font-size:8px;letter-spacing:0;flex:none;}
+  .st-menu .pi.off{opacity:.4;pointer-events:none;}
+  .st-menu::-webkit-scrollbar{width:5px;height:5px;} .st-menu::-webkit-scrollbar-track{background:transparent;}
+  .st-menu::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.13);border-radius:3px;}
+
+  /* the overlay: the #tp-b chassis at top:44 (header stays clickable above it) */
+  #st-overlay{position:absolute;left:0;right:0;top:44px;bottom:0;z-index:2050;display:none;flex-direction:column;color:var(--text-primary);
+    font-family:-apple-system,'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-user-select:none;user-select:none;}
+  #st-overlay.on{display:flex;}
+  #st-overlay .tp-glass,#st-overlay #st-b{background:var(--menu-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);}
+  #st-overlay #st-b{position:absolute;inset:0;display:flex;flex-direction:column;}
+  #st-overlay .tb{height:38px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--menu-line);flex:none;}
+  #st-overlay .sw{position:relative;flex:1;max-width:300px;}
+  #st-overlay .sw::before{content:'';position:absolute;left:1px;top:50%;transform:translateY(-50%);width:11px;height:11px;border:1.5px solid var(--text-secondary);border-radius:50%;pointer-events:none;}
+  #st-overlay .sw::after{content:'';position:absolute;left:10px;top:calc(50% + 4px);width:4px;height:1.5px;background:var(--text-secondary);transform:rotate(45deg);pointer-events:none;}
+  #st-overlay .search{width:100%;height:26px;border:none;border-radius:5px;padding:0 8px 0 21px;font-size:11.5px;background:transparent;color:var(--text-primary);outline:none;font-family:inherit;}
+  #st-overlay .search::placeholder{color:var(--text-muted);}
+  #st-overlay .count{margin-left:auto;font-size:10px;color:var(--text-soft);white-space:nowrap;margin-right:4px;}
+  #st-overlay .count b{color:var(--text-primary);font-weight:500;}
+  #st-overlay .ibtn{width:26px;height:26px;border:none;border-radius:5px;background:transparent;color:var(--text-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:color .15s,box-shadow .15s;}
+  #st-overlay .ibtn:hover{color:var(--text-primary);box-shadow:inset 0 0 0 1px var(--edge-soft);}
+  #st-overlay .ibtn svg{width:15px;height:15px;}
+  #st-overlay .tp-chip{padding:4px 9px;border:1px solid var(--edge-soft);border-radius:4px;background:transparent;font-size:9.5px;font-weight:500;color:var(--text-soft);cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap;line-height:1.2;flex:none;font-family:inherit;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+  #st-overlay .tp-chip:hover{color:var(--text-primary);}
+  #st-overlay .tp-chip.active{background:transparent;border-color:var(--purple-400);color:var(--on-fg);}
+  #st-overlay .tp-chip.add{border-style:dashed;color:var(--purple-400);padding:0;width:22px;height:20px;display:flex;align-items:center;justify-content:center;margin-right:2px;}
+  #st-overlay .tp-chip.add svg{width:11px;height:11px;}
+  #st-overlay .tp-chip.add:hover{border-color:var(--purple-400);color:var(--on-fg);}
+  #st-overlay .body{flex:1;min-height:0;display:flex;}
+  #st-overlay .rail{width:138px;flex:none;border-right:1px solid var(--menu-line);overflow-y:auto;padding:8px 0 12px;scrollbar-width:none;}
+  #st-overlay .rail::-webkit-scrollbar,#st-overlay .insp::-webkit-scrollbar{width:0;height:0;display:none;}
+  #st-overlay .rail .sec{font-size:10px;font-weight:500;color:var(--text-soft);padding:12px 16px 5px;}
+  #st-overlay .rail .ri{display:flex;align-items:center;gap:7px;height:23px;padding:0 16px 0 14px;cursor:pointer;font-size:10.5px;color:var(--text-soft);border-left:2px solid transparent;transition:color .1s,background .1s;}
+  #st-overlay .rail .ri .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #st-overlay .rail .ri:hover{color:var(--text-primary);background:rgba(127,127,160,0.07);}
+  #st-overlay .rail .ri.cur{color:var(--sel-fg);border-left-color:var(--purple-500);background:transparent;}
+  #st-overlay .rail .ri svg{width:11px;height:11px;flex:none;}
+  #st-overlay .tag{font-size:9px;font-weight:500;color:var(--purple-400);flex:none;}
+  #st-overlay .tag.user{color:var(--text-secondary);}
+  #st-overlay .insp{width:224px;flex:none;border-left:1px solid var(--menu-line);display:flex;flex-direction:column;overflow:hidden;}
+  #st-overlay .iscroll{flex:1;min-height:0;overflow-y:auto;padding:14px 18px 14px;}
+  #st-overlay .iscroll::-webkit-scrollbar{width:5px;height:5px;}
+  #st-overlay .iscroll::-webkit-scrollbar-track{background:transparent;}
+  #st-overlay .iscroll::-webkit-scrollbar-thumb{background:rgba(127,127,160,0.25);border-radius:3px;}
+  #st-overlay .iscroll::-webkit-scrollbar-thumb:hover{background:rgba(127,127,160,0.45);}
+  #st-overlay .insp .nm{font-size:13px;font-weight:500;color:var(--text-primary);line-height:1.3;letter-spacing:.2px;}
+  #st-overlay .insp .sub{margin-top:3px;min-height:14px;font-size:10px;font-weight:500;color:var(--text-secondary);line-height:14px;}
+  #st-overlay .insp .kv{display:grid;grid-template-columns:52px 1fr;row-gap:5px;column-gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--menu-line);}
+  #st-overlay .insp .k{font-size:10px;font-weight:500;color:var(--text-soft);line-height:14px;}
+  #st-overlay .insp .v{font-size:10.5px;color:var(--text-primary);line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #st-overlay .insp .notes{margin-top:12px;padding-top:12px;border-top:1px solid var(--menu-line);}
+  #st-overlay .insp .notes .k{margin-bottom:4px;}
+  #st-overlay .tp-notebox{min-height:34px;border-radius:6px;padding:5px 7px;margin:0 -7px;font-size:10.5px;line-height:1.45;color:var(--text-primary);outline:none;white-space:pre-wrap;word-break:break-word;}
+  #st-overlay .insp .acts{flex:none;display:flex;gap:6px;padding:10px 18px 12px;border-top:1px solid var(--menu-line);}
+  #st-overlay .tp-btn{height:28px;border:1px solid var(--edge-soft);border-radius:6px;background:transparent;color:var(--text-soft);font-size:10.5px;font-weight:500;cursor:pointer;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,color .15s;font-family:inherit;}
+  #st-overlay .tp-btn:hover{color:var(--text-primary);border-color:var(--edge);}
+  #st-overlay .tp-btn.pri{border-color:var(--purple-400);color:var(--on-fg);flex:1;}
+  #st-overlay .tp-btn.pri:hover{border-color:var(--purple-600);}
+  #st-overlay .tp-btn:disabled{opacity:.3;pointer-events:none;}
+
+  /* the ti-card kit pieces used here (knob ring, track, slot dot, keys, the velocity screen) */
+  #st-overlay .gbox{position:relative;border:1px solid rgba(255,255,255,.15);border-radius:9px;}
+  #st-overlay .gbl{position:absolute;top:-4px;left:50%;transform:translateX(-50%);font-size:6px;letter-spacing:1.6px;text-transform:uppercase;line-height:8px;color:rgba(255,255,255,.92);background:#1A1A2E;padding:0 6px;white-space:nowrap;pointer-events:none;}
+  #st-overlay .cell{display:flex;flex-direction:column;align-items:center;min-width:0;}
+  #st-overlay .ctl{display:flex;align-items:flex-end;justify-content:center;width:100%;}
+  #st-overlay .cell .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;color:rgba(255,255,255,.45);line-height:1;margin-top:6px;}
+  #st-overlay .cell .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1;margin-top:4px;min-height:9px;}
+  #st-overlay .cell .lb,#st-overlay .cell .vl{white-space:nowrap;max-width:100%;overflow:hidden;text-align:center;text-overflow:ellipsis;}
+  #st-overlay .k svg{width:30px;height:30px;display:block;cursor:ns-resize;}
+  #st-overlay .k svg .km{stroke:#B794FF;}
+  #st-overlay .tr{position:relative;height:16px;width:100%;cursor:ew-resize;}
+  #st-overlay .tr::before{content:'';position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,0.16);}
+  #st-overlay .tr u{position:absolute;left:50%;top:50%;width:1px;height:7px;transform:translate(-50%,-50%);background:rgba(255,255,255,0.28);pointer-events:none;}
+  #st-overlay .tr i{position:absolute;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,.92);pointer-events:none;}
+  #st-overlay .tr i.lv{background:#B794FF!important;box-shadow:0 0 4px rgba(183,148,255,.65);}
+  #st-overlay .tr b{position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#fff;transform:translate(-50%,-50%);pointer-events:none;}
+  #st-overlay .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px;cursor:pointer;}
+  #st-overlay .sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26);transition:background .12s,border-color .12s;}
+  #st-overlay .sd:hover i{border-color:rgba(255,255,255,.55);}
+  #st-overlay .sd.on i{background:rgba(255,255,255,.92);border-color:transparent;}
+  #st-overlay .fxb{border:1px solid rgba(255,255,255,.20);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;text-transform:uppercase;color:rgba(255,255,255,.50);transition:background .12s,color .12s,border-color .12s;}
+  #st-overlay .fxb:hover{color:rgba(255,255,255,.85);}
+  #st-overlay .fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600;}
+  #st-overlay .crv{position:relative;border-radius:4px;background:#0F0F1C;border:1px solid rgba(255,255,255,.06);overflow:hidden;cursor:ns-resize;touch-action:none;}
+  #st-overlay .crv svg{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  #st-overlay .crv .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85));vector-effect:non-scaling-stroke;}
+  #st-overlay .crv .grid line{stroke:rgba(255,255,255,.065);stroke-width:1;vector-effect:non-scaling-stroke;}
+  #st-overlay .crv .dt{fill:#fff;}
+
+  /* the settings sheet — #tp-sheet grammar, scoped */
+  #st-overlay #st-sheet{position:absolute;inset:0;z-index:2100;background:var(--wash);display:none;align-items:center;justify-content:center;color:var(--text-primary);}
+  #st-overlay #st-sheet.on{display:flex;}
+  #st-overlay #st-sheet .tp-card{width:340px;display:flex;flex-direction:column;max-height:calc(100% - 40px);background:var(--menu-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--menu-line);border-radius:12px;padding:20px 22px 18px;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);}
+  #st-overlay #st-sheet .tp-card.wide{width:480px;max-width:calc(100% - 60px);}
+  #st-overlay .tp-hd{font-size:11.5px;font-weight:500;color:var(--text-primary);margin-bottom:14px;flex:none;}
+  #st-overlay .tp-hd.row{display:flex;align-items:center;}
+  #st-overlay .tp-sbody{flex:1;min-height:0;overflow-y:auto;margin:0 -6px;padding:0 6px;}
+  #st-overlay .tp-f{display:grid;grid-template-columns:56px 1fr;align-items:center;column-gap:10px;row-gap:9px;}
+  #st-overlay .tp-f .k{font-size:10px;font-weight:500;color:var(--text-soft);align-self:start;padding-top:7px;}
+  #st-overlay .tp-f .v{font-size:10.5px;color:var(--text-primary);padding-top:6px;line-height:1.5;}
+  #st-overlay .tp-in{height:28px;border:1px solid var(--menu-line);border-radius:5px;padding:0 9px;font-size:11px;background:rgba(255,255,255,0.05);color:var(--text-primary);outline:none;width:100%;font-family:inherit;}
+  #st-overlay .tp-in:focus{border-color:var(--purple-400);background:rgba(255,255,255,0.07);}
+  #st-overlay .tp-in::placeholder{color:var(--text-muted);}
+  #st-overlay .tp-note-in{height:auto;min-height:46px;max-height:108px;overflow-y:auto;padding:6px 9px;line-height:1.45;white-space:pre-wrap;word-break:break-word;text-align:left;cursor:text;user-select:text;-webkit-user-select:text;}
+  #st-overlay .tp-note-in:empty::before{content:attr(data-ph);color:var(--text-muted);}
+  #st-overlay .chp{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+  #st-overlay .tp-acts{display:flex;gap:6px;margin-top:18px;justify-content:flex-end;flex:none;}
+  #st-overlay .tp-acts .tp-btn.pri{flex:none;padding:0 18px;}
+  #st-overlay .tp-note{margin-top:10px;font-size:9.5px;color:var(--text-secondary);line-height:1.5;}
+  #st-overlay .tp-text{font-size:11px;color:var(--text-primary);line-height:1.55;}
+  #st-overlay .tp-text b{font-weight:500;}
+  #st-overlay .ld{height:2px;background:var(--border-strong);border-radius:1px;overflow:hidden;}
+  #st-overlay .ld i{display:block;height:100%;width:0;background:var(--purple-500);border-radius:1px;transition:width .12s linear;}
+  #st-overlay #st-toast{position:absolute;left:50%;bottom:18px;transform:translate(-50%,8px);z-index:2200;border:1px solid rgba(255,255,255,0.11);border-radius:8px;padding:7px 12px;font-size:10.5px;color:#fff;background:rgba(22,20,34,0.72);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;white-space:nowrap;max-width:560px;overflow:hidden;text-overflow:ellipsis;}
+  #st-overlay #st-toast.on{opacity:1;transform:translate(-50%,0);}
+  #st-overlay #st-toast .tp-bk{color:rgba(255,255,255,.5);}
+
+  /* the pane layout (box sizes / lanes / gaps / house type sizes only) */
+  #st-overlay #st-pane{flex:1;min-width:0;overflow-y:auto;padding:0 0 18px;}
+  #st-overlay #st-pane::-webkit-scrollbar{width:5px;} #st-overlay #st-pane::-webkit-scrollbar-track{background:transparent;}
+  #st-overlay #st-pane::-webkit-scrollbar-thumb{background:rgba(127,127,160,0.25);border-radius:3px;}
+  #st-overlay .ph{height:46px;display:flex;align-items:center;gap:8px;padding:0 18px;}
+  #st-overlay .ph .t{font-size:13px;font-weight:500;letter-spacing:.2px;color:var(--text-primary);white-space:nowrap;}
+  #st-overlay .ph .w{margin-left:auto;font-size:9.5px;color:var(--text-secondary);white-space:nowrap;}
+  #st-overlay .gh{display:flex;align-items:center;height:28px;margin:6px 18px 0;border-top:1px solid var(--menu-line);font-size:10px;font-weight:500;color:var(--text-soft);}
+  #st-overlay .gh .x{margin-left:auto;font-weight:400;color:var(--text-muted);font-size:9.5px;}
+  #st-overlay .note{margin:2px 18px 6px;font-size:9.5px;line-height:1.5;color:var(--text-secondary);}
+  #st-overlay .note b{color:var(--text-soft);font-weight:500;}
+  #st-overlay .sr{display:flex;align-items:center;height:34px;padding:0 18px;gap:10px;transition:background .08s;}
+  #st-overlay .sr:hover{background:rgba(127,127,160,0.07);}
+  #st-overlay .sr.flash{box-shadow:inset 0 0 0 1px var(--purple-400);}
+  #st-overlay .sr .lbl{flex:1;min-width:0;display:flex;align-items:center;gap:7px;}
+  #st-overlay .sr .lbl .t{font-size:10.5px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  #st-overlay .sr .lane{width:232px;flex:none;display:flex;align-items:center;gap:4px;min-width:0;}
+  #st-overlay .sr .lane .tp-btn{height:24px;padding:0 10px;}
+  #st-overlay .sr.soon .lane{opacity:.35;pointer-events:none;}
+  #st-overlay .sr .val{font-size:10.5px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  #st-overlay .sr .val.dim{color:var(--text-secondary);}
+  #st-overlay .sr .dd{position:relative;display:flex;align-items:center;cursor:pointer;padding-right:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:26px;}
+  #st-overlay .sr .dd.open{border-color:var(--purple-400);}
+  #st-overlay .sr .dd svg{position:absolute;right:9px;top:50%;width:9px;height:9px;margin-top:-4.5px;color:var(--text-secondary);}
+  #st-overlay .sr .dd .v{overflow:hidden;text-overflow:ellipsis;}
+  #st-overlay .sr .dd .u{color:var(--text-secondary);margin-left:6px;}
+  /* numbers — ultra-thin white (the BPM-number style); unit tight, and it never moves as digits change */
+  #st-overlay .num{font-size:13px;color:rgba(255,255,255,.92);font-weight:200;font-variant-numeric:tabular-nums;}
+  #st-overlay .num b{cursor:ns-resize;user-select:none;font:inherit;font-weight:200;color:#fff;display:inline-block;min-width:1.5em;text-align:right;}
+  #st-overlay .num span{font-weight:200;color:rgba(255,255,255,.5);margin-left:3px;}
+  #st-overlay .sr .lane .tr{flex:1;}
+  #st-overlay .blk{padding:4px 18px 8px;}
+  #st-overlay .lst{border:1px solid var(--menu-line);border-radius:6px;overflow:hidden;}
+  #st-overlay .lst .r{display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;font-size:10px;color:var(--text-soft);}
+  #st-overlay .lst .r+.r{border-top:1px solid rgba(255,255,255,.05);}
+  #st-overlay .lst .r:hover{background:rgba(127,127,160,0.07);}
+  #st-overlay .lst .r .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #st-overlay .lst .r .c1{width:44px;flex:none;color:var(--text-primary);font-weight:500;}
+  #st-overlay .lst .r .c2{width:74px;flex:none;color:var(--text-secondary);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #st-overlay .lst .r .x{width:14px;flex:none;display:flex;justify-content:center;color:rgba(255,255,255,.5);cursor:pointer;}
+  #st-overlay .lst .r .x:hover{color:#fff;}
+  #st-overlay .lst .r .lamp{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.14);flex:none;}
+  #st-overlay .lst .r.hd{height:22px;font-size:9.5px;font-weight:500;color:var(--text-secondary);}
+  #st-overlay .lst .r.hd:hover{background:transparent;}
+  #st-overlay .lst .r.learn .n{color:var(--purple-400);}
+  #st-overlay .acts{display:flex;gap:6px;margin-top:8px;}
+  #st-overlay .acts .tp-btn{height:24px;padding:0 10px;}
+  #st-overlay .acts.inl,#st-overlay .inl{margin-left:auto;width:232px;}
+  /* velocity: the curve screen + the play strip; the Soft/Linear/Hard/Fixed selector sits UNDER the keys */
+  #st-overlay .vel{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:stretch;}
+  #st-overlay .vel .left{display:flex;flex-direction:column;}
+  #st-overlay .vel .crv{flex:1;min-height:110px;}
+  #st-overlay .vel .right{display:flex;flex-direction:column;}
+  #st-overlay .vel .keys{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:2px;height:64px;}
+  #st-overlay .vel .keys .fxb{font-size:6px;letter-spacing:.2px;align-items:flex-end;padding-bottom:4px;}
+  #st-overlay .vel .keys .fxb.bk{background:rgba(255,255,255,.06);}
+  #st-overlay .vel .keys .fxb.bk.on{background:rgba(255,255,255,.92);}
+  #st-overlay .vel .cap{font-size:9.5px;color:var(--text-secondary);margin-top:6px;line-height:1.4;}
+  #st-overlay .vel .rd{display:flex;gap:6px;margin-top:auto;padding-top:8px;}
+  #st-overlay .vel .rd .tp-chip{flex:1;text-align:center;justify-content:center;display:flex;align-items:center;}
+  #st-overlay .tryk{display:flex;align-items:center;gap:12px;margin-left:auto;width:232px;}
+  #st-overlay .tryk .gbox{width:84px;height:74px;display:flex;align-items:center;justify-content:center;flex:none;}
+  #st-overlay .tryk .k svg{width:36px;height:36px;}
+  #st-overlay .tryk .cap{font-size:9.5px;color:var(--text-secondary);line-height:1.5;}
+  /* themes */
+  #st-overlay .thm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:6px 18px 4px;}
+  #st-overlay .thm .gbox{height:92px;padding:10px 8px 8px;cursor:pointer;transition:border-color .15s;}
+  #st-overlay .thm .gbox:hover{border-color:rgba(255,255,255,.35);}
+  #st-overlay .thm .gbox.cur{border-color:var(--purple-400);}
+  #st-overlay .thm .gbox.soon{cursor:default;}
+  #st-overlay .thm .mini{height:52px;border-radius:5px;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.06);}
+  #st-overlay .thm .mini .h{position:absolute;left:0;right:0;top:0;height:10px;}
+  #st-overlay .thm .mini .p{position:absolute;top:15px;height:32px;border-radius:3px;}
+  #st-overlay .thm .mini .k{position:absolute;width:9px;height:9px;border-radius:50%;border:1.3px solid;top:26px;}
+  #st-overlay .thm .foot{display:flex;align-items:center;gap:6px;margin-top:7px;}
+  #st-overlay .thm .foot .n{font-size:10px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1;}
+  /* about */
+  #st-overlay .hero{padding:6px 18px 4px;display:flex;align-items:center;gap:14px;}
+  #st-overlay .hero .wm{display:flex;align-items:baseline;gap:8px;height:28px;}
+  #st-overlay .hero .wm .brand-name{font-weight:600;font-size:18px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-primary);}
+  #st-overlay .hero .wm .brand-version{font-size:10px;letter-spacing:1.5px;color:var(--text-muted);}
+  #st-overlay .hero .by{font-size:10px;color:var(--text-secondary);}
+  #st-overlay .para{margin:4px 18px 4px;font-size:10.5px;line-height:1.6;color:var(--text-soft);}
+  #st-overlay .para b{color:var(--text-primary);font-weight:500;}
+  #st-overlay .mantra{margin:6px 18px 4px;font-size:11.5px;line-height:1.5;color:var(--purple-400);font-weight:500;letter-spacing:.3px;}
+  #st-overlay .kvp{display:grid;grid-template-columns:minmax(0,1fr) 232px;row-gap:6px;column-gap:10px;padding:6px 18px 4px;}
+  #st-overlay .kvp .k{font-size:10px;font-weight:500;color:var(--text-soft);line-height:14px;}
+  #st-overlay .kvp .v{font-size:10.5px;color:var(--text-primary);line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #st-overlay .kvp .v .dim{color:var(--text-secondary);}
+  #st-overlay .sr .pg{width:74px;flex:none;font-size:9.5px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}
+  #st-overlay .sr .pg:hover{color:var(--purple-400);}
+  #st-overlay .empty{padding:60px 30px;text-align:center;color:var(--text-secondary);font-size:11px;line-height:1.7;}
+  #st-overlay .empty b{display:block;color:var(--text-primary);font-weight:500;margin-bottom:2px;}
+  #st-overlay .steps{display:flex;gap:0;margin-left:auto;}
+  #st-overlay .steps .sd{width:14px;cursor:default;}
+  #st-overlay .steps .sd.done i{background:rgba(255,255,255,.35);border-color:transparent;}
+  #st-overlay .err{color:var(--rose)!important;}
+  #st-overlay .ok{color:var(--purple-400)!important;}
+  #st-overlay .code{letter-spacing:2px;font-variant-numeric:tabular-nums;text-transform:uppercase;}
+  /* fb-settings — Hover help OFF hides the terrain-view tooltip card without touching its own code */
+  body.ti-hover-off #tooltip{display:none!important;}
+  </style>
+
+  <div id="st-overlay">
+    <div id="st-b" class="tp-glass">
+      <div class="tb">
+        <div class="sw"><input class="search" id="st-search" type="text" placeholder="Search settings — buffer, author, MPE, theme…" autocomplete="off" spellcheck="false"></div>
+        <div class="count" id="st-count"></div>
+        <button class="ibtn" id="st-close" title="Close settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg></button>
       </div>
-      <div class="settings-body">
-        <div class="settings-row">
-          <span class="settings-label">Theme</span>
-          <div class="settings-theme-btns">
-            <button class="theme-btn active" id="theme-light-btn">Light</button>
-            <button class="theme-btn" id="theme-dark-btn">Dark</button>
-          </div>
+      <div class="body">
+        <div class="rail" id="st-rail"></div>
+        <div id="st-pane"></div>
+        <div class="insp">
+          <div class="iscroll" id="st-insp"></div>
+          <div class="acts" id="st-acts"></div>
         </div>
-        <!-- fb563 — PITCH BEND RANGE. A global performance setting, so it lives here (the voice column
-             is a fixed-height box: one more row there pushed the rack's knob words off the window).
-             Drag the number, double-click for 2. Relay-free (setSynParam / getSynParam). -->
-        <!-- tp43 — DAW CAPTURE. Max: "give us a way to turn off Terrain capture … for memory's sake". The rolling
-             capture ring is ~202 MB; Off releases it and nothing is recorded. A global preference (a marker file the
-             plugin reads before it ever arms), not a preset setting. -->
-        <div class="settings-row" id="capture-row" title="Terrain's rolling DAW capture keeps the last minute of audio ready to export. Off frees ~200 MB and records nothing.">
-          <span class="settings-label">DAW capture</span>
-          <div class="settings-theme-btns">
-            <button class="theme-btn active" id="capture-on-btn">On</button>
-            <button class="theme-btn" id="capture-off-btn">Off</button>
-          </div>
-        </div>
-        <!-- tp62 — MOTION. Max: "give people the setting to turn off animations ... the UI just doesn't animate
-             whenever MIDI is coming in ... every time you move a knob it still moves". Off = no animation loops
-             anywhere: the reverb is a wash set by mix and decay, the tape stands, the meters rest, the lane runs
-             at 30 Hz. LFO, envelope, filter, trackers and the four Flow tiles keep moving. A global preference
-             (a marker file), like DAW capture. -->
-        <div class="settings-row" id="motion-row" title="Animation loops. Off: nothing moves on its own — knobs still redraw what they change, LFO / envelope / filter / trackers still move, and the UI costs less CPU.">
-          <span class="settings-label">Motion</span>
-          <div class="settings-theme-btns">
-            <button class="theme-btn active" id="motion-on-btn">On</button>
-            <button class="theme-btn" id="motion-off-btn">Off</button>
-          </div>
-        </div>
-        <div class="settings-row" id="rr-bend-row" title="Pitch bend range in semitones — drag the number, double-click for 2">
-          <span class="settings-label">Pitch bend range</span>
-          <span style="font:inherit;font-size:13px;color:#ECE8F2;"><b style="cursor:ns-resize;user-select:none;font:inherit;font-weight:400;color:#ECE8F2;">2</b><span style="opacity:.7;margin-left:4px;color:#ECE8F2;">st</span></span>
-        </div>
-      </div>
-      <div class="settings-footer">
-        <span class="settings-version">Terrain v3.0 by Waves Crate</span>
       </div>
     </div>
+    <div id="st-sheet"><div class="tp-card"></div></div>
+    <div id="st-toast"></div>
   </div>
+  <script id="st-js">
+  (function(){
+  'use strict';
+  /* ═══ SETTINGS MODULE — recycled from the mockup (Design/settings-mockup.html), wired to the plugin.
+     Persistence rides the ONE global settings file (saveSettings/getSettings → InstrumentSettings.json):
+     the whole S object is stored under settings.__st and read back on open (state-persists law). No new
+     native is required for persistence; DSP-affecting rows call natives when present, degrade quietly when not. ═══ */
+  function C01(n){ return Math.max(0,Math.min(1,n)); }
+  function el(html){ var t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function $(id){ return document.getElementById(id); }
+  function nfn(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+  function callN(n){ var f=nfn(n); if(!f) return null; try{ return f.apply(null,Array.prototype.slice.call(arguments,1)); }catch(e){ return null; } }
+  var PL=$('plugin');
+  function PR(){ return PL?PL.getBoundingClientRect():{left:0,top:0,right:820,bottom:656}; }
+  function knobSVG(){ return '<svg viewBox="0 0 36 36">'
+    +'<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>'
+    +'<circle class="kf" cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2" stroke-linecap="round" stroke-dasharray="0 132" transform="rotate(90 18 18)"/></svg>'; }
+  function setRing(host,n){ var d=C01(n)*88, kf=host.querySelector('.kf'); if(kf) kf.setAttribute('stroke-dasharray', d.toFixed(1)+' '+(132-d).toFixed(1)); }
+  var X_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg>';
+  var CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  var PLUS='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+
+  /* TIC.dragify — verbatim; the number/knob drag, double-click to reset */
+  function dragify(elm,o){
+    var dn=false,s0=0,n0=0,moved=false,lastDragUp=0;
+    elm.addEventListener('pointerdown',function(e){ if(e.button!==0)return; dn=true; moved=false;
+      s0=(o.axis==='x')?e.clientX:e.clientY; n0=o.get(); try{ elm.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); e.stopPropagation(); });
+    elm.addEventListener('pointermove',function(e){ if(!dn)return; var d=(o.axis==='x')?(e.clientX-s0):(s0-e.clientY);
+      if(Math.abs(d)>2)moved=true; var sp=(typeof o.span==='function'?o.span():o.span)||140; if(e.shiftKey) sp*=4; o.set(C01(n0+d/sp)); });
+    function up(){ if(dn&&moved)lastDragUp=Date.now(); dn=false; }
+    elm.addEventListener('pointerup',up); elm.addEventListener('pointercancel',up);
+    elm.addEventListener('dblclick',function(e){ if(Date.now()-lastDragUp<400)return; if(o.reset!=null)o.set(o.reset); e.preventDefault(); e.stopPropagation(); });
+  }
+
+  /* THE CLAMP — the .pmenu house clamp: stay inside the plugin bounds, flip up at the bottom */
+  function placeNear(m,anchor,w,h){ var P=PR(), r=anchor.getBoundingClientRect();
+    w=w||m.offsetWidth; h=h||m.offsetHeight;
+    var left=Math.max(P.left+6,Math.min(P.right-w-6,r.left));
+    var top=r.bottom+4; if(top+h>P.bottom-6) top=r.top-h-4; top=Math.max(P.top+6,Math.min(P.bottom-h-6,top));
+    m.style.left=left+'px'; m.style.top=top+'px'; }
+  var menuEl=null, menuAnchor=null;
+  function closeMenu(){ if(menuEl&&menuEl.parentNode) menuEl.parentNode.removeChild(menuEl); if(menuAnchor) menuAnchor.classList.remove('open'); menuEl=null; menuAnchor=null; document.removeEventListener('pointerdown',menuOut,true); }
+  function menuOut(e){ if(menuEl&&!menuEl.contains(e.target)&&!(menuAnchor&&menuAnchor.contains(e.target))) closeMenu(); }
+  function openMenu(rows,anchor){ var same=menuAnchor===anchor; closeMenu(); if(same) return;
+    var m=document.createElement('div'); m.className='st-menu'; m.style.minWidth=Math.max(176,anchor.offsetWidth)+'px';
+    rows.forEach(function(r){ if(r.sec){ var h=document.createElement('div'); h.className='ps'; h.textContent=r.sec; m.appendChild(h); return; }
+      var d=document.createElement('div'); d.className='pi'+(r.cur?' cur':'')+(r.off?' off':'');
+      d.innerHTML='<span class="nm"></span>'+(r.ct?'<span class="ct">'+esc(r.ct)+'</span>':''); d.querySelector('.nm').textContent=r.label;
+      d.addEventListener('click',function(e){ e.stopPropagation(); closeMenu(); try{ r.onPick(); }catch(x){ console.error(x); } }); m.appendChild(d); });
+    document.body.appendChild(m); menuEl=m; menuAnchor=anchor; anchor.classList.add('open'); placeNear(m,anchor);
+    var c=m.querySelector('.pi.cur'); if(c) m.scrollTop=Math.max(0,c.offsetTop-m.clientHeight/2);
+    setTimeout(function(){ document.addEventListener('pointerdown',menuOut,true); },0); return m; }
+
+  var toastT=null;
+  function toast(html){ var t=$('st-toast'); if(!t) return; t.innerHTML=html; t.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(function(){ t.classList.remove('on'); },2400); }
+  function bar(host,ms,done){ host.innerHTML='<div class="ld"><i></i></div>'; var i=host.querySelector('i'), t0=performance.now();
+    (function step(){ var p=Math.min(1,(performance.now()-t0)/ms); i.style.width=(Math.pow(p,.7)*100).toFixed(1)+'%'; if(p<1) requestAnimationFrame(step); else setTimeout(done,120); })(); }
+
+  /* ═══ STATE — plugin defaults (unregistered; empty author). Persists via the global settings file. ═══ */
+  var DEF={ reg:false, name:'', email:'', since:'', author:'', authorSet:false, roles:[],
+    roleVocab:['Producer','Sound designer','Composer','Artist','Mix engineer','DJ','Educator'], sign:'On', usage:'Off',
+    driver:'CoreAudio', out:'System output', outCh:'1 + 2', inDev:'None', inCh:'Off', sr:48000, buf:256, testCh:'Both',
+    ports:{}, qwerty:true, tempo:120,
+    chan:'Omni', vcurve:0, vmode:'Curve', bend:2, mpe:'Off', mpeBend:48, pickup:'Hook', pc:'Off', mapFromPreset:'Off', a4:440,
+    cc:[{cc:1,p:'Mod Wheel',fixed:true}],
+    onStart:'Init', autoVer:'Off', scan:'On',
+    theme:'Dark', size:100, motion:'On', hover:'On', values:'On', drag:'Vertical', sens:.5, wheel:'On', dbl:'Reset', openOn:'Last used',
+    cpuMeter:'Off', rtQ:'Standard', offQ:'High', lockQ:'Off', voices:32, sleep:'On', tails:'Off', capture:'On', fps:60,
+    autoUpd:'On', chanUpd:'Beta' };
+  var S=JSON.parse(JSON.stringify(DEF));
+  if(window.__stInitS){ try{ Object.keys(window.__stInitS).forEach(function(k){ if(k in DEF) S[k]=window.__stInitS[k]; }); }catch(e){} }
+  /* mirror the plugin's live theme into S so the chip and the About line agree */
+  try{ if(typeof getTheme==='function'){ S.theme=getTheme()==='light'?'Light':'Dark'; } }catch(e){}
+  function save(){ try{ if(typeof window.saveSettings==='function') window.saveSettings(); }catch(e){} }
+  window.__stGet=function(){ return S; };
+  window.__stRestore=function(obj){ if(!obj) return; try{ Object.keys(obj).forEach(function(k){ if(k in DEF) S[k]=obj[k]; }); }catch(e){}
+    try{ if(typeof getTheme==='function'){ S.theme=getTheme()==='light'?'Light':'Dark'; } }catch(e){}
+    applyAll(); renderRail(); paintPage(); paintHeaderCpu(); };
+
+  /* ═══ AUDIO — a tiny Web Audio voice for the velocity preview + the test chime (WKWebView supports it).
+     Armed on the first gesture inside the settings overlay. The computer keyboard is NOT hijacked here —
+     the real synth already answers QWERTY (fb484). Only the on-screen keys and real MIDI drive this preview. ═══ */
+  var ac=null, master=null, an=null, anBuf=null;
+  function arm(){ if(ac){ if(ac.state==='suspended') ac.resume(); return true; }
+    try{ ac=new (window.AudioContext||window.webkitAudioContext)(); master=ac.createGain(); master.gain.value=.7; an=ac.createAnalyser(); an.fftSize=512; anBuf=new Float32Array(512);
+      master.connect(an); an.connect(ac.destination); return true; }catch(e){ return false; } }
+  function level(){ if(!an) return 0; an.getFloatTimeDomainData(anBuf); var p=0; for(var i=0;i<anBuf.length;i++){ var a=Math.abs(anBuf[i]); if(a>p)p=a; } return p; }
+  function chime(){ if(!arm()) return; var t=ac.currentTime+.02, pan=S.testCh==='Left'?-1:(S.testCh==='Right'?1:0);
+    [523.25,659.25,783.99,1046.5].forEach(function(f,i){ var o=ac.createOscillator(), g=ac.createGain(), p=ac.createStereoPanner?ac.createStereoPanner():null;
+      o.type='sine'; o.frequency.value=f; var s=t+i*.11; g.gain.setValueAtTime(0,s); g.gain.linearRampToValueAtTime(.25,s+.008); g.gain.exponentialRampToValueAtTime(.0005,s+1.1);
+      o.connect(g); if(p){ p.pan.value=pan; g.connect(p); p.connect(master); } else g.connect(master); o.start(s); o.stop(s+1.2); }); }
+  function crvF(u,c){ u=C01(u); if(!c) return u; return Math.pow(u,Math.pow(2,c*2.6)); }   /* the mod-matrix CRV law, verbatim */
+  function velOut(v){ if(S.vmode==='Fixed') return 100/127; return crvF(v,S.vcurve); }
+  var held={};
+  function noteOn(n,vin,src){ if(!arm()) return; if(held[n]) noteOff(n);
+    var v=velOut(vin), f=440*Math.pow(2,(n-69)/12)*(S.a4/440), t=ac.currentTime;
+    var g=ac.createGain(), lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=500+v*v*6500; lp.Q.value=.8;
+    var o1=ac.createOscillator(), o2=ac.createOscillator(); o1.type='sawtooth'; o2.type='sawtooth'; o1.frequency.value=f; o2.frequency.value=f*1.004;
+    o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(master);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.16*(.08+.92*v),t+.006); g.gain.setTargetAtTime(.10*(.08+.92*v),t+.05,.3);
+    o1.start(t); o2.start(t); held[n]={g:g,o:[o1,o2]};
+    LIVE.note=n; LIVE.vin=Math.round(vin*127); LIVE.vout=Math.round(v*127); LIVE.src=src||LIVE.src; lastVin=vin; paintLive(); paintVelDot(vin); }
+  function noteOff(n){ var h=held[n]; if(!h||!ac) return; delete held[n]; var t=ac.currentTime; h.g.gain.cancelScheduledValues(t); h.g.gain.setTargetAtTime(0,t,.08); h.o.forEach(function(o){ o.stop(t+.6); }); }
+  var LIVE={note:null,vin:null,vout:null,bend:0,cc:null,src:'—'}, lastVin=null;
+  var NN=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; function nn(n){ return NN[n%12]+(Math.floor(n/12)-1); }
+
+  /* ═══ THE CATALOGUE ═══ */
+  var PAGES=[
+    {sec:'You'},
+    {id:'account',  name:'Account',          ic:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>', w:'Every host · this computer'},
+    {sec:'Sound'},
+    {id:'audio',    name:'Audio & MIDI',     ic:'<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>', w:'Standalone app only'},
+    {id:'control',  name:'MIDI & Controllers', short:'Controllers', ic:'<circle cx="12" cy="12" r="8.5"/><circle cx="8" cy="11" r=".9" fill="currentColor"/><circle cx="16" cy="11" r=".9" fill="currentColor"/><circle cx="12" cy="8" r=".9" fill="currentColor"/><circle cx="9.5" cy="14.8" r=".9" fill="currentColor"/><circle cx="14.5" cy="14.8" r=".9" fill="currentColor"/>', w:'Every host · every instance'},
+    {id:'perf',     name:'Performance',      ic:'<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/>', w:'Every host · every instance'},
+    {sec:'Library'},
+    {id:'library',  name:'Presets & Library', short:'Presets', ic:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>', w:'Every host · this computer'},
+    {sec:'Look'},
+    {id:'ui',       name:'Interface',        ic:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/>', w:'Every host · every instance'},
+    {id:'themes',   name:'Themes',           ic:'<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/>', w:'Every host · every instance'},
+    {sec:'Terrain'},
+    {id:'about',    name:'Updates & About', short:'About',  ic:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".9" fill="currentColor"/>', w:'Version, licence, support'}
+  ];
+  function chips(opts,key,after){ return {t:'chips',opts:opts,get:function(){ return S[key]; },set:function(v){ S[key]=v; if(after) after(v); }}; }
+  function onoff(key,after){ return chips(['On','Off'],key,after); }
+  function menu(key,opts,fmt,after){ return {t:'menu',get:function(){ return S[key]; },opts:opts,fmt:fmt,set:function(v){ S[key]=v; if(after) after(v); }}; }
+  var BUFS=[32,64,128,256,512,1024,2048];
+  var ROWS=[
+   /* ── ACCOUNT ── */
+   {p:'account',g:'Registration',id:'reg',blk:'reg',label:'Registration',help:'Terrain is registered to one person. Registration asks for your name, then your email, then the authorization code we email you — the name becomes yours, and every preset you save is signed with it. (The code service arrives with 1.0; your name signs presets now.)',where:'Every host · this computer'},
+   {p:'account',g:'You as an author',id:'author',label:'Author name',help:'Written into every preset you save — the Save sheet opens with it already in the Author field. Type another name there for a one-off; this stays your default.',where:'Every host · this computer',
+     ctl:{t:'text',ph:'Your name',get:function(){ return S.author; },set:function(v){ S.author=v; S.authorSet=true; }}},
+   {p:'account',g:'You as an author',id:'roles',blk:'roles',label:'What you do',help:'Your credit line under the author name in the preset browser. Pick as many as fit; + adds your own.',where:'Every host · this computer'},
+   {p:'account',g:'You as an author',id:'credit',label:'Credit line',help:'How your presets read in the browser. Live preview of the two settings above.',where:'Every host',ctl:{t:'info',get:function(){ return (S.author||'—')+(S.roles.length?'  ·  '+S.roles.join(' / '):''); }}},
+   {p:'account',g:'You as an author',id:'sign',label:'Sign every save',help:'On: the Author field is filled for you on every save. Off: it opens empty and you type it each time.',where:'Every host',ctl:onoff('sign')},
+   {p:'account',g:'Privacy',id:'usage',label:'Anonymous usage data',help:'OFF by default — nothing is collected or sent. When ON, Terrain keeps only privacy-safe, anonymized counters (which pages and features get used) in a LOCAL log on this computer. No audio, presets, names or identifiers, ever. Sending is disabled until a privacy policy and endpoint are configured.',where:'Every host',ctl:onoff('usage')},
+
+   /* ── AUDIO & MIDI (standalone) ── */
+   {p:'audio',g:'Audio device',id:'driver',label:'Audio driver',help:'The kind of audio system Terrain talks to. On a Mac it is Core Audio; on Windows you would see ASIO, WASAPI and DirectSound here.',where:'Standalone app only',need:'setAudioSetup',
+     ctl:menu('driver',function(){ return [{label:'CoreAudio'},{sec:'Windows only'},{label:'ASIO',off:true},{label:'Windows Audio (WASAPI)',off:true},{label:'DirectSound',off:true}]; })},
+   {p:'audio',g:'Audio device',id:'out',label:'Output device',help:'Where Terrain plays. Unplugging it falls back to the system output and says so.',where:'Standalone app only',need:'setAudioSetup',
+     ctl:menu('out',function(){ return (audioOuts||['System output']).map(function(n){ return {label:n}; }); })},
+   {p:'audio',g:'Audio device',id:'outCh',label:'Output channels',help:'Which pair of outputs Terrain’s stereo bus lands on.',where:'Standalone app only',need:'setAudioSetup',ctl:menu('outCh',function(){ return ['1 + 2','3 + 4','5 + 6'].map(function(n){ return {label:n}; }); })},
+   {p:'audio',g:'Audio device',id:'inDev',label:'Input device',help:'Terrain’s live input (the granular engine and DAW capture can listen to it). None keeps the microphone closed.',where:'Standalone app only',need:'setAudioSetup',
+     ctl:menu('inDev',function(){ return (audioIns||['None']).map(function(n){ return {label:n}; }); },null,function(v){ if(v==='None') S.inCh='Off'; else if(S.inCh==='Off') S.inCh='1 + 2'; })},
+   {p:'audio',g:'Audio device',id:'inCh',label:'Input channels',help:'Which inputs feed Terrain. Mono inputs are copied to both sides.',where:'Standalone app only',need:'setAudioSetup',
+     ctl:menu('inCh',function(){ return S.inDev==='None'?[{label:'Off'}]:['1','2','1 + 2','3 + 4'].map(function(n){ return {label:n}; }); })},
+   {p:'audio',g:'Audio device',id:'sr',label:'Sample rate',help:'Your device’s rate.',where:'Standalone app only',need:'setAudioSetup',
+     ctl:{t:'chips',opts:['44.1','48','88.2','96'],get:function(){ return String(S.sr/1000); },set:function(v){ S.sr=Math.round(parseFloat(v)*1000); },unit:'kHz'}},
+   {p:'audio',g:'Audio device',id:'buf',label:'Buffer size',help:'Smaller = the keys answer sooner, but the computer works harder. 256 is a safe start; go to 64 or 128 to play live, 1024 when a big patch crackles.',where:'Standalone app only',need:'setAudioSetup',
+     ctl:menu('buf',function(){ return BUFS.map(function(b){ return {label:b+' samples',value:b,ct:ms(b)}; }); },function(v){ return v+' samples<span class="u">'+ms(v)+'</span>'; })},
+   {p:'audio',g:'Audio device',id:'lat',label:'Latency',help:'What you feel between a key and the sound: the buffer, once each way, plus the device’s own safety margin.',where:'Standalone app only',
+     ctl:{t:'info',get:function(){ var one=S.buf/S.sr*1000, dev=(ac&&ac.outputLatency?ac.outputLatency*1000:(ac&&ac.baseLatency?ac.baseLatency*1000:2.9)); return one.toFixed(1)+' ms out  ·  '+(2*one+dev).toFixed(1)+' ms round trip'; }}},
+   {p:'audio',g:'Audio device',id:'test',blk:'test',label:'Test audio',help:'Plays a short chime through the device and channels above — press it after changing anything to hear that sound really comes out.',where:'Standalone app only'},
+   {p:'audio',g:'MIDI inputs',id:'ports',blk:'ports',label:'MIDI inputs',help:'Tick every keyboard or controller Terrain should listen to. The lamp flashes when a port sends anything.',where:'Standalone app only',need:'setMidiInput'},
+   {p:'audio',g:'MIDI inputs',id:'qwerty',label:'Computer keyboard',help:'A W S E D F T G Y H U J K play an octave from C, at velocity 100.',where:'Standalone app only',ctl:{t:'chips',opts:['On','Off'],get:function(){ return S.qwerty?'On':'Off'; },set:function(v){ S.qwerty=v==='On'; }}},
+   {p:'audio',g:'Transport',id:'tempo',label:'Tempo',help:'The standalone has no DAW to follow, so this is the clock for LFO sync, the arpeggiator, delays and Chop. Drag the number, double-click for 120; Tap to tap it in.',where:'Standalone app only',need:'setStandaloneBpm',
+     ctl:{t:'num',key:'tempo',min:40,max:240,step:1,unit:'BPM',reset:120,fmt:function(v){ return v.toFixed(0); },tap:true}},
+
+   /* ── MIDI & CONTROLLERS (every host) ── */
+   {p:'control',g:'Receiving',id:'chan',label:'MIDI channel',help:'Omni plays from every channel. Pick one to let Terrain share a controller with other instruments.',where:'Every host · every instance',
+     ctl:menu('chan',function(){ var a=[{label:'Omni'}]; for(var i=1;i<=16;i++) a.push({label:'Channel '+i}); return a; })},
+   {p:'control',g:'Receiving',id:'vel',blk:'vel',label:'Velocity curve',help:'How hard you play → how loud and bright Terrain answers. Drag the curve up for a softer touch (quiet playing sounds fuller), down for a harder one. Hit the keys: the higher on a key you click, the harder the hit. You hear the curve.',where:'Every host · every instance'},
+   {p:'control',g:'Receiving',id:'bend',label:'Pitch bend range',help:'How far the wheel bends, in semitones. Drag the number, double-click for 2.',where:'Every host · saved with the patch',
+     ctl:{t:'num',key:'bend',min:0,max:24,step:1,unit:'ST',reset:2,fmt:function(v){ return v.toFixed(0); }}},
+   {p:'control',g:'Receiving',id:'a4',label:'Tuning reference',help:'Concert pitch for A4. Scala / .tun files and MTS-ESP come later.',where:'Every host · every instance',
+     ctl:{t:'num',key:'a4',min:415,max:466,step:1,unit:'Hz',reset:440,fmt:function(v){ return v.toFixed(0); }}},
+   {p:'control',g:'Expression',id:'mpe',label:'MPE',help:'For Roli, LinnStrument, Osmose, Push 3: each note gets its own bend, pressure and slide (CC 74). In Ableton use the AU — Live’s VST3 path drops per-note expression.',where:'Every host · every instance',ctl:onoff('mpe')},
+   {p:'control',g:'Expression',id:'mpeBend',label:'MPE bend range',help:'Per-note bend in semitones. 48 is the MPE standard; your controller should match.',where:'Every host',
+     ctl:{t:'num',key:'mpeBend',min:1,max:96,step:1,unit:'ST',reset:48,fmt:function(v){ return v.toFixed(0); }},dim:function(){ return S.mpe!=='On'; }},
+   {p:'control',g:'Controllers',id:'ccmap',blk:'ccmap',label:'MIDI learn',help:'Right-click any knob → MIDI Learn, then move a control. Or press Learn here and turn a knob on your controller. Mod wheel is always CC 1.',where:'Saved with the instance'},
+   {p:'control',g:'Controllers',id:'pickup',label:'Knob pickup',help:'When a hardware knob and Terrain disagree: Jump snaps at once, Hook waits until you pass the current value, Scale glides the rest of the way.',where:'Every host',ctl:chips(['Jump','Hook','Scale'],'pickup')},
+   {p:'control',g:'Controllers',id:'mapFromPreset',label:'Presets carry their MIDI map',help:'On: loading a preset also loads the CC map it was saved with. Off: your map stays put whatever you load.',where:'Every host',ctl:onoff('mapFromPreset')},
+   {p:'control',g:'Controllers',id:'pc',label:'Program change loads presets',help:'Lets a controller or a DAW clip step through the current pack.',where:'Every host',ctl:onoff('pc')},
+
+   /* ── PERFORMANCE ── */
+   {p:'perf',g:'Quality',id:'rtQ',label:'Playing quality',help:'Oversampling while you play. Eco saves CPU on big patches; High is cleaner on bright FM, folding and distortion.',where:'Every host · every instance',ctl:chips(['Eco','Standard','High'],'rtQ')},
+   {p:'perf',g:'Quality',id:'offQ',label:'Bounce quality',help:'Used automatically when the DAW renders offline — slower than real time, so it can afford more.',where:'Every host',ctl:chips(['Same','High','Best'],'offQ')},
+   {p:'perf',g:'Quality',id:'lockQ',label:'Presets can change quality',help:'Off keeps your choice above no matter what a preset asks for.',where:'Every host',ctl:onoff('lockQ')},
+   {p:'perf',g:'CPU',id:'voices',label:'Voice ceiling',help:'The most notes Terrain will ever sound at once, across unison. Lower it on a laptop; the oldest note is released first.',where:'Every host · every instance',
+     ctl:{t:'num',key:'voices',min:8,max:96,step:1,unit:'voices',reset:32,fmt:function(v){ return v.toFixed(0); }}},
+   {p:'perf',g:'CPU',id:'sleep',label:'Sleep when silent',help:'When nothing plays and every tail has died, Terrain stops computing until the next note.',where:'Every host',ctl:onoff('sleep')},
+   {p:'perf',g:'CPU',id:'tails',label:'Cut tails when the DAW stops',help:'On: pressing stop silences reverb and delay tails at once.',where:'Every host',ctl:onoff('tails')},
+   {p:'perf',g:'CPU',id:'cpu',blk:'cpu',label:'CPU meter in the header',help:'A small meter on the left of the header, opposite the version. The measurement already exists (the DSP clock); this shows it.',where:'Every host'},
+   {p:'perf',g:'Memory & screen',id:'capture',label:'DAW capture',help:'Terrain keeps the last minute of what it played, ready to drag out. Off frees about 200 MB and records nothing.',where:'Every host · every instance',ctl:onoff('capture')},
+   {p:'perf',g:'Memory & screen',id:'fps',label:'Screen refresh',help:'How often the window redraws. 30 halves the drawing cost on slow machines.',where:'Every host',ctl:{t:'chips',opts:['60','30'],get:function(){ return String(S.fps); },set:function(v){ S.fps=+v; },unit:'fps'}},
+
+   /* ── PRESETS & LIBRARY ── */
+   {p:'library',g:'Saving',id:'libAuthor',label:'Author on every save',help:'Set on the Account page. The Save sheet opens with it; you can still type another name for one save.',where:'Every host',ctl:{t:'info',get:function(){ return S.author||'—'; },link:{label:'Change',go:'account'}}},
+   {p:'library',g:'Saving',id:'autoVer',label:'Keep old versions',help:'Saving over a preset keeps the previous one as "Name v2", "v3"… instead of replacing it.',where:'Every host',ctl:onoff('autoVer')},
+   {p:'library',g:'Saving',id:'onStart',label:'New instances open with',help:'What a fresh Terrain loads. "Your default" is the sound saved with Save as default.',where:'Every host',ctl:menu('onStart',function(){ return [{label:'Init'},{label:'Your default'},{label:'Last preset used'}]; })},
+   {p:'library',g:'Saving',id:'saveDef',label:'Save as default',help:'Makes the current sound what every new Terrain starts with.',where:'Every host',ctl:{t:'btns',btns:[{label:'Save current sound as default',on:function(){ S.onStart='Your default'; save(); paintPage(); toast('Saved the current sound as the default for new instances'); }}]}},
+   {p:'library',g:'Bring sounds in',id:'import',label:'Import',help:'Presets, a whole pack (.zip), or a folder. Open the preset browser to drop files in.',where:'Every host',ctl:{t:'btns',btns:[{label:'Open the browser…',on:function(){ openBrowser(); }}]}},
+   {p:'library',g:'Bring sounds in',id:'export',label:'Export',help:'Everything you have saved, as one pack to share or back up. Use Export in the preset browser.',where:'Every host',ctl:{t:'btns',btns:[{label:'Open the browser…',on:function(){ openBrowser(); }}]}},
+   {p:'library',g:'Where things live',id:'rescan',blk:'rescan',label:'Rescan library',help:'Re-reads every pack from disk — use it after copying presets in by hand.',where:'Every host'},
+   {p:'library',g:'Where things live',id:'scan',label:'Scan on start',help:'Off opens faster with a big library; press Rescan when you add files.',where:'Every host',ctl:onoff('scan')},
+   {p:'library',g:'Factory',id:'factory',label:'Factory library',help:'The sounds that ship with Terrain. New packs will arrive through updates.',where:'Every host',st:'soon',ctl:{t:'info',get:function(){ return 'Terrain Factory · 1.0 · beta'; },link:{label:'Get new sounds',soon:true}}},
+
+   /* ── INTERFACE ── */
+   {p:'ui',g:'Look',id:'theme',label:'Theme',help:'Dark or Light. More looks are on the Themes page.',where:'Every host · every instance',ctl:chips(['Dark','Light'],'theme')},
+   {p:'ui',g:'Look',id:'size',label:'Window size',help:'Where every new Terrain window opens. Dragging the corner still works; it remembers the last size you dragged to.',where:'Every host',
+     ctl:menu('size',function(){ return [65,80,100,125,150,175,190].map(function(p){ return {label:p+' %',value:p,ct:Math.round(820*p/100)+' × '+Math.round(672*p/100)}; }); },function(v){ return v+' %<span class="u">'+Math.round(820*v/100)+' × '+Math.round(672*v/100)+'</span>'; })},
+   {p:'ui',g:'Look',id:'motion',label:'Motion',help:'Off: nothing animates on its own — knobs still redraw, LFOs, envelopes, filters and trackers still move, and the window costs less CPU.',where:'Every host · every instance',ctl:onoff('motion')},
+   {p:'ui',g:'Help',id:'hover',label:'Hover help',help:'The card that explains a control when you rest on it (bottom right of the terrain view).',where:'Every host',ctl:onoff('hover')},
+   {p:'ui',g:'Help',id:'values',label:'Values while turning',help:'Shows the number under a knob while you drag it.',where:'Every host',ctl:onoff('values')},
+   {p:'ui',g:'Knobs',id:'drag',label:'Knob drag',help:'Vertical: drag up and down (today). Circular: turn around the knob like a real one. Horizontal: side to side. Try it below.',where:'Every host',ctl:chips(['Vertical','Circular','Horizontal'],'drag')},
+   {p:'ui',g:'Knobs',id:'sens',label:'Drag sensitivity',help:'How far you move for a full turn. Hold Shift for fine moves (already there).',where:'Every host',ctl:{t:'slider',get:function(){ return S.sens; },set:function(v){ S.sens=v; },fmt:function(v){ return Math.round(40+v*210)+' %'; },reset:.5}},
+   {p:'ui',g:'Knobs',id:'try',blk:'try',label:'Try it',help:'This knob uses the three settings around it.',where:'—'},
+   {p:'ui',g:'Knobs',id:'wheel',label:'Mouse wheel turns knobs',help:'Scroll over a knob to nudge it.',where:'Every host',ctl:onoff('wheel')},
+   {p:'ui',g:'Knobs',id:'dbl',label:'Double-click a knob',help:'Reset it to its default (today), or type a value.',where:'Every host',ctl:chips(['Reset','Type a value'],'dbl')},
+   {p:'ui',g:'Pages',id:'openOn',label:'Open on',help:'Which page a Terrain window shows first.',where:'Every host',ctl:menu('openOn',function(){ return ['Last used','SYN','CHOP','MOD'].map(function(n){ return {label:n}; }); })},
+
+   /* ── THEMES ── */
+   {p:'themes',g:'Themes',id:'thm',blk:'themes',label:'Themes',help:'Looks for the whole window. Night and Daylight ship today; the rest arrive with skins.',where:'Every host'},
+
+   /* ── UPDATES & ABOUT ── */
+   {p:'about',g:'',id:'hero',blk:'hero',label:'Terrain',help:'',where:'—'},
+   {p:'about',g:'Version',id:'ver',blk:'ver',label:'Version',help:'What you are running. Copy it into any bug report.',where:'—'},
+   {p:'about',g:'Updates',id:'upd',blk:'upd',label:'Check for updates',help:'Asks Waves Crate for a newer build. This beta checks nothing yet — the button shows how it will read.',where:'Every host',st:'soon'},
+   {p:'about',g:'Updates',id:'autoUpd',label:'Check automatically',help:'Once a day, quietly. You are told, never interrupted.',where:'Every host',st:'soon',ctl:onoff('autoUpd')},
+   {p:'about',g:'Updates',id:'chanUpd',label:'Update channel',help:'Beta gets new builds first.',where:'Every host',st:'soon',ctl:chips(['Beta','Stable'],'chanUpd')},
+   {p:'about',g:'Licence',id:'lic',blk:'lic',label:'Licence',help:'Who Terrain is registered to, on how many computers, and how it is signed.',where:'Every host · this computer',st:'soon'},
+   {p:'about',g:'Support',id:'sup',blk:'sup',label:'Support',help:'For the beta: copy your system info into a message and tell us what happened.',where:'—'},
+   {p:'about',g:'Waves Crate',id:'wc',blk:'wc',label:'About Waves Crate',help:'',where:'—'},
+   {p:'about',g:'Reset',id:'reset',label:'Reset all settings',help:'Puts every setting on this page back to how Terrain shipped. Your presets, packs and registration are not touched.',where:'Every host · this computer',ctl:{t:'btns',btns:[{label:'Reset settings…',on:function(){ resetSheet(); }}]}}
+  ];
+  var RID={}; ROWS.forEach(function(r){ RID[r.id]=r; });
+  function ms(b){ return (b/S.sr*1000).toFixed(1)+' ms'; }
+
+  /* ═══ NATIVE WIRING — DSP-affecting rows push to the processor; quiet no-op when the native is absent ═══ */
+  function bodyGate(cls,on){ try{ document.body.classList.toggle(cls,on); }catch(e){} }
+  function applyRow(id){
+    switch(id){
+      case 'theme': try{ if(typeof setTheme==='function'){ setTheme(S.theme==='Light'?'light':'dark'); if(typeof drawSettingsIcon==='function') drawSettingsIcon(); } }catch(e){} break;
+      case 'motion': bodyGate('ti-motion-off',S.motion!=='On'); if(S.motion!=='On'){ try{ if(window.__tiMotionRest) window.__tiMotionRest(); }catch(e){} } callN('setMotionEnabled',S.motion==='On'?1:0); try{ if(window.__tiRepaint) window.__tiRepaint(); }catch(e){} break;
+      case 'capture': bodyGate('ti-capture-off',S.capture!=='On'); callN('setCaptureEnabled',S.capture==='On'?1:0); break;
+      case 'bend': try{ if(window.__setSynParam) window.__setSynParam('SYN_BEND_RANGE', C01(S.bend/24)); }catch(e){} break;
+      case 'a4': callN('setA4', S.a4); break;
+      case 'voices': callN('setVoiceCeiling', S.voices); break;
+      case 'vel': callN('setVelCurve', S.vmode==='Fixed'? 999 : S.vcurve); break;
+      case 'chan': callN('setMidiChannel', S.chan==='Omni'?0:parseInt(String(S.chan).replace('Channel ',''),10)); break;
+      case 'fps': try{ window.__UI_FPS = (+S.fps===30) ? 30 : null; }catch(e){} break;
+      case 'size': callN('setBootWidth', Math.round(820*S.size/100)); break;
+      case 'mpe': try{ if(window.__setSynParam) window.__setSynParam('SYN_MPE_ON', S.mpe==='On'?1:0); }catch(e){} break;
+      case 'mpeBend': try{ if(window.__setSynParam) window.__setSynParam('SYN_MPE_BEND', C01((S.mpeBend-1)/95)); }catch(e){} break;
+      case 'openOn': callN('setOpenOnPage', String(S.openOn)); break;
+      case 'cpu': paintHeaderCpu(); break;
+      case 'sleep': callN('setSleepWhenSilent', S.sleep==='On'?1:0); break;
+      case 'tails': callN('setCutTailsOnStop', S.tails==='On'?1:0); break;
+      case 'rtQ': callN('setRtQuality', S.rtQ); break;
+      case 'hover': bodyGate('ti-hover-off', S.hover!=='On'); break;
+      case 'usage': logEvent('usage:'+S.usage.toLowerCase()); break;
+    }
+  }
+  function applyAll(){ ['theme','motion','capture','bend','a4','voices','vel','chan','fps','size','mpe','mpeBend','openOn','cpu','sleep','tails','rtQ','hover'].forEach(applyRow);
+    try{ window.__terrainUiPrefs={ drag:S.drag, sens:S.sens, wheel:S.wheel, dbl:S.dbl, values:S.values, hover:S.hover, pickup:S.pickup }; }catch(e){} }
+
+  /* ═══ PRIVACY — opt-in only. A tiny LOCAL log of anonymized counters when S.usage==='On'; the network
+     sender stays disabled behind a configurable endpoint (owner supplies it). No PII, no identifiers here. ═══ */
+  var USAGE_ENDPOINT = '';   /* configurable by the owner; empty = sending DISABLED. Never hardcode a URL/secret. */
+  function logEvent(name){ if(S.usage!=='On') return; try{ var ev={e:String(name).slice(0,40),t:Date.now()};
+    var f=nfn('appendUsageLog'); if(f){ try{ f(JSON.stringify(ev)); }catch(e){} }
+    /* network send is intentionally gated off until USAGE_ENDPOINT is configured with a privacy policy */
+  }catch(e){} }
+
+  function openBrowser(){ try{ if(window.__openPresetBrowser){ openSettings(false); window.__openPresetBrowser(); return; } }catch(e){}
+    toast('Open the preset browser from the header to import or export'); }
+
+  /* ═══ RAIL ═══ */
+  var cur='account', q='';
+  function renderRail(){ var r=$('st-rail'); if(!r) return; r.innerHTML='';
+    PAGES.forEach(function(p){ if(p.sec){ r.appendChild(el('<div class="sec">'+esc(p.sec)+'</div>')); return; }
+      var d=el('<div class="ri'+(p.id===cur&&!q?' cur':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p.ic+'</svg><span class="nm">'+esc(p.short||p.name)+'</span></div>');
+      d.onclick=function(){ go(p.id); }; r.appendChild(d); });
+    r.style.opacity=q?'.35':''; }
+  function go(id,flashId){ cur=id; q=''; var se=$('st-search'); if(se) se.value=''; closeMenu(); renderRail(); paintPage(); var pn=$('st-pane'); if(pn) pn.scrollTop=0;
+    if(flashId){ var r=document.querySelector('#st-overlay [data-row="'+flashId+'"]'); if(r){ r.scrollIntoView({block:'center'}); r.classList.add('flash'); setTimeout(function(){ r.classList.remove('flash'); },1200); } } }
+
+  /* ═══ CONTROLS ═══ */
+  function ctlEl(r){ var c=r.ctl, lane=el('<div class="lane"></div>');
+    if(c.t==='chips'){ c.opts.forEach(function(o){ var b=el('<button class="tp-chip'+(String(c.get())===o?' active':'')+'">'+esc(o)+'</button>');
+        b.onclick=function(){ c.set(o); save(); after(r); }; lane.appendChild(b); });
+      if(c.unit) lane.appendChild(el('<span class="val dim" style="margin-left:4px">'+esc(c.unit)+'</span>')); }
+    else if(c.t==='menu'){ var v=c.get(), f=el('<div class="tp-in dd"><span class="v"></span>'+CHEV+'</div>');
+      f.querySelector('.v').innerHTML=c.fmt?c.fmt(v):esc(v);
+      f.onclick=function(){ openMenu(c.opts().map(function(o){ if(o.sec) return o; var val=o.value!=null?o.value:o.label;
+          return {label:o.label,ct:o.ct,off:o.off,cur:String(val)===String(c.get()),onPick:function(){ c.set(val); save(); after(r); }}; }),f); };
+      lane.appendChild(f); }
+    else if(c.t==='text'){ var i=el('<input class="tp-in" type="text" maxlength="30" spellcheck="false">'); i.value=c.get(); i.placeholder=c.ph||'';
+      i.oninput=function(){ c.set(i.value); save(); paintInsp(); var cr=document.querySelector('#st-overlay [data-row="credit"] .val'); if(cr) cr.textContent=RID.credit.ctl.get(); };
+      i.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Enter') i.blur(); }; lane.appendChild(i); }
+    else if(c.t==='info'){ lane.appendChild(el('<span class="val" style="flex:1">'+esc(c.get())+'</span>'));
+      if(c.link){ var b=el('<button class="tp-btn">'+esc(c.link.label)+'</button>'); if(c.link.soon) b.disabled=true; b.onclick=function(){ go(c.link.go,'author'); }; lane.appendChild(b); } }
+    else if(c.t==='num'){ var n=el('<span class="num"><b></b><span>'+esc(c.unit)+'</span></span>'), bEl=n.querySelector('b');
+      function paintN(){ bEl.textContent=c.fmt(S[c.key]); }
+      paintN(); var span=function(){ return 260; };
+      dragify(bEl,{get:function(){ return (S[c.key]-c.min)/(c.max-c.min); },set:function(u){ S[c.key]=Math.round((c.min+u*(c.max-c.min))/c.step)*c.step; paintN(); save(); applyRow(r.id); if(r.id==='buf'||r.id==='mpe') paintPage(); },span:span,reset:(c.reset-c.min)/(c.max-c.min)});
+      lane.appendChild(n);
+      if(c.tap){ var taps=[]; var tb=el('<button class="tp-btn" style="margin-left:auto">Tap</button>'); tb.onclick=function(){ var t=performance.now(); taps=taps.filter(function(x){ return t-x<2000; }); taps.push(t);
+          if(taps.length>1){ var d=(taps[taps.length-1]-taps[0])/(taps.length-1); S.tempo=Math.max(40,Math.min(240,Math.round(60000/d))); paintN(); save(); applyRow('tempo'); } }; lane.appendChild(tb); } }
+    else if(c.t==='slider'){ var tr=el('<div class="tr"><i style="left:0"></i><b></b></div>'), vl=el('<span class="val" style="width:44px;text-align:right;flex:none"></span>');
+      function paintS(){ var p=c.get()*100; tr.querySelector('i').style.width=p+'%'; tr.querySelector('b').style.left=p+'%'; vl.textContent=c.fmt(c.get()); }
+      paintS(); dragify(tr,{axis:'x',get:c.get,set:function(u){ c.set(u); paintS(); save(); },span:200,reset:c.reset});
+      tr.addEventListener('pointerdown',function(e){ var rc=tr.getBoundingClientRect(); c.set(C01((e.clientX-rc.left)/rc.width)); paintS(); save(); });
+      lane.appendChild(tr); lane.appendChild(vl); }
+    else if(c.t==='btns'){ c.btns.forEach(function(bt){ var b=el('<button class="tp-btn">'+esc(bt.label)+'</button>'); b.onclick=bt.on; lane.appendChild(b); }); }
+    if(r.dim&&r.dim()){ lane.style.opacity='.35'; lane.style.pointerEvents='none'; }
+    return lane; }
+  function after(r){ applyRow(r.id); paintPage(); }
+
+  /* Honest coming-soon: a row whose DSP/hardware backend isn't wired shows Soon + a disabled lane,
+     so nothing looks live-but-dead. These natives are intentionally absent in this build (A4 tuning,
+     voice ceiling, MIDI-channel filter, MPE, standalone audio/MIDI, window size, RT quality) — the
+     owner wires them with a real build. Velocity curve + CPU meter ARE wired (setVelCurve/getDspLoad). */
+  var NEED={ driver:'setAudioSetup', out:'setAudioSetup', outCh:'setAudioSetup', inDev:'setAudioSetup', inCh:'setAudioSetup', sr:'setAudioSetup', buf:'setAudioSetup',
+    tempo:'setStandaloneBpm', chan:'setMidiChannel', a4:'setA4', mpe:'setMpeOn', mpeBend:'setMpeOn',
+    voices:'setVoiceCeiling', rtQ:'setRtQuality', offQ:'setRtQuality', lockQ:'setRtQuality', sleep:'setSleepWhenSilent', tails:'setCutTailsOnStop', size:'setBootWidth' };
+  function isSoon(r){ return r.st==='soon' || (NEED[r.id] && !nfn(NEED[r.id])); }
+  function rowEl(r,withPage){ var soon=isSoon(r);
+    var d=el('<div class="sr'+(soon?' soon':'')+'" data-row="'+r.id+'"><div class="lbl"><span class="t"></span>'+(soon?'<span class="tag">Soon</span>':'')+'</div></div>');
+    d.querySelector('.t').textContent=r.label;
+    if(withPage){ var pg=PAGES.filter(function(p){ return p.id===r.p; })[0]; var s=el('<span class="pg">'+esc(pg.name)+'</span>'); s.onclick=function(){ go(r.p,r.id); }; d.insertBefore(s,d.firstChild); }
+    if(r.ctl) d.appendChild(ctlEl(r));
+    hoverable(d,r); return d; }
+  function hoverable(d,r){ d.addEventListener('mouseenter',function(){ hov=r; paintInsp(); }); d.addEventListener('mouseleave',function(){ if(hov===r){ hov=null; paintInsp(); } }); }
+
+  /* ═══ BLOCKS ═══ */
+  var BLK={
+   reg:function(r){ var b=el('<div class="blk"></div>');
+     if(S.reg){ b.appendChild(el('<div class="kvp" style="padding:0 0 4px"><span class="k">Registered to</span><span class="v">'+esc(S.name)+'</span><span class="k">Email</span><span class="v">'+esc(S.email)+'</span><span class="k">Since</span><span class="v">'+esc(S.since||'—')+' <span class="dim">· this computer</span></span></div>'));
+       var a=el('<div class="acts inl"><button class="tp-btn" id="b-chg">Change name or email</button><button class="tp-btn" id="b-out">Sign out</button></div>'); b.appendChild(a);
+       a.querySelector('#b-chg').onclick=function(){ regSheet(1); }; a.querySelector('#b-out').onclick=function(){ signOutSheet(); }; }
+     else { b.appendChild(el('<div class="note" style="margin:0 0 4px">Terrain isn’t registered on this computer yet. It takes a minute: your <b>name</b>, your <b>email</b>, then the <b>authorization code</b> we send you. Your name then signs every preset you save.</div>'));
+       var a2=el('<div class="acts inl"><button class="tp-btn pri" style="flex:none;padding:0 18px">Register Terrain</button></div>'); a2.firstChild.onclick=function(){ regSheet(1); }; b.appendChild(a2); }
+     return b; },
+   roles:function(r){ var d=el('<div class="sr" style="height:auto;min-height:34px;padding-top:6px;padding-bottom:6px;align-items:flex-start" data-row="roles"><div class="lbl" style="padding-top:4px"><span class="t">What you do</span></div><div class="lane" style="flex-wrap:wrap;row-gap:4px"></div></div>');
+     var lane=d.querySelector('.lane');
+     S.roleVocab.forEach(function(w){ var on=S.roles.indexOf(w)>=0, c=el('<button class="tp-chip'+(on?' active':'')+'">'+esc(w)+'</button>');
+       c.onclick=function(){ var i=S.roles.indexOf(w); if(i>=0) S.roles.splice(i,1); else S.roles.push(w); save(); paintPage(); }; lane.appendChild(c); });
+     var add=el('<button class="tp-chip add" title="Add your own">'+PLUS+'</button>'); lane.appendChild(add);
+     add.onclick=function(){ var inp=el('<input class="tp-in" type="text" maxlength="20" placeholder="Your own" style="width:96px;height:22px;font-size:10px;padding:0 7px">'); lane.replaceChild(inp,add); inp.focus();
+       inp.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Enter'){ var w=inp.value.trim(); if(w&&S.roleVocab.indexOf(w)<0){ S.roleVocab.push(w); S.roles.push(w); save(); } paintPage(); } if(e.key==='Escape') paintPage(); }; };
+     hoverable(d,r); return d; },
+   test:function(r){ var soon=!nfn('playTestTone'); var d=el('<div class="sr'+(soon?' soon':'')+'" data-row="test"><div class="lbl"><span class="t">Test audio</span>'+(soon?'<span class="tag">Soon</span>':'')+'</div><div class="lane"><button class="tp-btn pri" style="flex:none;padding:0 12px;height:24px">Play</button></div></div>');
+     var lane=d.querySelector('.lane');
+     ['Left','Both','Right'].forEach(function(o){ var c=el('<button class="tp-chip'+(S.testCh===o?' active':'')+'">'+o+'</button>'); c.onclick=function(){ S.testCh=o; save(); paintPage(); }; lane.appendChild(c); });
+     var tr=el('<div class="tr" style="flex:1;margin-left:6px;cursor:default"><i class="lv" style="left:0;width:0"></i></div>'); lane.appendChild(tr); meters.push(tr);
+     lane.firstChild.onclick=function(){ var f=nfn('playTestTone'); if(f){ try{ f(S.testCh==='Left'?1:(S.testCh==='Right'?2:3)); }catch(e){} } chime(); }; hoverable(d,r); return d; },
+   ports:function(r){ var b=el('<div class="blk" data-row="ports"><div class="lst"></div></div>'), L=b.firstChild;
+     var names=Object.keys(S.ports);
+     L.appendChild(el('<div class="r hd"><span style="width:20px"></span><span class="n">Port</span><span class="c2">Activity</span></div>'));
+     if(!names.length) L.appendChild(el('<div class="r"><span class="n" style="color:var(--text-secondary)">No MIDI ports found — plug one in, it appears here.</span></div>'));
+     names.forEach(function(n){ var on=!!S.ports[n], row=el('<div class="r"><span class="sd'+(on?' on':'')+'"><i></i></span><span class="n"></span><span class="c2"><span class="lamp" style="display:inline-block"></span></span></div>');
+       row.querySelector('.n').textContent=n; row.onclick=function(){ S.ports[n]=!S.ports[n]; save(); callN('setMidiInput',n,S.ports[n]?1:0); paintPage(); }; lamps[n]=row.querySelector('.lamp'); L.appendChild(row); });
+     hoverable(b,r); return b; },
+   vel:function(r){ var b=el('<div class="blk" data-row="vel"><div class="sr" style="padding:0;margin-bottom:6px"><div class="lbl"><span class="t">Velocity curve</span></div><div class="lane"><span class="val dim" id="vel-rd"></span></div></div>'
+       +'<div class="vel"><div class="left"><div class="crv" title="Drag up/down to bend · double-click = straight"><svg viewBox="0 0 150 92" preserveAspectRatio="none"><g class="grid"></g><path class="mv-stroke"/><circle class="dt" r="2.4" cx="-9" cy="-9"/></svg></div></div>'
+       +'<div class="right"><div class="keys"></div><div class="cap">Click low on a key for a soft hit, high for a hard one — or play your controller.</div><div class="rd"></div></div></div></div>');
+     var g=b.querySelector('.grid'), gl=''; for(var i=1;i<4;i++){ gl+='<line x1="'+(i*37.5)+'" y1="0" x2="'+(i*37.5)+'" y2="92"/><line x1="0" y1="'+(i*23)+'" x2="150" y2="'+(i*23)+'"/>'; } g.innerHTML=gl;
+     var crv=b.querySelector('.crv');
+     dragify(crv,{get:function(){ return (1-S.vcurve)/2; },set:function(u){ S.vcurve=Math.round((1-u*2)*100)/100; S.vmode='Curve'; paintVel(); save(); applyRow('vel'); paintInsp(); },span:150,reset:.5});
+     var rd=b.querySelector('.rd');
+     [['Soft',-.45],['Linear',0],['Hard',.45],['Fixed',null]].forEach(function(o){ var c=el('<button class="tp-chip">'+o[0]+'</button>'); c.dataset.v=o[0];
+       c.onclick=function(){ if(o[1]===null) S.vmode='Fixed'; else { S.vmode='Curve'; S.vcurve=o[1]; } save(); paintVel(); applyRow('vel'); paintInsp(); }; rd.appendChild(c); });
+     var keys=b.querySelector('.keys'), BK=[1,3,6,8,10];
+     for(var k=0;k<13;k++){ (function(k){ var f=el('<div class="fxb'+(BK.indexOf(k%12)>=0?' bk':'')+'">'+(k===0?'C4':(k===12?'C5':''))+'</div>');
+       f.addEventListener('pointerdown',function(e){ var rc=f.getBoundingClientRect(); var v=C01(1-(e.clientY-rc.top)/rc.height)*.94+.06; f.classList.add('on'); noteOn(60+k,v,'mouse'); try{ f.setPointerCapture(e.pointerId); }catch(_){} });
+       function up(){ f.classList.remove('on'); noteOff(60+k); } f.addEventListener('pointerup',up); f.addEventListener('pointercancel',up); keys.appendChild(f); })(k); }
+     hoverable(b,r); velEl=b; setTimeout(paintVel,0); return b; },
+   ccmap:function(r){ var b=el('<div class="blk" data-row="ccmap"><div class="lst"></div><div class="acts"></div></div>'), L=b.querySelector('.lst');
+     L.appendChild(el('<div class="r hd"><span class="c1">CC</span><span class="n">Controls</span><span class="c2">Range</span><span class="x"></span></div>'));
+     S.cc.forEach(function(m,ix){ var row=el('<div class="r"><span class="c1">'+m.cc+'</span><span class="n"></span><span class="c2">'+(m.fixed?'always':'0 – 100 %')+'</span><span class="x">'+(m.fixed?'':X_SVG)+'</span></div>');
+       row.querySelector('.n').textContent=m.p; var x=row.querySelector('.x'); if(!m.fixed) x.onclick=function(){ S.cc.splice(ix,1); save(); callN('removeMidiCc',m.cc); paintPage(); toast('Unmapped <span class="tp-bk">CC '+m.cc+'</span> · '+esc(m.p)); }; L.appendChild(row); });
+     var a=b.querySelector('.acts');
+     var dfl=el('<button class="tp-btn">Save as default map</button>'); dfl.onclick=function(){ callN('saveDefaultMidiMap'); toast('New instances will start with these <b>'+S.cc.length+'</b> mappings'); }; a.appendChild(dfl);
+     var clr=el('<button class="tp-btn">Clear</button>'); clr.onclick=function(){ S.cc=S.cc.filter(function(m){ return m.fixed; }); save(); callN('clearMidiCc'); paintPage(); }; a.appendChild(clr);
+     hoverable(b,r); return b; },
+   cpu:function(r){ var d=el('<div class="sr" data-row="cpu"><div class="lbl"><span class="t">CPU meter in the header</span></div><div class="lane"></div></div>'), lane=d.querySelector('.lane');
+     ['On','Off'].forEach(function(o){ var c=el('<button class="tp-chip'+(S.cpuMeter===o?' active':'')+'">'+o+'</button>'); c.onclick=function(){ S.cpuMeter=o; save(); paintPage(); paintHeaderCpu(); }; lane.appendChild(c); });
+     var tr=el('<div class="tr" style="flex:1;margin-left:6px;cursor:default"><i class="lv" style="left:0;width:0"></i></div>'), v=el('<span class="val" style="width:34px;text-align:right;flex:none">—</span>');
+     lane.appendChild(tr); lane.appendChild(v); cpuEls=[tr,v]; hoverable(d,r); return d; },
+   rescan:function(r){ var d=el('<div class="sr" data-row="rescan"><div class="lbl"><span class="t">Rescan library</span></div><div class="lane"><button class="tp-btn">Rescan</button><span class="val dim" style="flex:1;margin-left:6px">from disk</span></div></div>');
+     var bt=d.querySelector('.tp-btn'), sp=d.querySelector('.val');
+     bt.onclick=function(){ bt.disabled=true; sp.style.flex='1'; callN('rescanLibrary'); bar(sp,900,function(){ sp.textContent='Library rescanned'; bt.disabled=false; toast('Library rescanned'); }); };
+     hoverable(d,r); return d; },
+   try:function(r){ var b=el('<div class="blk" data-row="try"><div class="tryk"><div class="gbox"><span class="gbl" style="background:#1d1b2b">Try it</span><div class="cell"><div class="ctl k">'+knobSVG()+'</div><div class="lb">Cutoff</div><div class="vl"></div></div></div><div class="cap"></div></div></div>');
+     var k=b.querySelector('.k'), vl=b.querySelector('.vl'), cap=b.querySelector('.cap'), val=.5;
+     function paint(){ setRing(k,val); vl.textContent=S.values==='On'?Math.round(20*Math.pow(1000,val))+' Hz':''; }
+     cap.innerHTML='Drag: <b style="color:var(--text-primary);font-weight:500">'+esc(S.drag)+'</b>, '+Math.round(40+S.sens*210)+' % travel.'+(S.wheel==='On'?' Scroll to nudge.':'')+' Shift = fine. Double-click: '+(S.dbl==='Reset'?'reset.':'type a value.');
+     var svg=k.querySelector('svg'); svg.style.cursor=S.drag==='Horizontal'?'ew-resize':(S.drag==='Circular'?'grab':'ns-resize');
+     var dn=false, s0=0, n0=0, a0=0;
+     function ang(e){ var rc=svg.getBoundingClientRect(); return Math.atan2(e.clientY-(rc.top+rc.height/2), e.clientX-(rc.left+rc.width/2)); }
+     svg.addEventListener('pointerdown',function(e){ dn=true; n0=val; s0=S.drag==='Horizontal'?e.clientX:e.clientY; a0=ang(e); try{ svg.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); });
+     svg.addEventListener('pointermove',function(e){ if(!dn) return; var span=(80+S.sens*420)*(e.shiftKey?4:1);
+       if(S.drag==='Circular'){ var da=ang(e)-a0; if(da>Math.PI) da-=2*Math.PI; if(da<-Math.PI) da+=2*Math.PI; val=C01(n0+da/(Math.PI*1.5)*(140/span)*2.2); }
+       else { var d=S.drag==='Horizontal'?(e.clientX-s0):(s0-e.clientY); val=C01(n0+d/span); } paint(); });
+     svg.addEventListener('pointerup',function(){ dn=false; });
+     svg.addEventListener('wheel',function(e){ if(S.wheel!=='On') return; e.preventDefault(); val=C01(val-e.deltaY/1200); paint(); },{passive:false});
+     svg.addEventListener('dblclick',function(){ if(S.dbl==='Reset'){ val=.5; paint(); } else toast('Type a value — a field opens over the knob'); });
+     paint(); hoverable(b,r); return b; },
+   themes:function(r){ var b=el('<div data-row="thm"><div class="note">Themes change the whole window. <b>Night</b> and <b>Daylight</b> ship today; the rest arrive with skins — and you will be able to load your own.</div><div class="thm"></div></div>'), g=b.querySelector('.thm');
+     THEMES.forEach(function(t){ var soon=!!t.soon, on=(S.theme==='Dark'&&t.n==='Night')||(S.theme==='Light'&&t.n==='Daylight');
+       var c=el('<div class="gbox'+(on?' cur':'')+(soon?' soon':'')+'"><div class="mini" style="background:'+t.bg+'"><div class="h" style="background:'+t.hd+'"></div><div class="p" style="left:6px;right:52%;background:'+t.pn+'"></div><div class="p" style="left:52%;right:6px;background:'+t.pn+'"></div>'
+         +'<div class="k" style="left:13px;border-color:'+t.ac+'"></div><div class="k" style="left:28px;border-color:'+t.ink+'"></div><div class="k" style="left:calc(52% + 8px);border-color:'+t.ink+'"></div><div class="k" style="left:calc(52% + 23px);border-color:'+t.ac+'"></div></div>'
+         +'<div class="foot"><span class="n">'+esc(t.n)+'</span>'+(soon?'<span class="tag">Soon</span>':(on?'<span class="tag">In use</span>':''))+'</div></div>');
+       c.onmouseenter=function(){ hovTheme=t; paintInsp(); }; c.onmouseleave=function(){ hovTheme=null; paintInsp(); };
+       c.onclick=function(){ if(soon){ toast('<b>'+esc(t.n)+'</b> <span class="tp-bk">· coming with skins</span>'); return; } S.theme=t.n==='Night'?'Dark':'Light'; save(); applyRow('theme'); paintPage(); };
+       g.appendChild(c); });
+     var a=el('<div class="blk"><div class="acts"><button class="tp-btn" disabled>Load a skin…</button><button class="tp-btn" disabled>Open the skin folder</button></div></div>'); b.appendChild(a);
+     return b; },
+   hero:function(){ return el('<div class="hero"><div class="wm"><span class="brand-name">Terrain</span><span class="brand-version">V1</span></div><span class="by">by Waves Crate · '+(S.reg?'registered to <b style="color:var(--sel-fg);font-weight:500">'+esc(S.name)+'</b>':'a synthesizer &amp; sampler')+'</span></div>'); },
+   ver:function(r){ var info=buildInfo();
+     var b=el('<div data-row="ver"><div class="kvp"><span class="k">Version</span><span class="v">'+esc(info.ver)+'</span><span class="k">Build</span><span class="v">'+esc(info.build)+'</span><span class="k">Running as</span><span class="v">'+esc(info.wrap)+'</span><span class="k">Formats</span><span class="v">AU · VST3 · Standalone</span><span class="k">Engine</span><span class="v">Resynth <span class="dim">· JUCE 8</span></span></div></div>'); hoverable(b,r); return b; },
+   upd:function(r){ var d=el('<div class="sr soon" data-row="upd"><div class="lbl"><span class="t">Check for updates</span><span class="tag">Soon</span></div><div class="lane"><button class="tp-btn" disabled>Check now</button><span class="val dim" style="flex:1;margin-left:6px">Last checked: never</span></div></div>');
+     hoverable(d,r); return d; },
+   lic:function(r){ var b=el('<div data-row="lic"><div class="kvp"><span class="k">Status</span><span class="v">'+(S.reg?'Beta <span class="dim">· '+esc(S.name)+'</span>':'<span class="err">Not registered</span>')+'</span><span class="k">Computers</span><span class="v">This computer <span class="dim">· 1 of 3</span> <span class="tag" style="margin-left:4px">Soon</span></span><span class="k">Code signing</span><span class="v">Ad-hoc <span class="dim">· Developer ID at 1.0</span></span></div><div class="blk"><div class="acts inl"><button class="tp-btn" disabled>Manage computers</button><button class="tp-btn" id="b-lic">'+(S.reg?'Account':'Register')+'</button></div></div></div>');
+     b.querySelector('#b-lic').onclick=function(){ if(S.reg) go('account','reg'); else regSheet(1); }; hoverable(b,r); return b; },
+   sup:function(r){ var b=el('<div class="blk" data-row="sup"><div class="acts" style="margin-top:2px"><button class="tp-btn pri" style="flex:none;padding:0 14px">Copy system info</button><button class="tp-btn">Report a bug…</button><button class="tp-btn">Manual</button></div></div>');
+     var bs=b.querySelectorAll('.tp-btn'); var info=buildInfo();
+     bs[0].onclick=function(){ var t='Terrain '+info.ver+' ('+info.build+')\n'+info.wrap+' · '+(S.sr/1000)+' kHz · '+S.buf+' samples\nRegistered: '+(S.reg?S.name:'no');
+       try{ navigator.clipboard.writeText(t).then(function(){ toast('System info copied — paste it into your message'); },function(){ toast('System info ready (clipboard blocked here)'); }); }catch(e){ toast('System info ready (clipboard blocked here)'); } };
+     bs[1].onclick=function(){ toast('Opens the beta feedback form <span class="tp-bk">· link to be decided</span>'); }; bs[2].onclick=function(){ toast('Opens the Terrain manual <span class="tp-bk">· coming with 1.0</span>'); };
+     hoverable(b,r); return b; },
+   wc:function(){ return el('<div>'
+     +'<div class="mantra">Consciousness Through Sound.</div>'
+     +'<div class="para"><b>Waves Crate</b> holds that creation is the highest form of evolution — that when you make music you raise your own awareness and, note by note, the awareness of everyone who hears it. We build instruments in service of that: tools where every knob means something, where 100 % is really 100 %, where nothing clicks, and where the sound always matches the number.</div>'
+     +'<div class="para"><b>Terrain</b> has been in the making since November 2025 — a synthesizer and a sampler in one window. Its <b>Resynth</b> oscillators and band-limited <b>wavetables</b> feed <b>118 measured filters</b>; the <b>Chop / Shaper</b> engine reshapes anything you feed it; a full <b>mod matrix</b> wires it all together; and the <b>Terrain Patcher</b> turns every effect into a node you can link into your own chains. One instrument, meant to be lived in.</div>'
+     +'<div class="kvp"><span class="k">Made by</span><span class="v">Waves Crate</span><span class="k">Built with</span><span class="v">JUCE 8 <span class="dim">· WebKit UI</span></span></div>'
+     +'<div class="note" style="margin-top:8px">© 2026 Waves Crate. VST is a registered trademark of Steinberg Media Technologies GmbH. Audio Units and macOS are trademarks of Apple Inc.</div></div>'); }
+  };
+  var THEMES=[
+   {n:'Night',     bg:'#1A1A2E',hd:'#12121F',pn:'#232340',ink:'rgba(255,255,255,.85)',ac:'#B794FF',sw:['#1A1A2E','#232340','#B794FF','#E0DCE8']},
+   {n:'Daylight',  bg:'#EDEAF2',hd:'#E2DDEA',pn:'#F7F5FA',ink:'#2A2035',ac:'#7C3AED',sw:['#EDEAF2','#F7F5FA','#7C3AED','#2A2035']},
+   {n:'Basalt',    bg:'#141414',hd:'#0C0C0C',pn:'#1E1E1E',ink:'rgba(255,255,255,.8)',ac:'#FF8A3D',sw:['#141414','#1E1E1E','#FF8A3D','#EDEDED'],soon:1},
+   {n:'Aurora',    bg:'#0E1A1F',hd:'#08262B',pn:'#12303A',ink:'rgba(220,255,250,.85)',ac:'#4FF0C8',sw:['#0E1A1F','#12303A','#4FF0C8','#DCFFFA'],soon:1},
+   {n:'Moss',      bg:'#1B1F16',hd:'#14170F',pn:'#262C1E',ink:'rgba(240,244,228,.85)',ac:'#B8D86B',sw:['#1B1F16','#262C1E','#B8D86B','#F0F4E4'],soon:1},
+   {n:'Paper',     bg:'#F3EFE6',hd:'#E8E2D4',pn:'#FBF8F2',ink:'#2B2620',ac:'#D0493B',sw:['#F3EFE6','#FBF8F2','#D0493B','#2B2620'],soon:1}
+  ];
+  var hov=null, hovTheme=null, meters=[], lamps={}, velEl=null, cpuEls=null, audioOuts=null, audioIns=null;
+
+  function buildInfo(){ var d={ver:'1.0.0 · beta 1',build:'—',wrap:'Standalone'};
+    try{ var f=nfn('getBuildInfo'); if(f){ var raw=f(); if(raw&&!raw.then){ var j=JSON.parse(raw); if(j){ d.ver=j.ver||d.ver; d.build=j.build||d.build; d.wrap=j.wrap||d.wrap; } } } }catch(e){} return d; }
+
+  /* ═══ THE PANE ═══ */
+  function paintPage(){ closeMenu(); hov=null; hovTheme=null; var P=$('st-pane'); if(!P) return; var st=P.scrollTop; P.innerHTML=''; meters=[]; lamps={}; velEl=null; cpuEls=null;
+    if(q){ var hits=ROWS.filter(function(r){ return (r.label+' '+r.help+' '+r.g).toLowerCase().indexOf(q)>=0 && r.blk!=='hero' && r.blk!=='wc'; });
+      $('st-count').innerHTML='<b>'+hits.length+'</b> '+(hits.length===1?'setting':'settings');
+      if(!hits.length){ P.appendChild(el('<div class="empty"><b>Nothing called that</b>Try buffer, author, MIDI, theme, update…</div>')); paintInsp(); return; }
+      P.appendChild(el('<div class="ph"><span class="t">Results</span><span class="w">click a page name to go there</span></div>'));
+      hits.forEach(function(r){ if(r.ctl) P.appendChild(rowEl(r,true)); else { var d=el('<div class="sr" data-row="'+r.id+'"><span class="pg"></span><div class="lbl"><span class="t"></span></div><div class="lane"><button class="tp-btn">Open</button></div></div>');
+        var pg=PAGES.filter(function(p){ return p.id===r.p; })[0]; d.querySelector('.pg').textContent=pg.name; d.querySelector('.t').textContent=r.label; d.querySelector('.pg').onclick=d.querySelector('.tp-btn').onclick=function(){ go(r.p,r.id); }; hoverable(d,r); P.appendChild(d); } });
+      paintInsp(); return; }
+    paintCount();
+    var pg=PAGES.filter(function(p){ return p.id===cur; })[0];
+    P.appendChild(el('<div class="ph"><span class="t">'+esc(pg.name)+'</span><span class="w">'+esc(pg.w)+'</span></div>'));
+    if(cur==='audio') P.appendChild(el('<div class="note" style="margin-top:-6px">These belong to the <b>Terrain app</b>. Inside Ableton, FL Studio or Logic your DAW owns the sound card — Terrain follows its sample rate and buffer, and this page stays out of the way.</div>'));
+    var lastG=null;
+    ROWS.filter(function(r){ return r.p===cur; }).forEach(function(r){
+      if(r.g&&r.g!==lastG&&cur!=='themes'){ P.appendChild(el('<div class="gh">'+esc(r.g)+'</div>')); } lastG=r.g;
+      if(r.blk) P.appendChild(BLK[r.blk](r)); else P.appendChild(rowEl(r)); });
+    P.scrollTop=st; paintInsp(); }
+  function paintCount(){ var e=$('st-count'); if(!e) return; e.innerHTML=S.reg?'Terrain recognises you as <b>'+esc(S.name)+'</b>':'Not registered · <b style="cursor:pointer" id="cnt-reg">Register</b>';
+    var cr=$('cnt-reg'); if(cr) cr.onclick=function(){ regSheet(1); }; }
+
+  /* ═══ THE INSPECTOR ═══ */
+  function kv(pairs){ return '<div class="kv">'+pairs.map(function(p){ return '<span class="k">'+esc(p[0])+'</span><span class="v">'+p[1]+'</span>'; }).join('')+'</div>'; }
+  function paintInsp(){ var I=$('st-insp'), A=$('st-acts'); if(!I||!A) return; var h='', acts='';
+    if(hovTheme){ var t=hovTheme; h='<div class="nm">'+esc(t.n)+'</div><div class="sub">'+(t.soon?'Coming with skins':'Ships in Terrain today')+'</div>'
+        +'<div class="kv" style="grid-template-columns:repeat(4,1fr);column-gap:6px">'+t.sw.map(function(c){ return '<span style="height:34px;border-radius:5px;border:1px solid rgba(255,255,255,.1);background:'+c+'"></span>'; }).join('')+'</div>'
+        +'<div class="notes"><div class="k">Palette</div><div class="tp-notebox">Ground '+t.sw[0]+'\nPanels '+t.sw[1]+'\nAccent '+t.sw[2]+'\nInk '+t.sw[3]+'</div></div>'; }
+    else if(hov&&hov.help){ var r=hov;
+      h='<div class="nm">'+esc(r.label)+'</div><div class="sub">'+esc(r.where)+'</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox">'+esc(r.help)+'</div></div>'; }
+    else if(cur==='account'&&!q){ h='<div class="nm">'+esc(S.reg?S.name:'Guest')+'</div><div class="sub">'+esc(S.roles.join(' / ')||'—')+'</div>'
+        +kv([['Email',esc(S.email||'—')],['Status',S.reg?'Registered':'<span class="err">Not registered</span>'],['Signs as',esc(S.author||'—')]])
+        +'<div class="notes" style="padding-bottom:0"><div class="k" style="margin-bottom:0">Your next save</div></div>'+kv([['Author','<span class="ok">'+esc(S.sign==='On'?(S.author||''):'')+'</span>'+(S.sign==='On'?'':'<span style="color:var(--text-muted)">you type it</span>')]]).replace('class="kv"','class="kv" style="border-top:0;margin-top:7px;padding-top:0"');
+      acts='<button class="tp-btn pri" id="ia-save">Save preset…</button>'; }
+    else if(cur==='audio'&&!q){ var one=S.buf/S.sr*1000;
+      h='<div class="nm">This computer</div><div class="sub">The Terrain app, right now</div>'+kv([['Driver',esc(S.driver)],['Out',esc(S.out)],['In',esc(S.inDev)],['Rate',(S.sr/1000)+' kHz'],['Buffer',S.buf+' · '+one.toFixed(1)+' ms']])
+        +'<div class="notes"><div class="k">Last MIDI</div><div class="tp-notebox" id="i-live"></div></div><div class="notes"><div class="k">In a DAW</div><div class="tp-notebox" style="color:var(--text-soft)">Ableton, FL Studio and Logic own the device. Terrain reads their rate and buffer; the MIDI & Controllers page still applies.</div></div>';
+      acts='<button class="tp-btn pri" id="ia-test">Play test audio</button>'; }
+    else if(cur==='control'&&!q){ h='<div class="nm">Live input</div><div class="sub">Play anything — it shows here</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox" id="i-live"></div></div>'
+        +kv([['Channel',esc(S.chan)],['Curve',S.vmode==='Fixed'?'Fixed 100':(S.vcurve===0?'Linear':(S.vcurve<0?'Soft ':'Hard ')+Math.abs(Math.round(S.vcurve*100)))],['Bend','± '+S.bend+' ST'],['MPE',esc(S.mpe)],['Mapped',S.cc.length+' CCs']]); }
+    else if(cur==='library'&&!q){ h='<div class="nm">Your library</div><div class="sub">Presets & packs</div>'+kv([['Author',esc(S.author||'—')],['On start',esc(S.onStart)]]); acts='<button class="tp-btn pri" id="ia-browse">Open the browser</button>'; }
+    else if(cur==='perf'&&!q){ h='<div class="nm">Load</div><div class="sub">What Terrain costs right now</div>'+kv([['DSP','<span id="i-cpu">—</span>'],['Voices','of '+S.voices],['Capture',S.capture==='On'?'~202 MB':'off'],['Quality',esc(S.rtQ)],['Screen',S.fps+' fps · motion '+S.motion.toLowerCase()]]); }
+    else if(cur==='ui'&&!q){ h='<div class="nm">Interface</div><div class="sub">How Terrain looks and feels in your hands</div>'+kv([['Theme',esc(S.theme)],['Window',S.size+' %'],['Knobs',esc(S.drag)],['Motion',esc(S.motion)]])
+        +'<div class="notes"><div class="k">Tip</div><div class="tp-notebox" style="color:var(--text-soft)">Rest on any setting and this column explains it.</div></div>'; }
+    else if(cur==='themes'&&!q){ h='<div class="nm">Themes</div><div class="sub">Night &amp; Daylight ship</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox" style="color:var(--text-soft)">Rest on a theme to see its palette. Skins will be files you can share — the same way presets are.</div></div>'; }
+    else if(cur==='about'&&!q){ var info=buildInfo(); h='<div class="nm">Terrain 1.0</div><div class="sub">'+esc(info.build)+'</div>'+kv([['User',esc(S.reg?S.name:'—')],['Licence',S.reg?'Beta':'—'],['Channel',esc(S.chanUpd)]])
+        +'<div class="notes"><div class="k">For testers</div><div class="tp-notebox" style="color:var(--text-soft)">Found something? Copy system info and send it with what you were doing. Thank you for playing it first.</div></div>'; }
+    else { h='<div class="nm">Settings</div><div class="sub">Rest on a result to read it</div>'; }
+    I.innerHTML=h; A.innerHTML=acts; A.style.display=acts?'':'none';
+    var s1=$('ia-save'); if(s1) s1.onclick=function(){ saveSheet(); };
+    var s2=$('ia-test'); if(s2) s2.onclick=function(){ chime(); };
+    var s3=$('ia-browse'); if(s3) s3.onclick=function(){ openBrowser(); };
+    paintLive(); }
+  function paintLive(){ var e=$('i-live'); if(!e) return;
+    e.textContent=LIVE.note==null?'Nothing yet. Play a note — it shows here.'
+      :('Note '+nn(LIVE.note)+'  ·  from '+LIVE.src+'\nVelocity '+LIVE.vin+' → '+LIVE.vout+(S.vmode==='Fixed'?' (fixed)':'')+(LIVE.bend?'\nBend '+(LIVE.bend>0?'+':'')+LIVE.bend.toFixed(2):'')+(LIVE.cc?'\nLast CC '+LIVE.cc:'')); }
+  function paintVel(){ if(!velEl) return; var p='', n=96; for(var k=0;k<=n;k++){ var u=k/n, y=S.vmode==='Fixed'?100/127:crvF(u,S.vcurve); p+=(k?'L':'M')+(u*150).toFixed(2)+' '+(90-y*88).toFixed(2); }
+    velEl.querySelector('.mv-stroke').setAttribute('d',p);
+    velEl.querySelectorAll('.rd .tp-chip').forEach(function(c){ var v=c.dataset.v; c.classList.toggle('active', S.vmode==='Fixed'?v==='Fixed':((v==='Linear'&&S.vcurve===0)||(v==='Soft'&&S.vcurve===-.45)||(v==='Hard'&&S.vcurve===.45))); });
+    var rd=velEl.querySelector('#vel-rd'); if(rd) rd.textContent=S.vmode==='Fixed'?'every note at 100':(S.vcurve===0?'linear':(S.vcurve<0?'softer touch ':'harder touch ')+Math.abs(Math.round(S.vcurve*100))+' %');
+    paintVelDot(lastVin!=null?lastVin:0.5); }
+  function paintVelDot(vin){ if(!velEl) return; var d=velEl.querySelector('.dt'); if(!d) return; var y=S.vmode==='Fixed'?100/127:crvF(vin,S.vcurve); d.setAttribute('cx',(vin*150).toFixed(2)); d.setAttribute('cy',(90-y*88).toFixed(2)); }
+  function paintHeaderCpu(){ var e=$('hdr-cpu'); if(!e) return; if(S.cpuMeter==='On'){ e.style.display=''; e.innerHTML=cpuNow+'<i>%</i>'; } else { e.style.display='none'; e.textContent=''; } }
+
+  /* frame clock: preview meter + CPU (native getDspLoad when present, else a note-count estimate) */
+  var cpuNow=0, cpuT=0, getLoad=null, triedLoad=false;
+  (function tick(now){ var lv=level(); meters.forEach(function(m){ var i=m.querySelector('i'); if(i) i.style.width=Math.min(100,lv*260).toFixed(1)+'%'; });
+    if(now-cpuT>400){ cpuT=now;
+      if(!triedLoad){ triedLoad=true; getLoad=nfn('getDspLoad'); }
+      var nv=Object.keys(held).length, got=null;
+      if(getLoad){ try{ var raw=getLoad(); if(raw!=null&&!raw.then){ got=Math.round(parseFloat(raw)); } }catch(e){} }
+      cpuNow=(got!=null&&isFinite(got))?got:Math.max(1,Math.round(2+nv*4.2*({Eco:.6,Standard:1,High:1.8}[S.rtQ]||1)));
+      if(cpuEls){ cpuEls[0].querySelector('i').style.width=Math.min(100,cpuNow)+'%'; cpuEls[1].textContent=cpuNow+' %'; }
+      var ic=$('i-cpu'); if(ic) ic.textContent=cpuNow+' %';
+      if(S.cpuMeter==='On') paintHeaderCpu(); }
+    requestAnimationFrame(tick); })(0);
+
+  /* ═══ SHEETS ═══ */
+  function sheet(o){ var sh=$('st-sheet'), c=sh.querySelector('.tp-card'); closeMenu();
+    c.className='tp-card'+(o.wide?' wide':''); c.innerHTML='<div class="tp-hd'+(o.steps?' row':'')+'">'+o.title+(o.steps?'<span class="steps">'+[1,2,3].map(function(i){ return '<span class="sd'+(i===o.steps?' on':(i<o.steps?' done':''))+'"><i></i></span>'; }).join('')+'</span>':'')+'</div><div class="tp-sbody">'+o.body+'</div><div class="tp-acts"></div>';
+    var a=c.querySelector('.tp-acts'); (o.acts||[]).forEach(function(b){ var e=el('<button class="tp-btn'+(b.pri?' pri':'')+'">'+esc(b.label)+'</button>'); if(b.left) e.style.marginRight='auto'; e.onclick=b.on; a.appendChild(e); b.el=e; });
+    sh.classList.add('on'); if(o.init) o.init(c);
+    var f=c.querySelector('input'); if(f){ try{ f.focus(); f.select(); }catch(e){} } }
+  function closeSheet(){ $('st-sheet').classList.remove('on'); }
+  $('st-sheet').addEventListener('pointerdown',function(e){ if(e.target===$('st-sheet')) closeSheet(); });
+
+  /* REGISTRATION — name → email → authorization code → welcome. The network calls (send/verify) sit behind
+     a configurable HTTPS endpoint that is DISABLED until the owner configures it. No endpoint/secret is hardcoded. */
+  var REG_ENDPOINT = '';   /* owner supplies this; empty = the code service is OFF (clearly marked coming-soon). */
+  var REG={name:'',email:''};
+  function enterKey(c,fn){ c.querySelectorAll('input').forEach(function(i){ i.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); fn(); } if(e.key==='Escape') closeSheet(); }; }); }
+  function regSheet(step){
+    if(step===1){ REG.name=REG.name||S.name||S.author||'';
+      sheet({title:'Register Terrain',steps:1,body:'<div class="tp-text">First — who are you? This is the name Terrain registers to you, and the author on every preset you save.</div>'
+        +'<div class="tp-f" style="margin-top:14px"><span class="k">Name</span><input type="text" class="tp-in" id="rg-name" maxlength="40" placeholder="Your name" spellcheck="false"></div><div class="tp-note" id="rg-msg">Your real name or your artist name — you can change it later.</div>',
+        acts:[{label:'Cancel',on:closeSheet},{label:'Next',pri:1,on:next1}],init:function(c){ $('rg-name').value=REG.name; enterKey(c,next1); }});
+      function next1(){ var v=$('rg-name').value.trim().replace(/\s+/g,' '), m=$('rg-msg');
+        if(v.length<2){ m.textContent='Type at least two letters.'; m.className='tp-note err'; $('rg-name').focus(); return; }
+        if(!/[A-Za-zÀ-ÿ]/.test(v)){ m.textContent='A name needs at least one letter.'; m.className='tp-note err'; return; }
+        REG.name=v; regSheet(2); } }
+    else if(step===2){ REG.email=REG.email||S.email||'';
+      sheet({title:'Register Terrain',steps:2,body:'<div class="tp-text">Nice to meet you, <b>'+esc(REG.name)+'</b>. Where should we send your authorization code?</div>'
+        +'<div class="tp-f" style="margin-top:14px"><span class="k">Email</span><input type="email" class="tp-in" id="rg-mail" maxlength="80" placeholder="you@example.com" spellcheck="false"></div>'
+        +'<div class="tp-note" id="rg-msg">We only use it for your code, your licence and updates you ask for.</div>'
+        +'<div class="tp-note" style="margin-top:8px">Anonymous usage data is <b style="color:var(--text-soft)">off by default</b> and opt-in — you can turn it on later under Account → Privacy. Nothing is collected until you do.</div>'
+        +'<div id="rg-bar" style="margin-top:10px;height:2px"></div>',
+        acts:[{label:'Back',left:1,on:function(){ regSheet(1); }},{label:'Cancel',on:closeSheet},{label:'Send code',pri:1,on:next2}],init:function(c){ $('rg-mail').value=REG.email; enterKey(c,next2); }});
+      function next2(){ var v=$('rg-mail').value.trim(), m=$('rg-msg');
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)){ m.textContent=v?'That doesn’t look like an email address.':'Type your email address.'; m.className='tp-note err'; $('rg-mail').focus(); return; }
+        REG.email=v; S.name=REG.name; S.email=REG.email; if(!S.author||!S.authorSet) S.author=REG.name; save(); applyRow('author');
+        if(!REG_ENDPOINT){ m.innerHTML='The authorization-code service arrives with 1.0. <b style="color:var(--text-soft)">Your name is saved and already signs your presets.</b>'; m.className='tp-note';
+          var acts=$('st-sheet').querySelectorAll('.tp-acts .tp-btn'); var send=acts[acts.length-1]; if(send){ send.textContent='Done'; send.onclick=function(){ closeSheet(); go('account'); toast('Saved — presets sign as <b>'+esc(S.author)+'</b>'); }; } return; }
+        m.textContent='Sending your code…'; m.className='tp-note'; regNet('send',{email:REG.email,name:REG.name},function(ok){ if(ok) regSheet(3); else { m.textContent='Could not reach the code service. Try again in a moment.'; m.className='tp-note err'; } }); } }
+    else if(step===3){
+      sheet({title:'Register Terrain',steps:3,body:'<div class="tp-text">We sent a code to <b>'+esc(REG.email)+'</b>. Paste it here — it looks like <b>TRRN-XXXX-XXXX</b>.</div>'
+        +'<div class="tp-f" style="margin-top:14px"><span class="k">Code</span><input type="text" class="tp-in code" id="rg-code" maxlength="14" placeholder="TRRN-0000-0000" spellcheck="false" autocomplete="one-time-code"></div>'
+        +'<div class="tp-note" id="rg-msg"><span id="rg-resend" style="color:var(--purple-400);cursor:pointer">Resend code</span></div><div id="rg-bar" style="margin-top:10px;height:2px"></div>',
+        acts:[{label:'Back',left:1,on:function(){ regSheet(2); }},{label:'Cancel',on:closeSheet},{label:'Register',pri:1,on:next3}],init:function(c){ var i=$('rg-code');
+          i.oninput=function(){ var raw=i.value.toUpperCase().replace(/[^A-Z0-9]/g,''); if(raw.indexOf('TRRN')===0) raw=raw.slice(4); raw=raw.slice(0,8); i.value='TRRN-'+raw.slice(0,4)+(raw.length>4?'-'+raw.slice(4):''); if(!raw) i.value=''; var m=$('rg-msg'); if(m.dataset.dirty){ m.className='tp-note'; m.innerHTML='<span id="rg-resend" style="color:var(--purple-400);cursor:pointer">Resend code</span>'; m.dataset.dirty=''; $('rg-resend').onclick=resend; } };
+          function resend(){ regNet('send',{email:REG.email,name:REG.name},function(){}); toast('A new code is on its way to <span class="tp-bk">'+esc(REG.email)+'</span>'); } $('rg-resend').onclick=resend; enterKey(c,next3); }});
+      function next3(){ var raw=$('rg-code').value.replace(/^TRRN-?/,'').replace(/-/g,''), m=$('rg-msg');
+        if(raw.length<8){ m.textContent='The code has 8 letters and numbers after TRRN — check the email.'; m.className='tp-note err'; $('rg-code').focus(); return; }
+        m.textContent='Checking…'; m.className='tp-note'; m.dataset.dirty='1';
+        regNet('verify',{email:REG.email,code:raw},function(ok){ if(ok) regSheet(4); else { m.textContent='That code didn’t check out. Check the email, or resend.'; m.className='tp-note err'; } }); } }
+    else { var was=S.author, auto=!S.authorSet||!S.author||S.author===S.name;
+      S.reg=true; S.name=REG.name; S.email=REG.email; S.since=new Date().toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}); if(auto){ S.author=REG.name; S.authorSet=false; } save(); applyRow('author');
+      sheet({title:'Welcome to Terrain',body:'<div class="tp-text">Terrain is registered to <b>'+esc(S.name)+'</b>.</div>'
+        +'<div class="tp-f" style="margin-top:14px"><span class="k">Name</span><div class="v">'+esc(S.name)+'</div><span class="k">Email</span><div class="v">'+esc(S.email)+'</div><span class="k">Author</span><div class="v ok">'+esc(S.author)+'</div><span class="k">Licence</span><div class="v">Beta · this computer</div></div>'
+        +'<div class="tp-note">Every preset you save is now signed '+esc(S.author)+'. Change it any time under Account → Author name.</div>',
+        acts:[{label:'Done',pri:1,on:function(){ closeSheet(); REG={name:'',email:''}; go('account'); toast('Terrain recognises you as <b>'+esc(S.name)+'</b>'); }}]}); }
+  }
+  /* the single, gated network call — DISABLED until REG_ENDPOINT is configured. It never blocks the UI and never
+     runs on the audio thread; the owner stands up the HTTPS service. No URL and no secret are compiled in. */
+  function regNet(action,payload,cb){ if(!REG_ENDPOINT){ setTimeout(function(){ cb(false); },200); return; }
+    try{ var f=nfn('registerNet'); if(f){ Promise.resolve(f(action,JSON.stringify(payload))).then(function(res){ var ok=false; try{ ok=!!JSON.parse(res).ok; }catch(e){} cb(ok); },function(){ cb(false); }); return; } }catch(e){}
+    cb(false); }
+  function signOutSheet(){ sheet({title:'Sign out of Terrain',body:'<div class="tp-text">Terrain on this computer will stop recognising <b>'+esc(S.name)+'</b>. Your presets keep their author; you can register again any time.</div>',
+    acts:[{label:'Cancel',on:closeSheet},{label:'Sign out',pri:1,on:function(){ S.reg=false; save(); closeSheet(); go('account'); toast('Signed out'); }}]}); }
+  function resetSheet(){ sheet({title:'Reset all settings',body:'<div class="tp-text">Every setting goes back to how Terrain shipped. <b>Your presets, packs and registration are not touched.</b></div>',
+    acts:[{label:'Cancel',on:closeSheet},{label:'Reset',pri:1,on:function(){ var keep={reg:S.reg,name:S.name,email:S.email,since:S.since,author:S.author,authorSet:S.authorSet,roles:S.roles,roleVocab:S.roleVocab,theme:S.theme};
+      S=JSON.parse(JSON.stringify(DEF)); Object.keys(keep).forEach(function(k){ S[k]=keep[k]; }); save(); applyAll(); closeSheet(); paintPage(); paintHeaderCpu(); toast('Settings reset'); }}]}); }
+  /* Save preset — hand off to the real Save sheet when the plugin exposes it; otherwise a faithful demo. */
+  function saveSheet(){ try{ if(window.__openSave){ openSettings(false); window.__openSave(); return; } }catch(e){}
+    var types=['Bass','Keys','Pad','Lead','Pluck','FX'], styles=['Dark','Warm','Glassy','Evolving','Wide'], ty='Pad', sty=['Glassy'];
+    sheet({title:'Save preset',wide:true,body:'<div class="tp-f">'
+        +'<span class="k">Name</span><input type="text" class="tp-in" id="sv-name" maxlength="40" placeholder="Preset name" value="'+esc(($('preset-name')&&$('preset-name').textContent)||'Untitled')+'">'
+        +'<span class="k">Pack</span><input type="text" class="tp-in" id="sv-bank" maxlength="30" placeholder="Type a pack — new name makes one" value="User">'
+        +'<span class="k">Author</span><input type="text" class="tp-in" id="sv-author" maxlength="30" placeholder="Your name" value="'+esc(S.sign==='On'?S.author:'')+'">'
+        +'<span class="k">Type</span><div class="chp" id="sv-type"></div><span class="k">Style</span><div class="chp" id="sv-style"></div></div>'
+        +'<div class="tp-note">Author comes from <b style="color:var(--text-primary);font-weight:500">Settings → Account</b>'+(S.sign==='On'?'':' (signing is off, so it starts empty)')+'. Type another name here for this save only.</div>',
+      acts:[{label:'Cancel',on:closeSheet},{label:'Save',pri:1,on:function(){ var n=$('sv-name').value.trim()||'Untitled', a=$('sv-author').value.trim(); closeSheet();
+        toast('Saved <span class="tp-bk">User - </span>'+esc(n)+(a?' <span class="tp-bk">· by '+esc(a)+'</span>':'')); }}],
+      init:function(c){ function rc(){ var t=$('sv-type'), s=$('sv-style');
+          t.innerHTML=types.map(function(x){ return '<button class="tp-chip'+(x===ty?' active':'')+'" data-t="'+x+'">'+x+'</button>'; }).join('')+'<button class="tp-chip add">'+PLUS+'</button>';
+          s.innerHTML=styles.map(function(x){ return '<button class="tp-chip'+(sty.indexOf(x)>=0?' active':'')+'" data-s="'+x+'">'+x+'</button>'; }).join('')+'<button class="tp-chip add">'+PLUS+'</button>';
+          t.querySelectorAll('[data-t]').forEach(function(b){ b.onclick=function(){ ty=ty===b.dataset.t?'':b.dataset.t; rc(); }; });
+          s.querySelectorAll('[data-s]').forEach(function(b){ b.onclick=function(){ var i=sty.indexOf(b.dataset.s); if(i>=0) sty.splice(i,1); else sty.push(b.dataset.s); rc(); }; }); }
+        rc(); c.querySelectorAll('input').forEach(function(i){ i.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Escape') closeSheet(); }; }); }});
+  }
+
+  /* ═══ MIDI activity lamp (real ports arrive through the native list when the standalone provides one) ═══ */
+  function lampFlash(n){ var l=lamps[n]; if(!l) return; l.classList.add('lv'); clearTimeout(l._t); l._t=setTimeout(function(){ l.classList.remove('lv'); },120); }
+  window.__stMidiPorts=function(json){ try{ var arr=JSON.parse(json)||[]; var seen={}; arr.forEach(function(n){ seen[n]=true; if(S.ports[n]===undefined) S.ports[n]=false; });
+    Object.keys(S.ports).forEach(function(n){ if(!seen[n]) delete S.ports[n]; }); if(cur==='audio'&&!q) paintPage(); }catch(e){} };
+  window.__stMidiActivity=function(name){ lampFlash(name); };
+  window.__stAudioSetup=function(json){ try{ var j=JSON.parse(json); if(j.outputs) audioOuts=j.outputs; if(j.inputs) audioIns=j.inputs; if(j.out) S.out=j.out; if(j.sr) S.sr=j.sr; if(j.buf) S.buf=j.buf; if(cur==='audio'&&!q) paintPage(); }catch(e){} };
+
+  /* ═══ HEADER, OPEN / CLOSE, SEARCH ═══ */
+  function openSettings(on){ var ov=$('st-overlay'); if(!ov) return; ov.classList.toggle('on',on); bodyGate('st-open',on); closeMenu();
+    if(on){ arm(); renderRail(); paintPage(); paintHeaderCpu(); logEvent('open:settings'); } }
+  function toggleSettings(){ openSettings(!$('st-overlay').classList.contains('on')); }
+  (function(){ var g=$('settings-btn'); if(g){ g.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); toggleSettings(); }, true); } })();
+  $('st-close').onclick=function(){ openSettings(false); };
+  $('st-search').oninput=function(){ q=this.value.trim().toLowerCase(); renderRail(); paintPage(); };
+  $('st-search').onkeydown=function(e){ e.stopPropagation(); if(e.key==='Escape'){ this.value=''; q=''; renderRail(); paintPage(); } };
+  document.addEventListener('keydown',function(e){ if(!$('st-overlay').classList.contains('on')) return;
+    if(e.key==='Escape'){ if(menuEl){ closeMenu(); } else if($('st-sheet').classList.contains('on')){ closeSheet(); } else if(q){ $('st-search').value=''; q=''; renderRail(); paintPage(); } else { openSettings(false); } e.stopPropagation(); } }, true);
+  /* arm the preview audio on first interaction inside the overlay */
+  $('st-overlay').addEventListener('pointerdown',function(){ arm(); });
+
+  /* ═══ INIT ═══ */
+  applyAll(); renderRail(); paintPage(); paintHeaderCpu();
+  window.__st={go:go,regSheet:regSheet,saveSheet:saveSheet,open:openSettings,S:function(){ return S; },openMenuFor:function(id){ var f=document.querySelector('#st-overlay [data-row="'+id+'"] .dd'); if(f) f.click(); },search:function(s){ $('st-search').value=s; $('st-search').oninput(); }};
+  /* dev/QA hook only — #st=<pageId> auto-opens the settings menu to that page (used for headless screenshots). Harmless in the plugin. */
+  try{ var _hm=(location.hash||'').match(/st=([a-z]+)/); if(_hm){ openSettings(true); if(PAGES.some(function(p){ return p.id===_hm[1]; })) go(_hm[1]); } }catch(e){}
+  })();
+  </script>
+
 
   <!-- MODULATION PANEL -->
   <div id="mod-panel">
@@ -15537,51 +16384,9 @@ function initSettingsPanel() {
       try { window.__tpDiceMenu && window.__tpDiceMenu(e.clientX, e.clientY); } catch (x) {}
     });
   })();
-  var btn = document.getElementById('settings-btn');
-  var panel = document.getElementById('settings-panel');
-  var closeBtn = document.getElementById('settings-close');
-  var overlay = panel.querySelector('.settings-overlay');
-  var lightBtn = document.getElementById('theme-light-btn');
-  var darkBtn = document.getElementById('theme-dark-btn');
-
-  btn.addEventListener('click', function() { panel.style.display = 'block'; });
-  function closePanel() { panel.style.display = 'none'; }
-  closeBtn.addEventListener('click', closePanel);
-  overlay.addEventListener('click', closePanel);
-
-  lightBtn.addEventListener('click', function() {
-    setTheme('light');
-    lightBtn.classList.add('active'); darkBtn.classList.remove('active');
-    drawSettingsIcon(); saveSettings();
-  });
-  darkBtn.addEventListener('click', function() {
-    setTheme('dark');
-    darkBtn.classList.add('active'); lightBtn.classList.remove('active');
-    drawSettingsIcon(); saveSettings();
-  });
-  /* tp43 — DAW capture on/off: a native preference, read back on open */
-  (function(){ var onB=document.getElementById('capture-on-btn'), offB=document.getElementById('capture-off-btn'); if(!onB||!offB) return;
-    function paint(on){ onB.classList.toggle('active',!!on); offB.classList.toggle('active',!on); try{ document.body.classList.toggle('ti-capture-off',!on); }catch(e){} }
-    function nfn(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
-    function set(on){ paint(on); var f=nfn('setCaptureEnabled'); if(f){ try{ f(on?1:0); }catch(e){} } }
-    onB.addEventListener('click',function(){ set(true); }); offB.addEventListener('click',function(){ set(false); });
-    var g=nfn('getCaptureEnabled'); if(g){ try{ Promise.resolve(g()).then(function(v){ paint(!!v); }).catch(function(){}); }catch(e){} }
-    window.__tiCaptureSet=set;   /* the gates */
-  })();
-  /* tp62 — Motion on/off: the same shape as DAW capture. paint() writes body.ti-motion-off, which is what
-     __tiMotionOn() (the motion clock's switch) reads; the native keeps the preference and re-arms the push lane. */
-  (function(){ var onB=document.getElementById('motion-on-btn'), offB=document.getElementById('motion-off-btn'); if(!onB||!offB) return;
-    function paint(on){ onB.classList.toggle('active',!!on); offB.classList.toggle('active',!on); try{ document.body.classList.toggle('ti-motion-off',!on); }catch(e){}
-      try{ if(!on && window.__tiMotionRest) window.__tiMotionRest(); }catch(e){} }
-    function nfn(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
-    function set(on){ paint(on); var f=nfn('setMotionEnabled'); if(f){ try{ f(on?1:0); }catch(e){} } try{ if(window.__tiRepaint) window.__tiRepaint(); }catch(e){} }
-    onB.addEventListener('click',function(){ set(true); }); offB.addEventListener('click',function(){ set(false); });
-    var g=nfn('getMotionEnabled'); if(g){ try{ Promise.resolve(g()).then(function(v){ paint(!!v); }).catch(function(){}); }catch(e){} }
-    window.__tiMotionSet=set;   /* the gates */
-  })();
-  // Sync button state with current theme (may have been injected by C++ at page serve time)
-  lightBtn.classList.toggle('active', currentTheme.name === 'light');
-  darkBtn.classList.toggle('active', currentTheme.name === 'dark');
+  // fb-settings — the gear now opens the new #st-overlay settings menu (wired in its own module,
+  // below the header markup). Theme / Motion / DAW capture / Pitch bend now live inside it. The old
+  // #settings-panel modal was removed; only the header dice wiring (above) and the gear glyph remain here.
   drawSettingsIcon();
 }
 
@@ -15623,7 +16428,10 @@ function saveSettings() {
     try {
       saveSettingsFn(JSON.stringify({
         theme: getTheme(),
-        xyEnabled: state.xyEnabled
+        xyEnabled: state.xyEnabled,
+        // fb-settings — the whole settings-menu state (author, roles, MIDI, performance, look…) rides
+        // the ONE global settings file, so it persists and reads back on reopen (state-persists law).
+        settings: (typeof window.__stGet === 'function' ? window.__stGet() : undefined)
         // NOTE: no 'page' here — the settings file is GLOBAL (all instances). The active page
         // persists PER INSTANCE via the uiPage native fns, so new instances start on the front page.
       }));
@@ -15649,6 +16457,9 @@ function restoreSettings(json) {
     }
     // (The 'page' key is deliberately IGNORED here — older settings files carried it, but the
     // settings file is global to every instance. Per-instance page restore = restoreUiPage.)
+    // fb-settings — hand the saved settings-menu state to the settings module so every row reads
+    // back where the user left it (state-persists) and re-applies to the DSP (theme/motion/bend/…).
+    if (s.settings && typeof window.__stRestore === 'function') window.__stRestore(s.settings);
   } catch(e) {}
 }
 
@@ -35042,7 +35853,7 @@ restoreThemeFromBackend();
   var UL_OVER='.syn-ctx-menu,.samp-menu,.mv-menu,.rand-menu,.rand-menu-backdrop,.reso-menu,.pmenu,'
              +'.tpb-panel,.ti-card,.mv-ext,.warp-ext,.filt-ext,.eq-ctx-menu,.preset-ctx-menu,'
              +'#context-menu,#mod-ctx-menu,.tag-picker,.delete-confirm,.preset-overlay,'
-             +'#settings-panel,.rr-pop,.delay-mod-popover';
+             +'#settings-panel,#st-overlay,.rr-pop,.delay-mod-popover';
   /* AND A NET FOR THE ONE NOBODY REMEMBERS TO ADD: an overlay in this file is either one of the
      classes above or a <body> child that sets a huge z-index in its OWN inline style at open time
      (the two-pane browser, the cascading menus, the ghost cards). Reading `style.zIndex` is a plain

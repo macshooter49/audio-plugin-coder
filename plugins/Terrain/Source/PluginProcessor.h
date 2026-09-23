@@ -176,6 +176,20 @@ public:
     void setVoiceCap (int cap) noexcept { voiceCap_ = juce::jlimit (1, 96, cap); }
     void setRobinBrain (wc::FlowRobin* b) noexcept { robinBrain_ = b; }   // fb122 — the Wheel
 
+    // fb-settings — VELOCITY CURVE (Settings → Controllers → Velocity curve). c in [-1, 1]:
+    //   out = pow(in, 2^(2.6*c))  (the mod-matrix CRV law) — c<0 softer touch, c>0 harder.
+    //   c >= 2 is the FIXED sentinel (every note at 100). DEFAULT 0 is linear = IDENTITY, so an
+    //   un-set curve leaves note-on velocity byte-for-byte untouched (no behaviour change until used).
+    void  setVelCurve (float c) noexcept { velCurve_.store (c, std::memory_order_relaxed); }
+    float shapeVelocity (float v) const noexcept
+    {
+        const float c = velCurve_.load (std::memory_order_relaxed);
+        if (c >= 2.0f)  return 100.0f / 127.0f;                 // FIXED
+        if (c == 0.0f)  return v;                                // LINEAR — identity
+        return std::pow (juce::jlimit (0.0f, 1.0f, v), std::pow (2.0f, 2.6f * c));
+    }
+    std::atomic<float> velCurve_ { 0.0f };
+
     /** MONO/LEGATO voice modes, pushed per-block from the processor (audio thread —
      *  same thread as noteOn/noteOff, no extra locking needed). The held-note stack
      *  is cleared whenever MONO flips so stale notes can't resurrect later. */
@@ -229,6 +243,7 @@ public:
 
     void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
     {
+        velocity = shapeVelocity (velocity);   // fb-settings — velocity curve applied at note-on (identity when unset)
         if (monoMode_) { monoNoteOn (midiChannel, midiNoteNumber, velocity); return; }
 
         const juce::ScopedLock sl (lock);
@@ -1897,6 +1912,37 @@ public:
     static juce::File   motionOffMarker();
     bool getMotionEnabled() const noexcept { return motionEnabled_.load (std::memory_order_acquire); }
     void setMotionEnabled (bool on);    // message thread
+
+    // fb-settings — VELOCITY CURVE forwarded to both voice banks (Settings → Controllers). The native
+    //   setVelCurve calls this on the message thread; the stored value is a plain atomic read at note-on.
+    //   c: [-1,1] curve, 999 = FIXED. Default 0 = identity (no change until the user touches the curve).
+    void setVelCurve (float c) noexcept
+    {
+        synthEngine.setVelCurve (c);
+        if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->setVelCurve (c);
+    }
+    // fb-settings — CPU METER read (Settings → Performance → CPU meter in the header). Returns an
+    //   instantaneous DSP load %, the delta since the previous call (message thread only). dspTicks_ /
+    //   dspSamples_ accumulate every processBlock unconditionally; we read the delta and never reset them,
+    //   so the optional background CPU probe is left undisturbed. Smoothed and clamped to 0..100.
+    double getDspLoadPercent() noexcept
+    {
+        const long long t  = dspTicks_.load   (std::memory_order_relaxed);
+        const long long s  = dspSamples_.load (std::memory_order_relaxed);
+        const long long dt = t - dspLoadT0_, ds = s - dspLoadS0_;
+        dspLoadT0_ = t; dspLoadS0_ = s;
+        const double sr = getSampleRate();
+        if (ds > 0 && sr > 0.0 && dt >= 0)
+        {
+            const double dspSec = (double) dt / (double) juce::Time::getHighResolutionTicksPerSecond();
+            const double audSec = (double) ds / sr;
+            const double pct    = juce::jlimit (0.0, 100.0, 100.0 * dspSec / audSec);
+            dspLoadLast_ = 0.75 * dspLoadLast_ + 0.25 * pct;
+        }
+        return dspLoadLast_;
+    }
+    long long dspLoadT0_ = 0, dspLoadS0_ = 0;   // fb-settings — getDspLoadPercent state (message thread only)
+    double    dspLoadLast_ = 0.0;
     bool uiStatic() const noexcept { return ! motionEnabled_.load (std::memory_order_relaxed); }
     // a decorative feed's AUDIO-DRIVEN number: itself while motion is on, a constant rest while off
     float vz (float v) const noexcept { return uiStatic() ? 0.0f : v; }
