@@ -1437,6 +1437,17 @@ html.tp-glassup #header {
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   backdrop-filter: blur(20px) saturate(1.4);
 }
+/* tp98 — THE MOD PAGE IS ONE DARK GLASS, TOP TO BOTTOM. The matrix sheet (#mm) already wears the
+   preset-browser glass (.tp-glass = --menu-bg + blur(20px) saturate(1.4)); when the MOD page is up
+   the header band wears the exact same coat so the bar and the sheet are one material — the seam of
+   #plugin's purple ground showing only in the 0→44 header band is gone. The native CAPTURE strip
+   (bottom) gets the matching alpha-over via setStripGround (see the strip-ground poller). Keyed on
+   ti-mod-glass, set only while the MOD page is the active page, so SYN / Chop / Patcher are untouched. */
+html.ti-mod-glass #header {
+  background: var(--menu-bg);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
 
 .brand-area {
   display: flex;
@@ -3549,11 +3560,17 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
   border-color: var(--purple-400);
   color: var(--on-fg);
 }
+/* tp98 — Max: the MOD pill kept a lingering purple OUTLINE on SYN / Patcher / Send even off the MOD
+   page — has-routes tinted the border regardless of which page was up, so a patch with any active route
+   left the pill looking lit everywhere. The border now lights ONLY with .active (the MOD page open);
+   on every other page the pill wears the base border, exactly like SYN / Chop / DLY. THE BREATHERS stay
+   wired — has-routes still carries the play-synced heartbeat that holds at its 0 % pose (no glow) at
+   rest — so the only thing removed is the static outline. */
 .mod-btn.has-routes {
-  border-color: var(--purple-500);
   animation: mod-btn-breathe 2s ease-in-out infinite;
 }
 .mod-btn.has-routes.active {
+  border-color: var(--purple-500);
   animation: none;
 }
 /* fb636 — at rest the glow is held on its 0 % pose (no glow) after finishing its breath, never frozen mid-breath
@@ -4527,6 +4544,12 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 #mm-rv .cable.sel .core{stroke:#fff;stroke-width:2;opacity:1;}
 #mm-rv .cable.byp .core{opacity:.2;}
 #mm-rv .cable .hit{pointer-events:stroke;stroke:transparent;stroke-width:12;fill:none;cursor:pointer;}
+/* tp98 — THE ROUTES VIEW IS THE PATCHER: same cables (above, #tp-page .cable .core verbatim) + the
+   Patcher's own node at every connection point. #tp-page .tp-port i is a 9px circle (bg #16141f,
+   light border); recycled here as an SVG dot at each source output and each destination input, in the
+   mod page's strict purple (#B794FF, the source-bar colour) with NO glow (Max). Built once per rvBuild
+   (zero per-frame cost); the dark rim (#16141f, the port's own centre) reads it as a plugged port. */
+#mm-rv .node{fill:#B794FF;stroke:#16141f;stroke-width:1.4;}
 #mm-rv .hint{position:sticky;bottom:10px;text-align:center;font-size:9.5px;color:rgba(255,255,255,.34);pointer-events:none;}
 
 
@@ -45856,11 +45879,23 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         var m=(getComputedStyle(el).backgroundColor||'').match(/[\d.]+/g);
         if(!m||m.length<3) return;
         var hx=function(v){ v=Math.round(+v); return (v<16?'0':'')+v.toString(16); };
-        var c='ff'+hx(m[0])+hx(m[1])+hx(m[2]);
+        var c;
+        /* tp98 — while the MOD page is up it wears the browser's dark glass top-to-bottom (html.ti-mod-glass
+           on the header + #mm's .tp-glass). The native strip can't backdrop-blur the WebView, so — exactly
+           as fb630's browser glass does — it stands on the alpha-over the CSS composites: var(--menu-bg)
+           over the page's own ground, computed here from the live tokens (C++ holds no copied literal). */
+        if(document.documentElement.classList.contains('ti-mod-glass')){
+          var mb=(getComputedStyle(document.documentElement).getPropertyValue('--menu-bg')||'').match(/[\d.]+/g);
+          if(mb&&mb.length>=4){ var a=+mb[3], mix=function(i){ return mb[i]*a + (+m[i])*(1-a); }; c='ff'+hx(mix(0))+hx(mix(1))+hx(mix(2)); }
+          else c='ff'+hx(m[0])+hx(m[1])+hx(m[2]);
+        } else {
+          c='ff'+hx(m[0])+hx(m[1])+hx(m[2]);
+        }
         if(c===last) return; last=c;
         fn(1,c);
       }catch(e){}
     }
+    window.__tiStripKick=tick;   /* tp98 — a page switch repaints the strip at once, not on the next 1 s poll */
     if(document.readyState==='complete') { tick(); setInterval(tick,1000); }
     else window.addEventListener('load',function(){ tick(); setInterval(tick,1000); });
   })();
@@ -46198,6 +46233,11 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         var mx=(x0+x1)/2, my=(ys+yd)/2, ag=document.createElementNS(NS,'g'); ag.setAttribute('class','cable m'+(a.byp?' byp':''));
         var ap=document.createElementNS(NS,'path'); ap.setAttribute('class','core'); ap.setAttribute('d',cPath(x0,RV.srcY[sKey(a.aux)],mx,my)); ag.appendChild(ap); svg.appendChild(ag); LN.aux=ag; }
       RV.lines.push(LN); });
+    /* tp98 — the Patcher's port dot at every connection point: one at each source's output edge (x0),
+       one at each destination row's input edge (x1). Static — built with the cables, never per frame. */
+    var mkNode=function(cx,cy){ var c=document.createElementNS(NS,'circle'); c.setAttribute('class','node'); c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r','4'); svg.appendChild(c); };
+    Object.keys(RV.srcY).forEach(function(k){ mkNode(x0,RV.srcY[k]); });
+    Object.keys(RV.dstY).forEach(function(id){ mkNode(x1,RV.dstY[id]); });
     rvSel(); RV.lastSrc={}; RV.lastV={}; }
   function rvSel(){ (RV.lines||[]).forEach(function(L){ L.g.classList.toggle('sel',L.a===selA); if(L.aux) L.aux.classList.toggle('sel',L.a===selA); }); }
   function rvTick(){ if(!RV.lines) return;
@@ -46208,6 +46248,23 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* ═══ sync with the one matrix — a knob drop, a restore, the dice, a preset: rebuild only when the SET changed ═══ */
   function sync(){ if(!MM) return; var L=list(); var same=(L.length===built.length)&&L.every(function(a,i){ return a===built[i]&&a.__mm; });
     if(!same){ if(dragging) return; rebuild(); } else { L.forEach(paint); after(); } }
+
+  /* ═══ tp98 — THE LOOP RIDES THE PAGE (CPU HARD RULE) ═══════════════════════════════════════════
+     The live pass (tick → the Out meters, the amount dots, and the Routes view's cable/level updates)
+     is a frame-dispatcher painter. It must cost NOTHING when the MOD page is not on screen: instead of
+     registering once at boot and leaning on tick's offsetParent guard (which still keeps the painter in
+     the registry and pays a call + try/catch every shipped frame), 'mm' is REGISTERED only while #mm is
+     visible and fully UNREGISTERED the instant another page comes up or the panel closes. So the
+     active-frame-callback count returns to its exact baseline when the MOD page is hidden. */
+  var mmReg=false;
+  function mmLoop(on){ if(on===mmReg) return;
+    if(on){ if(window.__tiFrameReg){ window.__tiFrameReg('mm',tick); mmReg=true; } }
+    else { if(window.__tiFrameUnreg){ window.__tiFrameUnreg('mm'); mmReg=false; } } }
+  /* tp98 — the MOD page's dark-glass coat: html.ti-mod-glass gives the header band the browser glass
+     (see the header CSS), and the kick repaints the native CAPTURE strip onto the matching alpha-over
+     (the strip-ground poller reads ti-mod-glass). Set only while the MOD page is the active page. */
+  function mmGlass(on){ document.documentElement.classList.toggle('ti-mod-glass',!!on);
+    try{ if(window.__tiStripKick) window.__tiStripKick(); }catch(e){} }
 
   function boot(){ var host=document.getElementById('mod-panel'); if(!host||MM) return;
     MM=el('<div id="mm" class="tp-glass basic">'
@@ -46248,12 +46305,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       rv.addEventListener('pointermove',function(e){ if(!dn) return; rv.scrollTop=s0-(e.clientY-y0); });
       function up(){ dn=false; rv.classList.remove('grabbing'); } rv.addEventListener('pointerup',up); rv.addEventListener('pointercancel',up); })();
     window.addEventListener('smchange',function(){ if(MM.offsetParent) sync(); });
-    window.addEventListener('tipanelchange',function(e){ if(e&&e.detail&&e.detail.panel==='mod') sync(); });
-    if(window.__tiFrameReg) window.__tiFrameReg('mm',tick);
+    window.addEventListener('tipanelchange',function(e){ var isMod=!!(e&&e.detail&&e.detail.panel==='mod'); mmLoop(isMod); mmGlass(isMod); if(isMod) sync(); });
+    /* tp98 — start in the state the page is already in (a restore can open onto the MOD page before this
+       boots, so the tipanelchange above never fired for it): loop + glass on iff #mm is on screen now. */
+    var onNow=!!MM.offsetParent; mmLoop(onNow); mmGlass(onNow);
     sync(); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
   window.__mmPage={ sync:function(){ sync(); }, dests:function(){ return DST_ORDER.length; }, cats:function(){ return DCATS.map(function(c){ return c.label+':'+c.items.length; }); },
-                    tick:function(){ tick(); }, select:function(i){ select(list()[i]); }, headerMenu:function(){ headerMenu(document.getElementById('mm-menu')); } };
+                    tick:function(){ tick(); }, select:function(i){ select(list()[i]); }, headerMenu:function(){ headerMenu(document.getElementById('mm-menu')); },
+                    looping:function(){ return mmReg; } };
 })();
 
 </script>
