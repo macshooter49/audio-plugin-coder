@@ -7074,6 +7074,17 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               overflow: hidden;
               text-overflow: ellipsis;
             }
+            /* SHARED CONTEXT-MENU NUMBER — the house "ultra-thin white number" (the BPM-number style:
+               SF Pro, weight 200, tabular-nums, pure white). Every value shown inside a menu ("16",
+               "100%", "2 semitones", "1.00×") wears this so numbers read the same everywhere. Any menu
+               builder tags its value span `syn-ctx-num` and inherits it — no per-caller styling. */
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-num {
+              color: #FFFFFF;
+              font-weight: 200;
+              font-size: 10px;
+              letter-spacing: 0.2px;
+              font-variant-numeric: tabular-nums;
+            }
             /* ═══ fb564 — THE CONTROL MENU'S GRID ═════════════════════════════════════════════════
                Max: "everything must be symmetrical... not everything is set to the left side...
                Envelope 1 and Envelope 5 are pushed all the way over to the left but everything
@@ -24481,8 +24492,17 @@ setTimeout(function wireSynControls () {
         menuEl.style.top = '0px';
         const mw = menuEl.offsetWidth  || 180;
         const mh = menuEl.offsetHeight || (items.length * 22 + (header ? 22 : 0) + 8);
-        const localX = Math.max(0, Math.min(bw - mw, (x - pw.left) / z));
-        const localY = Math.max(0, Math.min(bh - mh, (y - pw.top ) / z));
+        let localX = Math.max(0, Math.min(bw - mw, (x - pw.left) / z));
+        let localY = Math.max(0, Math.min(bh - mh, (y - pw.top ) / z));
+        /* CRISP MENU — NO SUBPIXEL BLUR. The glass carries a backdrop-filter; when its box lands on a
+           FRACTIONAL device pixel WebKit re-rasterises the blur across the seam and the whole menu (text
+           included) goes soft — intermittently, because it depends where the pointer fell (the fb reported
+           "blurry on and off"). #syn-panel scales the menu by `z`, so an integer LOCAL px is still fractional
+           on screen: round localX*z to a whole DEVICE pixel and divide back so the rendered box sits on the
+           grid. (Portaled to the body just below, the menu is UNSCALED, so a plain integer px lands on the
+           grid there — handled in that branch.) No transform is used, so nothing else can push it off-grid. */
+        localX = Math.round(localX * z) / z;
+        localY = Math.round(localY * z) / z;
         menuEl.style.left = localX + 'px';
         menuEl.style.top = localY + 'px';
         /* tp76 — THE PORTAL. #syn-panel (position:absolute, z-index 30) is a stacking context, so a menu inside it sits UNDER every
@@ -24494,8 +24514,10 @@ setTimeout(function wireSynControls () {
           if (floating && synPanel && menuEl.parentElement !== document.body) {
             menuEl.__home = menuEl.parentElement;
             document.body.appendChild(menuEl);
-            menuEl.style.left = (pw.left / z + localX) + 'px';
-            menuEl.style.top  = (pw.top  / z + localY) + 'px';
+            /* on the body the menu is UNSCALED, so a plain integer px = a whole device pixel: round the
+               final fixed position so the backdrop-filter never straddles a fractional boundary (crisp). */
+            menuEl.style.left = Math.round(pw.left / z + localX) + 'px';
+            menuEl.style.top  = Math.round(pw.top  / z + localY) + 'px';
           }
         } catch (e) {}
         // Belt-and-suspenders wheel handler for the rare case JUCE WKWebView
@@ -33416,7 +33438,7 @@ restoreThemeFromBackend();
     var GI = lbl==='lv' ? '<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M1 1.5 H9 M1 4 H9 M1 6.5 H9"/></svg>'
                         : '<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg>';   // fb213 — MATCHED-WEIGHT emblems (Max: the ||| read way bigger than the ≡)
     lab.innerHTML = GI + '<span>' + (lbl==='lv'?'Level':'Time') + '</span>';
-    var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;';
+    var val=document.createElement('span'); val.className='syn-ctx-num'; val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:200;font-variant-numeric:tabular-nums;';   /* ultra-thin white number (the house BPM style) */
     row.appendChild(lab); row.appendChild(val);
     var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
     for(var i=0;i<GRIDS.length;i++){ var nk=document.createElement('div');
@@ -38763,12 +38785,18 @@ restoreThemeFromBackend();
           var ph=S.v['phase'+i]||0, sw=S.v['swing'+i]||0; if(Math.abs(ph)>1e-4||sw>1e-4){ var u=swingFwd(nx,sw)+ph; u-=Math.floor(u); nx=u; }
           selClear(); pts.push([nx,ny,0]); setPts(i,pts); });
         field.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); if(Date.now()-ctxAt<150)return; menu(e); });
+        /* SHAPER SCREEN BACKSTOP. The field opens the Shaper's own menu and claims that gesture; this
+           catches every OTHER right-click inside the Shaper screen (chips, empty ground) so nothing bubbles
+           to the CHOP page's document contextmenu listener (which would otherwise open the Pitch-mode panel
+           for any click over the full-width waveform canvas). The field's handler runs first, so its menu is
+           untouched. */
+        scr.addEventListener('contextmenu',function(e){ e.stopPropagation(); });
         /* ── the right-click menu — the LFO's rows, on this lane (everything but Extend) ── */
         function sliderNode(lbl,key,LIST,onChange){ var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
           var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;';
           var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;display:inline-flex;align-items:center;gap:5px;';
           lab.innerHTML=(key==='lgrid'?'<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M1 2 H9 M1 4.5 H9 M1 7 H9"/></svg>':'<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg>')+'<span>'+lbl+'</span>';
-          var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;'; row.appendChild(lab); row.appendChild(val);
+          var val=document.createElement('span'); val.className='syn-ctx-num'; val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:200;font-variant-numeric:tabular-nums;'; row.appendChild(lab); row.appendChild(val);   /* ultra-thin white number (the house BPM style) */
           var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
           for(var q=0;q<LIST.length;q++){ var nk=document.createElement('div'); nk.style.cssText='position:absolute;top:-2px;width:1px;height:6px;background:rgba(255,255,255,0.28);left:'+(q/(LIST.length-1)*100)+'%;'; track.appendChild(nk); }
           var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;left:0;height:2px;border-radius:1px;background:#8B5CF6;';
@@ -38966,7 +38994,11 @@ restoreThemeFromBackend();
     if(exp) exp.addEventListener('click', function(){ window.__openFlowCard(displayMode); });
     // right-click a mode tile → open THAT mode's extension card (replaces the removed expand glyph)
     [].forEach.call(document.querySelectorAll('#syn-panel .flow-mode'), function(tile){
-      tile.addEventListener('contextmenu', function(ev){ ev.preventDefault();
+      /* CLAIM THE EVENT. Without stopPropagation the right-click ALSO bubbled to the CHOP page's
+         document-level contextmenu listener (PluginEditor.cpp), which opens the Pitch-mode panel for
+         any click that lands geometrically over the (full-width) waveform canvas — so right-clicking the
+         Shaper tile opened BOTH its card AND the wrong pitch menu. The Shaper opens its OWN surface only. */
+      tile.addEventListener('contextmenu', function(ev){ ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation();
         window.__openFlowCard(tile.getAttribute('data-mode')); }); });
   }catch(e){}
 })();
