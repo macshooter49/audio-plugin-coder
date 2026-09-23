@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Terrain Settings (mockup)</title>
+<!--
+  TERRAIN · SETTINGS — standalone, interactive, AUDIBLE mockup (Design/, not wired into the plugin).
+  Opens by double-click in Safari. No imports, no libraries. Research: .ideas/settings-research.md.
+  What you can HEAR: Audio & MIDI → Test audio (a real Web Audio chime, left / both / right), the velocity
+  keys under the curve (MIDI & Controllers), the computer keyboard (A W S E D F T G Y H U J K), and — in Chrome —
+  any real MIDI keyboard you tick under MIDI inputs (Web MIDI; Safari has none, so the ports are mocked there).
+  NO NEW FURNITURE — every control below is a copy of one Terrain already ships (index.html line refs):
+     header, pills, dice, gear ........... #header 7093-7131, .mod-btn 3518-3567, .settings-btn / .dice-btn 3570-3598,
+                                           drawSettingsIcon 15485 (the gear, verbatim)
+     the settings surface ................ #tp-b, the PRESET BROWSER'S glass sheet 1664-1780 + markup 42397: .tb toolbar,
+                                           .sw search, .count, .ibtn ×, .rail .sec/.ri (the bank rail = the category rail),
+                                           .insp inspector (.nm .sub .kv .k .v .notes .acts) = the context column
+     fields ............................... #tp-sheet .tp-in (the Save sheet's field, 1856) — text AND pick-from-menu fields
+     buttons .............................. .tp-btn / .tp-btn.pri (1818-1826)      choices ... .tp-chip / .active (1689-1695)
+     tags ................................. .tp-row .tag (purple 9px, 1755)         toast ..... #tp-toast (1918)
+     menus ................................ .pmenu glass (.ps/.pi/.pi.cur bullet) + the house clamp (flips up at the bottom)
+     sheets ............................... #tp-sheet .tp-card (the Save sheet: registration + the Save preset demo)
+     progress ............................. #tp-load .bar (the preset loading bar)
+     number drag .......................... the Settings "Pitch bend range" row (7206-7209): drag the number, double-click resets
+     slider / meter / dots / knob / keys .. .ti-card kit: .tr (+ i.lv lamp), .sd slot dot, TIC.knobSVG + dragify, .gbox/.gbl,
+                                           .fxb tiles (the keys), .crv = the Shaper screen (velocity curve)
+  Mockup-only (outside the 820×656 box): the "build status" switch under the window, which tags every row
+  live (exists in Terrain today) or new (needs C++) and adds the where/stored/C++ lines to the inspector.
+-->
+<style>
+/* ═══ tokens — index.html :root[data-theme=dark] (1339-1366), verbatim ═══ */
+:root{
+  --bg-main:#1A1A2E; --bg-hero:#12121F; --bg-surface:#232340; --bg-footer:#1E1E36; --bg-card:#2A2A48;
+  --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.5); --border-strong:rgba(88,88,128,0.5);
+  --text-primary:#E0DCE8; --text-secondary:#9B93B0; --text-muted:#6B6080; --text-dim:#504870;
+  --text-soft:#C4BDD6; --rose:#f43f5e;
+  --menu-bg:rgba(22,20,34,0.72); --menu-fg:#fff; --menu-fg-dim:rgba(255,255,255,.78); --menu-fg-faint:rgba(255,255,255,.50);
+  --menu-line:rgba(255,255,255,0.11); --menu-wash:rgba(139,92,246,0.18); --sel-fg:#B794FF;
+  --edge:rgba(255,255,255,0.45); --edge-soft:rgba(255,255,255,0.22); --on-fg:#fff; --wash:rgba(18,18,31,0.82);
+  --ghost:rgba(255,255,255,0.55); --ghost-dim:rgba(255,255,255,0.34); --gray:#9b93a8;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{background:#0d0d18;}
+body{background:#0d0d18;font-family:-apple-system,'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;}
+#plugin{width:820px;height:656px;position:relative;overflow:hidden;
+  background:radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main);
+  box-shadow:0 30px 80px rgba(0,0,0,.6);border-radius:6px;}
+button,input{font-family:inherit;}
+
+/* ═══ HEADER — #header / .header-left / .header-preset / .header-right (1397-1617), as the mod-matrix mockup ═══ */
+#header{height:44px;display:flex;align-items:center;padding:0 16px;justify-content:flex-end;background:transparent;position:relative;z-index:20;}
+.header-left{position:absolute;left:50%;top:0;height:44px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;}
+.brand-name{font-weight:600;font-size:18px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-primary);}
+.brand-version{font-size:10px;letter-spacing:1.5px;color:var(--text-muted);margin-left:-2px;padding-top:3px;}
+.header-preset{position:absolute;left:16px;top:0;height:44px;display:flex;align-items:center;gap:6px;}
+.preset-nav-btn,.preset-save-btn{height:24px;min-width:20px;border:1px solid transparent;background:transparent;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .1s;font-family:inherit;}
+.preset-save-btn{font-size:16px;line-height:1;}
+.preset-nav-btn:hover,.preset-save-btn:hover{color:var(--purple-400);}
+.preset-name{font-weight:500;font-size:13px;letter-spacing:.4px;color:var(--text-primary);text-align:center;cursor:pointer;transition:opacity .15s,color .15s;
+  min-width:0;width:128px;max-width:236px;padding:0 6px;height:28px;line-height:28px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.preset-name:hover{color:var(--purple-400);}
+.header-right{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-shrink:0;}
+.mod-btn{position:relative;display:flex;align-items:center;justify-content:center;padding:3px 10px;border-radius:12px;border:1.5px solid rgba(139,92,246,0.2);
+  background:transparent;cursor:pointer;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-secondary);
+  padding-left:11.5px;padding-right:10px;margin-left:12px;transition:all 0.2s ease;flex-shrink:0;font-family:inherit;}
+.mod-btn:hover{border-color:rgba(139,92,246,0.4);color:var(--purple-500);}
+.mod-btn.active{background:transparent;border-color:var(--purple-400);color:var(--on-fg);}
+/* .settings-btn / .dice-btn (3570-3598), verbatim */
+.settings-btn{background:none;border:none;border-radius:6px;padding:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:32px;height:28px;flex-shrink:0;margin-left:6px;}
+.settings-btn:hover{background:none;opacity:.8;}
+.dice-btn{color:var(--text-secondary);}
+.dice-btn svg{width:19.5px;height:19.5px;display:block;}
+.dice-btn:hover{color:var(--text-secondary);}
+#dice-btn + .settings-btn{margin-left:0;}
+
+/* ═══ .pmenu glass (4033-4053) + .tp-menu rows (1623-1648), verbatim ═══ */
+.pmenu{position:fixed;z-index:2147483646;min-width:176px;max-width:206px;max-height:340px;overflow-y:auto;
+  background:rgba(22,20,34,0.72);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.11);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);
+  padding:5px;font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;}
+.pmenu .ps{font-size:9px;font-weight:500;letter-spacing:0;color:rgba(255,255,255,.50);padding:8px 9px 3px;}
+.pmenu .pi{display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:9.5px;letter-spacing:.5px;color:rgba(255,255,255,.5);transition:.1s;}
+.pmenu .pi .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pmenu .pi:hover{color:rgba(255,255,255,.86);background:rgba(255,255,255,0.05);}
+.pmenu .pi.cur{color:#FFFFFF;background:rgba(255,255,255,0.07);}
+.pmenu .pi.cur::before{content:'•';color:#fff;font-size:9px;line-height:1;flex:none;}
+.pmenu .pi .ct{color:rgba(255,255,255,.26);font-size:8px;letter-spacing:0;flex:none;}
+.pmenu .pi.off{opacity:.4;pointer-events:none;}
+.pmenu::-webkit-scrollbar{width:5px;height:5px;} .pmenu::-webkit-scrollbar-track{background:transparent;}
+.pmenu::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.13);border-radius:3px;}
+
+/* ═══ the .ti-card kit (3937-4330) — only the pieces used here, verbatim ═══ */
+.ti-card{font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;font-variant-numeric:tabular-nums;user-select:none;-webkit-user-select:none;}
+.ti-card .gbox{position:relative;border:1px solid rgba(255,255,255,.15);border-radius:9px;}
+.ti-card .gbl{position:absolute;top:-4px;left:50%;transform:translateX(-50%);font-size:6px;letter-spacing:1.6px;text-transform:uppercase;line-height:8px;
+  color:rgba(255,255,255,.92);background:#1A1A2E;padding:0 6px;white-space:nowrap;pointer-events:none;}
+.ti-card .cell{display:flex;flex-direction:column;align-items:center;min-width:0;}
+.ti-card .ctl{display:flex;align-items:flex-end;justify-content:center;width:100%;}
+.ti-card .cell .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;color:rgba(255,255,255,.45);line-height:1;margin-top:6px;}
+.ti-card .cell .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1;margin-top:4px;min-height:9px;}
+.ti-card .cell .lb,.ti-card .cell .vl{white-space:nowrap;max-width:100%;overflow:hidden;text-align:center;text-overflow:ellipsis;}
+.ti-card .k svg{width:30px;height:30px;display:block;cursor:ns-resize;}
+.ti-card .tr{position:relative;height:16px;width:100%;cursor:ew-resize;}
+.ti-card .tr::before{content:'';position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,0.16);}
+.ti-card .tr u{position:absolute;left:50%;top:50%;width:1px;height:7px;transform:translate(-50%,-50%);background:rgba(255,255,255,0.28);pointer-events:none;}
+.ti-card .tr i{position:absolute;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,.92);pointer-events:none;}
+.ti-card .tr b{position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#fff;transform:translate(-50%,-50%);pointer-events:none;}
+.ti-card .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px;cursor:pointer;}
+.ti-card .sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26);transition:background .12s,border-color .12s;}
+.ti-card .sd:hover i{border-color:rgba(255,255,255,.55);}
+.ti-card .sd.on i{background:rgba(255,255,255,.92);border-color:transparent;}
+.ti-card .fxb{border:1px solid rgba(255,255,255,.20);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;text-transform:uppercase;
+  color:rgba(255,255,255,.50);transition:background .12s,color .12s,border-color .12s;}
+.ti-card .fxb:hover{color:rgba(255,255,255,.85);}
+.ti-card .fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600;}
+.ti-card i.lv{background:#B794FF!important;box-shadow:0 0 4px rgba(183,148,255,.65);}
+.ti-card .k svg .km{stroke:#B794FF;}
+/* the Shaper screen (.shp-ext .screen + .mv-stroke) — the mod-matrix CRV box, grown */
+.crv{position:relative;border-radius:4px;background:#0F0F1C;border:1px solid rgba(255,255,255,.06);overflow:hidden;cursor:ns-resize;touch-action:none;}
+.crv svg{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.crv .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.2;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85));vector-effect:non-scaling-stroke;}
+.crv .grid line{stroke:rgba(255,255,255,.065);stroke-width:1;vector-effect:non-scaling-stroke;}
+.crv .dt{fill:#fff;}
+
+/* ═══ the synth page behind the glass (the mod-matrix mockup's #syn) ═══ */
+#syn{position:absolute;left:0;right:0;top:44px;bottom:0;padding:14px 14px 14px;display:grid;grid-template-rows:repeat(4,minmax(0,1fr));gap:16px;}
+#syn .row{display:grid;gap:10px;}
+#syn .gbox{display:flex;align-items:center;justify-content:space-around;padding:12px 6px 8px;}
+#syn .cell{flex:1;}
+
+/* ═══ THE SETTINGS SURFACE = #tp-b, the preset browser's glass sheet (1664-1780), verbatim ═══ */
+.tp-glass{background:var(--menu-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);}
+#tp-b{position:absolute;left:0;right:0;top:44px;bottom:0;z-index:2000;display:none;flex-direction:column;color:var(--text-primary);font-family:inherit;}
+#tp-b.on{display:flex;}
+#tp-b .tb{height:38px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--menu-line);flex:none;}
+#tp-b .sw{position:relative;flex:1;max-width:300px;}
+#tp-b .sw::before{content:'';position:absolute;left:1px;top:50%;transform:translateY(-50%);width:11px;height:11px;border:1.5px solid var(--text-secondary);border-radius:50%;pointer-events:none;}
+#tp-b .sw::after{content:'';position:absolute;left:10px;top:calc(50% + 4px);width:4px;height:1.5px;background:var(--text-secondary);transform:rotate(45deg);pointer-events:none;}
+#tp-b .search{width:100%;height:26px;border:none;border-radius:5px;padding:0 8px 0 21px;font-size:11.5px;background:transparent;color:var(--text-primary);outline:none;}
+#tp-b .search::placeholder{color:var(--text-muted);}
+#tp-b .count{margin-left:auto;font-size:10px;color:var(--text-soft);white-space:nowrap;margin-right:4px;}
+#tp-b .count b{color:var(--text-primary);font-weight:500;}
+#tp-b .ibtn{width:26px;height:26px;border:none;border-radius:5px;background:transparent;color:var(--text-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:color .15s,box-shadow .15s;}
+#tp-b .ibtn:hover{color:var(--text-primary);box-shadow:inset 0 0 0 1px var(--edge-soft);}
+#tp-b .ibtn svg{width:15px;height:15px;}
+.tp-chip{padding:4px 9px;border:1px solid var(--edge-soft);border-radius:4px;background:transparent;font-size:9.5px;font-weight:500;color:var(--text-soft);cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap;line-height:1.2;flex:none;font-family:inherit;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+.tp-chip:hover{color:var(--text-primary);}
+.tp-chip.active{background:transparent;border-color:var(--purple-400);color:var(--on-fg);}
+.tp-chip.add{border-style:dashed;color:var(--purple-400);padding:0;width:22px;height:20px;display:flex;align-items:center;justify-content:center;margin-right:2px;}
+.tp-chip.add svg{width:11px;height:11px;}
+.tp-chip.add:hover{border-color:var(--purple-400);color:var(--on-fg);}
+#tp-b .body{flex:1;min-height:0;display:flex;}
+#tp-b .rail{width:138px;flex:none;border-right:1px solid var(--menu-line);overflow-y:auto;padding:8px 0 12px;scrollbar-width:none;}
+#tp-b .rail::-webkit-scrollbar,#tp-b .insp::-webkit-scrollbar{width:0;height:0;display:none;}
+#tp-b .rail .sec{font-size:10px;font-weight:500;color:var(--text-soft);padding:12px 16px 5px;}
+#tp-b .rail .ri{display:flex;align-items:center;gap:7px;height:23px;padding:0 16px 0 14px;cursor:pointer;font-size:10.5px;color:var(--text-soft);border-left:2px solid transparent;transition:color .1s,background .1s;}
+#tp-b .rail .ri .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#tp-b .rail .ri .ct{font-size:9.5px;color:var(--text-secondary);}
+#tp-b .rail .ri:hover{color:var(--text-primary);background:rgba(127,127,160,0.07);}
+#tp-b .rail .ri.cur{color:var(--sel-fg);border-left-color:var(--purple-500);background:transparent;}
+#tp-b .rail .ri.cur .ct{color:var(--sel-fg);}
+#tp-b .rail .ri svg{width:11px;height:11px;flex:none;}
+.tp-row .tag,.tag{font-size:9px;font-weight:500;color:var(--purple-400);flex:none;}
+.tp-row .tag.user,.tag.user{color:var(--text-secondary);}
+#tp-b .insp{width:224px;flex:none;border-left:1px solid var(--menu-line);display:flex;flex-direction:column;overflow:hidden;}
+#tp-b .iscroll{flex:1;min-height:0;overflow-y:auto;padding:14px 18px 14px;}
+#tp-b .iscroll::-webkit-scrollbar{width:5px;height:5px;}
+#tp-b .iscroll::-webkit-scrollbar-track{background:transparent;}
+#tp-b .iscroll::-webkit-scrollbar-thumb{background:rgba(127,127,160,0.25);border-radius:3px;}
+#tp-b .iscroll::-webkit-scrollbar-thumb:hover{background:rgba(127,127,160,0.45);}
+#tp-b .insp .nm{font-size:13px;font-weight:500;color:var(--text-primary);line-height:1.3;letter-spacing:.2px;}
+#tp-b .insp .sub{margin-top:3px;min-height:14px;font-size:10px;font-weight:500;color:var(--text-secondary);line-height:14px;}
+#tp-b .insp .kv{display:grid;grid-template-columns:52px 1fr;row-gap:5px;column-gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--menu-line);}
+#tp-b .insp .k{font-size:10px;font-weight:500;color:var(--text-soft);line-height:14px;}
+#tp-b .insp .v{font-size:10.5px;color:var(--text-primary);line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#tp-b .insp .notes{margin-top:12px;padding-top:12px;border-top:1px solid var(--menu-line);}
+#tp-b .insp .notes .k{margin-bottom:4px;}
+.tp-notebox{min-height:34px;border-radius:6px;padding:5px 7px;margin:0 -7px;font-size:10.5px;line-height:1.45;color:var(--text-primary);outline:none;white-space:pre-wrap;word-break:break-word;}
+#tp-b .insp .acts{flex:none;display:flex;gap:6px;padding:10px 18px 12px;border-top:1px solid var(--menu-line);}
+.tp-btn{height:28px;border:1px solid var(--edge-soft);border-radius:6px;background:transparent;color:var(--text-soft);font-size:10.5px;font-weight:500;cursor:pointer;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,color .15s;font-family:inherit;}
+.tp-btn:hover{color:var(--text-primary);border-color:var(--edge);}
+.tp-btn.pri{border-color:var(--purple-400);color:var(--on-fg);flex:1;}
+.tp-btn.pri:hover{border-color:var(--purple-600);}
+.tp-btn:disabled{opacity:.3;pointer-events:none;}
+
+/* ═══ SHEETS — #tp-sheet (1829-1881), verbatim; its .tp-in field is shared with the settings pane ═══ */
+#tp-sheet{position:absolute;inset:0;z-index:2100;background:var(--wash);display:none;align-items:center;justify-content:center;color:var(--text-primary);}
+#tp-sheet.on{display:flex;}
+#tp-sheet .tp-card{width:340px;display:flex;flex-direction:column;max-height:calc(100% - 56px);background:var(--menu-bg);
+  -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid var(--menu-line);border-radius:12px;padding:20px 22px 18px;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);}
+#tp-sheet .tp-card.wide{width:480px;max-width:calc(100% - 80px);}
+#tp-sheet .tp-hd{font-size:11.5px;font-weight:500;color:var(--text-primary);margin-bottom:14px;flex:none;}
+#tp-sheet .tp-sbody{flex:1;min-height:0;overflow-y:auto;margin:0 -6px;padding:0 6px;}
+#tp-sheet .tp-f{display:grid;grid-template-columns:56px 1fr;align-items:center;column-gap:10px;row-gap:9px;}
+#tp-sheet .tp-f .k{font-size:10px;font-weight:500;color:var(--text-soft);align-self:start;padding-top:7px;}
+#tp-sheet .tp-f .v{font-size:10.5px;color:var(--text-primary);padding-top:6px;line-height:1.5;}
+#tp-sheet .tp-in,#tp-b .tp-in{height:28px;border:1px solid var(--menu-line);border-radius:5px;padding:0 9px;font-size:11px;background:rgba(255,255,255,0.05);color:var(--text-primary);outline:none;width:100%;font-family:inherit;}
+#tp-sheet .tp-in:focus,#tp-b .tp-in:focus{border-color:var(--purple-400);background:rgba(255,255,255,0.07);}
+#tp-sheet .tp-in::placeholder,#tp-b .tp-in::placeholder{color:var(--text-muted);}
+#tp-sheet .tp-note-in{height:auto;min-height:46px;max-height:108px;overflow-y:auto;padding:6px 9px;line-height:1.45;white-space:pre-wrap;word-break:break-word;text-align:left;cursor:text;user-select:text;-webkit-user-select:text;}
+#tp-sheet .tp-note-in:empty::before{content:attr(data-ph);color:var(--text-muted);}
+#tp-sheet .chp{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+#tp-sheet .tp-acts{display:flex;gap:6px;margin-top:18px;justify-content:flex-end;flex:none;}
+#tp-sheet .tp-acts .tp-btn.pri{flex:none;padding:0 18px;}
+#tp-sheet .tp-note{margin-top:10px;font-size:9.5px;color:var(--text-secondary);line-height:1.5;}
+#tp-sheet .tp-text{font-size:11px;color:var(--text-primary);line-height:1.55;}
+#tp-sheet .tp-text b{font-weight:500;}
+/* #tp-load .bar (1913-1914) — the preset loading bar, re-used for "sending", "verifying", "scanning", "checking" */
+.ld{height:2px;background:var(--border-strong);border-radius:1px;overflow:hidden;}
+.ld i{display:block;height:100%;width:0;background:var(--purple-500);border-radius:1px;transition:width .12s linear;}
+#tp-toast{position:absolute;left:50%;bottom:18px;transform:translate(-50%,8px);z-index:2200;border:1px solid rgba(255,255,255,0.11);border-radius:8px;padding:7px 12px;font-size:10.5px;color:#fff;
+  background:rgba(22,20,34,0.72);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;white-space:nowrap;max-width:560px;overflow:hidden;text-overflow:ellipsis;}
+#tp-toast.on{opacity:1;transform:translate(-50%,0);}
+#tp-toast .tp-bk{color:rgba(255,255,255,.5);}
+
+/* ═══ LAYOUT ONLY — the settings pane places the recycled controls above. No new control looks below this line:
+   every rule is a box size, a lane width, a gap, or the house type sizes (10.5 / 10 / 9.5 px) already used by #tp-b. ═══ */
+#pane{flex:1;min-width:0;overflow-y:auto;padding:0 0 18px;}
+#pane::-webkit-scrollbar{width:5px;} #pane::-webkit-scrollbar-track{background:transparent;}
+#pane::-webkit-scrollbar-thumb{background:rgba(127,127,160,0.25);border-radius:3px;}
+.ph{height:46px;display:flex;align-items:center;gap:8px;padding:0 18px;}                 /* page title: the inspector's .nm size */
+.ph .t{font-size:13px;font-weight:500;letter-spacing:.2px;color:var(--text-primary);white-space:nowrap;}
+.ph .w{margin-left:auto;font-size:9.5px;color:var(--text-secondary);white-space:nowrap;}
+.gh{display:flex;align-items:center;height:28px;margin:6px 18px 0;border-top:1px solid var(--menu-line);font-size:10px;font-weight:500;color:var(--text-soft);}   /* = .insp .kv/.notes divider + .k */
+.gh .x{margin-left:auto;font-weight:400;color:var(--text-muted);font-size:9.5px;}
+.note{margin:2px 18px 6px;font-size:9.5px;line-height:1.5;color:var(--text-secondary);}   /* = #tp-sheet .tp-note */
+.note b{color:var(--text-soft);font-weight:500;}
+.sr{display:flex;align-items:center;height:34px;padding:0 18px;gap:10px;transition:background .08s;}   /* = .tp-row, 34 tall for a 28 px field */
+.sr:hover{background:rgba(127,127,160,0.07);}
+.sr.flash{box-shadow:inset 0 0 0 1px var(--purple-400);}
+.sr .lbl{flex:1;min-width:0;display:flex;align-items:center;gap:7px;}
+.sr .lbl .t{font-size:10.5px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.sr .lbl .tag.bs{display:none;}
+body.bs .sr .lbl .tag.bs{display:inline;}
+.sr .lane{width:232px;flex:none;display:flex;align-items:center;gap:4px;min-width:0;}
+.sr .lane .tp-btn{height:24px;padding:0 10px;}
+.sr.soon .lane{opacity:.35;pointer-events:none;}
+.sr .val{font-size:10.5px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.sr .val.dim{color:var(--text-secondary);}
+.sr .dd{position:relative;display:flex;align-items:center;cursor:pointer;padding-right:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:26px;}
+.sr .dd:hover{border-color:var(--edge-soft);}
+.sr .dd.open{border-color:var(--purple-400);}
+.sr .dd svg{position:absolute;right:9px;top:50%;width:9px;height:9px;margin-top:-4.5px;color:var(--text-secondary);}
+.sr .dd .v{overflow:hidden;text-overflow:ellipsis;}
+.sr .dd .u{color:var(--text-secondary);margin-left:6px;}
+.num{font-size:13px;color:#ECE8F2;}   /* the bend-range row's own inline style (7208), verbatim values */
+.num b{cursor:ns-resize;user-select:none;font:inherit;font-weight:400;color:#ECE8F2;display:inline-block;width:30px;text-align:left;}   /* fixed box: the unit never moves as the digits change */
+.num span{opacity:.7;margin-left:0;color:#ECE8F2;}
+.sr .lane .tr{flex:1;}
+.blk{padding:4px 18px 8px;}
+/* a list block (MIDI inputs, CC map) — .tp-row rows, 26 tall, inside a .gbox */
+.lst{border:1px solid var(--menu-line);border-radius:6px;overflow:hidden;}
+.lst .r{display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;font-size:10px;color:var(--text-soft);}
+.lst .r+.r{border-top:1px solid rgba(255,255,255,.05);}
+.lst .r:hover{background:rgba(127,127,160,0.07);}
+.lst .r .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lst .r .c1{width:44px;flex:none;color:var(--text-primary);font-weight:500;}
+.lst .r .c2{width:74px;flex:none;color:var(--text-secondary);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lst .r .x{width:14px;flex:none;display:flex;justify-content:center;color:rgba(255,255,255,.5);cursor:pointer;}
+.lst .r .x:hover{color:#fff;}
+.lst .r .lamp{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.14);flex:none;}
+.lst .r.hd{height:22px;font-size:9.5px;font-weight:500;color:var(--text-secondary);}
+.lst .r.hd:hover{background:transparent;}
+.lst .r.learn .n{color:var(--purple-400);}
+.acts{display:flex;gap:6px;margin-top:8px;}
+.acts .tp-btn{height:24px;padding:0 10px;}
+.acts.inl,.inl{margin-left:auto;width:232px;}
+/* velocity: the Shaper screen + the play strip's keys */
+.vel{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:stretch;}
+.vel .crv{height:92px;}
+.vel .keys{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:2px;height:64px;}
+.vel .keys .fxb{font-size:6px;letter-spacing:.2px;align-items:flex-end;padding-bottom:4px;}
+.vel .keys .fxb.bk{background:rgba(255,255,255,.06);}
+.vel .keys .fxb.bk.on{background:rgba(255,255,255,.92);}
+.vel .cap{font-size:9.5px;color:var(--text-secondary);margin-top:6px;line-height:1.4;}
+.vel .rd{display:flex;gap:6px;margin-top:8px;}
+/* knob try-out */
+.tryk{display:flex;align-items:center;gap:12px;margin-left:auto;width:232px;}
+.tryk .gbox{width:84px;height:74px;display:flex;align-items:center;justify-content:center;flex:none;}
+.tryk .k svg{width:36px;height:36px;}
+.tryk .cap{font-size:9.5px;color:var(--text-secondary);line-height:1.5;}
+/* themes */
+.thm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:6px 18px 4px;}
+.thm .gbox{height:92px;padding:10px 8px 8px;cursor:pointer;transition:border-color .15s;}
+.thm .gbox:hover{border-color:rgba(255,255,255,.35);}
+.thm .gbox.cur{border-color:var(--purple-400);}
+.thm .gbox.soon{cursor:default;}
+.thm .mini{height:52px;border-radius:5px;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.06);}
+.thm .mini .h{position:absolute;left:0;right:0;top:0;height:10px;}
+.thm .mini .p{position:absolute;top:15px;height:32px;border-radius:3px;}
+.thm .mini .k{position:absolute;width:9px;height:9px;border-radius:50%;border:1.3px solid;top:26px;}
+.thm .foot{display:flex;align-items:center;gap:6px;margin-top:7px;}
+.thm .foot .n{font-size:10px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1;}
+/* about */
+.hero{padding:6px 18px 4px;display:flex;align-items:center;gap:14px;}
+.hero .wm{display:flex;align-items:center;gap:8px;height:28px;}
+.hero .by{font-size:10px;color:var(--text-secondary);}
+.para{margin:4px 18px 4px;font-size:10.5px;line-height:1.6;color:var(--text-soft);}
+.para b{color:var(--text-primary);font-weight:500;}
+.kvp{display:grid;grid-template-columns:minmax(0,1fr) 232px;row-gap:6px;column-gap:10px;padding:6px 18px 4px;}   /* the value column IS the control lane */
+.kvp .k{font-size:10px;font-weight:500;color:var(--text-soft);line-height:14px;}
+.kvp .v{font-size:10.5px;color:var(--text-primary);line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kvp .v .dim{color:var(--text-secondary);}
+/* search results: the page name rides in front of the row */
+.sr .pg{width:74px;flex:none;font-size:9.5px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}
+.sr .pg:hover{color:var(--purple-400);}
+.empty{padding:60px 30px;text-align:center;color:var(--text-secondary);font-size:11px;line-height:1.7;}
+.empty b{display:block;color:var(--text-primary);font-weight:500;margin-bottom:2px;}
+/* registration steps: three .sd dots in the sheet head */
+.steps{display:flex;gap:0;margin-left:auto;}
+.steps .sd{width:14px;cursor:default;}
+.steps .sd.done i{background:rgba(255,255,255,.35);border-color:transparent;}
+.tp-hd.row{display:flex;align-items:center;}
+.err{color:var(--rose)!important;}
+.ok{color:var(--purple-400)!important;}
+.code{letter-spacing:2px;font-variant-numeric:tabular-nums;text-transform:uppercase;}
+
+/* mockup-only chrome, outside the plugin box */
+.outside{position:absolute;left:50%;transform:translateX(-50%);bottom:-30px;display:flex;align-items:center;gap:14px;font-size:10px;color:#6B6080;white-space:nowrap;}
+.outside label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+.outside .tp-chip{font-size:9px;padding:3px 8px;}
+</style>
+</head>
+<body class="bs">
+<div style="position:relative">
+<div id="plugin" class="ti-card">
+  <!-- HEADER — index.html 7093-7131 (wordmark centred, preset cluster left, page pills + dice + gear right) -->
+  <div id="header">
+    <div class="header-preset">
+      <button class="preset-save-btn" id="save-btn" title="Save preset">+</button>
+      <button class="preset-nav-btn">&lsaquo;</button>
+      <span class="preset-name" id="preset-name">Glass Choir</span>
+      <button class="preset-nav-btn">&rsaquo;</button>
+    </div>
+    <div class="header-left"><span class="brand-name">Terrain</span><span class="brand-version">V1</span></div>
+    <div class="header-right">
+      <button class="mod-btn" id="syn-btn" title="Synth Page">SYN</button>
+      <button class="mod-btn" id="mix-btn" title="Chop — the sampler page">CHOP</button>
+      <button class="mod-btn" id="mod-btn" title="Modulation Panel">MOD</button>
+      <button class="settings-btn dice-btn" id="dice-btn" title="Roll the dice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="4.4"/><circle cx="8.4" cy="8.4" r="1.05" fill="currentColor"/><circle cx="15.6" cy="15.6" r="1.05" fill="currentColor"/><circle cx="15.6" cy="8.4" r="1.05" fill="currentColor"/><circle cx="8.4" cy="15.6" r="1.05" fill="currentColor"/><circle cx="12" cy="12" r="1.05" fill="currentColor"/></svg></button>
+      <button class="settings-btn" id="settings-btn" title="Settings"><canvas id="settings-icon" width="28" height="28"></canvas></button>
+    </div>
+  </div>
+
+  <div id="syn"></div>
+
+  <!-- THE SETTINGS SURFACE — the preset browser's #tp-b chassis, whole: toolbar, rail, list column, inspector -->
+  <div id="tp-b" class="tp-glass on">
+    <div class="tb">
+      <div class="sw"><input class="search" id="st-search" type="text" placeholder="Search settings — buffer, author, MPE, theme…" autocomplete="off" spellcheck="false"></div>
+      <div class="count" id="st-count"></div>
+      <button class="ibtn" id="st-close" title="Close settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg></button>
+    </div>
+    <div class="body">
+      <div class="rail" id="st-rail"></div>
+      <div id="pane"></div>
+      <div class="insp">
+        <div class="iscroll" id="st-insp"></div>
+        <div class="acts" id="st-acts"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tp-sheet"><div class="tp-card"></div></div>
+  <div id="tp-toast"></div>
+</div>
+<div class="outside">
+  <label><span class="tp-chip active" id="bs-tog">Build status: on</span></label>
+  <span>live = in Terrain today · new = needs C++ · hover a row for where it is stored</span>
+  <span class="tp-chip" id="snd-tog">Sound: tap to arm</span>
+</div>
+</div>
+
+<script>
+(function(){
+'use strict';
+/* ═══ small house helpers (TIC, index.html 35484-35560 — verbatim where marked) ═══ */
+function C01(n){ return Math.max(0,Math.min(1,n)); }
+function el(html){ var t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function $(id){ return document.getElementById(id); }
+var PL=$('plugin');
+function PR(){ return PL.getBoundingClientRect(); }
+function knobSVG(){ return '<svg viewBox="0 0 36 36">'
+  +'<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>'
+  +'<circle class="kf" cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2" stroke-linecap="round" stroke-dasharray="0 132" transform="rotate(90 18 18)"/></svg>'; }
+function setRing(host,n){ var d=C01(n)*88, kf=host.querySelector('.kf'); if(kf) kf.setAttribute('stroke-dasharray', d.toFixed(1)+' '+(132-d).toFixed(1)); }
+var X_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg>';
+var CHEV='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+var PLUS='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+
+/* drawSettingsIcon — index.html 15485, verbatim (the gear on a 28 px canvas, tp57's 0.84 scale) */
+function drawSettingsIcon(){ var canvas=$('settings-icon'); var ctx=canvas.getContext('2d'); var dpr=window.devicePixelRatio||1;
+  canvas.width=28*dpr; canvas.height=28*dpr; canvas.style.width='28px'; canvas.style.height='28px'; ctx.scale(dpr,dpr);
+  var cx=14, cy=14; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim(); ctx.lineWidth=1.5; ctx.lineCap='round';
+  var teeth=8; ctx.beginPath();
+  for(var i=0;i<teeth;i++){ var a1=(i/teeth)*Math.PI*2-Math.PI/2, a2=((i+0.35)/teeth)*Math.PI*2-Math.PI/2, a3=((i+0.65)/teeth)*Math.PI*2-Math.PI/2, a4=((i+1)/teeth)*Math.PI*2-Math.PI/2;
+    var ro=9*0.84, ri=6.5*0.84; if(i===0) ctx.moveTo(cx+Math.cos(a1)*ri, cy+Math.sin(a1)*ri);
+    ctx.lineTo(cx+Math.cos(a2)*ro, cy+Math.sin(a2)*ro); ctx.lineTo(cx+Math.cos(a3)*ro, cy+Math.sin(a3)*ro); ctx.lineTo(cx+Math.cos(a4)*ri, cy+Math.sin(a4)*ri); }
+  ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(cx,cy,3*0.84,0,Math.PI*2); ctx.stroke(); }
+drawSettingsIcon();
+
+/* TIC.dragify — verbatim, + a live span getter (the sensitivity setting feeds it) */
+function dragify(elm,o){
+  var dn=false,s0=0,n0=0,moved=false,lastDragUp=0;
+  elm.addEventListener('pointerdown',function(e){ if(e.button!==0)return; dn=true; moved=false;
+    s0=(o.axis==='x')?e.clientX:e.clientY; n0=o.get(); try{ elm.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); e.stopPropagation(); });
+  elm.addEventListener('pointermove',function(e){ if(!dn)return; var d=(o.axis==='x')?(e.clientX-s0):(s0-e.clientY);
+    if(Math.abs(d)>2)moved=true; var sp=(typeof o.span==='function'?o.span():o.span)||140; if(e.shiftKey) sp*=4; o.set(C01(n0+d/sp)); });
+  function up(){ if(dn&&moved)lastDragUp=Date.now(); dn=false; }
+  elm.addEventListener('pointerup',up); elm.addEventListener('pointercancel',up);
+  elm.addEventListener('dblclick',function(e){ if(Date.now()-lastDragUp<400)return; if(o.reset!=null)o.set(o.reset); e.preventDefault(); e.stopPropagation(); });
+}
+
+/* THE CLAMP — .pmenu's own: inside the PLUGIN's bounds; a menu that would run off the bottom flips UP */
+function placeNear(m,anchor,w,h){ var P=PR(), r=anchor.getBoundingClientRect();
+  w=w||m.offsetWidth; h=h||m.offsetHeight;
+  var left=Math.max(P.left+6,Math.min(P.right-w-6,r.left));
+  var top=r.bottom+4; if(top+h>P.bottom-6) top=r.top-h-4; top=Math.max(P.top+6,Math.min(P.bottom-h-6,top));
+  m.style.left=left+'px'; m.style.top=top+'px'; }
+var menuEl=null, menuAnchor=null;
+function closeMenu(){ if(menuEl&&menuEl.parentNode) menuEl.parentNode.removeChild(menuEl); if(menuAnchor) menuAnchor.classList.remove('open'); menuEl=null; menuAnchor=null; document.removeEventListener('pointerdown',menuOut,true); }
+function menuOut(e){ if(menuEl&&!menuEl.contains(e.target)&&!(menuAnchor&&menuAnchor.contains(e.target))) closeMenu(); }
+function openMenu(rows,anchor){ var same=menuAnchor===anchor; closeMenu(); if(same) return;
+  var m=document.createElement('div'); m.className='pmenu'; m.style.minWidth=Math.max(176,anchor.offsetWidth)+'px';
+  rows.forEach(function(r){ if(r.sec){ var h=document.createElement('div'); h.className='ps'; h.textContent=r.sec; m.appendChild(h); return; }
+    var d=document.createElement('div'); d.className='pi'+(r.cur?' cur':'')+(r.off?' off':'');
+    d.innerHTML='<span class="nm"></span>'+(r.ct?'<span class="ct">'+esc(r.ct)+'</span>':''); d.querySelector('.nm').textContent=r.label;
+    d.addEventListener('click',function(e){ e.stopPropagation(); closeMenu(); try{ r.onPick(); }catch(x){ console.error(x); } }); m.appendChild(d); });
+  document.body.appendChild(m); menuEl=m; menuAnchor=anchor; anchor.classList.add('open'); placeNear(m,anchor);
+  var c=m.querySelector('.pi.cur'); if(c) m.scrollTop=Math.max(0,c.offsetTop-m.clientHeight/2);
+  setTimeout(function(){ document.addEventListener('pointerdown',menuOut,true); },0); return m; }
+
+var toastT=null;
+function toast(html){ var t=$('tp-toast'); t.innerHTML=html; t.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(function(){ t.classList.remove('on'); },2400); }
+function bar(host,ms,done){ host.innerHTML='<div class="ld"><i></i></div>'; var i=host.querySelector('i'), t0=performance.now();
+  (function step(){ var p=Math.min(1,(performance.now()-t0)/ms); i.style.width=(Math.pow(p,.7)*100).toFixed(1)+'%'; if(p<1) requestAnimationFrame(step); else setTimeout(done,120); })(); }
+
+/* ═══ STATE (persists across reloads — the STATE PERSISTS law; wrapped, the page works without storage) ═══ */
+var DEF={ reg:true, name:'Max Shooter', email:'max@example.com', since:'23 Sep 2026', author:'Max Shooter', authorSet:false, roles:['Producer','Sound designer'],
+  roleVocab:['Producer','Sound designer','Composer','Artist','Mix engineer','DJ','Educator'], sign:'On', usage:'Off',
+  driver:'CoreAudio', out:'MacBook Pro Speakers', outCh:'1 + 2', inDev:'None', inCh:'Off', sr:48000, buf:256, testCh:'Both',
+  ports:{ 'KeyLab mkII 61':true, 'IAC Driver Bus 1':false, 'Network Session 1':false }, qwerty:true, tempo:120,
+  chan:'Omni', vcurve:0, vmode:'Curve', bend:2, mpe:'Off', mpeBend:48, pickup:'Hook', pc:'Off', mapFromPreset:'Off', a4:440,
+  cc:[{cc:1,p:'Mod Wheel',fixed:true},{cc:74,p:'Osc A · Warp Amount'},{cc:71,p:'Filter 1 · Resonance'},{cc:21,p:'Macro 1 · Cutoff'}],
+  onStart:'Init', autoVer:'Off', scan:'On',
+  theme:'Dark', size:100, motion:'On', hover:'On', values:'On', drag:'Vertical', sens:.5, wheel:'On', dbl:'Reset', openOn:'Last used',
+  cpuMeter:'Off', rtQ:'Standard', offQ:'High', lockQ:'Off', voices:32, sleep:'On', tails:'Off', capture:'On', fps:60,
+  autoUpd:'On', chanUpd:'Beta' };
+var S={}; try{ S=JSON.parse(localStorage.getItem('terrain-settings-mockup')||'{}')||{}; }catch(e){ S={}; }
+Object.keys(DEF).forEach(function(k){ if(S[k]===undefined) S[k]=JSON.parse(JSON.stringify(DEF[k])); });
+function save(){ try{ localStorage.setItem('terrain-settings-mockup',JSON.stringify(S)); }catch(e){} }
+if(/[?#&]fresh/.test(location.href)){ S=JSON.parse(JSON.stringify(DEF)); S.reg=false; S.name=''; S.email=''; S.author='Me'; S.authorSet=false; }
+
+/* ═══ AUDIO — one tiny Web Audio voice + the test chime; armed on the first gesture (Safari's rule) ═══ */
+var ac=null, master=null, an=null, anBuf=null;
+function arm(){ if(ac){ if(ac.state==='suspended') ac.resume(); return true; }
+  try{ ac=new (window.AudioContext||window.webkitAudioContext)(); master=ac.createGain(); master.gain.value=.8; an=ac.createAnalyser(); an.fftSize=512; anBuf=new Float32Array(512);
+    master.connect(an); an.connect(ac.destination); $('snd-tog').textContent='Sound: on · '+(ac.sampleRate/1000)+' kHz'; $('snd-tog').classList.add('active');
+    if(DEF.sr===S.sr){ S.sr=ac.sampleRate; setTimeout(function(){ document.querySelectorAll('[data-row="sr"] .tp-chip').forEach(function(c){ c.classList.toggle('active',c.textContent===String(S.sr/1000)); }); var l=document.querySelector('[data-row="lat"] .val'); if(l) l.textContent=RID.lat.ctl.get(); if(!hov) paintInsp(); },0); } return true; }catch(e){ return false; } }
+document.addEventListener('pointerdown',function(){ arm(); },true);
+document.addEventListener('keydown',function(){ arm(); },true);
+function level(){ if(!an) return 0; an.getFloatTimeDomainData(anBuf); var p=0; for(var i=0;i<anBuf.length;i++){ var a=Math.abs(anBuf[i]); if(a>p)p=a; } return p; }
+function chime(){ if(!arm()) return; var t=ac.currentTime+.02, pan=S.testCh==='Left'?-1:(S.testCh==='Right'?1:0);
+  [523.25,659.25,783.99,1046.5].forEach(function(f,i){ var o=ac.createOscillator(), g=ac.createGain(), p=ac.createStereoPanner?ac.createStereoPanner():null;
+    o.type='sine'; o.frequency.value=f; var s=t+i*.11; g.gain.setValueAtTime(0,s); g.gain.linearRampToValueAtTime(.25,s+.008); g.gain.exponentialRampToValueAtTime(.0005,s+1.1);
+    o.connect(g); if(p){ p.pan.value=pan; g.connect(p); p.connect(master); } else g.connect(master); o.start(s); o.stop(s+1.2); }); }
+var held={};
+function velOut(v){ if(S.vmode==='Fixed') return 100/127; return crvF(v,S.vcurve); }
+function noteOn(n,vin,src){ if(!arm()) return; if(held[n]) noteOff(n);
+  var v=velOut(vin), f=440*Math.pow(2,(n-69)/12)*(S.a4/440), t=ac.currentTime;
+  var g=ac.createGain(), lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=500+v*v*6500; lp.Q.value=.8;
+  var o1=ac.createOscillator(), o2=ac.createOscillator(); o1.type='sawtooth'; o2.type='sawtooth'; o1.frequency.value=f; o2.frequency.value=f*1.004;
+  o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(master);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.16*(.08+.92*v),t+.006); g.gain.setTargetAtTime(.10*(.08+.92*v),t+.05,.3);
+  o1.start(t); o2.start(t); held[n]={g:g,o:[o1,o2]};
+  LIVE.note=n; LIVE.vin=Math.round(vin*127); LIVE.vout=Math.round(v*127); LIVE.src=src||LIVE.src; paintLive(); paintVelDot(vin); }
+function noteOff(n){ var h=held[n]; if(!h||!ac) return; delete held[n]; var t=ac.currentTime; h.g.gain.cancelScheduledValues(t); h.g.gain.setTargetAtTime(0,t,.08); h.o.forEach(function(o){ o.stop(t+.6); }); }
+function crvF(u,c){ u=C01(u); if(!c) return u; return Math.pow(u,Math.pow(2,c*2.6)); }   /* the mod-matrix CRV law, verbatim */
+var LIVE={note:null,vin:null,vout:null,bend:0,cc:null,src:'—'};
+var NN=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; function nn(n){ return NN[n%12]+(Math.floor(n/12)-1); }
+
+/* ═══ THE CATALOGUE — every setting, what it does, where it lives, and whether Terrain has it today ═══ */
+var PAGES=[
+  {sec:'You'},
+  {id:'account',  name:'Account',          ic:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>', w:'Every host · this computer'},
+  {sec:'Sound'},
+  {id:'audio',    name:'Audio & MIDI',     ic:'<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>', w:'Standalone app only'},
+  {id:'control',  name:'MIDI & Controllers', short:'Controllers', ic:'<circle cx="12" cy="12" r="8.5"/><circle cx="8" cy="11" r=".9" fill="currentColor"/><circle cx="16" cy="11" r=".9" fill="currentColor"/><circle cx="12" cy="8" r=".9" fill="currentColor"/><circle cx="9.5" cy="14.8" r=".9" fill="currentColor"/><circle cx="14.5" cy="14.8" r=".9" fill="currentColor"/>', w:'Every host · every instance'},
+  {id:'perf',     name:'Performance',      ic:'<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/>', w:'Every host · every instance'},
+  {sec:'Library'},
+  {id:'library',  name:'Presets & Library', short:'Presets', ic:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>', w:'Every host · this computer'},
+  {sec:'Look'},
+  {id:'ui',       name:'Interface',        ic:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/>', w:'Every host · every instance'},
+  {id:'themes',   name:'Themes',           ic:'<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/>', w:'Coming soon', soon:true},
+  {sec:'Terrain'},
+  {id:'about',    name:'Updates & About', short:'About',  ic:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".9" fill="currentColor"/>', w:'Version, licence, support'}
+];
+function chips(opts,key,after){ return {t:'chips',opts:opts,get:function(){ return S[key]; },set:function(v){ S[key]=v; if(after) after(v); }}; }
+function onoff(key,after){ return chips(['On','Off'],key,after); }
+function menu(key,opts,fmt,after){ return {t:'menu',get:function(){ return S[key]; },opts:opts,fmt:fmt,set:function(v){ S[key]=v; if(after) after(v); }}; }
+var BUFS=[32,64,128,256,512,1024,2048];
+var ROWS=[
+ /* ── ACCOUNT ── */
+ {p:'account',g:'Registration',id:'reg',blk:'reg',label:'Registration',help:'Terrain is registered to one person. Registration asks for your name, then your email, then the authorization code we email you — the name becomes yours, and every preset you save is signed with it.',where:'Every host · this computer',st:'new',store:'~/Library/Application Support/Waves Crate/Terrain/Licence.json (signed)',cpp:'A LicenceManager on the processor: load/verify a signed licence file at boot; natives registerStart(name,email), registerVerify(code), signOut(); a server endpoint to mail + check codes.'},
+ {p:'account',g:'You as an author',id:'author',label:'Author name',help:'Written into every preset you save — the Save sheet opens with it already in the Author field. Type another name there for a one-off; this stays your default. Starts as your registered name.',where:'Every host · this computer',st:'new',
+   store:'InstrumentSettings.json → "author"',cpp:'None beyond saveSettings: the page reads S.author0 from the settings file instead of guessing it from the most common author on disk (fb626 does that today).',
+   ctl:{t:'text',ph:'Your name',get:function(){ return S.author; },set:function(v){ S.author=v; S.authorSet=true; }}},
+ {p:'account',g:'You as an author',id:'roles',blk:'roles',label:'What you do',help:'Your credit line under the author name in the preset browser (the inspector\'s sub-line). Pick as many as fit; + adds your own.',where:'Every host · this computer',st:'new',store:'InstrumentSettings.json → "roles"',cpp:'None — JSON only; the browser inspector reads it for your own presets.'},
+ {p:'account',g:'You as an author',id:'credit',label:'Credit line',help:'How your presets read in the browser. Live preview of the two settings above.',where:'Every host',st:'new',store:'derived',cpp:'—',ctl:{t:'info',get:function(){ return (S.author||'—')+(S.roles.length?'  ·  '+S.roles.join(' / '):''); }}},
+ {p:'account',g:'You as an author',id:'sign',label:'Sign every save',help:'On: the Author field is filled for you on every save. Off: it opens empty and you type it each time.',where:'Every host',st:'new',store:'InstrumentSettings.json → "signSaves"',cpp:'None — page only.',ctl:onoff('sign')},
+ {p:'account',g:'Privacy',id:'usage',label:'Anonymous usage data',help:'Off by default. When on, Terrain would send which pages and devices get used — never audio, presets or names. Nothing is sent from this beta.',where:'Every host',st:'soon',store:'InstrumentSettings.json → "usage"',cpp:'An opt-in telemetry sender (off until a privacy policy exists).',ctl:onoff('usage')},
+
+ /* ── AUDIO & MIDI (standalone) ── */
+ {p:'audio',g:'Audio device',id:'driver',label:'Audio driver',help:'The kind of audio system Terrain talks to. On a Mac it is Core Audio; on Windows you would see ASIO, WASAPI and DirectSound here.',where:'Standalone app only',st:'live',store:'the JUCE standalone\'s own settings file (Terrain.settings)',cpp:'Exists: JUCE\'s StandaloneFilterWindow owns an AudioDeviceManager + the stock Audio/MIDI Settings dialog. New = drawing it in this page: natives listAudioSetup()/setAudioSetup(json) that call deviceManager.setAudioDeviceSetup.',
+   ctl:menu('driver',function(){ return [{label:'CoreAudio'},{sec:'Windows only'},{label:'ASIO',off:true},{label:'Windows Audio (WASAPI)',off:true},{label:'DirectSound',off:true}]; })},
+ {p:'audio',g:'Audio device',id:'out',label:'Output device',help:'Where Terrain plays. Unplugging it falls back to the system output and says so.',where:'Standalone app only',st:'live',store:'Terrain.settings',cpp:'As Audio driver.',
+   ctl:menu('out',function(){ return ['MacBook Pro Speakers','External Headphones','Universal Audio Apollo Twin','Focusrite Scarlett 2i2 4th Gen','BlackHole 2ch','Aggregate Device'].map(function(n){ return {label:n}; }); })},
+ {p:'audio',g:'Audio device',id:'outCh',label:'Output channels',help:'Which pair of outputs Terrain\'s stereo bus lands on.',where:'Standalone app only',st:'live',store:'Terrain.settings',cpp:'As Audio driver.',ctl:menu('outCh',function(){ return ['1 + 2','3 + 4','5 + 6'].map(function(n){ return {label:n}; }); })},
+ {p:'audio',g:'Audio device',id:'inDev',label:'Input device',help:'Terrain\'s live input (the granular engine and DAW capture can listen to it). None keeps the microphone closed.',where:'Standalone app only',st:'live',store:'Terrain.settings',cpp:'As Audio driver.',
+   ctl:menu('inDev',function(){ return ['None','MacBook Pro Microphone','Universal Audio Apollo Twin','Focusrite Scarlett 2i2 4th Gen'].map(function(n){ return {label:n}; }); },null,function(v){ if(v==='None') S.inCh='Off'; else if(S.inCh==='Off') S.inCh='1 + 2'; })},
+ {p:'audio',g:'Audio device',id:'inCh',label:'Input channels',help:'Which inputs feed Terrain. Mono inputs are copied to both sides.',where:'Standalone app only',st:'live',store:'Terrain.settings',cpp:'As Audio driver.',
+   ctl:menu('inCh',function(){ return S.inDev==='None'?[{label:'Off'}]:['1','2','1 + 2','3 + 4'].map(function(n){ return {label:n}; }); })},
+ {p:'audio',g:'Audio device',id:'sr',label:'Sample rate',help:'Your device\'s rate. The first time you arm sound, this mockup reads your Mac\'s REAL rate from the browser.',where:'Standalone app only',st:'live',store:'Terrain.settings',cpp:'As Audio driver.',
+   ctl:{t:'chips',opts:['44.1','48','88.2','96'],get:function(){ return String(S.sr/1000); },set:function(v){ S.sr=Math.round(parseFloat(v)*1000); },unit:'kHz'}},
+ {p:'audio',g:'Audio device',id:'buf',label:'Buffer size',help:'Smaller = the keys answer sooner, but the computer works harder. 256 is a safe start; go to 64 or 128 to play live, 1024 when a big patch crackles.',where:'Standalone app only',st:'live',store:'Terrain.settings',cpp:'As Audio driver.',
+   ctl:menu('buf',function(){ return BUFS.map(function(b){ return {label:b+' samples',value:b,ct:ms(b)}; }); },function(v){ return v+' samples<span class="u">'+ms(v)+'</span>'; })},
+ {p:'audio',g:'Audio device',id:'lat',label:'Latency',help:'What you feel between a key and the sound: the buffer, once each way, plus the device\'s own safety margin.',where:'Standalone app only',st:'live',store:'derived',cpp:'deviceManager.getCurrentAudioDevice()->getOutputLatencyInSamples() — reported back through listAudioSetup().',
+   ctl:{t:'info',get:function(){ var one=S.buf/S.sr*1000, dev=(ac&&ac.outputLatency?ac.outputLatency*1000:(ac&&ac.baseLatency?ac.baseLatency*1000:2.9)); return one.toFixed(1)+' ms out  ·  '+(2*one+dev).toFixed(1)+' ms round trip'; }}},
+ {p:'audio',g:'Audio device',id:'test',blk:'test',label:'Test audio',help:'Plays a short chime through the device and channels above — press it after changing anything to hear that sound really comes out.',where:'Standalone app only',st:'new',store:'—',cpp:'A native playTestTone(channelMask): a 1 s sine chime rendered by the standalone\'s own callback (JUCE\'s dialog has one; ours would be the same call).'},
+ {p:'audio',g:'MIDI inputs',id:'ports',blk:'ports',label:'MIDI inputs',help:'Tick every keyboard or controller Terrain should listen to. The lamp flashes when a port sends anything. In Chrome this list is your REAL MIDI ports — tick one and play.',where:'Standalone app only',st:'live',store:'Terrain.settings',cpp:'Exists in the JUCE standalone (deviceManager.setMidiInputDeviceEnabled). New = natives listMidiInputs()/setMidiInput(id,on) + a per-port activity push.'},
+ {p:'audio',g:'MIDI inputs',id:'qwerty',label:'Computer keyboard',help:'A W S E D F T G Y H U J K play an octave from C, at velocity 100. Try it here.',where:'Standalone app only',st:'live',store:'marker in InstrumentSettings.json → "qwerty"',cpp:'Exists (fb484: qwertyNote native, standalone only). New = the on/off switch.',
+   ctl:{t:'chips',opts:['On','Off'],get:function(){ return S.qwerty?'On':'Off'; },set:function(v){ S.qwerty=v==='On'; }}},
+ {p:'audio',g:'Transport',id:'tempo',label:'Tempo',help:'The standalone has no DAW to follow, so this is the clock for LFO sync, the arpeggiator, delays and Chop. Drag the number, double-click for 120; Tap to tap it in.',where:'Standalone app only',st:'new',store:'InstrumentSettings.json → "standaloneBpm"',cpp:'currentBPM already exists (tp49 reads it for Chop). New = in standalone, getPlayHead() is null, so processBlock uses a stored standaloneBpm_ atomic; native setStandaloneBpm(bpm).',
+   ctl:{t:'num',key:'tempo',min:40,max:240,step:1,unit:'BPM',reset:120,fmt:function(v){ return v.toFixed(0); },tap:true}},
+
+ /* ── MIDI & CONTROLLERS (every host) ── */
+ {p:'control',g:'Receiving',id:'chan',label:'MIDI channel',help:'Omni plays from every channel. Pick one to let Terrain share a controller with other instruments.',where:'Every host · every instance',st:'new',store:'InstrumentSettings.json → "midiChannel"',cpp:'In processBlock\'s MIDI walk (PluginProcessor.cpp ~7915): drop messages whose getChannel() ≠ the setting (MPE off). An atomic set by a native.',
+   ctl:menu('chan',function(){ var a=[{label:'Omni'}]; for(var i=1;i<=16;i++) a.push({label:'Channel '+i}); return a; })},
+ {p:'control',g:'Receiving',id:'vel',blk:'vel',label:'Velocity curve',help:'How hard you play → how loud and bright Terrain answers. Drag the curve up for a softer touch (quiet playing sounds fuller), down for a harder one. Hit the keys: the higher on a key you click, the harder the hit. You hear the curve.',where:'Every host · every instance',st:'new',store:'InstrumentSettings.json → "velCurve"',cpp:'One float c (−1…1): the voice\'s note-on velocity becomes pow(v, 2^(2.6c)) (the mod-matrix CRV law) before VEL reaches the envelopes / mod matrix. Fixed = 100.'},
+ {p:'control',g:'Receiving',id:'bend',label:'Pitch bend range',help:'How far the wheel bends, in semitones. Drag the number, double-click for 2.',where:'Every host · saved with the patch',st:'live',store:'SYN_BEND_RANGE parameter (fb563)',cpp:'Exists — the Settings row today (index.html 7206).',
+   ctl:{t:'num',key:'bend',min:0,max:24,step:1,unit:'st',reset:2,fmt:function(v){ return v.toFixed(0); }}},
+ {p:'control',g:'Receiving',id:'a4',label:'Tuning reference',help:'Concert pitch for A4. Scala / .tun files and MTS-ESP come later.',where:'Every host · every instance',st:'new',store:'InstrumentSettings.json → "a4"',cpp:'A global ratio (a4/440) multiplied into every oscillator\'s base frequency in SynthVoice.',
+   ctl:{t:'num',key:'a4',min:415,max:466,step:1,unit:'Hz',reset:440,fmt:function(v){ return v.toFixed(0); }}},
+ {p:'control',g:'Expression',id:'mpe',label:'MPE',help:'For Roli, LinnStrument, Osmose, Push 3: each note gets its own bend, pressure and slide (CC 74). In Ableton use the AU — Live\'s VST3 path drops per-note expression.',where:'Every host · every instance',st:'new',store:'SYN_MPE_ON (design: Design/mpe/00-MPE-DESIGN-2026-09-02.md)',cpp:'The MPE design note, whole: supportsMPE()=true, per-channel bend/pressure/slide in GlobalModSources, a new ModSource Slide (wire 245), RPN 6 auto-arm.',ctl:onoff('mpe')},
+ {p:'control',g:'Expression',id:'mpeBend',label:'MPE bend range',help:'Per-note bend in semitones. 48 is the MPE standard; your controller should match.',where:'Every host',st:'new',store:'SYN_MPE_BEND',cpp:'As MPE (the evaluator becomes master × bend range + member × this).',
+   ctl:{t:'num',key:'mpeBend',min:1,max:96,step:1,unit:'st',reset:48,fmt:function(v){ return v.toFixed(0); }},dim:function(){ return S.mpe!=='On'; }},
+ {p:'control',g:'Controllers',id:'ccmap',blk:'ccmap',label:'MIDI learn',help:'Right-click any knob → MIDI Learn, then move a control. Or press Learn here and turn a knob on your controller. Mod wheel is always CC 1.',where:'Saved with the instance',st:'live',store:'plugin state → midiCcMap (fb563)',cpp:'Exists: setMidiLearn / removeMidiCc / getMidiMapJson. New = listing it here + "Save as default map" (a defaultMidiMap in InstrumentSettings.json that a fresh instance loads).'},
+ {p:'control',g:'Controllers',id:'pickup',label:'Knob pickup',help:'When a hardware knob and Terrain disagree: Jump snaps at once, Hook waits until you pass the current value, Scale glides the rest of the way.',where:'Every host',st:'new',store:'InstrumentSettings.json → "pickup"',cpp:'applyPendingMidiCc gains a per-CC "last hardware value" and the three rules before setValueNotifyingHost.',ctl:chips(['Jump','Hook','Scale'],'pickup')},
+ {p:'control',g:'Controllers',id:'mapFromPreset',label:'Presets carry their MIDI map',help:'On: loading a preset also loads the CC map it was saved with. Off: your map stays put whatever you load.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'setStateInformation skips midiCcMap when off (the map is already in the state).',ctl:onoff('mapFromPreset')},
+ {p:'control',g:'Controllers',id:'pc',label:'Program change loads presets',help:'Lets a controller or a DAW clip step through the current pack.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'A program-change branch in the MIDI walk that posts the index to the editor (the preset system loads it on the message thread).',ctl:onoff('pc')},
+
+ /* ── PERFORMANCE ── */
+ {p:'perf',g:'Quality',id:'rtQ',label:'Playing quality',help:'Oversampling while you play. Eco saves CPU on big patches; High is cleaner on bright FM, folding and distortion.',where:'Every host · every instance',st:'new',store:'InstrumentSettings.json → "rtQuality"',cpp:'A global oversampling factor (1× / 2× / 4×) read at prepareToPlay by the stages that oversample (Terra Fold already runs 8× internally).',ctl:chips(['Eco','Standard','High'],'rtQ')},
+ {p:'perf',g:'Quality',id:'offQ',label:'Bounce quality',help:'Used automatically when the DAW renders offline — slower than real time, so it can afford more.',where:'Every host',st:'new',store:'InstrumentSettings.json → "offQuality"',cpp:'isNonRealtime() switches to this factor for the render.',ctl:chips(['Same','High','Best'],'offQ')},
+ {p:'perf',g:'Quality',id:'lockQ',label:'Presets can change quality',help:'Off keeps your choice above no matter what a preset asks for.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'Only if presets ever carry a quality — today they do not.',ctl:onoff('lockQ')},
+ {p:'perf',g:'CPU',id:'voices',label:'Voice ceiling',help:'The most notes Terrain will ever sound at once, across unison. Lower it on a laptop; the oldest note is released first.',where:'Every host · every instance',st:'new',store:'InstrumentSettings.json → "voiceCeiling"',cpp:'The pool is kSynthVoiceCount = 96 (PluginProcessor.h); UnisonSynth::noteOn steals past this ceiling instead of the pool size.',
+   ctl:{t:'num',key:'voices',min:8,max:96,step:1,unit:'voices',reset:32,fmt:function(v){ return v.toFixed(0); }}},
+ {p:'perf',g:'CPU',id:'sleep',label:'Sleep when silent',help:'When nothing plays and every tail has died, Terrain stops computing until the next note.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'A silence counter at the end of processBlock: after N quiet blocks with no active voices, skip the synth + FX until MIDI arrives.',ctl:onoff('sleep')},
+ {p:'perf',g:'CPU',id:'tails',label:'Cut tails when the DAW stops',help:'On: pressing stop silences reverb and delay tails at once.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'Watch playHead isPlaying true→false; clear FX buffers with a 10 ms fade (no-clicks law).',ctl:onoff('tails')},
+ {p:'perf',g:'CPU',id:'cpu',blk:'cpu',label:'CPU meter in the header',help:'A small meter next to the version. The measurement already exists (the DSP clock); this shows it.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'The DspClock already accumulates dspTicks_/dspSamples_; a native getDspLoad() + a header readout.'},
+ {p:'perf',g:'Memory & screen',id:'capture',label:'DAW capture',help:'Terrain keeps the last minute of what it played, ready to drag out. Off frees about 200 MB and records nothing.',where:'Every host · every instance',st:'live',store:'marker file (tp43)',cpp:'Exists — setCaptureEnabled / getCaptureEnabled.',ctl:onoff('capture')},
+ {p:'perf',g:'Memory & screen',id:'fps',label:'Screen refresh',help:'How often the window redraws. 30 halves the drawing cost on slow machines.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'__uiPaceFps already exists (fb512, Windows runs 30); exposing it = a native that sets the pace.',ctl:{t:'chips',opts:['60','30'],get:function(){ return String(S.fps); },set:function(v){ S.fps=+v; },unit:'fps'}},
+
+ /* ── PRESETS & LIBRARY ── */
+ {p:'library',g:'Saving',id:'libAuthor',label:'Author on every save',help:'Set on the Account page. The Save sheet opens with it; you can still type another name for one save.',where:'Every host',st:'new',store:'InstrumentSettings.json → "author"',cpp:'As Author name.',ctl:{t:'info',get:function(){ return S.author||'—'; },link:{label:'Change',go:'account'}}},
+ {p:'library',g:'Saving',id:'autoVer',label:'Keep old versions',help:'Saving over a preset keeps the previous one as "Name v2", "v3"… instead of replacing it.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'savePresetToBank: rename the existing file to the next free vN before writing.',ctl:onoff('autoVer')},
+ {p:'library',g:'Saving',id:'onStart',label:'New instances open with',help:'What a fresh Terrain loads. "Your default" is the sound saved with Save as default.',where:'Every host',st:'new',store:'InstrumentSettings.json → "onStart"',cpp:'The processor constructor loads the chosen file after the virgin-chunk snapshot (fb623 initPatch stays the Init).',
+   ctl:menu('onStart',function(){ return [{label:'Init'},{label:'Your default'},{label:'Last preset used'}]; })},
+ {p:'library',g:'Saving',id:'saveDef',label:'Save as default',help:'Makes the current sound what every new Terrain starts with.',where:'Every host',st:'new',store:'Banks/User/Default.terrain',cpp:'savePresetToBank("User", …) with a reserved name.',ctl:{t:'btns',btns:[{label:'Save current sound as default',on:function(){ S.onStart='Your default'; save(); paintPage(); toast('Saved <span class="tp-bk">Glass Choir</span> as the default for new instances'); }}]}},
+ {p:'library',g:'Bring sounds in',id:'import',label:'Import',help:'Presets, a whole pack (.zip), or a folder. They land in their own pack in the User library. You can also drop files on the preset browser.',where:'Every host',st:'live',store:'Banks/',cpp:'Exists — the preset browser\'s Import (fb620 NEW BANK · IMPORT · EXPORT).',
+   ctl:{t:'btns',btns:[{label:'Presets…',file:'.terrain,.json,.fxp'},{label:'Pack…',file:'.zip'},{label:'Folder…',dir:true}]}},
+ {p:'library',g:'Bring sounds in',id:'export',label:'Export',help:'Everything you have saved, as one pack to share or back up.',where:'Every host',st:'live',store:'—',cpp:'Exists — the browser\'s Export.',ctl:{t:'btns',btns:[{label:'Export my presets…',on:function(){ toast('Exported <span class="tp-bk">Max Shooter - </span>User.zip · 64 presets'); }}]}},
+ {p:'library',g:'Where things live',id:'libPath',label:'User library',help:'Your packs and presets. Moving it copies everything and leaves a note where it was.',where:'Every host · this computer',st:'live',store:'banksUserRoot() = <data>/WavesCrate/Terrain/Banks',cpp:'Exists (read-only). New = a relocatable root in InstrumentSettings.json that banksUserRoot() reads first.',
+   ctl:{t:'path',get:function(){ return '~/Library/Application Support/WavesCrate/Terrain/Banks'; }}},
+ {p:'library',g:'Where things live',id:'wtPath',label:'Wavetables',help:'Imported and factory wavetables.',where:'Every host · this computer',st:'live',store:'Noizefield/Terrain Instrument/Wavetables (legacy-first, fb605)',cpp:'Exists (read-only).',ctl:{t:'path',get:function(){ return '~/Library/Application Support/Noizefield/Terrain Instrument/Wavetables'; }}},
+ {p:'library',g:'Where things live',id:'rescan',blk:'rescan',label:'Rescan library',help:'Re-reads every pack from disk — use it after copying presets in by hand.',where:'Every host',st:'live',store:'—',cpp:'Exists — rescan() → listPresets.'},
+ {p:'library',g:'Where things live',id:'scan',label:'Scan on start',help:'Off opens faster with a big library; press Rescan when you add files.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'Gate the first listPresets on open.',ctl:onoff('scan')},
+ {p:'library',g:'Factory',id:'factory',label:'Factory library',help:'The sounds that ship with Terrain. New packs will arrive through updates.',where:'Every host',st:'soon',store:'the bundle\'s Resources/Banks',cpp:'A factory-library version string in the bundle + the update check.',ctl:{t:'info',get:function(){ return 'Terrain Factory · 1.0 · beta'; },link:{label:'Get new sounds',soon:true}}},
+
+ /* ── INTERFACE ── */
+ {p:'ui',g:'Look',id:'theme',label:'Theme',help:'Dark or Light. More looks are on the Themes page (coming soon).',where:'Every host · every instance',st:'live',store:'InstrumentSettings.json → "theme"',cpp:'Exists — setTheme + saveSettings.',ctl:chips(['Dark','Light'],'theme',function(v){ if(v==='Light') toast('Light is Terrain\'s existing light theme — not drawn in this mockup'); })},
+ {p:'ui',g:'Look',id:'size',label:'Window size',help:'Where every new Terrain window opens. Dragging the corner still works; it remembers the last size you dragged to.',where:'Every host',st:'live',store:'InstrumentSettings.json (bootWidth, fb103)',cpp:'Exists: drag-resize 65 %–190 % and a saved boot width. New = choosing it here — a native setBootWidth(w) + setSize on the open editor.',
+   ctl:menu('size',function(){ return [65,80,100,125,150,175,190].map(function(p){ return {label:p+' %',value:p,ct:Math.round(820*p/100)+' × '+Math.round(672*p/100)}; }); },function(v){ return v+' %<span class="u">'+Math.round(820*v/100)+' × '+Math.round(672*v/100)+'</span>'; })},
+ {p:'ui',g:'Look',id:'motion',label:'Motion',help:'Off: nothing animates on its own — knobs still redraw, LFOs, envelopes, filters and trackers still move, and the window costs less CPU.',where:'Every host · every instance',st:'live',store:'marker file (tp62)',cpp:'Exists — setMotionEnabled / getMotionEnabled.',ctl:onoff('motion')},
+ {p:'ui',g:'Help',id:'hover',label:'Hover help',help:'The card that explains a control when you rest on it (bottom right of the terrain view).',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'None — the #tooltip card exists; the switch is page-only.',ctl:onoff('hover')},
+ {p:'ui',g:'Help',id:'values',label:'Values while turning',help:'Shows the number under a knob while you drag it.',where:'Every host',st:'live',store:'InstrumentSettings.json',cpp:'The readouts exist; the switch is new (page-only).',ctl:onoff('values')},
+ {p:'ui',g:'Knobs',id:'drag',label:'Knob drag',help:'Vertical: drag up and down (today). Circular: turn around the knob like a real one. Horizontal: side to side. Try it below.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'None — TIC.dragify gains the three axes (page-only).',ctl:chips(['Vertical','Circular','Horizontal'],'drag')},
+ {p:'ui',g:'Knobs',id:'sens',label:'Drag sensitivity',help:'How far you move for a full turn. Hold Shift for fine moves (already there).',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'None — dragify\'s span becomes a setting (page-only). Shift = 4× finer exists.',ctl:{t:'slider',get:function(){ return S.sens; },set:function(v){ S.sens=v; },fmt:function(v){ return Math.round(40+v*210)+' %'; },reset:.5}},
+ {p:'ui',g:'Knobs',id:'try',blk:'try',label:'Try it',help:'This knob uses the three settings around it.',where:'—',st:'new',store:'—',cpp:'—'},
+ {p:'ui',g:'Knobs',id:'wheel',label:'Mouse wheel turns knobs',help:'Scroll over a knob to nudge it.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'None — a wheel handler in dragify (page-only).',ctl:onoff('wheel')},
+ {p:'ui',g:'Knobs',id:'dbl',label:'Double-click a knob',help:'Reset it to its default (today), or type a value.',where:'Every host',st:'new',store:'InstrumentSettings.json',cpp:'None — page-only (a typed field over the knob).',ctl:chips(['Reset','Type a value'],'dbl')},
+ {p:'ui',g:'Pages',id:'openOn',label:'Open on',help:'Which page a Terrain window shows first.',where:'Every host',st:'live',store:'per instance (uiPage natives)',cpp:'"Last used" exists per instance; the fixed choices are new (page-only).',ctl:menu('openOn',function(){ return ['Last used','SYN','CHOP','MOD'].map(function(n){ return {label:n}; }); })},
+
+ /* ── THEMES ── */
+ {p:'themes',g:'Themes',id:'thm',blk:'themes',label:'Themes',help:'Looks for the whole window. Night and Daylight ship today; the rest arrive with skins.',where:'Every host',st:'soon',store:'InstrumentSettings.json → "theme"',cpp:'Themes = token sets (the :root variables). Skins later = a .terrainskin file of tokens + fonts; the page swaps :root.'},
+
+ /* ── UPDATES & ABOUT ── */
+ {p:'about',g:'',id:'hero',blk:'hero',label:'Terrain',help:'',where:'—',st:'live',store:'—',cpp:'—'},
+ {p:'about',g:'Version',id:'ver',blk:'ver',label:'Version',help:'What you are running. Copy it into any bug report.',where:'—',st:'live',store:'CMake VERSION',cpp:'A native getBuildInfo(): JucePlugin_VersionString + git hash + build date + wrapperType + host (PluginHostType).'},
+ {p:'about',g:'Updates',id:'upd',blk:'upd',label:'Check for updates',help:'Asks Waves Crate for a newer build. This beta checks nothing yet — the button shows how it will read.',where:'Every host',st:'soon',store:'—',cpp:'An HTTPS GET of a signed appcast (version, url, notes) on the message thread; never on the audio thread; never blocks opening.'},
+ {p:'about',g:'Updates',id:'autoUpd',label:'Check automatically',help:'Once a day, quietly. You are told, never interrupted.',where:'Every host',st:'soon',store:'InstrumentSettings.json',cpp:'As above, on a daily timer.',ctl:onoff('autoUpd')},
+ {p:'about',g:'Updates',id:'chanUpd',label:'Update channel',help:'Beta gets new builds first.',where:'Every host',st:'soon',store:'InstrumentSettings.json',cpp:'The appcast URL per channel.',ctl:chips(['Beta','Stable'],'chanUpd')},
+ {p:'about',g:'Licence',id:'lic',blk:'lic',label:'Licence',help:'Who Terrain is registered to, on how many computers, and how it is signed.',where:'Every host · this computer',st:'soon',store:'Licence.json',cpp:'LicenceManager (see Registration) + Developer ID signing and notarisation at release.'},
+ {p:'about',g:'Support',id:'sup',blk:'sup',label:'Support',help:'For the beta: copy your system info into a message and tell us what happened.',where:'—',st:'new',store:'—',cpp:'getBuildInfo() for the clipboard; the logs folder is the settings folder.'},
+ {p:'about',g:'Waves Crate',id:'wc',blk:'wc',label:'About Waves Crate',help:'',where:'—',st:'live',store:'—',cpp:'—'},
+ {p:'about',g:'Reset',id:'reset',label:'Reset all settings',help:'Puts every setting on this page back to how Terrain shipped. Your presets, packs and registration are not touched.',where:'Every host · this computer',st:'new',store:'InstrumentSettings.json',cpp:'Delete InstrumentSettings.json + the two marker files; reload the page.',ctl:{t:'btns',btns:[{label:'Reset settings…',on:function(){ resetSheet(); }}]}}
+];
+var RID={}; ROWS.forEach(function(r){ RID[r.id]=r; });
+function ms(b){ return (b/S.sr*1000).toFixed(1)+' ms'; }
+
+/* ═══ RAIL ═══ */
+var cur='account', q='';
+try{ var m=location.hash.match(/page=(\w+)/); if(m&&PAGES.some(function(p){ return p.id===m[1]; })) cur=m[1]; }catch(e){}
+function renderRail(){ var r=$('st-rail'); r.innerHTML='';
+  PAGES.forEach(function(p){ if(p.sec){ r.appendChild(el('<div class="sec">'+esc(p.sec)+'</div>')); return; }
+    var n=ROWS.filter(function(x){ return x.p===p.id && (x.ctl||x.blk) && x.blk!=='hero' && x.blk!=='wc'; }).length;
+    var d=el('<div class="ri'+(p.id===cur&&!q?' cur':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p.ic+'</svg><span class="nm">'+esc(p.short||p.name)+'</span>'+(p.soon?'<span class="tag">Soon</span>':'<span class="ct">'+n+'</span>')+'</div>');
+    d.onclick=function(){ go(p.id); }; r.appendChild(d); });
+  r.style.opacity=q?'.35':''; }
+function go(id,flashId){ cur=id; q=''; $('st-search').value=''; closeMenu(); renderRail(); paintPage(); $('pane').scrollTop=0;
+  try{ history.replaceState(null,'','#page='+id); }catch(e){}
+  if(flashId){ var r=document.querySelector('[data-row="'+flashId+'"]'); if(r){ r.scrollIntoView({block:'center'}); r.classList.add('flash'); setTimeout(function(){ r.classList.remove('flash'); },1200); } } }
+
+/* ═══ CONTROLS — each builds the recycled piece into a fixed 232 px lane ═══ */
+function ctlEl(r){ var c=r.ctl, lane=el('<div class="lane"></div>');
+  if(c.t==='chips'){ c.opts.forEach(function(o){ var b=el('<button class="tp-chip'+(String(c.get())===o?' active':'')+'">'+esc(o)+(c.unit&&o===c.opts[c.opts.length-1]?'':'')+'</button>');
+      b.onclick=function(){ c.set(o); save(); after(r); }; lane.appendChild(b); });
+    if(c.unit) lane.appendChild(el('<span class="val dim" style="margin-left:4px">'+esc(c.unit)+'</span>')); }
+  else if(c.t==='menu'){ var v=c.get(), f=el('<div class="tp-in dd"><span class="v"></span>'+CHEV+'</div>');
+    f.querySelector('.v').innerHTML=c.fmt?c.fmt(v):esc(v);
+    f.onclick=function(){ openMenu(c.opts().map(function(o){ if(o.sec) return o; var val=o.value!=null?o.value:o.label;
+        return {label:o.label,ct:o.ct,off:o.off,cur:String(val)===String(c.get()),onPick:function(){ c.set(val); save(); after(r); }}; }),f); };
+    lane.appendChild(f); }
+  else if(c.t==='text'){ var i=el('<input class="tp-in" type="text" maxlength="30" spellcheck="false">'); i.value=c.get(); i.placeholder=c.ph||'';
+    i.oninput=function(){ c.set(i.value); save(); paintInsp(); var cr=document.querySelector('[data-row="credit"] .val'); if(cr) cr.textContent=RID.credit.ctl.get(); };
+    i.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Enter') i.blur(); }; lane.appendChild(i); }
+  else if(c.t==='info'){ lane.appendChild(el('<span class="val" style="flex:1">'+esc(c.get())+'</span>'));
+    if(c.link){ var b=el('<button class="tp-btn">'+esc(c.link.label)+'</button>'); if(c.link.soon) b.disabled=true; b.onclick=function(){ go(c.link.go,'author'); }; lane.appendChild(b); } }
+  else if(c.t==='path'){ var pth=c.get(), seg=pth.split('/'), sp=el('<span class="val dim" style="flex:1" title="'+esc(pth)+'"></span>'); sp.textContent=seg[0]+'/…/'+seg.slice(-2).join('/'); lane.appendChild(sp);
+    var rv=el('<button class="tp-btn">Reveal</button>'); rv.onclick=function(){ toast('Opens <span class="tp-bk">'+esc(pth.split('/').slice(-2).join('/'))+'</span> in Finder'); }; lane.appendChild(rv); }
+  else if(c.t==='num'){ var n=el('<span class="num"><b></b><span>'+esc(c.unit)+'</span></span>'), bEl=n.querySelector('b');
+    function paintN(){ bEl.textContent=c.fmt(S[c.key]); }
+    paintN(); var span=function(){ return 260; };
+    dragify(bEl,{get:function(){ return (S[c.key]-c.min)/(c.max-c.min); },set:function(u){ S[c.key]=Math.round((c.min+u*(c.max-c.min))/c.step)*c.step; paintN(); save(); if(r.id==='buf') paintPage(); },span:span,reset:(c.reset-c.min)/(c.max-c.min)});
+    lane.appendChild(n);
+    if(c.tap){ var taps=[]; var tb=el('<button class="tp-btn" style="margin-left:auto">Tap</button>'); tb.onclick=function(){ var t=performance.now(); taps=taps.filter(function(x){ return t-x<2000; }); taps.push(t);
+        if(taps.length>1){ var d=(taps[taps.length-1]-taps[0])/(taps.length-1); S.tempo=Math.max(40,Math.min(240,Math.round(60000/d))); paintN(); save(); } }; lane.appendChild(tb); } }
+  else if(c.t==='slider'){ var tr=el('<div class="tr"><i style="left:0"></i><b></b></div>'), vl=el('<span class="val" style="width:44px;text-align:right;flex:none"></span>');
+    function paintS(){ var p=c.get()*100; tr.querySelector('i').style.width=p+'%'; tr.querySelector('b').style.left=p+'%'; vl.textContent=c.fmt(c.get()); }
+    paintS(); dragify(tr,{axis:'x',get:c.get,set:function(u){ c.set(u); paintS(); save(); },span:200,reset:c.reset});
+    tr.addEventListener('pointerdown',function(e){ var rc=tr.getBoundingClientRect(); c.set(C01((e.clientX-rc.left)/rc.width)); paintS(); save(); });
+    lane.appendChild(tr); lane.appendChild(vl); }
+  else if(c.t==='btns'){ c.btns.forEach(function(bt){ var b=el('<button class="tp-btn">'+esc(bt.label)+'</button>');
+      if(bt.file||bt.dir){ var inp=el('<input type="file" style="display:none"'+(bt.dir?' webkitdirectory':' multiple accept="'+bt.file+'"')+'>');
+        inp.onchange=function(){ var n=inp.files.length; if(!n) return; toast('Imported <b>'+n+'</b> '+(n===1?'file':'files')+' into <span class="tp-bk">'+esc((inp.files[0].webkitRelativePath||inp.files[0].name).split('/')[0].replace(/\.\w+$/,''))+'</span>'); inp.value=''; };
+        b.onclick=function(){ inp.click(); }; lane.appendChild(inp); }
+      else b.onclick=bt.on; lane.appendChild(b); }); }
+  if(r.dim&&r.dim()){ lane.style.opacity='.35'; lane.style.pointerEvents='none'; }
+  return lane; }
+function after(r){ paintPage(); }
+
+function rowEl(r,withPage){ var soon=r.st==='soon';
+  var d=el('<div class="sr'+(soon?' soon':'')+'" data-row="'+r.id+'"><div class="lbl"><span class="t"></span>'+(soon?'<span class="tag">Soon</span>':'')
+    +'<span class="tag bs'+(r.st==='live'?' user':'')+'">'+(r.st==='live'?'live':'new')+'</span></div></div>');
+  d.querySelector('.t').textContent=r.label;
+  if(withPage){ var pg=PAGES.filter(function(p){ return p.id===r.p; })[0]; var s=el('<span class="pg">'+esc(pg.name)+'</span>'); s.onclick=function(){ go(r.p,r.id); }; d.insertBefore(s,d.firstChild); }
+  if(r.ctl) d.appendChild(ctlEl(r));
+  hoverable(d,r); return d; }
+function hoverable(d,r){ d.addEventListener('mouseenter',function(){ hov=r; paintInsp(); }); d.addEventListener('mouseleave',function(){ if(hov===r){ hov=null; paintInsp(); } }); }
+
+/* ═══ BLOCKS — the rows that are more than one control ═══ */
+var BLK={
+ reg:function(r){ var b=el('<div class="blk"></div>');
+   if(S.reg){ b.appendChild(el('<div class="kvp" style="padding:0 0 4px"><span class="k">Registered to</span><span class="v">'+esc(S.name)+'</span><span class="k">Email</span><span class="v">'+esc(S.email)+'</span><span class="k">Since</span><span class="v">'+esc(S.since)+' <span class="dim">· this Mac</span></span></div>'));
+     var a=el('<div class="acts inl"><button class="tp-btn" id="b-chg">Change name or email</button><button class="tp-btn" id="b-out">Sign out</button></div>'); b.appendChild(a);
+     a.querySelector('#b-chg').onclick=function(){ regSheet(1); }; a.querySelector('#b-out').onclick=function(){ signOutSheet(); }; }
+   else { b.appendChild(el('<div class="note" style="margin:0 0 4px">Terrain isn\'t registered on this computer yet. It takes a minute: your <b>name</b>, your <b>email</b>, then the <b>authorization code</b> we send you. Your name then signs every preset you save.</div>'));
+     var a2=el('<div class="acts inl"><button class="tp-btn pri" style="flex:none;padding:0 18px">Register Terrain</button></div>'); a2.firstChild.onclick=function(){ regSheet(1); }; b.appendChild(a2); }
+   return b; },
+ roles:function(r){ var d=el('<div class="sr" style="height:auto;min-height:34px;padding-top:6px;padding-bottom:6px;align-items:flex-start" data-row="roles"><div class="lbl" style="padding-top:4px"><span class="t">What you do</span><span class="tag bs">new</span></div><div class="lane" style="flex-wrap:wrap;row-gap:4px"></div></div>');
+   var lane=d.querySelector('.lane');
+   S.roleVocab.forEach(function(w){ var on=S.roles.indexOf(w)>=0, c=el('<button class="tp-chip'+(on?' active':'')+'">'+esc(w)+'</button>');
+     c.onclick=function(){ var i=S.roles.indexOf(w); if(i>=0) S.roles.splice(i,1); else S.roles.push(w); save(); paintPage(); }; lane.appendChild(c); });
+   var add=el('<button class="tp-chip add" title="Add your own">'+PLUS+'</button>'); lane.appendChild(add);
+   add.onclick=function(){ var inp=el('<input class="tp-in" type="text" maxlength="20" placeholder="Your own" style="width:96px;height:22px;font-size:10px;padding:0 7px">'); lane.replaceChild(inp,add); inp.focus();
+     inp.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Enter'){ var w=inp.value.trim(); if(w&&S.roleVocab.indexOf(w)<0){ S.roleVocab.push(w); S.roles.push(w); save(); } paintPage(); } if(e.key==='Escape') paintPage(); }; };
+   hoverable(d,r); return d; },
+ test:function(r){ var d=el('<div class="sr" data-row="test"><div class="lbl"><span class="t">Test audio</span><span class="tag bs">new</span></div><div class="lane"><button class="tp-btn pri" style="flex:none;padding:0 12px;height:24px">Play</button></div></div>');
+   var lane=d.querySelector('.lane');
+   ['Left','Both','Right'].forEach(function(o){ var c=el('<button class="tp-chip'+(S.testCh===o?' active':'')+'">'+o+'</button>'); c.onclick=function(){ S.testCh=o; save(); paintPage(); }; lane.appendChild(c); });
+   var tr=el('<div class="tr" style="flex:1;margin-left:6px;cursor:default"><i class="lv" style="left:0;width:0"></i></div>'); lane.appendChild(tr); meters.push(tr);
+   lane.firstChild.onclick=function(){ chime(); }; hoverable(d,r); return d; },
+ ports:function(r){ var b=el('<div class="blk" data-row="ports"><div class="lst"></div></div>'), L=b.firstChild;
+   var names=midiPorts?midiPorts.map(function(p){ return p.name; }):Object.keys(S.ports);
+   L.appendChild(el('<div class="r hd"><span style="width:20px"></span><span class="n">'+(midiPorts?'Your MIDI ports (live, Web MIDI)':'Port')+'</span><span class="c2">Activity</span></div>'));
+   if(!names.length) L.appendChild(el('<div class="r"><span class="n" style="color:var(--text-secondary)">No MIDI ports found — plug one in, it appears here.</span></div>'));
+   names.forEach(function(n){ var on=!!S.ports[n], row=el('<div class="r"><span class="sd'+(on?' on':'')+'"><i></i></span><span class="n"></span><span class="c2"><span class="lamp" style="display:inline-block"></span></span></div>');
+     row.querySelector('.n').textContent=n; row.onclick=function(){ S.ports[n]=!S.ports[n]; save(); paintPage(); }; lamps[n]=row.querySelector('.lamp'); L.appendChild(row); });
+   hoverable(b,r); return b; },
+ vel:function(r){ var b=el('<div class="blk" data-row="vel"><div class="sr" style="padding:0;margin-bottom:6px"><div class="lbl"><span class="t">Velocity curve</span><span class="tag bs">new</span></div><div class="lane"><span class="val dim" id="vel-rd"></span></div></div><div class="vel"><div><div class="crv" title="Drag up/down to bend · double-click = straight"><svg viewBox="0 0 150 92" preserveAspectRatio="none"><g class="grid"></g><path class="mv-stroke"/><circle class="dt" r="2.2" cx="-9" cy="-9"/></svg></div><div class="rd"></div></div><div><div class="keys"></div><div class="cap">Click low on a key for a soft hit, high for a hard one — or play your controller.</div></div></div></div>');
+   var g=b.querySelector('.grid'), gl=''; for(var i=1;i<4;i++){ gl+='<line x1="'+(i*37.5)+'" y1="0" x2="'+(i*37.5)+'" y2="92"/><line x1="0" y1="'+(i*23)+'" x2="150" y2="'+(i*23)+'"/>'; } g.innerHTML=gl;
+   var crv=b.querySelector('.crv');
+   dragify(crv,{get:function(){ return (1-S.vcurve)/2; },set:function(u){ S.vcurve=Math.round((1-u*2)*100)/100; S.vmode='Curve'; paintVel(); save(); },span:150,reset:.5});
+   var rd=b.querySelector('.rd');
+   [['Soft',-.45],['Linear',0],['Hard',.45],['Fixed',null]].forEach(function(o){ var c=el('<button class="tp-chip">'+o[0]+'</button>'); c.dataset.v=o[0];
+     c.onclick=function(){ if(o[1]===null) S.vmode='Fixed'; else { S.vmode='Curve'; S.vcurve=o[1]; } save(); paintVel(); }; rd.appendChild(c); });
+   var keys=b.querySelector('.keys'), BK=[1,3,6,8,10];
+   for(var k=0;k<13;k++){ (function(k){ var f=el('<div class="fxb'+(BK.indexOf(k%12)>=0?' bk':'')+'">'+(k===0?'C4':(k===12?'C5':''))+'</div>');
+     f.addEventListener('pointerdown',function(e){ var rc=f.getBoundingClientRect(); var v=C01(1-(e.clientY-rc.top)/rc.height)*.94+.06; f.classList.add('on'); noteOn(60+k,v,'mouse'); try{ f.setPointerCapture(e.pointerId); }catch(_){} });
+     function up(){ f.classList.remove('on'); noteOff(60+k); } f.addEventListener('pointerup',up); f.addEventListener('pointercancel',up); keys.appendChild(f); })(k); }
+   hoverable(b,r); velEl=b; setTimeout(paintVel,0); return b; },
+ ccmap:function(r){ var b=el('<div class="blk" data-row="ccmap"><div class="lst"></div><div class="acts"></div></div>'), L=b.querySelector('.lst');
+   L.appendChild(el('<div class="r hd"><span class="c1">CC</span><span class="n">Controls</span><span class="c2">Range</span><span class="x"></span></div>'));
+   S.cc.forEach(function(m,ix){ var row=el('<div class="r"><span class="c1">'+m.cc+'</span><span class="n"></span><span class="c2">'+(m.fixed?'always':'0 – 100 %')+'</span><span class="x">'+(m.fixed?'':X_SVG)+'</span></div>');
+     row.querySelector('.n').textContent=m.p; var x=row.querySelector('.x'); if(!m.fixed) x.onclick=function(){ S.cc.splice(ix,1); save(); paintPage(); toast('Unmapped <span class="tp-bk">CC '+m.cc+'</span> · '+esc(m.p)); }; L.appendChild(row); });
+   if(learning) L.appendChild(el('<div class="r learn"><span class="c1">…</span><span class="n">Move a control on your controller (or click a key)…</span><span class="c2"></span><span class="x"></span></div>'));
+   var a=b.querySelector('.acts'), lb=el('<button class="tp-btn'+(learning?' pri':'')+'" style="flex:none">'+(learning?'Listening…':'Learn')+'</button>');
+   lb.onclick=function(){ learning=!learning; paintPage(); if(learning) learnT=setTimeout(function(){ if(learning) learnCC(20+Math.floor(Math.random()*10)); },midiAcc?9000:2600); };
+   a.appendChild(lb);
+   var dfl=el('<button class="tp-btn">Save as default map</button>'); dfl.onclick=function(){ toast('New instances will start with these <b>'+S.cc.length+'</b> mappings'); }; a.appendChild(dfl);
+   var clr=el('<button class="tp-btn">Clear</button>'); clr.onclick=function(){ S.cc=S.cc.filter(function(m){ return m.fixed; }); save(); paintPage(); }; a.appendChild(clr);
+   hoverable(b,r); return b; },
+ cpu:function(r){ var d=el('<div class="sr" data-row="cpu"><div class="lbl"><span class="t">CPU meter in the header</span><span class="tag bs">new</span></div><div class="lane"></div></div>'), lane=d.querySelector('.lane');
+   ['On','Off'].forEach(function(o){ var c=el('<button class="tp-chip'+(S.cpuMeter===o?' active':'')+'">'+o+'</button>'); c.onclick=function(){ S.cpuMeter=o; save(); paintPage(); paintHeaderCpu(); }; lane.appendChild(c); });
+   var tr=el('<div class="tr" style="flex:1;margin-left:6px;cursor:default"><i class="lv" style="left:0;width:0"></i></div>'), v=el('<span class="val" style="width:34px;text-align:right;flex:none">—</span>');
+   lane.appendChild(tr); lane.appendChild(v); cpuEls=[tr,v]; hoverable(d,r); return d; },
+ rescan:function(r){ var d=el('<div class="sr" data-row="rescan"><div class="lbl"><span class="t">Rescan library</span><span class="tag bs user">live</span></div><div class="lane"><button class="tp-btn">Rescan</button><span class="val dim" style="flex:1;margin-left:6px">1,248 presets · 38 packs</span></div></div>');
+   var bt=d.querySelector('.tp-btn'), sp=d.querySelector('.val');
+   bt.onclick=function(){ bt.disabled=true; sp.style.flex='1'; bar(sp,900,function(){ sp.textContent='1,251 presets · 39 packs'; bt.disabled=false; toast('Library rescanned · <span class="tp-bk">3 new presets</span>'); }); };
+   hoverable(d,r); return d; },
+ try:function(r){ var b=el('<div class="blk" data-row="try"><div class="tryk"><div class="gbox"><span class="gbl" style="background:#1d1b2b">Try it</span><div class="cell"><div class="ctl k">'+knobSVG()+'</div><div class="lb">Cutoff</div><div class="vl"></div></div></div><div class="cap"></div></div></div>');
+   var k=b.querySelector('.k'), vl=b.querySelector('.vl'), cap=b.querySelector('.cap'), val=.5;
+   function paint(){ setRing(k,val); vl.textContent=S.values==='On'?Math.round(20*Math.pow(1000,val))+' Hz':''; }
+   cap.innerHTML='Drag: <b style="color:var(--text-primary);font-weight:500">'+esc(S.drag)+'</b>, '+Math.round(40+S.sens*210)+' % travel.'+(S.wheel==='On'?' Scroll to nudge.':'')+' Shift = fine. Double-click: '+(S.dbl==='Reset'?'reset.':'type a value.');
+   var svg=k.querySelector('svg'); svg.style.cursor=S.drag==='Horizontal'?'ew-resize':(S.drag==='Circular'?'grab':'ns-resize');
+   var dn=false, s0=0, n0=0, a0=0;
+   function ang(e){ var rc=svg.getBoundingClientRect(); return Math.atan2(e.clientY-(rc.top+rc.height/2), e.clientX-(rc.left+rc.width/2)); }
+   svg.addEventListener('pointerdown',function(e){ dn=true; n0=val; s0=S.drag==='Horizontal'?e.clientX:e.clientY; a0=ang(e); try{ svg.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); });
+   svg.addEventListener('pointermove',function(e){ if(!dn) return; var span=(80+S.sens*420)*(e.shiftKey?4:1);
+     if(S.drag==='Circular'){ var da=ang(e)-a0; if(da>Math.PI) da-=2*Math.PI; if(da<-Math.PI) da+=2*Math.PI; val=C01(n0+da/(Math.PI*1.5)*(140/span)*2.2); }
+     else { var d=S.drag==='Horizontal'?(e.clientX-s0):(s0-e.clientY); val=C01(n0+d/span); } paint(); });
+   svg.addEventListener('pointerup',function(){ dn=false; });
+   svg.addEventListener('wheel',function(e){ if(S.wheel!=='On') return; e.preventDefault(); val=C01(val-e.deltaY/1200); paint(); },{passive:false});
+   svg.addEventListener('dblclick',function(){ if(S.dbl==='Reset'){ val=.5; paint(); } else toast('Type a value — a field opens over the knob'); });
+   paint(); hoverable(b,r); return b; },
+ themes:function(r){ var b=el('<div data-row="thm"><div class="note">Themes change the whole window. <b>Night</b> and <b>Daylight</b> ship today; the rest arrive with skins — and you will be able to load your own.</div><div class="thm"></div></div>'), g=b.querySelector('.thm');
+   THEMES.forEach(function(t){ var soon=!!t.soon, on=(S.theme==='Dark'&&t.n==='Night')||(S.theme==='Light'&&t.n==='Daylight');
+     var c=el('<div class="gbox'+(on?' cur':'')+(soon?' soon':'')+'"><div class="mini" style="background:'+t.bg+'"><div class="h" style="background:'+t.hd+'"></div><div class="p" style="left:6px;right:52%;background:'+t.pn+'"></div><div class="p" style="left:52%;right:6px;background:'+t.pn+'"></div>'
+       +'<div class="k" style="left:13px;border-color:'+t.ac+'"></div><div class="k" style="left:28px;border-color:'+t.ink+'"></div><div class="k" style="left:calc(52% + 8px);border-color:'+t.ink+'"></div><div class="k" style="left:calc(52% + 23px);border-color:'+t.ac+'"></div></div>'
+       +'<div class="foot"><span class="n">'+esc(t.n)+'</span>'+(soon?'<span class="tag">Soon</span>':(on?'<span class="tag">In use</span>':''))+'</div></div>');
+     c.onmouseenter=function(){ hovTheme=t; paintInsp(); }; c.onmouseleave=function(){ hovTheme=null; paintInsp(); };
+     c.onclick=function(){ if(soon){ toast('<b>'+esc(t.n)+'</b> <span class="tp-bk">· coming with skins</span>'); return; } S.theme=t.n==='Night'?'Dark':'Light'; save(); paintPage(); if(t.n==='Daylight') toast('Daylight is Terrain\'s existing light theme — not drawn in this mockup'); };
+     g.appendChild(c); });
+   var a=el('<div class="blk"><div class="acts"><button class="tp-btn" disabled>Load a skin…</button><button class="tp-btn" disabled>Open the skin folder</button></div></div>'); b.appendChild(a);
+   return b; },
+ hero:function(){ return el('<div class="hero"><div class="wm"><span class="brand-name">Terrain</span><span class="brand-version">V1</span></div><span class="by">by Waves Crate · recognises you as <b style="color:var(--sel-fg);font-weight:500">'+esc(S.reg?S.name:'a guest')+'</b></span></div>'); },
+ ver:function(r){ var b=el('<div data-row="ver"><div class="kvp"><span class="k">Version</span><span class="v">1.0.0 <span class="dim">· beta 1</span></span><span class="k">Build</span><span class="v">1f610af <span class="dim">· 23 Sep 2026</span></span><span class="k">Running as</span><span class="v">Standalone <span class="dim">· arm64</span></span><span class="k">Formats</span><span class="v">AU · VST3 · Standalone</span><span class="k">Engine</span><span class="v">Resynth <span class="dim">· JUCE 8.0.12</span></span></div></div>'); hoverable(b,r); return b; },
+ upd:function(r){ var d=el('<div class="sr" data-row="upd"><div class="lbl"><span class="t">Check for updates</span><span class="tag">Soon</span><span class="tag bs">new</span></div><div class="lane"><button class="tp-btn">Check now</button><span class="val dim" style="flex:1;margin-left:6px">Last checked: never</span></div></div>');
+   var bt=d.querySelector('.tp-btn'), sp=d.querySelector('.val'); bt.onclick=function(){ bt.disabled=true; bar(sp,1300,function(){ sp.innerHTML='You have the newest beta'; sp.className='val ok'; bt.disabled=false; }); };
+   hoverable(d,r); return d; },
+ lic:function(r){ var b=el('<div data-row="lic"><div class="kvp"><span class="k">Status</span><span class="v">'+(S.reg?'Beta <span class="dim">· '+esc(S.name)+'</span>':'<span class="err">Not registered</span>')+'</span><span class="k">Computers</span><span class="v">This Mac <span class="dim">· 1 of 3</span> <span class="tag" style="margin-left:4px">Soon</span></span><span class="k">Code signing</span><span class="v">Ad-hoc <span class="dim">· Developer ID at 1.0</span></span></div><div class="blk"><div class="acts inl"><button class="tp-btn" disabled>Manage computers</button><button class="tp-btn" id="b-lic">'+(S.reg?'Account':'Register')+'</button></div></div></div>');
+   b.querySelector('#b-lic').onclick=function(){ if(S.reg) go('account','reg'); else regSheet(1); }; hoverable(b,r); return b; },
+ sup:function(r){ var b=el('<div class="blk" data-row="sup"><div class="acts" style="margin-top:2px"><button class="tp-btn pri" style="flex:none;padding:0 14px">Copy system info</button><button class="tp-btn">Report a bug…</button><button class="tp-btn">Manual</button></div></div>');
+   var bs=b.querySelectorAll('.tp-btn');
+   bs[0].onclick=function(){ var t='Terrain 1.0.0 beta 1 (1f610af, 23 Sep 2026)\nStandalone · Apple silicon · '+(S.sr/1000)+' kHz · '+S.buf+' samples\nmacOS · '+navigator.userAgent.replace(/.*Mac OS X ([\d_]+).*/,'$1').replace(/_/g,'.')+'\nRegistered: '+(S.reg?S.name:'no');
+     try{ navigator.clipboard.writeText(t).then(function(){ toast('System info copied — paste it into your message'); },function(){ toast('System info ready (clipboard blocked here)'); }); }catch(e){ toast('System info ready (clipboard blocked here)'); } };
+   bs[1].onclick=function(){ toast('Opens the beta feedback form <span class="tp-bk">· link to be decided</span>'); }; bs[2].onclick=function(){ toast('Opens the Terrain manual <span class="tp-bk">· coming with 1.0</span>'); };
+   hoverable(b,r); return b; },
+ wc:function(){ return el('<div><div class="para"><b>Waves Crate</b> makes instruments for people who want every knob to mean something — where 100 % is really 100 %, nothing clicks, and the sound matches the number.</div>'
+   +'<div class="para"><b>Terrain</b> is a synthesizer and sampler: Resynth oscillators, 118 filters, a rack of effects and a patcher, all in one window.</div>'
+   +'<div class="kvp"><span class="k">Design &amp; sound</span><span class="v">Max Shooter</span><span class="k">Built with</span><span class="v">JUCE 8 <span class="dim">· WebKit UI</span></span></div><div class="note" style="margin-top:8px">© 2026 Waves Crate. VST is a registered trademark of Steinberg Media Technologies GmbH. Audio Units and macOS are trademarks of Apple Inc.</div></div>'); }
+};
+var THEMES=[
+ {n:'Night',     bg:'#1A1A2E',hd:'#12121F',pn:'#232340',ink:'rgba(255,255,255,.85)',ac:'#B794FF',sw:['#1A1A2E','#232340','#B794FF','#E0DCE8']},
+ {n:'Daylight',  bg:'#EDEAF2',hd:'#E2DDEA',pn:'#F7F5FA',ink:'#2A2035',ac:'#7C3AED',sw:['#EDEAF2','#F7F5FA','#7C3AED','#2A2035']},
+ {n:'Basalt',    bg:'#141414',hd:'#0C0C0C',pn:'#1E1E1E',ink:'rgba(255,255,255,.8)',ac:'#FF8A3D',sw:['#141414','#1E1E1E','#FF8A3D','#EDEDED'],soon:1},
+ {n:'Aurora',    bg:'#0E1A1F',hd:'#08262B',pn:'#12303A',ink:'rgba(220,255,250,.85)',ac:'#4FF0C8',sw:['#0E1A1F','#12303A','#4FF0C8','#DCFFFA'],soon:1},
+ {n:'Moss',      bg:'#1B1F16',hd:'#14170F',pn:'#262C1E',ink:'rgba(240,244,228,.85)',ac:'#B8D86B',sw:['#1B1F16','#262C1E','#B8D86B','#F0F4E4'],soon:1},
+ {n:'Paper',     bg:'#F3EFE6',hd:'#E8E2D4',pn:'#FBF8F2',ink:'#2B2620',ac:'#D0493B',sw:['#F3EFE6','#FBF8F2','#D0493B','#2B2620'],soon:1}
+];
+var hov=null, hovTheme=null, meters=[], lamps={}, velEl=null, cpuEls=null, learning=false, learnT=null;
+
+/* ═══ THE PANE ═══ */
+function paintPage(){ closeMenu(); hov=null; hovTheme=null; var P=$('pane'), st=P.scrollTop; P.innerHTML=''; meters=[]; lamps={}; velEl=null; cpuEls=null;
+  if(q){ var hits=ROWS.filter(function(r){ return (r.label+' '+r.help+' '+r.g).toLowerCase().indexOf(q)>=0 && r.blk!=='hero' && r.blk!=='wc'; });
+    $('st-count').innerHTML='<b>'+hits.length+'</b> '+(hits.length===1?'setting':'settings');
+    if(!hits.length){ P.appendChild(el('<div class="empty"><b>Nothing called that</b>Try buffer, author, MIDI, theme, update…</div>')); paintInsp(); return; }
+    P.appendChild(el('<div class="ph"><span class="t">Results</span><span class="w">click a page name to go there</span></div>'));
+    hits.forEach(function(r){ if(r.ctl) P.appendChild(rowEl(r,true)); else { var d=el('<div class="sr" data-row="'+r.id+'"><span class="pg"></span><div class="lbl"><span class="t"></span></div><div class="lane"><button class="tp-btn">Open</button></div></div>');
+      var pg=PAGES.filter(function(p){ return p.id===r.p; })[0]; d.querySelector('.pg').textContent=pg.name; d.querySelector('.t').textContent=r.label; d.querySelector('.pg').onclick=d.querySelector('.tp-btn').onclick=function(){ go(r.p,r.id); }; hoverable(d,r); P.appendChild(d); } });
+    paintInsp(); return; }
+  paintCount();
+  var pg=PAGES.filter(function(p){ return p.id===cur; })[0];
+  P.appendChild(el('<div class="ph"><span class="t">'+esc(pg.name)+'</span>'+(pg.soon?'<span class="tag">Soon</span>':'')+'<span class="w">'+esc(pg.w)+'</span></div>'));
+  if(cur==='audio') P.appendChild(el('<div class="note" style="margin-top:-6px">These belong to the <b>Terrain app</b>. Inside Ableton, FL Studio or Logic your DAW owns the sound card — Terrain follows its sample rate and buffer, and this page stays out of the way.</div>'));
+  var lastG=null;
+  ROWS.filter(function(r){ return r.p===cur; }).forEach(function(r){
+    if(r.g&&r.g!==lastG&&cur!=='themes'){ P.appendChild(el('<div class="gh">'+esc(r.g)+'</div>')); } lastG=r.g;
+    if(r.blk) P.appendChild(BLK[r.blk](r)); else P.appendChild(rowEl(r)); });
+  P.scrollTop=st; paintInsp(); }
+function paintCount(){ $('st-count').innerHTML=S.reg?'Terrain recognises you as <b>'+esc(S.name)+'</b>':'Not registered · <b style="cursor:pointer" id="cnt-reg">Register</b>';
+  var cr=$('cnt-reg'); if(cr) cr.onclick=function(){ regSheet(1); }; }
+
+/* ═══ THE INSPECTOR — the preset browser's right column: the page's live summary, or the row you are resting on ═══ */
+function kv(pairs){ return '<div class="kv">'+pairs.map(function(p){ return '<span class="k">'+esc(p[0])+'</span><span class="v">'+p[1]+'</span>'; }).join('')+'</div>'; }
+function paintInsp(){ var I=$('st-insp'), A=$('st-acts'), h='', acts='';
+  if(hovTheme){ var t=hovTheme; h='<div class="nm">'+esc(t.n)+'</div><div class="sub">'+(t.soon?'Coming with skins':'Ships in Terrain today')+'</div>'
+      +'<div class="kv" style="grid-template-columns:repeat(4,1fr);column-gap:6px">'+t.sw.map(function(c){ return '<span style="height:34px;border-radius:5px;border:1px solid rgba(255,255,255,.1);background:'+c+'"></span>'; }).join('')+'</div>'
+      +'<div class="notes"><div class="k">Palette</div><div class="tp-notebox">Ground '+t.sw[0]+'\nPanels '+t.sw[1]+'\nAccent '+t.sw[2]+'\nInk '+t.sw[3]+'</div></div>'; }
+  else if(hov&&hov.help){ var r=hov, st=r.st==='live'?'In Terrain today':(r.st==='soon'?'Coming soon':'New');
+    h='<div class="nm">'+esc(r.label)+'</div><div class="sub">'+esc(r.where)+'</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox">'+esc(r.help)+'</div></div>';
+    if(document.body.classList.contains('bs')) h+=kv([['Status','<span class="'+(r.st==='live'?'':'ok')+'">'+st+'</span>'],['Stored','<span title="'+esc(r.store)+'">'+esc(r.store)+'</span>']])+'<div class="notes"><div class="k">C++</div><div class="tp-notebox" style="font-size:9.5px;color:var(--text-soft)">'+esc(r.cpp)+'</div></div>'; }
+  else if(cur==='account'&&!q){ h='<div class="nm">'+esc(S.reg?S.name:'Guest')+'</div><div class="sub">'+esc(S.roles.join(' / ')||'—')+'</div>'
+      +kv([['Email',esc(S.email||'—')],['Status',S.reg?'Registered':'<span class="err">Not registered</span>'],['Signs as',esc(S.author||'—')]])
+      +'<div class="notes" style="padding-bottom:0"><div class="k" style="margin-bottom:0">Your next save</div></div>'+kv([['Name','Glass Choir 2'],['Pack','User'],['Author','<span class="ok">'+esc(S.sign==='On'?(S.author||''):'')+'</span>'+(S.sign==='On'?'':'<span style="color:var(--text-muted)">you type it</span>')]]).replace('class="kv"','class="kv" style="border-top:0;margin-top:7px;padding-top:0"');
+    acts='<button class="tp-btn pri" id="ia-save">Save preset…</button>'; }
+  else if(cur==='audio'&&!q){ var one=S.buf/S.sr*1000;
+    h='<div class="nm">This computer</div><div class="sub">The Terrain app, right now</div>'+kv([['Driver',esc(S.driver)],['Out',esc(S.out)],['In',esc(S.inDev)],['Rate',(S.sr/1000)+' kHz'],['Buffer',S.buf+' · '+one.toFixed(1)+' ms']])
+      +'<div class="notes"><div class="k">Last MIDI</div><div class="tp-notebox" id="i-live"></div></div><div class="notes"><div class="k">In a DAW</div><div class="tp-notebox" style="color:var(--text-soft)">Ableton, FL Studio and Logic own the device. Terrain reads their rate and buffer; the MIDI & Controllers page still applies.</div></div>';
+    acts='<button class="tp-btn pri" id="ia-test">Play test audio</button>'; }
+  else if(cur==='control'&&!q){ h='<div class="nm">Live input</div><div class="sub">Play anything — it shows here</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox" id="i-live"></div></div>'
+      +kv([['Channel',esc(S.chan)],['Curve',S.vmode==='Fixed'?'Fixed 100':(S.vcurve===0?'Linear':(S.vcurve<0?'Soft ':'Hard ')+Math.abs(Math.round(S.vcurve*100)))],['Bend','± '+S.bend+' st'],['MPE',esc(S.mpe)],['Mapped',S.cc.length+' CCs']]); }
+  else if(cur==='library'&&!q){ h='<div class="nm">Your library</div><div class="sub">1,248 presets · 38 packs</div>'+kv([['Yours','64 presets · 5 packs'],['Factory','1,184 presets'],['Hearts','41'],['Author',esc(S.author||'—')]]); acts='<button class="tp-btn pri" id="ia-browse">Open the browser</button>'; }
+  else if(cur==='perf'&&!q){ h='<div class="nm">Load</div><div class="sub">What Terrain costs right now</div>'+kv([['DSP','<span id="i-cpu">—</span>'],['Voices','<span id="i-vc">0</span> of '+S.voices],['Capture',S.capture==='On'?'~202 MB':'off'],['Quality',esc(S.rtQ)],['Screen',S.fps+' fps · motion '+S.motion.toLowerCase()]]); }
+  else if(cur==='ui'&&!q){ h='<div class="nm">Interface</div><div class="sub">How Terrain looks and feels in your hands</div>'+kv([['Theme',esc(S.theme)],['Window',S.size+' %'],['Knobs',esc(S.drag)],['Motion',esc(S.motion)]])
+      +'<div class="notes"><div class="k">Tip</div><div class="tp-notebox" style="color:var(--text-soft)">Rest on any setting and this column explains it.</div></div>'; }
+  else if(cur==='themes'&&!q){ h='<div class="nm">Themes</div><div class="sub">Coming soon</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox" style="color:var(--text-soft)">Rest on a theme to see its palette. Skins will be files you can share — the same way presets are.</div></div>'; }
+  else if(cur==='about'&&!q){ h='<div class="nm">Terrain 1.0</div><div class="sub">beta 1 · 1f610af</div>'+kv([['User',esc(S.reg?S.name:'—')],['Licence',S.reg?'Beta':'—'],['Channel',esc(S.chanUpd)]])
+      +'<div class="notes"><div class="k">For testers</div><div class="tp-notebox" style="color:var(--text-soft)">Found something? Copy system info and send it with what you were doing. Thank you for playing it first.</div></div>'; }
+  else { h='<div class="nm">Settings</div><div class="sub">Rest on a result to read it</div>'; }
+  I.innerHTML=h; A.innerHTML=acts; A.style.display=acts?'':'none';
+  var s1=$('ia-save'); if(s1) s1.onclick=function(){ saveSheet(); };
+  var s2=$('ia-test'); if(s2) s2.onclick=function(){ chime(); };
+  var s3=$('ia-browse'); if(s3) s3.onclick=function(){ toast('Opens the preset browser <span class="tp-bk">· the #tp-b surface this page is built from</span>'); };
+  paintLive(); }
+function paintLive(){ var e=$('i-live'); if(!e) return;
+  e.textContent=LIVE.note==null?'Nothing yet. Try the keys on your computer (A W S E…) or a MIDI keyboard.'
+    :('Note '+nn(LIVE.note)+'  ·  from '+LIVE.src+'\nVelocity '+LIVE.vin+' → '+LIVE.vout+(S.vmode==='Fixed'?' (fixed)':'')+(LIVE.bend?'\nBend '+(LIVE.bend>0?'+':'')+LIVE.bend.toFixed(2):'')+(LIVE.cc?'\nLast CC '+LIVE.cc:'')); }
+function paintVel(){ if(!velEl) return; var p='', n=40; for(var k=0;k<=n;k++){ var u=k/n, y=S.vmode==='Fixed'?100/127:crvF(u,S.vcurve); p+=(k?'L':'M')+(u*150).toFixed(1)+' '+(90-y*88).toFixed(1); }
+  velEl.querySelector('.mv-stroke').setAttribute('d',p);
+  velEl.querySelectorAll('.rd .tp-chip').forEach(function(c){ var v=c.dataset.v; c.classList.toggle('active', S.vmode==='Fixed'?v==='Fixed':((v==='Linear'&&S.vcurve===0)||(v==='Soft'&&S.vcurve===-.45)||(v==='Hard'&&S.vcurve===.45))); });
+  var rd=velEl.querySelector('#vel-rd'); if(rd) rd.textContent=S.vmode==='Fixed'?'every note at 100':(S.vcurve===0?'linear':(S.vcurve<0?'softer touch ':'harder touch ')+Math.abs(Math.round(S.vcurve*100))+' %'); }
+function paintVelDot(vin){ if(!velEl) return; var y=S.vmode==='Fixed'?100/127:crvF(vin,S.vcurve), d=velEl.querySelector('.dt'); d.setAttribute('cx',(vin*150).toFixed(1)); d.setAttribute('cy',(90-y*88).toFixed(1)); }
+function paintHeaderCpu(){ var bv=document.querySelector('#header .brand-version'); bv.textContent=S.cpuMeter==='On'?'V1 · '+cpuNow+'%':'V1'; }
+
+/* the frame clock: test meter, CPU readouts (mock DSP load that follows how many notes sound) */
+var cpuNow=4, cpuT=0;
+(function tick(now){ var lv=level(); meters.forEach(function(m){ var i=m.querySelector('i'); i.style.width=Math.min(100,lv*260).toFixed(1)+'%'; });
+  if(now-cpuT>400){ cpuT=now; var nv=Object.keys(held).length; cpuNow=Math.max(2,Math.round(3+nv*4.2*({Eco:.6,Standard:1,High:1.8}[S.rtQ])+Math.random()*2));
+    if(cpuEls){ cpuEls[0].querySelector('i').style.width=cpuNow+'%'; cpuEls[1].textContent=cpuNow+' %'; }
+    var ic=$('i-cpu'); if(ic) ic.textContent=cpuNow+' %'; var iv=$('i-vc'); if(iv) iv.textContent=Object.keys(held).length*1;
+    if(S.cpuMeter==='On') paintHeaderCpu(); }
+  requestAnimationFrame(tick); })(0);
+
+/* ═══ SHEETS — #tp-sheet .tp-card, the Save sheet's grammar ═══ */
+function sheet(o){ var sh=$('tp-sheet'), c=sh.querySelector('.tp-card'); closeMenu();
+  c.className='tp-card'+(o.wide?' wide':''); c.innerHTML='<div class="tp-hd'+(o.steps?' row':'')+'">'+o.title+(o.steps?'<span class="steps">'+[1,2,3].map(function(i){ return '<span class="sd'+(i===o.steps?' on':(i<o.steps?' done':''))+'"><i></i></span>'; }).join('')+'</span>':'')+'</div><div class="tp-sbody">'+o.body+'</div><div class="tp-acts"></div>';
+  var a=c.querySelector('.tp-acts'); (o.acts||[]).forEach(function(b){ var e=el('<button class="tp-btn'+(b.pri?' pri':'')+'">'+esc(b.label)+'</button>'); if(b.left) e.style.marginRight='auto'; e.onclick=b.on; a.appendChild(e); b.el=e; });
+  sh.classList.add('on'); if(o.init) o.init(c);
+  var f=c.querySelector('input'); if(f){ try{ f.focus(); f.select(); }catch(e){} } }
+function closeSheet(){ $('tp-sheet').classList.remove('on'); }
+$('tp-sheet').addEventListener('pointerdown',function(e){ if(e.target===$('tp-sheet')) closeSheet(); });
+
+/* REGISTRATION — name → email → authorization code → welcome. Every step validates; Enter = Next. */
+var REG={name:'',email:''};
+function enterKey(c,fn){ c.querySelectorAll('input').forEach(function(i){ i.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); fn(); } if(e.key==='Escape') closeSheet(); }; }); }
+function regSheet(step){
+  if(step===1){ REG.name=REG.name||S.name||'';
+    sheet({title:'Register Terrain',steps:1,body:'<div class="tp-text">First — who are you? This is the name Terrain registers to you, and the author on every preset you save.</div>'
+      +'<div class="tp-f" style="margin-top:14px"><span class="k">Name</span><input type="text" class="tp-in" id="rg-name" maxlength="40" placeholder="Your name" spellcheck="false"></div><div class="tp-note" id="rg-msg">Your real name or your artist name — you can change it later.</div>',
+      acts:[{label:'Cancel',on:closeSheet},{label:'Next',pri:1,on:next1}],init:function(c){ $('rg-name').value=REG.name; enterKey(c,next1); }});
+    function next1(){ var v=$('rg-name').value.trim().replace(/\s+/g,' '), m=$('rg-msg');
+      if(v.length<2){ m.textContent='Type at least two letters.'; m.className='tp-note err'; $('rg-name').focus(); return; }
+      if(!/[A-Za-zÀ-ÿ]/.test(v)){ m.textContent='A name needs at least one letter.'; m.className='tp-note err'; return; }
+      REG.name=v; regSheet(2); } }
+  else if(step===2){ REG.email=REG.email||S.email||'';
+    sheet({title:'Register Terrain',steps:2,body:'<div class="tp-text">Nice to meet you, <b>'+esc(REG.name)+'</b>. Where should we send your authorization code?</div>'
+      +'<div class="tp-f" style="margin-top:14px"><span class="k">Email</span><input type="email" class="tp-in" id="rg-mail" maxlength="80" placeholder="you@example.com" spellcheck="false"></div><div class="tp-note" id="rg-msg">We only use it for your code, your licence and updates you ask for.</div><div id="rg-bar" style="margin-top:10px;height:2px"></div>',
+      acts:[{label:'Back',left:1,on:function(){ regSheet(1); }},{label:'Cancel',on:closeSheet},{label:'Send code',pri:1,on:next2}],init:function(c){ $('rg-mail').value=REG.email; enterKey(c,next2); }});
+    function next2(){ var v=$('rg-mail').value.trim(), m=$('rg-msg');
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)){ m.textContent=v?'That doesn\'t look like an email address.':'Type your email address.'; m.className='tp-note err'; $('rg-mail').focus(); return; }
+      REG.email=v; m.textContent='Sending your code…'; m.className='tp-note'; bar($('rg-bar'),900,function(){ regSheet(3); }); } }
+  else if(step===3){
+    sheet({title:'Register Terrain',steps:3,body:'<div class="tp-text">We sent a code to <b>'+esc(REG.email)+'</b>. Paste it here — it looks like <b>TRRN-XXXX-XXXX</b>.</div>'
+      +'<div class="tp-f" style="margin-top:14px"><span class="k">Code</span><input type="text" class="tp-in code" id="rg-code" maxlength="14" placeholder="TRRN-0000-0000" spellcheck="false" autocomplete="one-time-code"></div>'
+      +'<div class="tp-note" id="rg-msg">Mockup: any 8 letters or numbers work · a code with 0000 shows the "used up" error. <span id="rg-resend" style="color:var(--purple-400);cursor:pointer">Resend code</span></div><div id="rg-bar" style="margin-top:10px;height:2px"></div>',
+      acts:[{label:'Back',left:1,on:function(){ regSheet(2); }},{label:'Cancel',on:closeSheet},{label:'Register',pri:1,on:next3}],init:function(c){ var i=$('rg-code');
+        i.oninput=function(){ var raw=i.value.toUpperCase().replace(/[^A-Z0-9]/g,''); if(raw.indexOf('TRRN')===0) raw=raw.slice(4); raw=raw.slice(0,8); i.value='TRRN-'+raw.slice(0,4)+(raw.length>4?'-'+raw.slice(4):''); if(!raw) i.value=''; var m=$('rg-msg'); if(m.className!=='tp-note'||m.dataset.dirty){ m.className='tp-note'; m.innerHTML=hint0; m.dataset.dirty=''; $('rg-resend').onclick=resend; } };
+        var hint0=$('rg-msg').innerHTML; function resend(){ toast('A new code is on its way to <span class="tp-bk">'+esc(REG.email)+'</span>'); } $('rg-resend').onclick=resend; enterKey(c,next3); }});
+    function next3(){ var raw=$('rg-code').value.replace(/^TRRN-?/,'').replace(/-/g,''), m=$('rg-msg');
+      if(raw.length<8){ m.textContent='The code has 8 letters and numbers after TRRN — check the email.'; m.className='tp-note err'; $('rg-code').focus(); return; }
+      m.textContent='Checking…'; m.className='tp-note'; m.dataset.dirty='1';
+      bar($('rg-bar'),1100,function(){ if(raw.indexOf('0000')>=0){ $('rg-bar').innerHTML=''; m.textContent='That code has already been used on 3 computers. Sign out on one of them, or write to us.'; m.className='tp-note err'; return; } regSheet(4); }); } }
+  else { var was=S.author, auto=!S.authorSet||!S.author||S.author==='Me'||S.author===S.name;
+    S.reg=true; S.name=REG.name; S.email=REG.email; S.since='23 Sep 2026'; if(auto){ S.author=REG.name; S.authorSet=false; } save();
+    sheet({title:'Welcome to Terrain',body:'<div class="tp-text">Terrain is registered to <b>'+esc(S.name)+'</b>.</div>'
+      +'<div class="tp-f" style="margin-top:14px"><span class="k">Name</span><div class="v">'+esc(S.name)+'</div><span class="k">Email</span><div class="v">'+esc(S.email)+'</div><span class="k">Author</span><div class="v ok">'+esc(S.author)+'</div><span class="k">Licence</span><div class="v">Beta · this Mac</div></div>'
+      +'<div class="tp-note">'+(auto?'Every preset you save is now signed '+esc(S.author)+'. Change it any time under Account → Author name.':'Your presets stay signed '+esc(was)+' — you set that yourself.')+'</div>',
+      acts:[{label:'Done',pri:1,on:function(){ closeSheet(); REG={name:'',email:''}; go('account'); toast('Terrain recognises you as <b>'+esc(S.name)+'</b>'); }}]}); }
+}
+function signOutSheet(){ sheet({title:'Sign out of Terrain',body:'<div class="tp-text">Terrain on this Mac will stop recognising <b>'+esc(S.name)+'</b>. Your presets keep their author; you can register again any time.</div>',
+  acts:[{label:'Cancel',on:closeSheet},{label:'Sign out',pri:1,on:function(){ S.reg=false; save(); closeSheet(); go('account'); toast('Signed out'); }}]}); }
+function resetSheet(){ sheet({title:'Reset all settings',body:'<div class="tp-text">Every setting goes back to how Terrain shipped. <b>Your presets, packs and registration are not touched.</b></div>',
+  acts:[{label:'Cancel',on:closeSheet},{label:'Reset',pri:1,on:function(){ var keep={reg:S.reg,name:S.name,email:S.email,since:S.since,author:S.author,roles:S.roles,roleVocab:S.roleVocab};
+    S=JSON.parse(JSON.stringify(DEF)); Object.keys(keep).forEach(function(k){ S[k]=keep[k]; }); save(); closeSheet(); paintPage(); paintHeaderCpu(); toast('Settings reset'); }}]}); }
+/* THE SAVE SHEET — index.html 43162 (openSave), its fields verbatim; Author arrives filled from Settings */
+function saveSheet(){ var types=['Bass','Keys','Pad','Lead','Pluck','FX'], styles=['Dark','Warm','Glassy','Evolving','Wide'], ty='Pad', sty=['Glassy','Evolving'];
+  sheet({title:'Save preset',wide:true,body:'<div class="tp-f">'
+      +'<span class="k">Name</span><input type="text" class="tp-in" id="sv-name" maxlength="40" placeholder="Preset name" value="Glass Choir 2">'
+      +'<span class="k">Pack</span><input type="text" class="tp-in" id="sv-bank" maxlength="30" placeholder="Type a pack — new name makes one" value="User">'
+      +'<span class="k">Author</span><input type="text" class="tp-in" id="sv-author" maxlength="30" placeholder="Your name" value="'+esc(S.sign==='On'?S.author:'')+'">'
+      +'<span class="k">Type</span><div class="chp" id="sv-type"></div><span class="k">Style</span><div class="chp" id="sv-style"></div>'
+      +'<span class="k">Notes</span><div class="tp-in tp-note-in" contenteditable="plaintext-only" spellcheck="false" data-ph="What should someone know about this sound?"></div>'
+      +'<span class="k">Carries</span><div class="v">2 wavetables · 1 sample</div></div>'
+      +'<div class="tp-note">Author comes from <b style="color:var(--text-primary);font-weight:500">Settings → Account</b>'+(S.sign==='On'?'':' (signing is off, so it starts empty)')+'. Type another name here for this save only.</div>',
+    acts:[{label:'Cancel',on:closeSheet},{label:'Save',pri:1,on:function(){ var n=$('sv-name').value.trim()||'Untitled', a=$('sv-author').value.trim(); closeSheet(); $('preset-name').textContent=n;
+      toast('Saved <span class="tp-bk">User - </span>'+esc(n)+(a?' <span class="tp-bk">· by '+esc(a)+'</span>':'')); }}],
+    init:function(c){ function rc(){ var t=$('sv-type'), s=$('sv-style');
+        t.innerHTML=types.map(function(x){ return '<button class="tp-chip'+(x===ty?' active':'')+'" data-t="'+x+'">'+x+'</button>'; }).join('')+'<button class="tp-chip add">'+PLUS+'</button>';
+        s.innerHTML=styles.map(function(x){ return '<button class="tp-chip'+(sty.indexOf(x)>=0?' active':'')+'" data-s="'+x+'">'+x+'</button>'; }).join('')+'<button class="tp-chip add">'+PLUS+'</button>';
+        t.querySelectorAll('[data-t]').forEach(function(b){ b.onclick=function(){ ty=ty===b.dataset.t?'':b.dataset.t; rc(); }; });
+        s.querySelectorAll('[data-s]').forEach(function(b){ b.onclick=function(){ var i=sty.indexOf(b.dataset.s); if(i>=0) sty.splice(i,1); else sty.push(b.dataset.s); rc(); }; }); }
+      rc(); c.querySelectorAll('input').forEach(function(i){ i.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Escape') closeSheet(); }; }); }});
+}
+
+/* ═══ MIDI — Web MIDI when the browser has it (Chrome), the mocked ports otherwise (Safari) ═══ */
+var midiAcc=null, midiPorts=null;
+function lampFlash(n){ var l=lamps[n]; if(!l) return; l.classList.add('lv'); clearTimeout(l._t); l._t=setTimeout(function(){ l.classList.remove('lv'); },120); }
+function onMidi(name,d){ if(!S.ports[name]) return; lampFlash(name); var st=d[0]&0xF0, ch=(d[0]&15)+1;
+  if(S.chan!=='Omni'&&S.chan!=='Channel '+ch) return;
+  if(st===0x90&&d[2]>0) noteOn(d[1],d[2]/127,name); else if(st===0x80||(st===0x90&&d[2]===0)) noteOff(d[1]);
+  else if(st===0xB0){ LIVE.cc=d[1]+' = '+d[2]; if(learning) learnCC(d[1]); paintLive(); }
+  else if(st===0xE0){ LIVE.bend=(((d[2]<<7)|d[1])-8192)/8192*S.bend; paintLive(); } }
+function learnCC(cc){ clearTimeout(learnT); learning=false; var targets=['Filter 1 · Cutoff','Osc B · Level','Reverb · Mix','Macro 2 · Space','Env 1 · Attack'];
+  var p=targets[Math.floor(Math.random()*targets.length)]; S.cc=S.cc.filter(function(m){ return m.cc!==cc||m.fixed; }); S.cc.push({cc:cc,p:p}); save(); paintPage(); toast('Learned <span class="tp-bk">CC '+cc+' →</span> '+esc(p)); }
+try{ if(navigator.requestMIDIAccess) navigator.requestMIDIAccess().then(function(acc){ midiAcc=acc;
+  function scan(){ midiPorts=[]; acc.inputs.forEach(function(inp){ midiPorts.push({name:inp.name}); if(S.ports[inp.name]===undefined) S.ports[inp.name]=false; inp.onmidimessage=function(e){ onMidi(inp.name,e.data); }; }); if(cur==='audio'&&!q) paintPage(); }
+  scan(); acc.onstatechange=scan; },function(){}); }catch(e){}
+
+/* the computer keyboard (fb484's QWERTY map: A W S E D F T G Y H U J K from C4) */
+var QW='awsedftgyhujk';
+document.addEventListener('keydown',function(e){ if(e.target.tagName==='INPUT'||e.target.isContentEditable) return;
+  if(e.key==='Escape'){ if(menuEl) closeMenu(); else if($('tp-sheet').classList.contains('on')) closeSheet(); else if(q){ $('st-search').value=''; q=''; renderRail(); paintPage(); } else openSettings(false); return; }
+  if(e.metaKey||e.ctrlKey||e.repeat||!S.qwerty) return; var i=QW.indexOf(e.key.toLowerCase()); if(i<0) return;
+  if(!held[60+i]){ noteOn(60+i,100/127,'computer keyboard'); var ks=velEl&&velEl.querySelectorAll('.keys .fxb'); if(ks&&ks[i]) ks[i].classList.add('on'); if(learning) learnCC(20+i); } });
+document.addEventListener('keyup',function(e){ var i=QW.indexOf(e.key.toLowerCase()); if(i<0) return; noteOff(60+i); var ks=velEl&&velEl.querySelectorAll('.keys .fxb'); if(ks&&ks[i]) ks[i].classList.remove('on'); });
+
+/* ═══ HEADER, OPEN / CLOSE, SEARCH ═══ */
+function openSettings(on){ $('tp-b').classList.toggle('on',on); closeMenu(); ['syn-btn','mix-btn','mod-btn'].forEach(function(id){ $(id).classList.toggle('active',!on&&id==='syn-btn'); }); }
+$('settings-btn').onclick=function(){ openSettings(!$('tp-b').classList.contains('on')); };
+$('st-close').onclick=function(){ openSettings(false); };
+['syn-btn','mix-btn','mod-btn'].forEach(function(id){ $(id).onclick=function(){ openSettings(false); ['syn-btn','mix-btn','mod-btn'].forEach(function(j){ $(j).classList.toggle('active',j===id); }); }; });
+$('save-btn').onclick=function(){ saveSheet(); };
+$('dice-btn').onclick=function(){ toast('The dice rolls a sound <span class="tp-bk">· not part of this mockup</span>'); };
+$('st-search').oninput=function(){ q=this.value.trim().toLowerCase(); renderRail(); paintPage(); };
+$('st-search').onkeydown=function(e){ e.stopPropagation(); if(e.key==='Escape'){ this.value=''; q=''; renderRail(); paintPage(); } };
+$('bs-tog').onclick=function(){ var on=document.body.classList.toggle('bs'); this.textContent='Build status: '+(on?'on':'off'); this.classList.toggle('active',on); paintInsp(); };
+$('snd-tog').onclick=function(){ arm(); chime(); };
+
+/* the synth page behind the glass — the mod-matrix mockup's SYN grid, still */
+(function(){ var syn=$('syn'), rows=[['Osc A','Osc B','Osc C'],['Filter 1','Filter 2','Env 1'],['LFO 1','Macros','Reverb'],['Delay','Voice','Output']];
+  rows.forEach(function(rw){ var row=el('<div class="row" style="grid-template-columns:repeat('+rw.length+',minmax(0,1fr))"></div>');
+    rw.forEach(function(nm,bi){ var g=el('<div class="gbox"><span class="gbl">'+esc(nm)+'</span></div>');
+      ['Level','Tone','Shape','Mix'].forEach(function(lb,i){ var c=el('<div class="cell"><div class="ctl k">'+knobSVG()+'</div><div class="lb">'+lb+'</div><div class="vl">'+Math.round(30+((bi*7+i*13)%60))+'%</div></div>'); setRing(c,.3+((bi*7+i*13)%60)/100); g.appendChild(c); }); row.appendChild(g); });
+    syn.appendChild(row); }); })();
+
+renderRail(); paintPage(); paintHeaderCpu();
+window.__st={go:go,regSheet:regSheet,saveSheet:saveSheet,S:function(){ return S; },openMenuFor:function(id){ var f=document.querySelector('[data-row="'+id+'"] .dd'); if(f) f.click(); },search:function(s){ $('st-search').value=s; $('st-search').oninput(); }};
+})();
+</script>
+</body>
+</html>
