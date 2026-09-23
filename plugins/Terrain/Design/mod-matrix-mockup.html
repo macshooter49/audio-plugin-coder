@@ -195,6 +195,9 @@ html.tp-glassup #header{background:var(--menu-bg);-webkit-backdrop-filter:blur(2
 .c-g{width:12px;flex:none;cursor:grab;text-align:center;}
 .c-b{width:14px;flex:none;display:flex;justify-content:center;}
 .c-s{width:96px;flex:none;}
+/* the header's word sits over the ROW's word, not over its ‹ arrow (Max's #1 law: align the visible glyph) —
+   measured 11.7 px, the arrow plus its gap, identical on Source / Destination / Aux in Basic and Pro */
+#mm-hd .c-s,#mm-hd .c-d,#mm-hd .c-ax{padding-left:11.7px;box-sizing:border-box;}
 .c-cv,.c-acv{width:30px;flex:none;}
 .c-am{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;}
 .c-am .tr{flex:1;min-width:0;}
