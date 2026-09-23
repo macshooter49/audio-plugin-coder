@@ -1118,6 +1118,14 @@ struct Assignment
     bool      useAux  = false;
     bool      enabled = false;
     int       curve   = -1;             // fb554 — index into ModCurveSet, or -1 for "straight line"
+    /* tp96 — THE MATRIX PAGE'S PRO COLUMNS (Max: "I want everything … all of it needs to work").
+       pol:    0 = the source's own polarity (every patch saved before tp96), 1 = Uni, 2 = Bi — see applyPolarity
+       auxInv: the aux flips — aux up = LESS modulation
+       auxCrv: the aux's response bend, -1..+1 (0 = straight) — see auxScale
+       (OUTPUT is folded into depth by the parser: a static trim needs no per-sample work.) */
+    int       pol     = 0;
+    bool      auxInv  = false;
+    float     auxCrv  = 0.0f;
 };
 
 // ── fb554 · OVERPASS 10A — THE MOD-CONNECTION CURVE ─────────────────────────────────────────
@@ -1296,6 +1304,40 @@ inline float applyModCurve (const ModCurveSet* set, int curveIdx, int sI, float 
     const float  fr = x - (float) i0;
     const float  y  = mc.pts[i0] + (mc.pts[i1] - mc.pts[i0]) * fr;
     return shape ? (y - 1.0f) : (vel ? y : (2.0f * y - 1.0f));
+}
+
+/* tp96 — THE MATRIX'S BEND, ONE DEFINITION. The page's CRV box drags a single bend c ∈ [-1, +1]; the shape is
+   u^(2^(2.6c)) on the normalised 0..1 value — c > 0 holds the start back and saves the jump for the top, c < 0
+   jumps early and levels off, 0 is the straight line (and is skipped, so it costs nothing). The SOURCE curve is
+   baked by the page into the route's existing 129-point curve (fb554) with this same law; the AUX curve has no
+   curve slot of its own, so it is evaluated here. */
+inline float modBend (float u, float c) noexcept
+{
+    u = u < 0.0f ? 0.0f : (u > 1.0f ? 1.0f : u);
+    if (c > -1.0e-4f && c < 1.0e-4f) return u;
+    return std::pow (u, std::exp2 (c * 2.6f));
+}
+/* tp96 — the aux "Scale by" value (0..1), bent and optionally inverted, before it scales the route's depth. */
+inline float auxScale (float a01, float crv, bool inv) noexcept
+{
+    const float a = modBend (a01, crv);
+    return inv ? 1.0f - a : a;
+}
+/* tp96 — POLARITY, as an OVERRIDE of the source's own. Terrain's families disagree about what a source's value
+   means (fb554): LFOs / drift / bend swing −1..+1, velocity · macros · wheel · aftertouch · random · alt are
+   0..1 additive, and the SHAPE sources (envelopes, followers, key tracking) arrive as level−1 and OWN a 0..1
+   knob. pol 0 leaves all of that exactly as it was. Uni on a bipolar source folds it to 0..1 (it pushes one way
+   from the knob); Bi on a 0..1 source centres it (−1..+1: it swings both ways); Bi on a SHAPE source turns it
+   into an ordinary signed swing around the knob — so `shapeLaw` comes back false and the caller must skip the
+   ownership law for this route. */
+inline float applyPolarity (int sI, int pol, float v, bool& shapeLaw) noexcept
+{
+    shapeLaw = isShapeModSource (sI);
+    if (pol == 0) return v;
+    const bool wantBi = (pol == 2);
+    if (shapeLaw) { if (! wantBi) return v; shapeLaw = false; return 2.0f * (v + 1.0f) - 1.0f; }
+    if (isUniAdditiveSource (sI)) return wantBi ? 2.0f * v - 1.0f : v;
+    return wantBi ? v : 0.5f * (v + 1.0f);
 }
 
 // ---------------------------------------------------------------------------

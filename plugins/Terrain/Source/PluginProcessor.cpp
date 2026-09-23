@@ -11240,7 +11240,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             for (const auto& r0 : synModRoutes)
             {
                 if (r0.bypass) continue;   // fb563 (3)
-                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias);   // fb563 (3) — "Scale by"
+                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= wc::auxScale (globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias), r0.auxCrv, r0.auxInv);   /* tp96 — bent · inverted */   // fb563 (3) — "Scale by"
                 if (r.dest < (int) wc::ModDest::LfoAmt1 || r.dest >= (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS) continue;
                 if (r.src >= 0 && r.src < wc::NUM_LFOS)
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += flowLfo_[r.src].peek() * (r.depth * *rpar (kLfoDepthIds[r.src]));
@@ -11254,7 +11254,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             for (const auto& r0 : synModRoutes)
             {
                 if (r0.bypass) continue;   // fb563 (3) — bypassed: in the list, out of the sum
-                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias);   // fb563 (3) — "Scale by" scales the DEPTH, whatever the family's law
+                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= wc::auxScale (globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias), r0.auxCrv, r0.auxInv);   /* tp96 — bent · inverted */   // fb563 (3) — "Scale by" scales the DEPTH, whatever the family's law
                 { const int dT = wc::destForBank (bank, r.dest); if (dT < 0) continue; r.dest = dT; }   // tp20 — the pool: a mirror int lands on bank 1's legacy index; A–D's own dests are bank 0's
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
                 const wc::ModCurveSet* mcSet = modCurvesLive_.load (std::memory_order_acquire);   // fb554 · fb573 — the audio-owned copy
@@ -11266,6 +11266,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     if (r.dest >= (int) wc::ModDest::LevelA && r.dest <= (int) wc::ModDest::LevelD) continue;
                     float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));
                     lv = wc::applyModCurve (mcSet, r.curve, (int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1), lv);   // fb554
+                    if (r.pol == 2)   // tp96 — Bi: an ordinary signed swing around the knob, not ownership
+                    { bool sl; mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyPolarity ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1), 2, lv, sl), r.depth); continue; }
                     // fb184 — OWNERSHIP for every unipolar (Linear01) dest: the env claims the
                     // knob by |depth| instead of offsetting it — knob-down + atten-100 follows
                     // the shape (Max's law, generalized from fb183 Levels). Semitone/Bipolar
@@ -11292,6 +11294,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     const float lv = wc::applyModCurve (mcSet, r.curve,
                                           (int) wc::ModSource::FollowA + (r.src - wc::kFollowSrcBase),
                                           followVis_[r.src - wc::kFollowSrcBase].load (std::memory_order_relaxed) - 1.0f);   // fb554
+                    if (r.pol == 2)   // tp96 — Bi: a signed swing
+                    { bool sl; mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyPolarity ((int) wc::ModSource::FollowA + (r.src - wc::kFollowSrcBase), 2, lv, sl), r.depth); continue; }
                     const auto& diF = wc::kDestInfo[r.dest];
                     if (diF.domain == wc::ModDomain::Linear01)
                     {
@@ -11310,6 +11314,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     //  Linear01 knob rather than offsetting it.
                     const float lv = wc::applyModCurve (mcSet, r.curve, (int) wc::ModSource::Note,
                                           noteVis_.load (std::memory_order_relaxed) - 1.0f);
+                    if (r.pol == 2)   // tp96 — Bi: a signed swing
+                    { bool sl; mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyPolarity ((int) wc::ModSource::Note, 2, lv, sl), r.depth); continue; }
                     const auto& diN = wc::kDestInfo[r.dest];
                     if (diN.domain == wc::ModDomain::Linear01)
                     {
@@ -11323,8 +11329,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 }
                 if (r.src == wc::kVelSrc)   // fb263 — VELOCITY at block-rate: reaches Level/Pan/Res/FX/macros (global, most-active voice). Fixes velocity→Volume being a silent no-op (viz moved, no audio).
                 {
-                    mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
-                                          wc::applyModCurve (mcSet, r.curve, (int) wc::ModSource::Velocity, velGlobal_), r.depth);   // fb554
+                    bool sl; mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
+                                          wc::applyPolarity ((int) wc::ModSource::Velocity, r.pol,   // tp96
+                                              wc::applyModCurve (mcSet, r.curve, (int) wc::ModSource::Velocity, velGlobal_), sl), r.depth);   // fb554
                     continue;
                 }
                 if (const int p2 = wc::phase2SourceForWire (r.src); p2 >= 0)
@@ -11337,14 +11344,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     else if (p2 == (int) wc::ModSource::Bend)          v = globalSrc_.bend.load (std::memory_order_relaxed);
                     else if (wc::isRandModSource (p2))                 v = randSeedLive_.load (std::memory_order_relaxed) ? wc::randForRoute (randSeedVis_.load (std::memory_order_relaxed), r.dest, wc::randIndexOf (p2)) : 0.0f;   // fb572 — this route's own draw from the most-active note
                     else if (p2 == (int) wc::ModSource::Alt)           v = altVis_.load (std::memory_order_relaxed);
-                    mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyModCurve (mcSet, r.curve, p2, v), r.depth);
+                    bool sl; mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyPolarity (p2, r.pol, wc::applyModCurve (mcSet, r.curve, p2, v), sl), r.depth);   // tp96
                     continue;
                 }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
                 const float master = *rpar (kLfoDepthIds[r.src]);   // per-LFO MASTER ring (same law as the matrix merge below)
-                mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
+                bool slL; mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
+                                                          wc::applyPolarity (r.src, r.pol,   // tp96
                                                           wc::applyModCurve (mcSet, r.curve, r.src,
-                                                              flowLfo_[r.src].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + lfoAmt[r.src])), r.depth * master);   // fb245 — LfoAmt now scales global dests too
+                                                              flowLfo_[r.src].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + lfoAmt[r.src])), slL), r.depth * master);   // fb245 — LfoAmt now scales global dests too
             }
         }
         { // ZPROBE-ENV log
@@ -12126,13 +12134,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                         const int auxSI = wc::sourceForWire (r.aux);
                         synModCfg.assignments[na].auxSource = (wc::ModSource) (auxSI >= 0 ? auxSI : 0);
                         synModCfg.assignments[na].useAux    = (auxSI >= 0);
+                        synModCfg.assignments[na].pol       = r.pol;      // tp96
+                        synModCfg.assignments[na].auxInv    = r.auxInv;
+                        synModCfg.assignments[na].auxCrv    = r.auxCrv;
                     }
                     if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — envelope source
                     {
                         synModCfg.assignments[na].source  = wc::envSourceFor (r.src - wc::kEnvSrcBase + 1);
                         synModCfg.assignments[na].curve   = r.curve;   // fb554
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
-                        synModCfg.assignments[na].depth   = std::abs (r.depth);   // fb180 — envelope depth is MAGNITUDE (direction is always knob-is-the-peak; the inverted mode read as 'the sound comes back')
+                        synModCfg.assignments[na].depth   = r.pol == 2 ? r.depth : std::abs (r.depth);   // fb180 — envelope depth is MAGNITUDE (direction is always knob-is-the-peak; the inverted mode read as 'the sound comes back') · tp96 — a Bi route is a signed swing
                         synModCfg.assignments[na].enabled = true;
                         ++na; continue;
                     }
@@ -12142,7 +12153,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                         synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::FollowA + (r.src - wc::kFollowSrcBase));
                         synModCfg.assignments[na].curve   = r.curve;   // fb554
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
-                        synModCfg.assignments[na].depth   = std::abs (r.depth);
+                        synModCfg.assignments[na].depth   = r.pol == 2 ? r.depth : std::abs (r.depth);   // tp96
                         synModCfg.assignments[na].enabled = true;
                         ++na; continue;
                     }
@@ -12152,7 +12163,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                         synModCfg.assignments[na].source  = wc::ModSource::Note;
                         synModCfg.assignments[na].curve   = r.curve;
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
-                        synModCfg.assignments[na].depth   = std::abs (r.depth);
+                        synModCfg.assignments[na].depth   = r.pol == 2 ? r.depth : std::abs (r.depth);   // tp96
                         synModCfg.assignments[na].enabled = true;
                         ++na; continue;
                     }
@@ -17102,6 +17113,14 @@ void TerrainAudioProcessor::setSynthModMatrix (const juce::String& json)
             if (! lfoSrc && ! envSrc && ! velSrc && ! folSrc && ! notSrc && ! p2Src) continue;
             if (r.dest < 0 || r.dest >= (int) wc::ModDest::NumDests) continue;
             r.depth = juce::jlimit (-1.0f, 1.0f, r.depth);
+            {   // tp96 — the matrix page's Pro columns. ABSENT = the pre-tp96 route, bit for bit: pl 0 (the source's own
+                //  polarity), no invert, a straight aux, Output 100 %. Output is a static trim, so it folds into the depth
+                //  here, once, instead of costing a multiply at every one of the evaluators.
+                r.pol    = juce::jlimit (0, 2, (int) item.getProperty ("pl", 0));
+                r.auxInv = ((int) item.getProperty ("ai", 0)) != 0;
+                r.auxCrv = juce::jlimit (-1.0f, 1.0f, (float) (double) item.getProperty ("ac", 0.0));
+                r.depth *= juce::jlimit (0.0f, 1.0f, (float) (double) item.getProperty ("o", 1.0));
+            }
             if (parsed.size() < (size_t) wc::MAX_ASSIGNMENTS) parsed.push_back (r);
         }
     }

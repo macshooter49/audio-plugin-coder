@@ -3633,8 +3633,8 @@ class SynthVoice : public juce::SynthesiserVoice
                         //  aux "Scale by" scales it exactly as the main pass below does.
                         bool ok2 = true; const float sv2 = sourceValueOf (sI, lfoPk, ok2, (int) as.dest); if (! ok2) continue;
                         float d2 = as.depth;
-                        if (as.useAux) { bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA, (int) as.dest + wc::kRandAuxDestBias); if (okA) d2 *= wc::sourceTo01 ((int) as.auxSource, av); }
-                        amt[dI - (int) wc::ModDest::LfoAmt1] += sv2 * d2;
+                        if (as.useAux) { bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA, (int) as.dest + wc::kRandAuxDestBias); if (okA) d2 *= wc::auxScale (wc::sourceTo01 ((int) as.auxSource, av), as.auxCrv, as.auxInv); }   // tp96 — bent · inverted
+                        bool slA; amt[dI - (int) wc::ModDest::LfoAmt1] += wc::applyPolarity (sI, as.pol, sv2, slA) * d2;   // tp96
                     }
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                 }
@@ -3660,7 +3660,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     if (as.useAux)
                     {   // "Scale by": the aux source's 0..1 value scales the DEPTH, whatever the main family's law
                         bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA, (int) as.dest + wc::kRandAuxDestBias);
-                        if (okA) asDepth *= wc::sourceTo01 ((int) as.auxSource, av);
+                        if (okA) asDepth *= wc::auxScale (wc::sourceTo01 ((int) as.auxSource, av), as.auxCrv, as.auxInv);   // tp96 — bent · inverted
                     }
                     // fb554 — THE CONNECTION CURVE, applied here and nowhere else. This is the last
                     //  line before srcV fans out into the ownership laws, the semitone sums and the
@@ -3669,11 +3669,14 @@ class SynthVoice : public juce::SynthesiserVoice
                     if (as.curve >= 0)
                         srcV = wc::applyModCurve (modCurves_ != nullptr ? modCurves_->load (std::memory_order_acquire) : nullptr,
                                                   as.curve, sI, srcV);
+                    /* tp96 — POLARITY, after the curve and before the family laws fan out. `shapeLaw` is false for a Bi
+                       envelope / follower / key route: it swings around the knob instead of owning it. */
+                    bool shapeLaw = true; srcV = wc::applyPolarity (sI, as.pol, srcV, shapeLaw);
                     // fb183 — env→LEVEL is OWNERSHIP, not offset: depth crossfades the knob
                     // toward the envelope's own shape (eff = (1−Σd)·knob + Σd·env). At 100%
                     // the shape IS the level — knob anywhere, Serum's level-down pluck included.
                     // Per-voice: each note plucks its OWN level (the mono-tap ghost is dead).
-                    if (wc::isShapeModSource (sI)   // fb552 — a FOLLOWER owns Level exactly like an env: this line is the reel (the noise plucking Osc A's volume)
+                    if (shapeLaw   // fb552 — a FOLLOWER owns Level exactly like an env: this line is the reel (the noise plucking Osc A's volume) · tp96 — unless it is a Bi route
                         && (int) as.dest >= (int) wc::ModDest::LevelA
                         && (int) as.dest <= (int) wc::ModDest::LevelD)
                     {
@@ -3686,7 +3689,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     // fb188 — same OWNERSHIP law for the voice-evaluated wavetable trio
                     // (Frame/Warp/Fold, all four oscs). Semitone dests (Coarse/Cut) stay
                     // offset; LfoAmt stays multiplicative.
-                    if (wc::isShapeModSource (sI))   // fb552 — and the wavetable trio the same way
+                    if (shapeLaw)   // fb552 — and the wavetable trio the same way · tp96 — unless Bi
                     {
                         int vi = -1;
                         switch (as.dest)
@@ -6602,8 +6605,15 @@ class SynthVoice : public juce::SynthesiserVoice
                             if (! okc) continue;
                             if (as.curve >= 0)
                                 sv = wc::applyModCurve (modCurves_ != nullptr ? modCurves_->load (std::memory_order_acquire) : nullptr, as.curve, sIdx, sv);
+                            { bool slC; sv = wc::applyPolarity (sIdx, as.pol, sv, slC); }   // tp96
+                            /* 🚨 tp96 — THE AUX NEVER REACHED THE CUTOFF. "Scale by" was applied in the matrix prelude, but LFO→cutoff
+                               is summed HERE, per sample, from as.depth — so an LFO on the cutoff scaled by velocity (the matrix
+                               page's very first example route) moved exactly as far on every note. It is scaled here now. */
+                            float dC = as.depth;
+                            if (as.useAux) { bool okAC = true; const float avC = sourceValueOf ((int) as.auxSource, lfoOut_, okAC, (int) as.dest + wc::kRandAuxDestBias);
+                                             if (okAC) dC *= wc::auxScale (wc::sourceTo01 ((int) as.auxSource, avC), as.auxCrv, as.auxInv); }
                             const wc::DestInfo& info = wc::kDestInfo[(int) as.dest];
-                            const float contrib = wc::routeContribution (info, sv, as.depth);
+                            const float contrib = wc::routeContribution (info, sv, dC);
                             if      (as.dest == wc::ModDest::Cut1) lfoSemis1 += contrib;
                             else if (as.dest == wc::ModDest::Cut2) lfoSemis2 += contrib;
                         }

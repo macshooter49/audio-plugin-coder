@@ -4402,6 +4402,134 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 }
 #mod-panel.open { display: flex; }
 
+/* ═══ tp96 — THE MOD PAGE: the approved mockup (Design/mod-matrix-mockup.html), wired. Every rule is the mockup's own,
+   scoped to #mm so nothing here can reach the preset browser it borrows its chassis from. Max's review, applied:
+   the play strip is gone (the plugin plays from the DAW) · a selected row's words are WHITE, not purple · the purple
+   (the Out meter, the live dot, a source's level bar) is strict purple with NO glow · INV sits dead centre · the
+   routes view draws the PATCHER's own cables (no dotted lines) and scrolls. ═══ */
+#mod-panel.open { position:absolute; left:0; right:0; top:44px; bottom:0; height:auto; width:auto; border-top:none; background:transparent; }
+#mod-panel .lfo-column { display:none !important; }   /* the pre-tp96 three-LFO panel: retired from view, its code left alone */
+#mm{position:absolute;inset:0;display:flex;flex-direction:column;color:var(--text-primary);font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;font-variant-numeric:tabular-nums;user-select:none;-webkit-user-select:none;}
+#mm .tb{height:38px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--menu-line);flex:none;}
+#mm .sw{position:relative;flex:0 0 200px;}
+#mm .sw::before{content:'';position:absolute;left:1px;top:50%;transform:translateY(-50%);width:11px;height:11px;border:1.5px solid var(--text-secondary);border-radius:50%;pointer-events:none;}
+#mm .sw::after{content:'';position:absolute;left:10px;top:calc(50% + 4px);width:4px;height:1.5px;background:var(--text-secondary);transform:rotate(45deg);pointer-events:none;}
+#mm .search{width:100%;height:26px;border:none;border-radius:5px;padding:0 8px 0 21px;font-size:11.5px;background:transparent;color:var(--text-primary);outline:none;font-family:inherit;}
+#mm .search::placeholder{color:var(--text-muted);}
+#mm .count{font-size:10px;color:var(--text-soft);white-space:nowrap;margin:0 10px 0 4px;width:92px;}
+#mm .count b{color:var(--text-primary);font-weight:500;}
+#mm .grp{display:flex;gap:4px;margin-left:8px;}
+#mm .ibtn{width:26px;height:26px;border:none;border-radius:5px;background:transparent;color:var(--text-soft);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:color .15s,box-shadow .15s;}
+#mm .ibtn:hover{color:var(--text-primary);box-shadow:inset 0 0 0 1px var(--edge-soft);}
+#mm .ibtn svg{width:15px;height:15px;}
+#mm .sp{flex:1;}
+#mm .lk{font-size:9.5px;color:var(--purple-400);font-weight:500;width:44px;text-align:right;margin-right:4px;}
+#mm .tp-chip{padding:4px 9px;border:1px solid var(--edge-soft);border-radius:4px;background:transparent;font-size:9.5px;font-weight:500;color:var(--text-soft);cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap;line-height:1.2;flex:none;font-family:inherit;}
+#mm .tp-chip:hover{color:var(--text-primary);}
+#mm .tp-chip.active{background:transparent;border-color:var(--purple-400);color:var(--on-fg);}
+#mm .hd{flex:none;display:flex;align-items:center;gap:5px;height:24px;padding:0 14px;border-bottom:1px solid var(--menu-line);font-size:10px;font-weight:500;color:var(--text-soft);}
+#mm .hd span{white-space:nowrap;overflow:hidden;}
+#mm .hd span[data-sort]{cursor:pointer;display:flex;align-items:center;gap:4px;}
+#mm .hd span[data-sort]:hover{color:var(--purple-400);}
+#mm .hd span[data-sort].on{color:var(--text-primary);}
+#mm .hd span[data-sort] i{font-style:normal;font-size:8px;color:var(--purple-400);opacity:0;}
+#mm .hd span[data-sort].on i{opacity:1;}
+#mm .list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;outline:none;position:relative;}
+#mm .list::-webkit-scrollbar{width:0;height:0;display:none;}
+#mm .tp-row{display:flex;align-items:center;gap:5px;height:26px;padding:0 14px;cursor:default;transition:background .08s;}
+#mm .tp-row:hover{background:rgba(127,127,160,0.07);}
+#mm .tp-row.sel .mv-c .t{color:#fff;}   /* Max: "the letter should be white, not purple" */
+#mm .tp-row.off{display:none;}
+#mm .tp-row.byp .c-am,#mm .tp-row.byp .c-d,#mm .tp-row.byp .c-s,#mm .tp-row.byp .c-o,#mm .tp-row.byp .pro{opacity:.35;}
+#mm .tp-row.drag{background:rgba(127,127,160,0.10);}
+#mm .tp-row.addr{color:rgba(255,255,255,.34);font-size:9.5px;letter-spacing:.5px;cursor:pointer;}
+#mm .tp-row.addr:hover{color:rgba(255,255,255,.86);}
+#mm-empty{padding:60px 30px;text-align:center;color:var(--text-secondary);font-size:11px;line-height:1.7;}
+#mm-empty b{display:block;color:var(--text-primary);font-weight:500;margin-bottom:2px;}
+/* the columns — ONE width per lane, shared by the header and every row (a name can never move a lane) */
+#mm .c-g{width:12px;flex:none;cursor:grab;text-align:center;letter-spacing:2px;color:rgba(255,255,255,.30);font-size:10px;}
+#mm .c-b{width:14px;flex:none;display:flex;justify-content:center;}
+#mm .c-s{width:96px;flex:none;}
+#mm-hd .c-s,#mm-hd .c-d,#mm-hd .c-ax{padding-left:11.7px;box-sizing:border-box;}   /* the header word over the ROW's word, not its ‹ (measured) */
+#mm .c-cv,#mm .c-acv{width:30px;flex:none;}
+#mm .c-am{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;}
+#mm .c-am .tr{flex:1;min-width:0;}
+#mm .c-am .vl,#mm .c-out .vl{width:30px;flex:none;text-align:right;font-size:9px;color:rgba(255,255,255,.90);font-weight:500;font-variant-numeric:tabular-nums;}
+#mm .c-am .pd{width:3px;flex:none;display:grid;}
+#mm .c-po{width:36px;flex:none;}
+#mm .c-d{width:128px;flex:none;}
+#mm .c-o{width:44px;flex:none;}
+#mm .c-ax{width:98px;flex:none;}
+#mm .c-in{width:32px;flex:none;}
+#mm .c-out{width:70px;flex:none;display:flex;align-items:center;gap:5px;}
+#mm .c-out .tr{flex:1;min-width:0;}
+#mm .c-x{width:16px;flex:none;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);cursor:pointer;}
+#mm .c-x:hover{color:#fff;}
+#mm.basic .pro{display:none!important;}
+#mm.basic .c-s{width:170px;} #mm.basic .c-d{width:200px;} #mm.basic .c-o{width:80px;}
+#mm:not(.basic) .c-am .pd{display:none;}
+/* the .ti-card kit, verbatim, scoped: the slider, the stepped select, the toggle pill, the slot dot, the lamp */
+#mm .tr{position:relative;height:16px;width:100%;cursor:ew-resize;}
+#mm .tr::before{content:'';position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,0.16);}
+#mm .tr u{position:absolute;left:50%;top:50%;width:1px;height:7px;transform:translate(-50%,-50%);background:rgba(255,255,255,0.28);pointer-events:none;}
+#mm .tr i{position:absolute;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,.92);pointer-events:none;}
+#mm .tr b{position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#fff;transform:translate(-50%,-50%);pointer-events:none;}
+#mm i.lv{background:#B794FF!important;box-shadow:none!important;}   /* Max: "strict purple … no glow" */
+#mm .step{position:relative;width:100%;height:18px;border:1px solid rgba(255,255,255,.18);border-radius:6px;font-size:7.5px;letter-spacing:.2px;color:rgba(255,255,255,.88);white-space:nowrap;transition:border-color .15s;}
+#mm .step:hover{border-color:rgba(255,255,255,.50);}
+#mm .step em{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-style:normal;pointer-events:none;padding:0 4px;overflow:hidden;}
+#mm .step select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}
+#mm .tog{height:18px;border:1px solid rgba(255,255,255,.20);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  font-size:6.5px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.72);transition:color .15s,border-color .15s;
+  padding-left:1px;}   /* the 1 px letter-spacing trails the last letter: the same 1 px ahead of it puts the WORD dead centre (measured) */
+#mm .tog:not(.off){border-color:rgba(255,255,255,.85);color:#fff;}
+#mm .tog.off{color:rgba(255,255,255,.38);}
+#mm .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px;cursor:pointer;}
+#mm .sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26);transition:background .12s,border-color .12s;}
+#mm .sd:hover i{border-color:rgba(255,255,255,.55);}
+#mm .sd.on i{background:rgba(255,255,255,.92);border-color:transparent;}
+#mm .fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14);}
+#mm .fleds i.on{background:#B794FF;}
+/* the chip grammar (#mod-engine .mv-c), scoped */
+#mm .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:var(--ghost);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);min-width:0;width:100%;}
+#mm .mv-c:hover{color:#fff;}
+#mm .mv-c .ar{font-size:8px;opacity:.55;flex:none;padding:0 1px;}
+#mm .mv-c .ar:hover{opacity:1;}
+#mm .mv-c svg.chev{width:8px;height:8px;opacity:.6;flex:none;}
+#mm .mv-c .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;}
+#mm .mv-c .sc{flex:none;margin-left:auto;color:rgba(255,255,255,.26);font-size:8px;letter-spacing:0;}
+#mm .mv-c.none .t{color:rgba(255,255,255,.30);}
+/* the CRV box — the Shaper screen at CRV size */
+#mm .crv{position:relative;height:16px;width:100%;border-radius:4px;background:#0F0F1C;border:1px solid rgba(255,255,255,.06);overflow:hidden;cursor:ns-resize;touch-action:none;}
+#mm .crv svg{position:absolute;inset:0;width:100%;height:100%;display:block;}
+#mm .crv .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.2;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85));}
+#mm .crv.lin .mv-stroke{stroke:rgba(236,232,242,.45);filter:none;}
+#mm .crv.dim{opacity:.35;pointer-events:none;}
+/* THE ROUTES VIEW — the Patcher's own cables. It scrolls (trackpad, or drag the empty space) and moves only when a
+   source is moving: no dash crawl, no glow, one class flip when a source goes live. */
+#mm-rv{position:absolute;inset:0;display:none;overflow-y:auto;scrollbar-width:none;cursor:grab;}
+#mm-rv::-webkit-scrollbar{width:0;height:0;display:none;}
+#mm-rv.grabbing{cursor:grabbing;}
+#mm.routes #mm-rv{display:block;} #mm.routes .hd,#mm.routes #mm-rows,#mm.routes #mm-empty{display:none;}
+#mm-rv .rv-in{position:relative;width:100%;}
+#mm-rv svg{position:absolute;left:0;top:0;width:100%;overflow:visible;pointer-events:none;}
+#mm-rv .src{position:absolute;left:18px;width:104px;height:26px;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,255,255,.72);
+  border:1px solid rgba(255,255,255,.18);border-radius:6px;background:rgba(22,20,34,.6);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 6px;}
+#mm-rv .src i{position:absolute;left:0;bottom:0;height:2px;background:#B794FF;}
+#mm-rv .gbox{position:absolute;right:18px;width:230px;padding:9px 10px 5px;border:1px solid rgba(255,255,255,.15);border-radius:9px;}
+#mm-rv .gbl{position:absolute;top:-4px;left:50%;transform:translateX(-50%);font-size:6px;letter-spacing:1.6px;text-transform:uppercase;line-height:8px;color:rgba(255,255,255,.92);background:#1C1A2C;padding:0 6px;white-space:nowrap;pointer-events:none;}
+#mm-rv .dr{height:18px;display:flex;align-items:center;justify-content:space-between;font-size:9px;letter-spacing:1.1px;font-weight:300;color:rgba(255,255,255,.72);white-space:nowrap;}
+#mm-rv .dr .t{overflow:hidden;text-overflow:ellipsis;min-width:0;}
+#mm-rv .dr .v{flex:none;font-size:8px;color:rgba(255,255,255,.40);letter-spacing:0;width:34px;text-align:right;}
+#mm-rv .cable .core{fill:none;stroke:#ECE8F2;stroke-width:1.3;stroke-linecap:round;opacity:.5;transition:opacity .2s;}   /* #tp-page .tp-cables .cable .core, verbatim */
+#mm-rv .cable.m .core{stroke-width:1;}
+#mm-rv .cable.hot .core{opacity:.85;}
+#mm-rv .cable.sel .core{stroke:#fff;stroke-width:2;opacity:1;}
+#mm-rv .cable.byp .core{opacity:.2;}
+#mm-rv .cable .hit{pointer-events:stroke;stroke:transparent;stroke-width:12;fill:none;cursor:pointer;}
+#mm-rv .hint{position:sticky;bottom:10px;text-align:center;font-size:9.5px;color:rgba(255,255,255,.34);pointer-events:none;}
+
+
 .lfo-column {
   flex: 1;
   display: flex;
@@ -33983,6 +34111,13 @@ restoreThemeFromBackend();
       if(a.curve&&a.pts&&window.__crvUtil) o.p=window.__crvUtil.packPts(a.pts);   /* fb573 — the points + per-point mods, beside the base bake */
       if(a.byp) o.b=1;                    /* fb563 (3) — bypassed: stays in the list, the processor skips it */
       if(a.aux) o.x=encodeSrc(a.aux);     /* fb563 (3) — "Scale by": the aux source, same codec */
+      /* tp96 — the MOD page's Pro columns. Each is written ONLY when it differs from the pre-tp96 route, so a patch
+         nobody touched serialises byte-identically and the C++ reads "absent" as exactly the old behaviour. */
+      if(a.pol) o.pl=a.pol;                                        /* 1 = Uni · 2 = Bi (0 = the source's own) */
+      if(a.ainv) o.ai=1;                                           /* aux inverted */
+      if(a.acrv) o.ac=+(+a.acrv).toFixed(3);                       /* aux bend −1..+1 */
+      if(a.out!=null&&+a.out<1) o.o=+(+a.out).toFixed(4);          /* Output trim 0..1 */
+      if(a.crv) o.cb=+(+a.crv).toFixed(3);                         /* the source bend the CRV box drew (its points ride `c`) */
       return o; });   /* fb178 — env sources ride 100+ · fb552 — followers ride 210+ (== wc::kFollowSrcBase) */
     if(pushFn)try{ pushFn(JSON.stringify(arr)); }catch(e){} }
 
@@ -34234,7 +34369,38 @@ restoreThemeFromBackend();
   function addFollowAssign(k,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].fol===k&&assigns[i].dest===dest) return;
     if(assigns.length>=128)return; var a={fol:k,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function markTargets(){ if(__tiBatchDepth){ __tiMarkDirty=true; return; }   /* tp19 */
-    document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
+    document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); });
+    /* tp96 — the MOD page mirrors this list; every change anywhere (a knob drop, a restore, the dice) reaches it through ONE event */
+    try{ window.dispatchEvent(new Event('smchange')); }catch(e){} }
+  /* ═══ tp96 — THE MOD PAGE'S DOOR INTO THE ONE MATRIX ════════════════════════════════════════════════════
+     The matrix page edits `assigns` — the SAME list the knobs' drag-to-assign, the underlines and the patch state
+     use — so a route made on a knob appears on the page and a route made on the page draws its underline. It never
+     keeps a second copy (fb524's law). */
+  window.__mmApi={
+    list:function(){ return assigns; },
+    add:function(S,dest){ var a=addRoute(S,dest,elForDest(dest)); lastLocalEdit=Date.now(); if(a){ markTargets(); push(); } return a; },
+    remove:function(a){ lastLocalEdit=Date.now(); removeAssign(a); },
+    commit:function(){ lastLocalEdit=Date.now(); markTargets(); push(); },
+    decode:decodeSrc, encode:encodeSrc, srcKey:srcKey, srcOf:srcOf, srcTag:srcTag,
+    batch:function(f){ window.__tiBatchBegin(); try{ f(); } finally { window.__tiBatchEnd(); } },
+    /* a continuous drag (amount, output, a curve) saves without re-walking every underline each frame */
+    save:function(){ lastLocalEdit=Date.now(); push(); },
+    srcName:function(S){ return srcName(S); },
+    el:function(d){ return elForDest(d); },
+    paramOfDest:function(d){ for(var k in KNOBDEST){ if(KNOBDEST.hasOwnProperty(k)&&KNOBDEST[k]===d) return k; } return null; },
+    srcCats:function(mk){ return buildSrcCats(mk); },   /* the SAME families, names and order the knobs' pickers show */
+    /* the value the underline's comet draws for this source right now: 0..1, or −1 when nothing is sounding —
+       the one chain (p2v · Key · followers · velocity · env · LFO), read from the feed that is already arriving */
+    live:function(S,dest){ try{ var ra={}; for(var k in S) ra[k]=S[k]; ra.dest=dest|0;
+        var v=p2v(ra); if(v!=null) return v;
+        if(ra.note) return (window.__mvNote!=null)?window.__mvNote:-1;
+        if(ra.fol) return (window.__mvFol&&window.__mvFol[ra.fol-1]!=null)?window.__mvFol[ra.fol-1]:-1;
+        if(ra.vel) return (window.__mvVel!=null&&window.__mvVel>=0)?window.__mvVel:-1;
+        if(ra.env) return (mvE&&mvE[ra.env-1]!=null)?mvE[ra.env-1]:-1;
+        if(ra.lfo){ var lv=window.__mvLfoValAt?window.__mvLfoValAt(ra.lfo-1):null; if(lv==null) lv=(mvL&&mvL[ra.lfo-1]!=null)?mvL[ra.lfo-1]:null;
+                    if(lv==null) return -1; var e=window.__tiMot?window.__tiMot.e:1; return e>0.001?(lv+1)/2:-1; }
+      }catch(e){} return -1; }
+  };
   function routeFor(el){ var sm=window.__selMod||{}, first=null, hit=null;   /* fb188 — the underline's depth drag edits the SELECTED modulator's route here, else the first */
     assigns.forEach(function(a){ if(curEl(a)!==el)return; if(!first)first=a;
       if(srcKey(a)===srcKey(sm))hit=a; });   /* fb262 — velocity joins the selected-source test · fb552 followers too */
@@ -35220,13 +35386,15 @@ restoreThemeFromBackend();
         if(strict||(!badgeBusy&&(Date.now()-lastLocalEdit)>1500)){ var nc=null; if(o.c){ try{ nc=String(o.c).split(',').map(Number); }catch(e){} }
           ex.curve=nc; ex.pts=(o.p&&window.__crvUtil)?o.p.map(window.__crvUtil.unpackPt):null;   /* fb573 */
           if(o.b) ex.byp=1; else delete ex.byp;
-          if(o.x!=null){ var X2=decodeSrc(o.x|0); if(X2) ex.aux=X2; else delete ex.aux; } else delete ex.aux; }
+          if(o.x!=null){ var X2=decodeSrc(o.x|0); if(X2) ex.aux=X2; else delete ex.aux; } else delete ex.aux;
+          ex.pol=o.pl|0; ex.ainv=o.ai?1:0; ex.acrv=+o.ac||0; ex.out=(o.o!=null)?+o.o:1; ex.crv=+o.cb||0; }   /* tp96 */
         return; }
       var a=srcOf(S); a.dest=dest; a.depth=(+o.v||srcDefaultDepth(S)); a.el=el;   /* fb563 — one shape for every family */
       if(o.c){ try{ a.curve=String(o.c).split(',').map(Number); }catch(e){} }   /* fb554 */
       if(o.p&&window.__crvUtil){ try{ a.pts=o.p.map(window.__crvUtil.unpackPt); }catch(e){} }   /* fb573 */
       if(o.b) a.byp=1;                                                          /* fb563 (3) */
       if(o.x!=null){ var X=decodeSrc(o.x|0); if(X) a.aux=X; }
+      a.pol=o.pl|0; a.ainv=o.ai?1:0; a.acrv=+o.ac||0; a.out=(o.o!=null)?+o.o:1; a.crv=+o.cb||0;   /* tp96 */
       assigns.push(a); });
       if(live&&(strict||(!badgeBusy&&(Date.now()-lastLocalEdit)>1500)))
         for(var q=assigns.length-1;q>=0;q--){ var aq=assigns[q];
@@ -45575,5 +45743,381 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
 </script>
 
 
+<script>
+
+/* ═══ tp96 — THE MOD PAGE (the approved mockup, Design/mod-matrix-mockup.html, WIRED) ═══════════════════════════════
+   Max: "This is absolutely perfect … I want this to be wired in … it needs to look exactly like this … it needs to
+   replace the main mod page." The page is a VIEW over the ONE matrix (`assigns`, through window.__mmApi): a route
+   made on a knob appears here, a route made here draws its underline, and both are the patch.
+   Pickers are the house two-pane browser (window.openTwoPaneBrowser); menus are the house .pmenu glass.
+   CPU: nothing runs while the page is closed. Open, it rides the shared frame dispatcher and writes to the DOM only
+   when a number actually changed; the routes view flips a class when a source goes live and nothing else. */
+(function(){
+  if(window.__cardOnly) return;
+  var MM=null, ROWS=null, ADDR=null, API=function(){ return window.__mmApi; };
+  function C01(n){ return Math.max(0,Math.min(1,n)); }
+  function el(html){ var t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+  function EA(list,f){ Array.prototype.forEach.call(list,f); }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  var X_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg>';
+  var CHEV='<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  /* TIC.dragify, verbatim */
+  function dragify(elm,o){ var dn=false,s0=0,n0=0,moved=false,lastDragUp=0;
+    elm.addEventListener('pointerdown',function(e){ if(e.button!==0)return; dn=true; moved=false; s0=(o.axis==='x')?e.clientX:e.clientY; n0=o.get();
+      try{ elm.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); e.stopPropagation(); if(o.start) o.start(); });
+    elm.addEventListener('pointermove',function(e){ if(!dn)return; var d=(o.axis==='x')?(e.clientX-s0):(s0-e.clientY); if(Math.abs(d)>2)moved=true;
+      var sp=(typeof o.span==='function')?o.span():(o.span||140); o.set(C01(n0+d/sp)); });
+    function up(){ if(dn&&moved)lastDragUp=Date.now(); if(dn&&o.end) o.end(); dn=false; }
+    elm.addEventListener('pointerup',up); elm.addEventListener('pointercancel',up);
+    elm.addEventListener('dblclick',function(e){ if(Date.now()-lastDragUp<400)return; if(o.reset!=null){ o.set(o.reset); if(o.end) o.end(); } e.preventDefault(); e.stopPropagation(); }); }
+
+  /* ═══ THE CATALOGUE — every destination the matrix can reach, by its real ModDest int (SynthModConfig.h /
+     KNOBDEST). Instance 1 of every rack device and flow card keeps its legacy ints; the Patcher's extra copies
+     are FX instances 2..6 (fxId) and flow instances 2..4 (flowInstDest). ═══ */
+  var DST={}, DCATS=[];
+  function cat(label){ var c={label:label,items:[]}; DCATS.push(c); return c; }
+  function addD(c,id,mod,name,hint){ var d=DST[id]; if(!d){ d={id:id,name:name,mod:mod,cat:c.label,full:(mod?mod+' ':'')+name}; DST[id]=d; } c.items.push({d:d,hint:hint||null}); return d; }
+  var OSCF=[['Level',64],['Pan',68],['Coarse',42],['Oct',288],['Semi',292],['Cent',296],['WT Pos',[2,9,26,29]],['Warp',[3,10,27,30]],['Warp 2',300],['Fold',[4,11,28,31]],
+    ['Blur',284],['Spectral',280],['Spec Low',1846],['Spec High',1850],['Detune',304],['Blend',308],['Width',312],['Voices',354],['Uni Range',1854],['Uni Warp',1858],
+    ['Warp Var',1862],['Warp 2 Var',1866],['Phase',1870],['Phase Amt',1874],['Sub',46],['Heat',50],['Sub Oct',346],['Sub Shape',350],['F1 Send',358],['F2 Send',362]];
+  var ENGF=[['Sample',[['Scan',92],['Stretch',96],['Formant',100],['Air',104],['Spray',108],['Xfade',112]]],
+    ['Granular',[['Position',116],['Density',120],['Size',124],['Pitch',128],['Spray',132],['P-Spray',136],['Shape',140],['Skew',144],['Width',148],['Scan',152],['Key',332],['Direction',336]]],
+    ['Resynth',[['Quality',156],['Formant',160],['Tilt',164],['Silt',168],['Position',172],['Fracture',176],['Creep',180],['Cut',184],['Distill',188],['Fossil',192],['Haze',196],['Sieve',200]]],
+    ['FM',[['Strike',204],['Age',208],['Rust',212],['Gale',216],['Bend',220],['Storm',224],['Feedback',228],['Ratio 1',316],['Depth 1',320],['Ratio 2',324],['Depth 2',328]]],
+    ['Harmonic',[['Hue',232],['Count',236],['Lean',240],['Fan',244],['Grit',248],['Braid',252],['Carve',256],['Churn',260],['Root',264],['Shine',268],['Wilt',272],['Fizz',276]]]];
+  var BANK2=window.OSCBANK2_BASE||1890;
+  'ABCDEFGH'.split('').forEach(function(L,oi){
+    var c=cat('Osc '+L), ix=oi%4, bank=oi>=4?BANK2:0, mod='Osc '+L;
+    OSCF.forEach(function(f){ var id=(Array.isArray(f[1])?f[1][ix]:f[1]+ix)+bank; addD(c,id,mod,f[0]); });
+    for(var q=0;q<4;q++) addD(c,76+ix*4+q+bank,mod,'Blend '+(q+1),'Blend');
+    ENGF.forEach(function(g){ g[1].forEach(function(p){ addD(c,p[1]+ix+bank,mod,p[0],g[0]); }); }); });
+  (function(){ var c=cat('Noise'); [['Level',72],['Scan',73],['Pan',74],['Width',75]].forEach(function(p){ addD(c,p[1],'Noise',p[0]); }); })();
+  [0,1].forEach(function(f){ var c=cat('Filter '+(f+1)), m='Filter '+(f+1);
+    [['Cutoff',0],['Res',54],['Env',56],['Drive',58],['Post Drive',60],['Mix',62],['Vel',340],['Track',342],['Spread',344]].forEach(function(p){ addD(c,p[1]+f,m,p[0]); }); });
+  (function(){ var c=cat('Envelopes'); for(var n=1;n<=5;n++) ['Delay','Attack','Hold','Decay','Sustain','Release'].forEach(function(p,k){ addD(c,481+(n-1)*6+k,'Env '+n,p,'Env '+n); }); })();
+  (function(){ var c=cat('LFOs'); for(var n=1;n<=10;n++){ addD(c,673+n-1,'LFO '+n,'Rate','LFO '+n); addD(c,12+n-1,'LFO '+n,'Amount','LFO '+n); addD(c,683+n-1,'LFO '+n,'Phase','LFO '+n); } addD(c,5199,'LFO','Global Rate'); })();
+  (function(){ var c=cat('Macros'); for(var n=1;n<=9;n++) addD(c,1878+n-1,'',(window.__macroName&&window.__macroName(n))||('Macro '+n)); })();
+  var FXK=[['Reverb',['Size','Decay','Tone','Mix','Pre-Delay','Diffuse','Mod Depth','Mod Rate','Hi Damp','Low Decay','Low Cut','Width']],
+    ['Delay',['Time','Feedback','Tone','Mix','Low Cut','Hi Cut','Spread','Width','Mod Rate','Mod Depth',null,'Time R']],
+    ['Saturate',['Drive','Morph','Tone','Mix','Back 1','Back 2','Back 3','Back 4','Back 5','Back 6','Back 7','Back 8']],
+    ['Granular FX',['Density','Size','Decay','Mix','Scan','Window','Spray','Pitch','Detune','Shape','Width','Freeze']],
+    ['Tape',['Wow','Sat','Hiss','Mix','Time','Repeats','Drive','Age','Flutter','Bump','Width','Duck']],
+    ['Filter FX',['Cutoff','Res','Drive','Mix']],
+    ['Chorus',['Rate','Depth','Feedback','Mix','Time','Detune','Width','Flutter','Drift','Colour','Low Keep','Phase']],
+    ['Flanger',['Rate','Depth','Feedback','Mix','Manual','Spread','Width','Damping','Shape','Bounce','Tail','Low Cut']],
+    ['Phaser',['Rate','Depth','Feedback','Mix','Center','Stages','Spread','Stereo','Touch','Lag','Floor','Color']],
+    ['Equalizer',['Slant','Air','Amount','Mix','Low Hz','Low','Body Hz','Body','Bite Hz','Bite','Reach','Trait']],
+    ['Widen',['Amount','Width','Rate','Mix','Voices','Spread','Offset','Roam','Low Keep','Tone','Feedback','Balance']],
+    ['Compress',['Push','Ratio','Lift','Mix','Attack','Release','Round','Hear Cut','Edge','Cling','Tie','Burn']],
+    ['OTT',['Amount','Chase','Top Lift','Mix','Low Cross','High Cross','Raise','Press','Grip','Bass','Mids','Treble']],
+    ['Bode',['Shift','Dir','Feedback','Mix','Fine','Spread','Time','Blur','Low Keep','Damping','Touch','Drift']],
+    ['Utility',['Gain','Image','Steer','Mix','Band 1','Band 2','Band 3','Band 4','Band 5','Band 6','Band 7','Band 8']],
+    ['Splitter',['Split','Balance','Spread','Mix','Band 1','Band 2','Band 3','Band 4','Band 5','Band 6','Band 7','Band 8']]];
+  function fxId(k,inst,knob){ return 694+(k*6+inst)*12+knob; }
+  (function(){ var c=cat('FX Rack'); FXK.forEach(function(f,k){ f[1].forEach(function(nm,kn){ if(nm) addD(c,fxId(k,0,kn),f[0]+' 1',nm,f[0]+' 1'); }); });
+    addD(c,1887,'Tape Machine','Knob 1','Tape'); addD(c,1888,'Tape Machine','Knob 2','Tape'); addD(c,1889,'Tape Machine','Knob 3','Tape'); })();
+  var FLOWD={ Arp:[['Swing',366],['Roll',367],['Timbre',368],['Glide',369],['Pitch Range',370],['Pitch Slide',373],['Gate Length',374],['Gate Random',376],
+      ['Velocity Range',378],['Velocity Random',380],['Octave Range',382],['Octave Random',384],['Mix',398]],
+    Glitch:[['Decay',434],['Drop',435],['Streak',436],['Stereo',437],['Bend',438],['Repeat Size',439],['Repeat Speed',440],['Reverse Length',443],
+      ['Tape Time',448],['Gate Rate',451],['Gate Amount',454],['Pitch Shift',455],['Crush Bits',459],['Crush Amount',462],['Freeze Size',463],['Scatter Amount',468],['Vary',23],['Traj',24],['Morph',25],['Mix',471]],
+    Shaper:[['Mix',433],['Rate',32],['Gate',33]] };
+  var FI_BASE=window.FLOWINST_BASE||3780, FI_SPAN=window.FLOW_SPAN||473, FI_T=window.FLOW_TIME_DEST||8;
+  function flowInst(inst,d){ return inst<=0?d:FI_BASE+(inst-1)*FI_SPAN+(d-FI_T); }
+  (function(){ var c=cat('Patcher');   /* the Patcher's extra nodes: rack devices 2..6 and flow cards 2..4 */
+    FXK.forEach(function(f,k){ for(var inst=1;inst<6;inst++) f[1].forEach(function(nm,kn){ if(nm) addD(c,fxId(k,inst,kn),f[0]+' '+(inst+1),nm,f[0]+' '+(inst+1)); }); });
+    ['Arp','Glitch','Shaper'].forEach(function(nm){ for(var inst=1;inst<4;inst++) FLOWD[nm].forEach(function(p){ addD(c,flowInst(inst,p[1]),nm+' '+(inst+1),p[0],nm+' '+(inst+1)); }); }); })();
+  (function(){ var c=cat('Samplers'); 'ABCD'.split('').forEach(function(L,ix){ ENGF[0][1].forEach(function(p){ addD(c,p[1]+ix,'Osc '+L,p[0],'Osc '+L+' · Sample'); });
+    ENGF[1][1].slice(0,4).forEach(function(p){ addD(c,p[1]+ix,'Osc '+L,p[0],'Osc '+L+' · Granular'); }); }); })();
+  (function(){ var c=cat('Shaper'); FLOWD.Shaper.forEach(function(p){ addD(c,p[1],'Shaper',p[0]); }); })();
+  (function(){ var c=cat('Arp'); FLOWD.Arp.forEach(function(p){ addD(c,p[1],'Arp',p[0]); }); })();
+  (function(){ var c=cat('Glitch'); FLOWD.Glitch.forEach(function(p){ addD(c,p[1],'Glitch',p[0]); }); })();
+  (function(){ var c=cat('Robin'); [['Vary',472],['Drift',473],['Wobble',474],['Level',475],['Pan',476],['After',477],['Glide',478],['Overlap',479],['Fade',480]].forEach(function(p){ addD(c,p[1],'Robin',p[0]); }); })();
+  (function(){ var c=cat('Resonator'); [['Structure',37],['Brightness',38],['Damping',39],['Position',40],['Mix',41]].forEach(function(p){ addD(c,p[1],'Resonator',p[0]); }); })();
+  (function(){ var c=cat('Global'); addD(c,5,'Global','Pitch'); addD(c,6,'Global','Level'); addD(c,7,'Global','Pan'); addD(c,5199,'LFO','Global Rate'); })();
+  var DST_ORDER=[]; DCATS.forEach(function(c){ c.items.forEach(function(it){ if(DST_ORDER.indexOf(it.d.id)<0) DST_ORDER.push(it.d.id); }); });
+  function dName(id){ var d=DST[id]; return d?d.full:('Dest '+id); }
+
+  /* ═══ SOURCES — the knobs' own families (buildSrcCats), so the two pickers can never disagree ═══ */
+  function srcList(){ var out=[]; try{ API().srcCats(function(S,name){ out.push({S:S,name:name}); return {name:name}; }); }catch(e){} return out; }
+  function sKey(S){ try{ return API().srcKey(S); }catch(e){ return '?'; } }
+  function sName(S){ try{ return API().srcName(S); }catch(e){ return '?'; } }
+  function scopeOf(S){ return (S.mac||S.whl||S.bend)?'G':'V'; }                 /* per-voice or global (the C++ passes) */
+  function naturalBi(S){ return !!(S.lfo||S.bend); }                          /* LFOs and bend swing; everything else pushes one way */
+  function polOf(a){ return a.pol?(a.pol===2?'bi':'uni'):(naturalBi(a)?'bi':'uni'); }
+  function srcOrderKey(S){ var L=srcList(), k=sKey(S); for(var i=0;i<L.length;i++) if(sKey(L[i].S)===k) return i; return 999; }
+
+  /* ═══ the bend — ONE law with the C++ (wc::modBend): u^(2^(2.6c)) ═══ */
+  function bendF(u,c){ u=C01(u); if(!c) return u; return Math.pow(u,Math.pow(2,c*2.6)); }
+  function bendPts(c){ var p=[]; for(var k=0;k<129;k++) p.push(bendF(k/128,c)); return p; }   /* the route's 129-point curve (fb554) */
+  function crvPath(fn){ var p='', n=16; for(var k=0;k<=n;k++){ var u=k/n, y=fn(u); p+=(k?'L':'M')+(1+u*26).toFixed(1)+' '+(14-C01(y)*12).toFixed(1); } return p; }
+
+  /* ═══ the house .pmenu (the mockup's builder over index.html's own .pmenu rules) ═══ */
+  var menuEl=null;
+  function closeMenu(){ if(menuEl&&menuEl.parentNode) menuEl.parentNode.removeChild(menuEl); menuEl=null; document.removeEventListener('pointerdown',menuOut,true); }
+  function menuOut(e){ if(menuEl&&!menuEl.contains(e.target)) closeMenu(); }
+  function vw(){ return window.__vw?window.__vw():window.innerWidth; } function vh(){ return window.__vh?window.__vh():window.innerHeight; }
+  function placeNear(m,r,w,h){ w=w||m.offsetWidth; h=h||m.offsetHeight; var z=window.__zoomFix||1;
+    var L=r.left/z, T=(r.bottom/z)+6; if(T+h>vh()-6) T=(r.top/z)-h-6;
+    m.style.left=Math.max(6,Math.min(vw()-w-6,L))+'px'; m.style.top=Math.max(6,Math.min(vh()-h-6,T))+'px'; }
+  function openMenu(rows,r,w){ closeMenu();
+    var m=document.createElement('div'); m.className='pmenu'; if(w){ m.style.maxWidth='none'; m.style.width=w+'px'; }
+    rows.forEach(function(q){ if(q.sec){ var h=document.createElement('div'); h.className='ps'; h.textContent=q.sec; m.appendChild(h); return; }
+      var d=document.createElement('div'); d.className='pi'+(q.cur?' cur':'')+(q.rose?' rose':'');
+      d.innerHTML='<span class="nm"></span>'+(q.ct?'<span class="ct">'+esc(q.ct)+'</span>':''); d.querySelector('.nm').textContent=q.label;
+      if(q.rose){ d.style.color='rgba(255,139,139,.78)'; d.addEventListener('mouseenter',function(){ d.style.color='#FF8B8B'; }); d.addEventListener('mouseleave',function(){ d.style.color='rgba(255,139,139,.78)'; }); }
+      d.addEventListener('click',function(e){ e.stopPropagation(); closeMenu(); try{ q.onPick(e,d); }catch(x){} }); m.appendChild(d); });
+    document.body.appendChild(m); menuEl=m; placeNear(m,r,w);
+    setTimeout(function(){ document.addEventListener('pointerdown',menuOut,true); },0); return m; }
+  function evAt(node){ var r=node.getBoundingClientRect(); return {clientX:r.left,clientY:r.bottom,target:node}; }
+  /* the house two-pane browser */
+  function pickSource(node,cur,onPick,noneRow,ph){ if(!window.openTwoPaneBrowser) return; closeMenu();
+    var cats=API().srcCats(function(S,name){ return {name:name,sel:!!(cur&&sKey(cur)===sKey(S)),pick:function(){ onPick(S); }}; }), oc;
+    cats.forEach(function(c,i){ if(c.items.some(function(it){ return it.sel; })) oc=i; });
+    if(noneRow) cats.push({label:'None',items:[{name:'No scaling',sel:!cur,pick:function(){ onPick(null); }}]});
+    window.openTwoPaneBrowser(evAt(node),{cats:cats,openCat:oc,searchPlaceholder:ph||'Search modulators…'}); }
+  function pickDest(node,cur,onPick){ if(!window.openTwoPaneBrowser) return; closeMenu();
+    var oc; var cats=DCATS.map(function(c,i){ return {label:c.label,items:c.items.map(function(it){ var d=it.d; if(d.id===cur&&oc==null) oc=i;
+      return {name:d.name,sub:it.hint||((c.label==='Envelopes'||c.label==='LFOs')?d.mod:null),sel:d.id===cur,pick:function(){ onPick(d.id); }}; })}; });
+    window.openTwoPaneBrowser(evAt(node),{cats:cats,openCat:oc,searchPlaceholder:'Search destinations…'}); }
+
+  /* ═══ THE ROWS — built once per route, painted surgically (nothing reflows when a name changes) ═══ */
+  var built=[], selA=null, sortKey=null, dragging=0;
+  function list(){ try{ return API().list(); }catch(e){ return []; } }
+  function save(){ try{ API().save(); }catch(e){} }
+  function commit(){ try{ API().commit(); }catch(e){} }
+  function crvBox(a,key){ var b=el('<div class="crv" title="Curve — drag up/down to bend · double-click = straight"><svg viewBox="0 0 28 16" preserveAspectRatio="none"><path class="mv-stroke"/></svg></div>');
+    function shapeFn(){ if(key==='crv'){ if(a.crv) return function(u){ return bendF(u,a.crv); };
+        if(a.curve&&a.curve.length>1){ var cv=a.curve; return function(u){ var x=u*(cv.length-1), i=Math.floor(x), f=x-i, j=Math.min(cv.length-1,i+1); return cv[i]+(cv[j]-cv[i])*f; }; } }
+      else if(a.acrv) return function(u){ return bendF(u,a.acrv); };
+      return function(u){ return u; }; }
+    function paint(){ b.querySelector('path').setAttribute('d',crvPath(shapeFn())); var lin=key==='crv'?(!a.crv&&!(a.curve&&a.curve.length>1)):!a.acrv; b.classList.toggle('lin',lin); }
+    dragify(b,{get:function(){ return ((key==='crv'?a.crv:a.acrv)||0)/2+0.5; },
+      set:function(n){ var c=Math.round((n*2-1)*100)/100; if(Math.abs(c)<0.03) c=0;
+        if(key==='crv'){ a.crv=c; if(c){ a.curve=bendPts(c); } else { a.curve=null; } a.pts=null; }   /* the bend REPLACES a drawn curve — the one the editor draws is the same slot */
+        else a.acrv=c;
+        paint(); paintBadge(a); save(); },span:90,reset:.5,end:commit});
+    paint(); b.__paint=paint; return b; }
+  function chip(kind,a){ var c=el('<span class="mv-c"><span class="ar">‹</span><span class="t"></span><span class="ar">›</span>'+CHEV+(kind==='s'?'<span class="sc pro"></span>':'')+'</span>');
+    var ars=c.querySelectorAll('.ar');
+    function setSrc(S){ var keep={dest:a.dest}; ['lfo','env','vel','note','fol','mac','whl','at','bend','rnd','alt'].forEach(function(k){ delete a[k]; });
+      for(var k in S) a[k]=S[k]; a.dest=keep.dest; }
+    function step(dir){ if(kind==='d'){ var ix=DST_ORDER.indexOf(a.dest); a.dest=DST_ORDER[(ix+dir+DST_ORDER.length)%DST_ORDER.length]; a.el=API().el(a.dest); }
+      else { var L=srcList(), cur=kind==='s'?a:a.aux, keys=L.map(function(o){ return sKey(o.S); });
+        if(kind==='a') keys.push('none');
+        var ix=cur?keys.indexOf(sKey(cur)):keys.length-1; ix=(ix+dir+keys.length)%keys.length;
+        if(kind==='a') a.aux=(keys[ix]==='none')?null:L[ix].S; else setSrc(L[ix].S); }
+      paint(a); commit(); }
+    ars[0].addEventListener('click',function(e){ e.stopPropagation(); step(-1); }); ars[1].addEventListener('click',function(e){ e.stopPropagation(); step(1); });
+    c.addEventListener('click',function(e){ e.stopPropagation(); select(a);
+      if(kind==='d') pickDest(c,a.dest,function(id){ a.dest=id; a.el=API().el(id); paint(a); commit(); });
+      else if(kind==='s') pickSource(c,a,function(S){ setSrc(S); paint(a); commit(); },false);
+      else pickSource(c,a.aux,function(S){ a.aux=S; paint(a); commit(); },true,'Scale by…'); });
+    return c; }
+  function trEl(bip){ return el('<div class="tr">'+(bip?'<u></u>':'')+'<i></i><b></b></div>'); }
+  function paintTr(t,n,bip){ var i2=t.querySelector('i'), b=t.querySelector('b'), p=n*100; if(b) b.style.left=p.toFixed(1)+'%';
+    if(bip){ if(n>=.5){ i2.style.left='50%'; i2.style.width=(p-50).toFixed(1)+'%'; } else { i2.style.left=p.toFixed(1)+'%'; i2.style.width=(50-p).toFixed(1)+'%'; } }
+    else { i2.style.left='0%'; i2.style.width=p.toFixed(1)+'%'; } }
+  function pct(v,sg){ var n=Math.round(v*100); return (sg&&n>0?'+':'')+n+'%'; }
+  function outOf(a){ return (a.out!=null)?+a.out:1; }
+  function build(a){
+    var row=el('<div class="tp-row"></div>'), ui={};
+    var g=el('<span class="c-g" title="Drag to reorder">⋮⋮</span>');
+    var b=el('<span class="c-b"><span class="sd on" title="Route on — click to bypass (keeps the route, mutes it)"><i></i></span></span>');
+    var s=el('<span class="c-s"></span>'); s.appendChild(chip('s',a));
+    var cv=el('<span class="c-cv pro"></span>'); cv.appendChild(crvBox(a,'crv'));
+    var am=el('<span class="c-am"></span>'), amt=trEl(true); amt.appendChild(el('<i class="lv" style="width:3px;height:3px;border-radius:50%;transform:translate(-50%,-50%);left:50%"></i>'));
+    am.appendChild(amt); am.appendChild(el('<span class="vl"></span>')); am.appendChild(el('<span class="pd fleds" title="Pro settings are shaping this route (curve · aux · polarity · output) — switch to Pro to see them"><i></i></span>'));
+    dragify(amt,{axis:'x',get:function(){ return (a.depth+1)/2; },set:function(n){ a.depth=Math.round((n*2-1)*100)/100; paint(a); save(); },
+      span:function(){ return amt.offsetWidth||110; },reset:.5,start:function(){ dragging++; },end:function(){ dragging=Math.max(0,dragging-1); commit(); }});
+    var po=el('<span class="c-po pro"><div class="step"><em></em><select><option value="uni">Uni</option><option value="bi">Bi</option></select></div></span>');
+    var d=el('<span class="c-d"></span>'); d.appendChild(chip('d',a));
+    var o=el('<span class="c-o" title="Live output of this route"></span>'), mt=el('<div class="tr"><u></u><i class="lv"></i></div>'); o.appendChild(mt);
+    var ax=el('<span class="c-ax pro"></span>'); ax.appendChild(chip('a',a));
+    var inv=el('<span class="c-in pro"><div class="tog off" title="Invert the aux: aux up = LESS modulation">Inv</div></span>');
+    var acv=el('<span class="c-acv pro"></span>'); acv.appendChild(crvBox(a,'acrv'));
+    var ou=el('<span class="c-out pro"></span>'), otr=trEl(false); ou.appendChild(otr); ou.appendChild(el('<span class="vl"></span>'));
+    dragify(otr,{axis:'x',get:function(){ return outOf(a); },set:function(n){ a.out=Math.round(n*100)/100; paint(a); save(); },span:60,reset:1,
+      start:function(){ dragging++; },end:function(){ dragging=Math.max(0,dragging-1); commit(); }});
+    var x=el('<span class="c-x" title="Remove this route">'+X_SVG+'</span>');
+    [g,b,s,cv,am,po,d,o,ax,inv,acv,ou,x].forEach(function(c){ row.appendChild(c); });
+    b.querySelector('.sd').addEventListener('click',function(e){ e.stopPropagation(); a.byp=a.byp?0:1; paint(a); commit(); });
+    po.querySelector('select').addEventListener('change',function(e){ var v=e.target.value, nat=naturalBi(a)?'bi':'uni'; a.pol=(v===nat)?0:(v==='bi'?2:1); paint(a); commit(); });
+    po.querySelector('select').addEventListener('pointerdown',function(e){ e.stopPropagation(); });
+    inv.querySelector('.tog').addEventListener('click',function(e){ e.stopPropagation(); a.ainv=a.ainv?0:1; paint(a); commit(); });
+    x.addEventListener('click',function(e){ e.stopPropagation(); remove(a); });
+    row.addEventListener('pointerdown',function(){ select(a); });
+    row.addEventListener('contextmenu',function(e){ e.preventDefault(); rowMenu(a,{left:e.clientX,right:e.clientX,top:e.clientY,bottom:e.clientY}); });
+    g.addEventListener('pointerdown',function(e){ e.preventDefault(); e.stopPropagation(); var y0=e.clientY, L=list(), ix0=L.indexOf(a); row.classList.add('drag'); dragging++;
+      try{ g.setPointerCapture(e.pointerId); }catch(_){}
+      function mv(ev){ var L2=list(), ix=Math.max(0,Math.min(L2.length-1,ix0+Math.round((ev.clientY-y0)/26))); if(L2.indexOf(a)!==ix){ L2.splice(L2.indexOf(a),1); L2.splice(ix,0,a); sortKey=null; order(); } }
+      function up(){ row.classList.remove('drag'); dragging=Math.max(0,dragging-1); g.removeEventListener('pointermove',mv); g.removeEventListener('pointerup',up); commit(); }
+      g.addEventListener('pointermove',mv); g.addEventListener('pointerup',up); });
+    ui={row:row,amt:amt,amv:am.querySelector('.vl'),tick:amt.querySelector('.lv'),po:po,mt:mt,mi:mt.querySelector('i'),inv:inv.querySelector('.tog'),otr:otr,ouv:ou.querySelector('.vl'),
+        s:s.querySelector('.mv-c'),d:d.querySelector('.mv-c'),a:ax.querySelector('.mv-c'),sd:b.querySelector('.sd'),cv:cv.querySelector('.crv'),acv:acv.querySelector('.crv'),pd:am.querySelector('.pd i'),lt:-1,lm:-1};
+    a.__mm=ui; paint(a); return row; }
+  function paintBadge(a){ var u=a.__mm; if(!u) return; u.pd.classList.toggle('on',!!(a.crv||(a.curve&&a.curve.length>1)||a.aux||outOf(a)<1||a.acrv||a.ainv||a.pol)); }
+  function paint(a){ var u=a.__mm; if(!u) return;
+    u.s.querySelector('.t').textContent=sName(a); u.s.querySelector('.sc').textContent=scopeOf(a);
+    u.s.title=sName(a)+' — '+(scopeOf(a)==='V'?'per-voice (every note has its own)':'global (one shared value)');
+    u.d.querySelector('.t').textContent=dName(a.dest); u.d.title=dName(a.dest);
+    u.a.querySelector('.t').textContent=a.aux?sName(a.aux):'None'; u.a.classList.toggle('none',!a.aux);
+    paintTr(u.amt,(a.depth+1)/2,true); u.amv.textContent=pct(a.depth,true);
+    var pl=polOf(a); u.po.querySelector('em').textContent=pl==='bi'?'Bi':'Uni'; u.po.querySelector('select').value=pl;
+    u.inv.classList.toggle('off',!a.ainv); u.acv.classList.toggle('dim',!a.aux);
+    paintTr(u.otr,outOf(a),false); u.ouv.textContent=pct(outOf(a));
+    u.sd.classList.toggle('on',!a.byp); u.row.classList.toggle('byp',!!a.byp); u.row.classList.toggle('sel',a===selA);
+    if(u.cv.__paint) u.cv.__paint(); if(u.acv.__paint) u.acv.__paint(); paintBadge(a); }
+  function select(a){ selA=a; list().forEach(function(q){ if(q.__mm) q.__mm.row.classList.toggle('sel',q===selA); }); if(MM&&MM.classList.contains('routes')) rvSel(); }
+  function rebuild(){ ROWS.innerHTML=''; built=list().slice(); built.forEach(function(a){ a.__mm=null; ROWS.appendChild(build(a)); }); ROWS.appendChild(ADDR); after(); }
+  function order(){ list().forEach(function(a){ if(a.__mm) ROWS.appendChild(a.__mm.row); }); ROWS.appendChild(ADDR); built=list().slice(); }
+  function after(){ var L=list(); document.getElementById('mm-empty').style.display=L.length?'none':'block'; ADDR.style.display=L.length<32?'flex':'none';
+    document.getElementById('mm-count').innerHTML='<b>'+L.length+'</b> routes · 32 max';
+    var mb=document.getElementById('mod-btn'); if(mb) mb.classList.toggle('has-routes',L.some(function(a){ return !a.byp; }));
+    search(); if(MM.classList.contains('routes')) rvBuild(); }
+  function add(S,dest,extra){ var L=list(); if(L.length>=32) return null; var a=API().add(S,dest); if(!a) return null;
+    if(extra) for(var k in extra) a[k]=extra[k]; commit(); sync(); select(a); return a; }
+  function remove(a){ API().remove(a); if(selA===a) selA=null; sync(); }
+  function rowMenu(a,r){ select(a); openMenu([
+    {label:a.byp?'Enable':'Bypass',onPick:function(){ a.byp=a.byp?0:1; paint(a); commit(); }},
+    {label:'Scale by…',ct:a.aux?sName(a.aux):'None',onPick:function(){ pickSource(a.__mm.a,a.aux,function(S){ a.aux=S; paint(a); commit(); },true,'Scale by…'); }},
+    {label:'Duplicate',onPick:function(){ var S=API().srcOf(a); add(S,a.dest,{depth:a.depth,pol:a.pol,crv:a.crv,curve:a.curve?a.curve.slice():null,aux:a.aux,ainv:a.ainv,acrv:a.acrv,out:a.out}); }},
+    {label:'Straighten curves',onPick:function(){ a.crv=0; a.curve=null; a.pts=null; a.acrv=0; paint(a); commit(); }},
+    {label:'Remove',rose:true,onPick:function(){ remove(a); }}],r); }
+  function search(){ var q=(document.getElementById('mm-search').value||'').trim().toLowerCase();
+    list().forEach(function(a){ if(!a.__mm) return; var t=(sName(a)+' '+dName(a.dest)+' '+(a.aux?sName(a.aux):'')+' '+(DST[a.dest]?DST[a.dest].cat:'')).toLowerCase(); a.__mm.row.classList.toggle('off',!!q&&t.indexOf(q)<0); }); }
+  function doSort(k){ sortKey=k; var f=k==='src'?function(a){ return srcOrderKey(a)*10000+DST_ORDER.indexOf(a.dest); }:(k==='dst'?function(a){ return DST_ORDER.indexOf(a.dest)*1000+srcOrderKey(a); }:function(a){ return a.aux?srcOrderKey(a.aux):9999; });
+    var L=list(); L.sort(function(x,y){ return f(x)-f(y); }); EA(document.querySelectorAll('#mm-hd span[data-sort]'),function(s){ s.classList.toggle('on',s.getAttribute('data-sort')===k); }); order(); commit(); }
+
+  /* the header menu — sort · lock · templates · bake macros */
+  var locked=false; try{ locked=localStorage.getItem('mmLock')==='1'; }catch(e){}
+  window.__mmLocked=function(){ return locked; };
+  function freeLfo(){ var used={}; list().forEach(function(a){ if(a.lfo) used[a.lfo]=1; if(a.aux&&a.aux.lfo) used[a.aux.lfo]=1; }); for(var k=1;k<=10;k++) if(!used[k]) return k; return 10; }
+  function headerMenu(btn){ var r=btn.getBoundingClientRect(); openMenu([
+    {sec:'Sort'},{label:'Sort by Source',cur:sortKey==='src',onPick:function(){ doSort('src'); }},{label:'Sort by Destination',cur:sortKey==='dst',onPick:function(){ doSort('dst'); }},
+    {sec:'Matrix'},{label:'Lock Matrix',cur:locked,ct:'keep on preset change',onPick:function(){ locked=!locked; try{ localStorage.setItem('mmLock',locked?'1':'0'); }catch(e){} document.getElementById('mm-lock').textContent=locked?'Locked':''; }},
+    {label:'Clear all routes',rose:true,onPick:function(){ API().batch(function(){ list().slice().forEach(function(a){ API().remove(a); }); }); selA=null; sync(); }},
+    {sec:'Templates'},
+    {label:'Create Vibrato',ct:'LFO → Pitch × Wheel',onPick:function(){ add({lfo:freeLfo()},5,{depth:.03,aux:{whl:1},pol:0}); }},
+    {label:'Create Velo → Amp',ct:'Velocity → Level',onPick:function(){ add({vel:1},6,{depth:.6,crv:.3,curve:bendPts(.3)}); }},
+    {label:'Create Filter Envelope',ct:'Env 2 → Cutoff',onPick:function(){ add({env:2},0,{depth:.5}); }},
+    {label:'Create Wheel → Cutoff',ct:'Mod Wheel → Cutoff',onPick:function(){ add({whl:1},0,{depth:.6}); }},
+    {sec:'Macros'},{label:'Apply and Delete Macros',ct:'bake into the knobs',onPick:bakeMacros}],r,272); }
+  /* bake: each macro route's CURRENT contribution is written into its destination's knob, then the route goes */
+  /* ⚠️ only a destination with a real KNOB PARAMETER can take a bake, and only in knob travel (0..1): the semitone
+     dests (Coarse / Oct / Semi / Cent / Pitch) are skipped, and a route that cannot be baked is KEPT, never deleted. */
+  var SEMI=function(d){ var b=d>=BANK2?d-BANK2:d; return b===5||(b>=42&&b<=45)||(b>=288&&b<300); };
+  function bakeMacros(){ var L=list().filter(function(a){ return a.mac; }); if(!L.length) return; var baked=0, kept=0;
+    API().batch(function(){ L.forEach(function(a){ var pid=API().paramOfDest(a.dest), ss=null;
+        try{ ss=(pid&&window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(pid):null; }catch(e){}
+        if(!ss||SEMI(a.dest)){ kept++; return; }
+        try{ var r=routeNow(a), c=r?r.live:0; ss.setNormalisedValue(C01(ss.getNormalisedValue()+c)); }catch(e){ kept++; return; }
+        API().remove(a); baked++; }); });
+    selA=null; sync(); var lk=document.getElementById('mm-lock'); if(lk){ var t0=lk.textContent; lk.textContent=baked+' baked'+(kept?' · '+kept+' kept':''); setTimeout(function(){ lk.textContent=locked?'Locked':t0==='Locked'?'Locked':''; },2200); } }
+
+  /* ═══ THE LIVE PASS — the Out meter and the amount's live dot. The mockup's law: dot = 0.5 + pre/2 (before
+     Output), meter = 0.5 + live/2 (after). Values come from the underline comet's own chain (__mmApi.live). ═══ */
+  function routeNow(a){ var v=API().live(a,a.dest); if(v<0||a.byp) return null;
+    var u=bendF(v,a.crv||0), m=(polOf(a)==='bi')?(u*2-1):u, f=1;
+    if(a.aux){ var av=API().live(a.aux,a.dest); if(av<0) av=0; av=bendF(av,a.acrv||0); f=a.ainv?1-av:av; }
+    var pre=m*a.depth*f; return {pre:pre,live:pre*outOf(a),src:v}; }
+  function tick(){ if(!MM||!MM.offsetParent) return;
+    list().forEach(function(a){ var u=a.__mm; if(!u) return; var r=routeNow(a);
+      var tp=r?Math.round(C01(0.5+r.pre/2)*400):-1, mp=r?Math.round(C01(0.5+r.live/2)*400):200;
+      if(tp!==u.lt){ u.lt=tp; if(tp<0) u.tick.style.opacity=0; else { u.tick.style.opacity=1; u.tick.style.left=(tp/4).toFixed(2)+'%'; } }
+      if(mp!==u.lm){ u.lm=mp; var p=mp/400; if(p>=.5){ u.mi.style.left='50%'; u.mi.style.width=((p-.5)*100).toFixed(2)+'%'; } else { u.mi.style.left=(p*100).toFixed(2)+'%'; u.mi.style.width=((.5-p)*100).toFixed(2)+'%'; } } });
+    if(MM.classList.contains('routes')) rvTick(); }
+
+  /* ═══ THE ROUTES VIEW — the Patcher's own cables (cablePath's audio shape), no dotted lines. It is as tall as
+     its content and scrolls; it changes only when a source's level changes. ═══ */
+  var RV={};
+  function cPath(ax,ay,bx,by){ var dx=Math.max(46,Math.abs(bx-ax)*0.45); return 'M'+ax+' '+ay+' C'+(ax+dx)+' '+ay+', '+(bx-dx)+' '+by+', '+bx+' '+by; }
+  function rvBuild(){ var host=document.getElementById('mm-rv'), inn=host.querySelector('.rv-in'), svg=inn.querySelector('svg');
+    EA(inn.querySelectorAll('.src,.gbox'),function(n){ n.remove(); }); while(svg.firstChild) svg.removeChild(svg.firstChild);
+    var L=list(), W=host.clientWidth||820, VH=host.clientHeight||540; RV={srcY:{},dstY:{},lines:[],srcEl:{},dstV:{},srcS:{}};
+    var srcs=[], used={}; L.forEach(function(a){ var k=sKey(a); if(!used[k]){ used[k]=1; srcs.push(API().srcOf(a)); } });
+    L.forEach(function(a){ if(a.aux){ var k=sKey(a.aux); if(!used[k]){ used[k]=2; srcs.push(a.aux); } } });
+    srcs.sort(function(x,y){ return srcOrderKey(x)-srcOrderKey(y); });
+    var mods={}, ord=[]; L.forEach(function(a){ var d=DST[a.dest]; var m=d?((d.cat==='Envelopes'||d.cat==='LFOs'||d.cat==='FX Rack'||d.cat==='Patcher')?d.mod:d.cat):'?';
+      if(!mods[m]){ mods[m]=[]; ord.push(m); } if(mods[m].indexOf(a.dest)<0) mods[m].push(a.dest); });
+    ord.sort(function(x,y){ return DST_ORDER.indexOf(mods[x][0])-DST_ORDER.indexOf(mods[y][0]); });
+    var boxH=function(m){ return 14+mods[m].length*18; }, tot=0; ord.forEach(function(m){ tot+=boxH(m); });
+    var gap=16, H=Math.max(VH-20, srcs.length*38+40, tot+gap*Math.max(0,ord.length-1)+40);
+    inn.style.height=H+'px'; svg.setAttribute('height',H); svg.style.height=H+'px';
+    var step=38, y0=(H-step*srcs.length)/2;
+    srcs.forEach(function(S,ix){ var y=y0+ix*step+step/2, k=sKey(S), n=el('<div class="src"><i></i></div>'); n.insertBefore(document.createTextNode(sName(S)),n.firstChild); n.style.top=(y-13)+'px'; inn.appendChild(n); RV.srcY[k]=y; RV.srcEl[k]=n; RV.srcS[k]=S; });
+    var y=Math.max(12,(H-tot-gap*Math.max(0,ord.length-1))/2);
+    ord.forEach(function(m){ var bx=el('<div class="gbox"><span class="gbl"></span></div>'); bx.querySelector('.gbl').textContent=m; bx.style.top=y+'px';
+      mods[m].forEach(function(id,ix){ var dr=el('<div class="dr"><span class="t"></span><span class="v"></span></div>'); var d=DST[id]; dr.querySelector('.t').textContent=d?(m===d.mod||m===d.cat?d.name:d.full):id; bx.appendChild(dr); RV.dstY[id]=y+9+ix*18+9; RV.dstV[id]=dr.querySelector('.v'); });
+      inn.appendChild(bx); y+=boxH(m)+gap; });
+    var NS='http://www.w3.org/2000/svg', x0=18+104, x1=W-18-230;
+    L.forEach(function(a){ var ys=RV.srcY[sKey(a)], yd=RV.dstY[a.dest]; if(ys==null||yd==null) return;
+      var g=document.createElementNS(NS,'g'); g.setAttribute('class','cable'+(a.byp?' byp':''));
+      var p=document.createElementNS(NS,'path'); p.setAttribute('class','core'); p.setAttribute('d',cPath(x0,ys,x1,yd));
+      var h=document.createElementNS(NS,'path'); h.setAttribute('class','hit'); h.setAttribute('d',cPath(x0,ys,x1,yd));
+      h.addEventListener('click',function(e){ e.stopPropagation(); select(a); }); g.appendChild(p); g.appendChild(h); svg.appendChild(g);
+      var LN={a:a,g:g,hot:false,aux:null};
+      if(a.aux&&RV.srcY[sKey(a.aux)]!=null){   /* the aux feeds the route's middle — a mod cable (.m), the Patcher's own */
+        var mx=(x0+x1)/2, my=(ys+yd)/2, ag=document.createElementNS(NS,'g'); ag.setAttribute('class','cable m'+(a.byp?' byp':''));
+        var ap=document.createElementNS(NS,'path'); ap.setAttribute('class','core'); ap.setAttribute('d',cPath(x0,RV.srcY[sKey(a.aux)],mx,my)); ag.appendChild(ap); svg.appendChild(ag); LN.aux=ag; }
+      RV.lines.push(LN); });
+    rvSel(); RV.lastSrc={}; RV.lastV={}; }
+  function rvSel(){ (RV.lines||[]).forEach(function(L){ L.g.classList.toggle('sel',L.a===selA); if(L.aux) L.aux.classList.toggle('sel',L.a===selA); }); }
+  function rvTick(){ if(!RV.lines) return;
+    RV.lines.forEach(function(L){ var r=routeNow(L.a), hot=!!(r&&Math.abs(r.live)>0.08); if(hot!==L.hot){ L.hot=hot; L.g.classList.toggle('hot',hot); if(L.aux) L.aux.classList.toggle('hot',hot); } });
+    Object.keys(RV.srcEl||{}).forEach(function(k){ var S=RV.srcS[k], v=API().live(S,0); var q=v<0?0:Math.round(C01(v)*100); if(q!==RV.lastSrc[k]){ RV.lastSrc[k]=q; RV.srcEl[k].querySelector('i').style.width=q+'%'; } });
+    Object.keys(RV.dstV||{}).forEach(function(id){ var s=0; list().forEach(function(a){ if(a.dest==id){ var r=routeNow(a); if(r) s+=r.live; } }); var t=pct(s,true); if(t!==RV.lastV[id]){ RV.lastV[id]=t; RV.dstV[id].textContent=t; } }); }
+
+  /* ═══ sync with the one matrix — a knob drop, a restore, the dice, a preset: rebuild only when the SET changed ═══ */
+  function sync(){ if(!MM) return; var L=list(); var same=(L.length===built.length)&&L.every(function(a,i){ return a===built[i]&&a.__mm; });
+    if(!same){ if(dragging) return; rebuild(); } else { L.forEach(paint); after(); } }
+
+  function boot(){ var host=document.getElementById('mod-panel'); if(!host||MM) return;
+    MM=el('<div id="mm" class="tp-glass basic">'
+      +'<div class="tb"><div class="sw"><input class="search" id="mm-search" type="text" placeholder="Search sources, destinations" autocomplete="off" spellcheck="false"></div>'
+      +'<div class="count" id="mm-count"></div>'
+      +'<div class="grp" id="mm-mode"><button class="tp-chip active" data-m="basic">Basic</button><button class="tp-chip" data-m="pro">Pro</button></div>'
+      +'<div class="grp" id="mm-view"><button class="tp-chip active" data-v="list">Matrix</button><button class="tp-chip" data-v="routes">Routes</button></div>'
+      +'<div class="sp"></div><span class="lk" id="mm-lock"></span>'
+      +'<button class="ibtn" id="mm-add" title="Add a route"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>'
+      +'<button class="ibtn" id="mm-menu" title="Matrix menu — sort, lock, templates"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div>'
+      +'<div class="hd" id="mm-hd"><span class="c-g"></span><span class="c-b"></span><span class="c-s" data-sort="src">Source<i>▾</i></span>'
+      +'<span class="c-cv pro" title="Source curve — bends how the source responds">Crv</span><span class="c-am">Amount</span>'
+      +'<span class="c-po pro" title="Polarity — Uni pushes one way from the knob, Bi swings both ways">Pol</span>'
+      +'<span class="c-d" data-sort="dst">Destination<i>▾</i></span><span class="c-o" title="Live output of this route">Out</span>'
+      +'<span class="c-ax pro" data-sort="aux" title="Aux source — a second source that scales how much gets through">Aux<i>▾</i></span>'
+      +'<span class="c-in pro" title="Invert the aux">Inv</span><span class="c-acv pro" title="Aux curve">Crv</span>'
+      +'<span class="c-out pro" title="Output — the final trim for this route">Output</span><span class="c-x"></span></div>'
+      +'<div class="list" id="mm-list"><div id="mm-rows"></div>'
+      +'<div id="mm-empty" style="display:none"><b>No routes yet</b>Drag a source onto any knob — or press +.</div>'
+      +'<div id="mm-rv"><div class="rv-in"><svg></svg></div><div class="hint">brighter = moving now · click a cable to select its route</div></div></div></div>');
+    host.insertBefore(MM,host.firstChild);
+    ROWS=document.getElementById('mm-rows');
+    ADDR=el('<div class="tp-row addr">＋ Add route</div>'); ADDR.addEventListener('click',function(){ add({lfo:freeLfo()},0,{depth:.3}); });
+    document.getElementById('mm-add').addEventListener('click',function(){ add({lfo:freeLfo()},0,{depth:.3}); });
+    document.getElementById('mm-menu').addEventListener('click',function(e){ headerMenu(e.currentTarget); });
+    document.getElementById('mm-lock').textContent=locked?'Locked':'';
+    var se=document.getElementById('mm-search'); se.addEventListener('input',search); se.addEventListener('keydown',function(e){ e.stopPropagation(); });
+    EA(document.querySelectorAll('#mm-hd span[data-sort]'),function(s){ s.addEventListener('click',function(){ doSort(s.getAttribute('data-sort')); }); });
+    EA(document.querySelectorAll('#mm-mode .tp-chip'),function(b){ b.addEventListener('click',function(){ EA(document.querySelectorAll('#mm-mode .tp-chip'),function(x){ x.classList.toggle('active',x===b); });
+      MM.classList.toggle('basic',b.getAttribute('data-m')==='basic'); try{ localStorage.setItem('mmMode',b.getAttribute('data-m')); }catch(e){} }); });
+    EA(document.querySelectorAll('#mm-view .tp-chip'),function(b){ b.addEventListener('click',function(){ EA(document.querySelectorAll('#mm-view .tp-chip'),function(x){ x.classList.toggle('active',x===b); });
+      var rv=b.getAttribute('data-v')==='routes'; MM.classList.toggle('routes',rv); if(rv) rvBuild(); try{ localStorage.setItem('mmView',rv?'routes':'list'); }catch(e){} }); });
+    try{ if(localStorage.getItem('mmMode')==='pro') document.querySelector('#mm-mode [data-m="pro"]').click(); }catch(e){}
+    try{ if(localStorage.getItem('mmView')==='routes') document.querySelector('#mm-view [data-v="routes"]').click(); }catch(e){}
+    /* the routes view scrolls with a trackpad, and with a plain drag on the empty space (no wheel needed) */
+    (function(){ var rv=document.getElementById('mm-rv'), dn=false, y0=0, s0=0;
+      rv.addEventListener('pointerdown',function(e){ if(e.button!==0||e.target.closest('.src,.gbox')) return; dn=true; y0=e.clientY; s0=rv.scrollTop; rv.classList.add('grabbing'); try{ rv.setPointerCapture(e.pointerId); }catch(_){} });
+      rv.addEventListener('pointermove',function(e){ if(!dn) return; rv.scrollTop=s0-(e.clientY-y0); });
+      function up(){ dn=false; rv.classList.remove('grabbing'); } rv.addEventListener('pointerup',up); rv.addEventListener('pointercancel',up); })();
+    window.addEventListener('smchange',function(){ if(MM.offsetParent) sync(); });
+    window.addEventListener('tipanelchange',function(e){ if(e&&e.detail&&e.detail.panel==='mod') sync(); });
+    if(window.__tiFrameReg) window.__tiFrameReg('mm',tick);
+    sync(); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
+  window.__mmPage={ sync:function(){ sync(); }, dests:function(){ return DST_ORDER.length; }, cats:function(){ return DCATS.map(function(c){ return c.label+':'+c.items.length; }); },
+                    tick:function(){ tick(); }, select:function(i){ select(list()[i]); }, headerMenu:function(){ headerMenu(document.getElementById('mm-menu')); } };
+})();
+
+</script>
 </body>
 </html>

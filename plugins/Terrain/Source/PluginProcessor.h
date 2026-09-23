@@ -1584,7 +1584,8 @@ public:
     // ── Synth mod-matrix (drag-to-assign): LFO source → synth dest, depth. The editor
     //    pushes the route list as JSON via the setSynthMod native fn; we parse it into a
     //    thread-safe vector the audio thread copies into synModCfg each block. Persisted.
-    struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; int curve = -1; bool bypass = false; int aux = -1; };   // fb554 — curve = index into the published ModCurveSet, -1 = a straight line · fb563 (3) — bypass keeps the route but mutes it; aux = the "Scale by" source's wire code, −1 = none
+    struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; int curve = -1; bool bypass = false; int aux = -1;
+                         int pol = 0; bool auxInv = false; float auxCrv = 0.0f; };   // tp96 — the matrix page's Pro columns (Output is folded into depth)   // fb554 — curve = index into the published ModCurveSet, -1 = a straight line · fb563 (3) — bypass keeps the route but mutes it; aux = the "Scale by" source's wire code, −1 = none
     // FLOW · ARP lane pattern (fb105): UI pushes JSON, audio thread copies into the
     // engine on version bump (synModLock pattern). Raw JSON kept verbatim for state save.
     // tp20 — everything below is PER INSTANCE ([0] = the fb-era single card). Index = the chain slot's instance.
