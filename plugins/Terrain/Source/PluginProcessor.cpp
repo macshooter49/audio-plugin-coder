@@ -7338,13 +7338,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         // themselves (typeNames()), never retyped here, so a name cannot drift out of sync with the roster.
         static const char* const kLn[18]  = { "VOL", "TIME", "FILT", "PAN", "REP", "DRIVE", "PHASE", "CRUSH", "VERB", "DELAY", "CHORUS", "WIDEN", "MULTI", "TAPE", "GRAIN", "BODE", "NOISE", "FLANGE" };
         static const char* const kLnN[18] = { "Volume", "Time", "Filter", "Pan", "Repeat", "Drive", "Phaser", "Crush", "Reverb", "Delay", "Chorus", "Widen", "Multiband", "Tape", "Granular", "Bode", "Noise", "Flanger" };
-        /* tp91 — the Flanger lane's thirty-two voicings, read from the ENGINE (typeNames × charNames), never retyped:
-           Tape Zero · Jet · BBD · Endless, eight characters each. Envelope and Step are not here — their modulator
-           IS the type, and on this lane the drawn line replaces the modulator. */
+        /* tp91/tp97 — the Flanger lane's voicings, read from the ENGINE (typeNames × charNames), never retyped.
+           tp97: only the two night-and-day distinct types survive — Jet and BBD (see ShaperRoster::kFlaLaneType).
+           Tape Zero was removed (fb634 through-zero crackle) and Endless was removed (a near-duplicate of Jet on
+           this lane, 0.78 dB by FlangerSweep_test's perceptual harness, because the drawn line replaces its saw).
+           Envelope and Step were never here (their modulator IS the type). 16 voicings, INDEX-FOR-INDEX with the
+           fx-case remap and the page's FLAM. */
         juce::StringArray flaModes;
-        for (int t = 0; t < 4; ++t) for (int c = 0; c < tw::TerrainFlangerFx::kNumChars; ++c)
+        for (int ti = 0; ti < ShaperRoster::kFlaLaneVoicings / tw::TerrainFlangerFx::kNumChars; ++ti)
+        { const int t = ShaperRoster::kFlaLaneType[ti];
+          for (int c = 0; c < tw::TerrainFlangerFx::kNumChars; ++c)
             flaModes.add (juce::String (tw::TerrainFlangerFx::typeNames()[t]) + juce::String (juce::CharPointer_UTF8 (" \xc2\xb7 "))
-                          + juce::String (tw::TerrainFlangerFx::charNames (t)[c]));
+                          + juce::String (tw::TerrainFlangerFx::charNames (t)[c])); }
         auto fromEngine = [] (const char* const* names, int n) { juce::StringArray a; for (int q = 0; q < n; ++q) a.add (names[q]); return a; };
         // tp72 — THE TYPES ARE THE ROSTERS. Filter = the rack's 118 engines (terrainFilterEngineNames, index = tw::filters::Type);
         //        Drive = the rack's 23 distortions (index = DistortionEngine::Mode); Phaser = the two built-ins then the roster's
@@ -7378,14 +7383,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                                 "Tape Air", "Tape Crackle", "Clean Vinyl", "Dirty Vinyl",
                                 "Space Open", "Space Helium", "Space Wind" },
             flaModes };
-        static const int kModeDef[18] = { 0, 0, 0, 0, 0, 5, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 8 };   // Drive boots on Soft Clip; Reverb on Plate; Tape on Cassette; Noise on Pink; Flanger on Jet · Silver
+        static const int kModeDef[18] = { 0, 0, 0, 0, 0, 5, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0 };   // Drive boots on Soft Clip; Reverb on Plate; Tape on Cassette; Noise on Pink; Flanger on Jet · Silver (tp97 — voicing 0 now that Tape Zero/Endless are gone)
+        /* tp97 — DEPTH defaults per lane. Time (lane 1) boots at 50 %: at 100 % a continuously-varying shape
+           (e.g. a sine) drives the read fast enough to expose a residual kernel-switch artifact (the "100% Time"
+           issue, deferred); at 50 % the read is measured click-free across every shape (FlowShaper_test T39).
+           Every other lane keeps 100 %. Mirrored in the page's init loop and Depth knobCell reset. */
+        static const float kDepthDef[18] = { 1.0f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
         const juce::StringArray rates { "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars", "8 bars" };
         const juce::StringArray trigs { "Sync", "Free", "Audio", "MIDI" };
         for (int ln = 0; ln < wc::kShaperLanes; ++ln)
         {
             const juce::String pid = juce::String ("FLOW_CHOP_") + kLn[ln], nm = juce::String ("Shaper ") + kLnN[ln];
             layout.add (std::make_unique<juce::AudioParameterBool>   (juce::ParameterID { pid + "_ON", 1 },    nm + " On",    false));   // tp79 — Max: "please stop starting off with the volume on". A fresh card is SILENT until a lane is lit.
-            layout.add (std::make_unique<juce::AudioParameterFloat>  (juce::ParameterID { pid + "_DEPTH", 1 }, nm + " Depth", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+            layout.add (std::make_unique<juce::AudioParameterFloat>  (juce::ParameterID { pid + "_DEPTH", 1 }, nm + " Depth", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), kDepthDef[ln]));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_RATE", 1 },  nm + " Rate",  rates, wc::kShaperRateDefault));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_MODE", 1 },  nm + " Mode",  kModes[ln], kModeDef[ln]));
             layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { pid + "_TRIG", 1 },  nm + " Trigger", trigs, 0));

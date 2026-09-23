@@ -3998,6 +3998,12 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .shp-ext .screen .ch-type{gap:2px;}   /* the arrows HUG: 2 px plus the arrow's own 1 px padding */
 .shp-ext .screen .mv-c .t{white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;}
 .shp-ext .screen .mv-c .t.long{letter-spacing:.5px;}   /* tp93 — "everything needs to fit": at .9 px tracking a 25-letter type (Tape Zero · Drifting Zero, and Multiband's Sub / Low / Mid / High) walked the chip left INTO "Sine" by 1.6 px. Same size, tighter tracking, and the chip stays in its column */
+/* tp97 — THE TYPE CHIP IS A FIXED-WIDTH BOX (fixed-position law). The type name is the ONE chip whose text
+   varies wildly in length (a filter engine, a flanger voicing), so it had grown its box and shoved the ‹ › arrows
+   left into the centred shape chip — the exact walking tp77/tp93 fought with tracking hacks. A hard width +
+   ellipsis pins the box: a long name gets a "…", the arrows and every position stay EXACTLY put, whatever the
+   name. Centred so short names sit between the arrows the way the filter's do. */
+.shp-ext .screen .ch-type .t{width:92px;max-width:92px;flex:none;text-align:center;}
 .shp-ext .screen .mv-c select{position:absolute;inset:0;width:auto;height:auto;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}   /* tp77 — THE BAR WALKED ON EVERY CLICK. The select hung 3 px past the screen's floor, so focusing it made the browser scroll its overflow:hidden ancestor to reveal it (measured .screen.scrollTop 0 → 2.85 on the first click) and the whole bar rode with it — Max: "every time I try to click on point or custom, it gets lower". Flush now; a JS belt in the card keeps it at zero. */
 .shp-ext .screen .mv-c.browser select{display:none;}
 .shp-ext .screen .sh-ghost{fill:none;stroke:rgba(236,232,242,.17);stroke-width:1;pointer-events:none;}
@@ -37435,13 +37441,15 @@ restoreThemeFromBackend();
         case 'noise': return ['White Noise','Pink Noise','Brown Noise','Geiger','Tape Hiss','Tape Hum','Tape Air','Tape Crackle','Clean Vinyl','Dirty Vinyl','Space Open','Space Helium','Space Wind'];
         /* tp91 — index-for-index with the processor's flaModes, which reads TerrainFlangerFx::typeNames × charNames */
         case 'flange': return FLAM; } return []; }
-      var FLAM=(function(){ var T=[['Tape Zero',['Sub','Add','Worn Deck','Servo','Wide Zero','Deep Zero','Drifting Zero','Counter Reel']],
-                                    ['Jet',['Silver','Compact','Deep Sweep','Hollow','Screamer','Drop','Thin Air','Twin Jet']],
-                                    ['BBD',['Mistress','Deluxe','Dark Bucket','Squash','Matrix','Short Bucket','Long Bucket','Grind']],
-                                    ['Endless',['Rise','Fall','Rise Deep','Fall Deep','Double Helix','Stacked Rise','Soft Rise','Tight Rise']]], a=[];
+      /* tp97 — only the two night-and-day distinct flanger types survive: Jet and BBD. Tape Zero was removed
+         (fb634 through-zero crackle) and Endless was removed (a near-duplicate of Jet on this lane — 0.78 dB by
+         the perceptual harness — because the drawn line replaces its sawtooth, the thing that made it distinct).
+         INDEX-FOR-INDEX with the processor's flaModes (ShaperRoster::kFlaLaneType) and its fx-case remap. */
+      var FLAM=(function(){ var T=[['Jet',['Silver','Compact','Deep Sweep','Hollow','Screamer','Drop','Thin Air','Twin Jet']],
+                                    ['BBD',['Mistress','Deluxe','Dark Bucket','Squash','Matrix','Short Bucket','Long Bucket','Grind']]], a=[];
         T.forEach(function(t){ t[1].forEach(function(c){ a.push(t[0]+' · '+c); }); }); return a; })();
-      var MODESTEPS={ vol:1, time:2, filt:117, pan:2, rep:1, drive:22, phase:27, crush:9, verb:3, delay:3, chorus:7, widen:5, multi:4, tape:4, grain:7, bode:7, noise:12, flange:31 };
-      var MODEDEF={ vol:0, time:0, filt:0, pan:0, rep:0, drive:5, phase:0, crush:0, verb:1, delay:0, chorus:0, widen:0, multi:0, tape:1, grain:0, bode:0, noise:1, flange:8 };
+      var MODESTEPS={ vol:1, time:2, filt:117, pan:2, rep:1, drive:22, phase:27, crush:9, verb:3, delay:3, chorus:7, widen:5, multi:4, tape:4, grain:7, bode:7, noise:12, flange:15 };
+      var MODEDEF={ vol:0, time:0, filt:0, pan:0, rep:0, drive:5, phase:0, crush:0, verb:1, delay:0, chorus:0, widen:0, multi:0, tape:1, grain:0, bode:0, noise:1, flange:0 };
       var ROSTER={ filt:1, drive:1, phase:1, crush:1, verb:1, delay:1, chorus:1, widen:1, multi:1, tape:1, grain:1, bode:1, noise:1, flange:1 };   /* the lanes whose type is a roster: the screen's type chip */
       /* tp79 — the chain, read out of the state and PROVEN to be a permutation before anything indexes with it.
          Anything else (an old preset with no list, a hand-edited one, a short one) reads as the tile order. */
@@ -37544,7 +37552,7 @@ restoreThemeFromBackend();
            lanesJson() hands the same list to the processor. */
         var init={ lane:0, tool:0, snap:1, lgrid:3, sense:.5, nsname:'' };   /* tp84 — the Noise lane's loaded sample, by name ('' = an algorithmic colour) */
         for(var sq=0;sq<SLOTS;sq++) init['slotk'+sq]=sq;   /* tp83 — the chain, one parameter a position */
-        LN.forEach(function(l,i){ init['on'+i]=0; init['depth'+i]=1;   /* tp79 — Max: "please stop starting off with the volume on"; the FLOW_CHOP_*_ON parameters default false to match */ init['rate'+i]=4; init['mode'+i]=MODEDEF[l[0]]; init['trig'+i]=0;
+        LN.forEach(function(l,i){ init['on'+i]=0; init['depth'+i]=(l[0]==='time'?0.5:1);   /* tp79 — Max: "please stop starting off with the volume on"; the FLOW_CHOP_*_ON parameters default false to match. tp97 — Time boots at 50 % (the 100 % ramp read has an artifact, deferred); C++ FLOW_CHOP_TIME_DEPTH matches */ init['rate'+i]=4; init['mode'+i]=MODEDEF[l[0]]; init['trig'+i]=0;
           init['smooth'+i]=.2; init['phase'+i]=0; init['tension'+i]=.5; init['floor'+i]=0; init['blend'+i]=1; init['swing'+i]=0; init['grid'+i]=6;
           for(var q=0;q<6;q++) init['k'+q+'_'+i]=KDEF[l[0]][q];
           init['pts'+i]=JSON.stringify(stock(DEFSHAPE[l[0]])); init['shape'+i]=DEFSHAPE[l[0]]; });
@@ -37676,6 +37684,31 @@ restoreThemeFromBackend();
         chShape.querySelector('select').addEventListener('change',function(){ var i=lane(), L=shapeList(), k=parseInt(this.value,10)||0; if(k<L.length) setPts(i,stock(L[k][0]),L[k][0]); else paintChips(); });
         chType.querySelector('select').addEventListener('change',function(){ var i=lane(); S.set('mode'+i,parseInt(this.value,10)||0); paintChips(); });
         TIC.EA(scr.querySelectorAll('.mv-c select'),function(se){ se.addEventListener('pointerdown',function(e){ e.stopPropagation(); }); });
+        /* ══ tp97 — THE SHAPE / OFFBEAT PICKER IS THE HOUSE .pmenu GLASS, not a native Apple dropdown ═══════════
+           Max: "shapes/offbeat should use the SAME menu as everything else." The preset pill, the right-click menu
+           and every other list in the plugin wear the .pmenu glass; only this per-lane shape picker was still a raw
+           <select>. It now opens the SAME .pmenu (recycled verbatim: the glass, the .ps section headers, the .pi
+           rows, the .pi.cur bullet, the body-append + viewport clamp from TIC.presets' buildMenu — no new menu is
+           built). The native <select> stays in the DOM as the state bridge — paintChips still fills it, it is still
+           scriptable — but pointer-events:none keeps its own dropdown from ever opening; a click on the chip opens
+           the glass instead, and a pick routes through the SAME setPts() the <select>'s change always did. Random
+           stays random for free here: a click is always a fresh stock() roll (the <select>'s "same row = no change"
+           trap never applies). */
+        (function(){ var sSel=chShape.querySelector('select'); sSel.style.pointerEvents='none'; var shMenu=null;
+          function closeShapeMenu(){ if(shMenu){ try{ shMenu.remove(); }catch(e){} shMenu=null; document.removeEventListener('pointerdown',shOutside,true); } }
+          function shOutside(ev){ if(shMenu&&!shMenu.contains(ev.target)&&!chShape.contains(ev.target)) closeShapeMenu(); }
+          function openShapeMenu(){ if(shMenu){ closeShapeMenu(); return; }
+            var i=lane(), L=shapeList(), curKey=S.v['shape'+i]||'custom';
+            var m=TIC.el('<div class="pmenu"></div>'), lastSect=null;
+            L.forEach(function(e){ if(e[2]!==lastSect){ lastSect=e[2]; m.appendChild(TIC.el('<div class="ps"></div>')); m.lastChild.textContent=e[2]; }
+              var r=TIC.el('<div class="pi'+(e[0]===curKey?' cur':'')+'"><span class="nm"></span></div>'); r.querySelector('.nm').textContent=e[1];
+              r.addEventListener('click',function(ev){ ev.stopPropagation(); setPts(i,stock(e[0]),e[0]); paintChips(); closeShapeMenu(); }); m.appendChild(r); });
+            if(curKey==='custom'){ var rc=TIC.el('<div class="pi cur"><span class="nm">Custom</span></div>'); m.appendChild(rc); }
+            document.body.appendChild(m); var b=chShape.getBoundingClientRect();
+            m.style.left=Math.max(6,Math.min(window.__vw()-m.offsetWidth-6,b.left+b.width/2-m.offsetWidth/2))+'px';
+            m.style.top=Math.max(6,Math.min(window.__vh()-m.offsetHeight-6,b.bottom+6))+'px';
+            shMenu=m; setTimeout(function(){ document.addEventListener('pointerdown',shOutside,true); },0); }
+          chShape.addEventListener('click',function(ev){ ev.preventDefault(); ev.stopPropagation(); openShapeMenu(); }); })();
         /* tp77 — the arrows STEP the lane's engine, the word still opens the list (the filter's grammar, and the
            synth page's: '‹ Sine ›'). They sit above the invisible <select>, so they must swallow their own clicks
            before the chip's browser handler below sees them. */
@@ -37891,7 +37924,7 @@ restoreThemeFromBackend();
            currently sits at its position; every handler reads that kind at click time rather than closing over an
            index, so a tile keeps working after the chain moves under it. */
         for(var sp=0;sp<SLOTS;sp++)(function(p){ var b=TIC.el('<div class="fxb"></div>'); var t0=0;
-          b.addEventListener('click',function(){ var k=chainOf(S)[p], now=Date.now(); if(lane()===k&&now-t0<380){ S.set('on'+k,S.v['on'+k]?0:1); } t0=now; S.set('lane',k); });
+          b.addEventListener('click',function(){ var k=chainOf(S)[p], now=Date.now(); if(lane()===k&&now-t0<380){ S.set('on'+k,S.v['on'+k]?0:1); paintBank(); }   /* tp97 — REPAINT NOW: write the model (S.set) AND flip the white class on the live tile at once, the way the old fx devices do. Was: it waited for a lane switch, because the S.on listener's /\d$/ never matched a two-digit borrowed lane (on10..on17). */ t0=now; S.set('lane',k); });
           b.addEventListener('contextmenu',function(ev){ ev.preventDefault(); ev.stopPropagation(); slotMenu(ev,p); });
           fxEl.appendChild(b); })(sp);
         /* tp79 — RIGHT-CLICK A TILE TO PLACE A LANE THERE. Max: "we right click on the buttons … I right click on
@@ -37927,7 +37960,8 @@ restoreThemeFromBackend();
         function paintClock(){}
         function fillLane(){ var i=lane(), l=lkey(), nm=LN[i][2];
           laneBox.querySelector('.gbl').textContent=nm; var g=laneBox.querySelector('.kin'); g.innerHTML='';
-          g.appendChild(TIC.knobCell(S,'depth'+i,'Depth',TIC.inum(0,100),1)); g.appendChild(TIC.knobCell(S,'smooth'+i,'Smooth',TIC.inum(0,100),.2));
+          g.appendChild(TIC.knobCell(S,'depth'+i,'Depth',TIC.inum(0,100),(l==='time'?0.5:1)));   /* tp97 — Time's dblclick-reset default is 50 %, matching its param default */
+          g.appendChild(TIC.knobCell(S,'smooth'+i,'Smooth',TIC.inum(0,100),.2));
           g.appendChild(TIC.knobCell(S,'tension'+i,'Tension',TIC.inum(0,100),.5)); g.appendChild(TIC.knobCell(S,'floor'+i,'Floor',TIC.inum(0,100),0));
           var cy=cycBox.querySelector('.kin'); cy.innerHTML='';
           cy.appendChild(TIC.knobCell(S,'phase'+i,'Phase',TIC.inum(0,100),0)); cy.appendChild(TIC.knobCell(S,'swing'+i,'Swing',TIC.inum(0,100),0)); cy.appendChild(TIC.knobCell(S,'blend'+i,'Blend',TIC.inum(0,100),1));
@@ -37948,12 +37982,12 @@ restoreThemeFromBackend();
         /* ── S → paint / push ── */
         S.on(function(k,v){ if(k==='lane'){ sel=[]; fillLane(); return; }
           var m=/^sk_(k[0-5])_(\d)$/.exec(k); if(m){ var sd=(LNS[LN[+m[2]][0]]||[]).filter(function(x){ return x[0]===m[1]; })[0]; if(sd){ S.set(m[1]+'_'+m[2],(v|0)/Math.max(1,sd[2].length-1)); } return; }
-          if(/^(smooth|phase|tension|floor|blend|swing|grid|k[0-5]_)\d$/.test(k)){ push(); paint(); return; }
+          if(/^(smooth|phase|tension|floor|blend|swing|grid|k[0-5]_)\d+$/.test(k)){ push(); paint(); return; }   /* tp97 — \d+ so the borrowed lanes 10..17 push & repaint too (was \d, single digit only) */
           if(k==='sense'){ push(); return; }
           /* tp79 — the chain changed (a pick, a preset recall, a snapshot restore): the tiles wear whichever kind
              now sits at each position, and the processor gets the new order. */
           if(/^slotk\d$/.test(k)){ paintBank(); push(); paint(); return; }
-          if(/^(on|mode|rate)\d$/.test(k)){ paintBank(); paint(); return; } });
+          if(/^(on|mode|rate)\d+$/.test(k)){ paintBank(); paint(); return; } });   /* tp97 — \d+ so on10..on17 (borrowed lanes) repaint the white/active state immediately, not only after a lane switch */
 
         /* ── the parameters: On / Depth / Rate / Mode / Trigger per lane, through the shim ── */
         (function(){ var BIND={}; for(var sq=0;sq<SLOTS;sq++) BIND['slotk'+sq]=[PFX+'SLOT'+(sq+1),LN.length-1];   /* tp83 — the chain's own parameters */
