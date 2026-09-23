@@ -1457,6 +1457,22 @@ html.ti-mod-glass #header {
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   backdrop-filter: blur(20px) saturate(1.4);
 }
+/* tp99 — ONE GLASS, EVERY PAGE. The preset browser, the MOD matrix and Settings must all be the
+   SAME dark glass. That glass is var(--menu-bg) composited over #plugin's ground, so the ground has
+   to be identical on every glass page or the one token reads as a different colour. It was NOT:
+   the browser/settings open over the synth page and stand on --bg-main (#1A1A2E) + a top vignette,
+   while the MOD page drops ti-syn-open and stands on the lighter --bg-surface (#232340) with no
+   vignette — so the matrix glass came out a lighter, purpler shade than the "browse-all" page Max
+   points to, and the vignette tinted the browser's 0→44 header band a hair differently from its body
+   (measured: mod ground rgb(35,35,64) vs browser ground rgb(26,26,46)). Pin every glass page to the
+   browser's own FLAT --bg-main so header + body + the native CAPTURE strip (whose poller reads this
+   exact colour) are one material. Same specificity as body.ti-syn-open #plugin (1 id,1 class,1 type),
+   so it sits AFTER that rule to win when the browser/settings open over the synth page. */
+html.tp-glassup   #plugin,
+html.ti-mod-glass #plugin,
+body.st-open      #plugin {
+  background: var(--bg-main);
+}
 
 .brand-area {
   display: flex;
@@ -46734,12 +46750,19 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         if(!m||m.length<3) return;
         var hx=function(v){ v=Math.round(+v); return (v<16?'0':'')+v.toString(16); };
         var c;
-        /* tp98 — while the MOD page is up it wears the browser's dark glass top-to-bottom (html.ti-mod-glass
-           on the header + #mm's .tp-glass). The native strip can't backdrop-blur the WebView, so — exactly
-           as fb630's browser glass does — it stands on the alpha-over the CSS composites: var(--menu-bg)
-           over the page's own ground, computed here from the live tokens (C++ holds no copied literal). */
-        if(document.documentElement.classList.contains('ti-mod-glass')){
-          var mb=(getComputedStyle(document.documentElement).getPropertyValue('--menu-bg')||'').match(/[\d.]+/g);
+        /* tp98/tp99 — every GLASS page (MOD matrix, preset browser, Settings) wears the browser's dark
+           glass top-to-bottom: the header (html.ti-mod-glass / tp-glassup / body.st-open) and the body
+           sheet (#mm / #tp-b / #st-b, all .tp-glass) are var(--menu-bg) over #plugin's now-uniform ground.
+           The native strip can't backdrop-blur the WebView, so — exactly as fb630's browser glass does —
+           it stands on the alpha-over the CSS composites: var(--menu-bg) over the page's ground, computed
+           here from the live tokens (C++ holds no copied literal). The browser also pushes this same value
+           through setBrowserGlass (C++ paints that with priority); computing it for tp-glassup here too
+           keeps the strip correct if that push is ever missed, and gives Settings — which pushes nothing —
+           its matching footer. */
+        var _de=document.documentElement;
+        var _glass = _de.classList.contains('ti-mod-glass') || _de.classList.contains('tp-glassup') || document.body.classList.contains('st-open');
+        if(_glass){
+          var mb=(getComputedStyle(_de).getPropertyValue('--menu-bg')||'').match(/[\d.]+/g);
           if(mb&&mb.length>=4){ var a=+mb[3], mix=function(i){ return mb[i]*a + (+m[i])*(1-a); }; c='ff'+hx(mix(0))+hx(mix(1))+hx(mix(2)); }
           else c='ff'+hx(m[0])+hx(m[1])+hx(m[2]);
         } else {
@@ -46750,6 +46773,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       }catch(e){}
     }
     window.__tiStripKick=tick;   /* tp98 — a page switch repaints the strip at once, not on the next 1 s poll */
+    /* tp99 — MOD and the browser already kick the strip on their transitions; Settings does not. Watch the
+       glass-bearing classes on <html>/<body> and repaint the instant the glass state changes, gated on a
+       tiny signature so the thousands of unrelated class toggles never trigger a getComputedStyle. */
+    try{
+      var _lastSig=null;
+      var _sig=function(){ var d=document.documentElement, b=document.body;
+        return (d.classList.contains('ti-mod-glass')?'m':'')+(d.classList.contains('tp-glassup')?'g':'')
+             + (b.classList.contains('st-open')?'s':'')+(b.classList.contains('ti-syn-open')?'y':''); };
+      var _mo=new MutationObserver(function(){ var s=_sig(); if(s!==_lastSig){ _lastSig=s; tick(); } });
+      _mo.observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+      _mo.observe(document.body,{attributes:true,attributeFilter:['class']});
+    }catch(e){}
     if(document.readyState==='complete') { tick(); setInterval(tick,1000); }
     else window.addEventListener('load',function(){ tick(); setInterval(tick,1000); });
   })();

@@ -8008,22 +8008,36 @@ juce::String TerrainUiCore::reduceFrame (const juce::String& full)
 void TerrainUiCore::resized()
 {
     auto b = getLocalBounds();
+    const int W = getWidth(), H = b.getHeight();
     // fb95 — the strip scales with the window so the web area keeps the exact
     // 820-wide proportions; pageZoom (pushed from timerCallback until the peer
     // exists) scales the page itself.
-    const double sc = getWidth() / 820.0;
-    // 🚨 fb637 — THE PAGE MUST NEVER BE HANDED LESS THAN ITS DESIGN BOX. The page is a fixed
-    // 820x656 CSS box with overflow:hidden, and it is shown at pageZoom == sc, so it needs
-    // ceil(656*sc) device px to draw its last row. The strip used to take round(16*sc) and the
-    // page got whatever was left — which is 656 CSS px only when the two roundings happen to
-    // agree. They do not: at sc 1.10 the window is round(739.2)=739 and the strip round(17.6)=18,
-    // leaving 721 px = 655.45 CSS px, so the bottom half-pixel of the last row was simply cut off,
-    // and WHICH sizes clipped changed as the user dragged. Size the WEB AREA first and give the
-    // strip the remainder: the page always gets its 656, and the strip absorbs the +/-1px of slack
-    // (invisible on a plain 16px drag bar). jlimit keeps the strip real if a host ever forces a
-    // window shorter than the design box.
-    const int webH  = (int) std::ceil (656.0 * sc);
-    const int strip = juce::jlimit (1, juce::jmax (1, b.getHeight() - 1), b.getHeight() - webH);
+    const double scW = W / 820.0;
+
+    // fb272/fb637 — the drag strip is a thin 16-CSS-px bar that scales with the window. Clamp it so
+    // a host that hands us an absurdly short window can never let it swallow the page.
+    const int strip = juce::jlimit (1, juce::jmax (1, H - 1),
+                                    (int) std::lround (CAPTURE_STRIP_HEIGHT * scW));
+
+    // The web area is EXACTLY everything above the strip — never a fixed 656*scale that can spill
+    // past the window (that fb637 slack is what let the WKWebView frame clip the page).
+    const int webAvail = juce::jmax (1, H - strip);
+
+    /* 🚨 tp64 — THE PAGE ZOOM MUST FIT THE AVAILABLE HEIGHT, NOT THE WIDTH ALONE. (Max: "the effects
+       bottom row is STILL clipped.") The page is a fixed 820x656 CSS box shown at pageZoom == sc, so
+       width-only zoom (W/820) makes it 656*sc device px tall. The JUCE 820:672 aspect-lock is only
+       ADVISORY — VST3 wrappers (FL, Live) apply host window sizes verbatim (see the JUCE_WINDOWS
+       junk-size defence in the shell's resized()), so the window can be shorter than the design
+       aspect. When it is, 656*sc overflows the web area and the WKWebView frame clips the last CSS
+       row — the effects knobs + A/B/C/D/S/N pills. fb637 sized the web area first but still zoomed on
+       width, so the page was drawn TALLER than its frame and clipped anyway. Taking the MIN with the
+       height-limited scale letterboxes a hair horizontally instead of clipping vertically, so the
+       bottom row is ALWAYS fully visible at any window size, on macOS (native pageZoom) and Windows
+       (page-side __setUIScale). In the normal aspect-correct case webAvail/656 ~= W/820, so this is a
+       sub-pixel no-op and the page still fills the width. uiZoom_ stays == the applied pageZoom, so
+       the screen→CSS coordinate maths (getModDrag et al.) remain exact. */
+    const double sc = juce::jmin (scW, (double) webAvail / 656.0);
+
     captureDragStrip.setBounds (b.removeFromBottom (strip));
     if (webView != nullptr)
         webView->setBounds(b);
