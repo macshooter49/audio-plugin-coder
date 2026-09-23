@@ -891,11 +891,11 @@ function regSheet(step){
       +'<div class="tp-f" style="margin-top:14px"><span class="k">Code</span><input type="text" class="tp-in code" id="rg-code" maxlength="14" placeholder="TRRN-0000-0000" spellcheck="false" autocomplete="one-time-code"></div>'
       +'<div class="tp-note" id="rg-msg">Mockup: any 8 letters or numbers work · a code with 0000 shows the "used up" error. <span id="rg-resend" style="color:var(--purple-400);cursor:pointer">Resend code</span></div><div id="rg-bar" style="margin-top:10px;height:2px"></div>',
       acts:[{label:'Back',left:1,on:function(){ regSheet(2); }},{label:'Cancel',on:closeSheet},{label:'Register',pri:1,on:next3}],init:function(c){ var i=$('rg-code');
-        i.oninput=function(){ var raw=i.value.toUpperCase().replace(/[^A-Z0-9]/g,''); if(raw.indexOf('TRRN')===0) raw=raw.slice(4); raw=raw.slice(0,8); i.value='TRRN-'+raw.slice(0,4)+(raw.length>4?'-'+raw.slice(4):''); if(!raw) i.value=''; $('rg-msg').className='tp-note'; };
-        $('rg-resend').onclick=function(){ toast('A new code is on its way to <span class="tp-bk">'+esc(REG.email)+'</span>'); }; enterKey(c,next3); }});
+        i.oninput=function(){ var raw=i.value.toUpperCase().replace(/[^A-Z0-9]/g,''); if(raw.indexOf('TRRN')===0) raw=raw.slice(4); raw=raw.slice(0,8); i.value='TRRN-'+raw.slice(0,4)+(raw.length>4?'-'+raw.slice(4):''); if(!raw) i.value=''; var m=$('rg-msg'); if(m.className!=='tp-note'||m.dataset.dirty){ m.className='tp-note'; m.innerHTML=hint0; m.dataset.dirty=''; $('rg-resend').onclick=resend; } };
+        var hint0=$('rg-msg').innerHTML; function resend(){ toast('A new code is on its way to <span class="tp-bk">'+esc(REG.email)+'</span>'); } $('rg-resend').onclick=resend; enterKey(c,next3); }});
     function next3(){ var raw=$('rg-code').value.replace(/^TRRN-?/,'').replace(/-/g,''), m=$('rg-msg');
       if(raw.length<8){ m.textContent='The code has 8 letters and numbers after TRRN — check the email.'; m.className='tp-note err'; $('rg-code').focus(); return; }
-      m.textContent='Checking…'; m.className='tp-note';
+      m.textContent='Checking…'; m.className='tp-note'; m.dataset.dirty='1';
       bar($('rg-bar'),1100,function(){ if(raw.indexOf('0000')>=0){ $('rg-bar').innerHTML=''; m.textContent='That code has already been used on 3 computers. Sign out on one of them, or write to us.'; m.className='tp-note err'; return; } regSheet(4); }); } }
   else { var was=S.author, auto=!S.authorSet||!S.author||S.author==='Me'||S.author===S.name;
     S.reg=true; S.name=REG.name; S.email=REG.email; S.since='23 Sep 2026'; if(auto){ S.author=REG.name; S.authorSet=false; } save();
