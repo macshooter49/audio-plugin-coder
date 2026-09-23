@@ -3997,6 +3997,7 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .shp-ext .screen .mv-c .ar:hover{opacity:1;}
 .shp-ext .screen .ch-type{gap:2px;}   /* the arrows HUG: 2 px plus the arrow's own 1 px padding */
 .shp-ext .screen .mv-c .t{white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;}
+.shp-ext .screen .mv-c .t.long{letter-spacing:.5px;}   /* tp93 — "everything needs to fit": at .9 px tracking a 25-letter type (Tape Zero · Drifting Zero, and Multiband's Sub / Low / Mid / High) walked the chip left INTO "Sine" by 1.6 px. Same size, tighter tracking, and the chip stays in its column */
 .shp-ext .screen .mv-c select{position:absolute;inset:0;width:auto;height:auto;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}   /* tp77 — THE BAR WALKED ON EVERY CLICK. The select hung 3 px past the screen's floor, so focusing it made the browser scroll its overflow:hidden ancestor to reveal it (measured .screen.scrollTop 0 → 2.85 on the first click) and the whole bar rode with it — Max: "every time I try to click on point or custom, it gets lower". Flush now; a JS belt in the card keeps it at zero. */
 .shp-ext .screen .mv-c.browser select{display:none;}
 .shp-ext .screen .sh-ghost{fill:none;stroke:rgba(236,232,242,.17);stroke-width:1;pointer-events:none;}
@@ -4019,6 +4020,7 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .ti-card.shp-ext .h .tt,.ti-card.shp-ext .tab,.ti-card.shp-ext .gbl,.ti-card.shp-ext .cell .lb,.ti-card.shp-ext .tog,.ti-card.shp-ext .h .pop,.ti-card.shp-ext .mix,.ti-card.shp-ext .step em,.ti-card.shp-ext .foot .lb,.ti-card.shp-ext .chain .lb{text-transform:none;}
 .ti-card.shp-ext .h .tt{letter-spacing:1.2px;font-size:10px;} .ti-card.shp-ext .tab{letter-spacing:1px;font-size:8.5px;} .ti-card.shp-ext .gbl{letter-spacing:.9px;font-size:6.5px;} .ti-card.shp-ext .cell .lb{letter-spacing:.5px;font-size:6.8px;}
 .ti-card.shp-ext .fx .fxb{text-transform:uppercase;}   /* the eight lane names ARE the caps Max keeps (VOL … CRUSH) */
+.ti-card.shp-ext .fx .fxb.long{letter-spacing:-.1px;}   /* tp93 — Max: "FLANGE looks WAY too big … everything needs to fit." A six-letter name (FLANGE, REVERB, CHORUS) overran a tile sized for CRUSH. The TILE never moves (fixed-positions law) and the SIZE matches its neighbours (a smaller word beside DRIVE read as a different control) — only the tracking tightens */
 .ti-card.shp-ext .chain .gl{text-transform:none;letter-spacing:.9px;font-size:7px;}   /* tp77 — 'Chain', not 'CHAIN' (the tp74 rule aimed at .chain .lb; the label wears .gl) */
 .shp-ext .oncell{justify-content:center;align-self:center;}
 .shp-ext .oncell .tog{min-width:34px;}
@@ -37409,7 +37411,7 @@ restoreThemeFromBackend();
           if(ROSTER[l]){ var M=LNMODE(l), mi=S.v['mode'+i]|0;
             /* tp84 — the Noise lane says its LOADED SAMPLE when there is one, and its colour when there is not */
             var lbl=(l==='noise'&&S.v.nsname)?S.v.nsname:(M[mi]||M[0]||'—');
-            chType.querySelector('.t').textContent=lbl;
+            chType.querySelector('.t').textContent=lbl; chType.querySelector('.t').classList.toggle('long',String(lbl).length>18);
             if(l!=='filt'&&l!=='noise') fillSel(chType,M,mi); else chType.querySelector('select').innerHTML=''; } }
         chBrush.querySelector('select').addEventListener('change',function(){ var k=parseInt(this.value,10)||0; S.set('tool',TOOLS[k][1]); paintChips(); });
         chShape.querySelector('select').addEventListener('change',function(){ var i=lane(), L=shapeList(), k=parseInt(this.value,10)||0; if(k<L.length) setPts(i,stock(L[k][0]),L[k][0]); else paintChips(); });
@@ -37650,7 +37652,7 @@ restoreThemeFromBackend();
           window.__synShowMenu('', rows, e.clientX, e.clientY); }
         function paintBank(){ var i=lane(), c=chainOf(S);
           TIC.EA(fxEl.querySelectorAll('.fxb'),function(b,p){ var k=c[p];
-            if(b.getAttribute('data-l')!==String(k)){ b.setAttribute('data-l',String(k)); b.textContent=LN[k][1]; b.title=LN[k][2]+' — right-click to place another lane here'; }
+            if(b.getAttribute('data-l')!==String(k)){ b.setAttribute('data-l',String(k)); b.textContent=LN[k][1]; b.title=LN[k][2]+' — right-click to place another lane here'; b.classList.toggle('long',LN[k][1].length>5); }
             b.classList.toggle('cur',k===i); b.classList.toggle('on',!!S.v['on'+k]); });
           TIC.EA(leds,function(d,p){ d.classList.toggle('on',!!S.v['on'+c[p]]); }); }   /* tp76 — a lit lane FILLS white like the LFO's and the Glitch's buttons (Max) */
 
