@@ -275,7 +275,12 @@ enum class ModDest : int
     // ── tp37 · THE GLOBAL LFO RATE. Appended at the tail (saved routes carry dest ints). index.html mirrors it as
     //    window.__LFO_GLOBAL_DEST; makeDestInfo() gives it its Linear01 x 1.0 row explicitly (the pool loops stop before it).
     LfoRateGlobal = FlowInstEnd,
-    NumDests = LfoRateGlobal + 1
+    // ── tp96 · THE SHAPER LANES' DEPTH. Max: "make sure we include all the destinations … every single one everything
+    //    that is capable." One per lane (kShaperLanes = 18) per Chop instance (4): ShaperDepthBase + inst*18 + lane.
+    //    Appended at the tail; index.html's MOD page mirrors SHAPER_DEPTH_BASE = 5200.
+    ShaperDepthBase = LfoRateGlobal + 1,
+    ShaperDepthEnd  = ShaperDepthBase + 4 * 18,
+    NumDests = ShaperDepthEnd
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
@@ -300,7 +305,7 @@ inline constexpr int kFlowSpan = (int) ModDest::EnvPBase - (int) ModDest::FlowTi
 static_assert ((int) ModDest::OscBank2Base == 1890 && (int) ModDest::FlowInstBase == 3780 && kFlowSpan == 473
             && (int) ModDest::FlowInstEnd == 3780 + 3 * 473,
     "tp20 - index.html mirrors OSCBANK2_BASE=1890, FLOWINST_BASE=3780, FLOW_SPAN=473; a shift here re-points every saved pool route");
-static_assert ((int) ModDest::LfoRateGlobal == 5199 && (int) ModDest::NumDests == 5200,
+static_assert ((int) ModDest::LfoRateGlobal == 5199 && (int) ModDest::ShaperDepthBase == 5200 && (int) ModDest::NumDests == 5272,
     "tp37 - index.html mirrors window.__LFO_GLOBAL_DEST=5199 (the global LFO rate, appended after the flow pool); a shift here re-points saved routes");
 /** A destination that belongs to ONE oscillator (its letter is in its name). Every such family is
  *  laid out A,B,C,D contiguously, so the ranges below are the families' first A and last D. */
@@ -1080,6 +1085,8 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     //   normalised space, like LfoRate1..10. (A dest past the pool that is NOT given a row here is value-initialised
     //   to scale 0 — an envelope routed to it would silently contribute nothing; measured, Tests/_tp37d_lfoglobal_env.js.)
     a[(size_t) ModDest::LfoRateGlobal] = DestInfo { ModDomain::Linear01, 1.0f };
+    // tp96 — the Shaper lanes' Depth (0..1 knob travel). Without these rows they would be value-initialised to scale 0.
+    for (int i = (int) ModDest::ShaperDepthBase; i < (int) ModDest::ShaperDepthEnd; ++i) a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;
 }
 static constexpr auto kDestInfo = makeDestInfo();

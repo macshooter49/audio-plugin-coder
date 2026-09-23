@@ -45828,7 +45828,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     ['Arp','Glitch','Shaper'].forEach(function(nm){ for(var inst=1;inst<4;inst++) FLOWD[nm].forEach(function(p){ addD(c,flowInst(inst,p[1]),nm+' '+(inst+1),p[0],nm+' '+(inst+1)); }); }); })();
   (function(){ var c=cat('Samplers'); 'ABCD'.split('').forEach(function(L,ix){ ENGF[0][1].forEach(function(p){ addD(c,p[1]+ix,'Osc '+L,p[0],'Osc '+L+' · Sample'); });
     ENGF[1][1].slice(0,4).forEach(function(p){ addD(c,p[1]+ix,'Osc '+L,p[0],'Osc '+L+' · Granular'); }); }); })();
-  (function(){ var c=cat('Shaper'); FLOWD.Shaper.forEach(function(p){ addD(c,p[1],'Shaper',p[0]); }); })();
+  /* tp96 — the Shaper lanes' Depth: ModDest::ShaperDepthBase (5200) + inst*18 + lane, lane order = FlowShaper.h's kinds */
+  var SHP_DEPTH_BASE=5200, SHP_LANES=['Volume','Time','Filter','Pan','Repeat','Drive','Phaser','Crush','Reverb','Delay','Chorus','Widen','Multiband','Tape','Granular','Bode','Noise','Flanger'];
+  (function(){ var c=cat('Shaper'); FLOWD.Shaper.forEach(function(p){ addD(c,p[1],'Shaper',p[0]); });
+    SHP_LANES.forEach(function(ln,k){ addD(c,SHP_DEPTH_BASE+k,'Shaper',ln+' Depth','Lanes'); }); })();
+  (function(){ var c=DCATS.filter(function(x){ return x.label==='Patcher'; })[0];
+    for(var inst=1;inst<4;inst++) SHP_LANES.forEach(function(ln,k){ addD(c,SHP_DEPTH_BASE+inst*18+k,'Shaper '+(inst+1),ln+' Depth','Shaper '+(inst+1)); }); })();
   (function(){ var c=cat('Arp'); FLOWD.Arp.forEach(function(p){ addD(c,p[1],'Arp',p[0]); }); })();
   (function(){ var c=cat('Glitch'); FLOWD.Glitch.forEach(function(p){ addD(c,p[1],'Glitch',p[0]); }); })();
   (function(){ var c=cat('Robin'); [['Vary',472],['Drift',473],['Wobble',474],['Level',475],['Pan',476],['After',477],['Glide',478],['Overlap',479],['Fade',480]].forEach(function(p){ addD(c,p[1],'Robin',p[0]); }); })();

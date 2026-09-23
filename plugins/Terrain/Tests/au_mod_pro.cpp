@@ -213,6 +213,28 @@ int main()
     snprintf (b, sizeof b, "swing %.2f dB at velocity 127, %.2f dB at 25", Dh.swingDb, Ds.swingDb);                    chk (Dh.swingDb > Ds.swingDb + 3.0, "D  AUX = velocity scales the route", b);
     snprintf (b, sizeof b, "swing %.2f dB at velocity 127, %.2f dB at 25", Eh.swingDb, Es.swingDb);                    chk (Es.swingDb > Eh.swingDb + 3.0, "E  INV flips it: the soft note swings more", b);
     snprintf (b, sizeof b, "swing %.2f dB with the aux bent +0.8, %.2f dB straight, both at velocity 72", Gb.swingDb, Gs.swingDb); chk (Gb.swingDb < Gs.swingDb - 3.0, "F  aux CRV bends the aux (a bent-down curve holds a mid velocity back)", b);
+
+    /* ── tp96 · G/H — THE FLOW KNOBS NOW HEAR EVERY FAMILY, and a Shaper lane's DEPTH is a destination. The Volume lane
+       is lit with a hard 1/8 gate and its own Depth at 0, so it does nothing by itself; a MACRO (a family flowMod used
+       to drop) routed to ShaperDepthBase + 0 (Volume, instance 1) has to bring the gating in. ── */
+    {
+        a.set ("Flow Chain 1", 2.0f); a.pump (0.6);
+        std::string x; a.getStateXml (x);
+        std::string j = "{\"tv\":2,\"lanes\":[{\"pts\":[[0,1,0],[0.1249,1,0],[0.125,0,0],[0.2499,0,0],[0.25,1,0],[0.3749,1,0],[0.375,0,0],[0.4999,0,0],[0.5,1,0],[0.6249,1,0],[0.625,0,0],[0.7499,0,0],[0.75,1,0],[0.8749,1,0],[0.875,0,0],[1,0,0]],\"smooth\":0.02,\"phase\":0,\"tension\":0.5,\"floor\":0,\"blend\":1,\"swing\":0,\"grid\":16}";
+        for (int i = 1; i < 18; ++i) j += ",{}";
+        Au::putAttr (x, "shaperJson0", j + "]}"); a.setStateXml (x);
+        for (int q = 0; q < 8; ++q) a.setIndex ("Shaper Slot " + std::to_string (q + 1), q, 18);
+        a.set ("Shaper Volume On", 1.0f); a.set ("Shaper Volume Depth", 0.0f); a.pump (0.6);
+        const float mHi = a.byRange.count ("Synth Macro 1") ? a.byRange["Synth Macro 1"].second : 1.0f;
+        auto gate = [&] (float macro) -> Swing
+        { std::string y; a.getStateXml (y); Au::putAttr (y, "synModJson", "[{\"s\":220,\"d\":5200,\"v\":1}]"); a.setStateXml (y);
+          a.set ("Shaper Volume On", 1.0f); a.set ("Shaper Volume Depth", 0.0f); a.set ("Synth Macro 1", macro); a.pump (0.6); a.render (40, 0.0, false);
+          a.note (48, 110); a.note (55, 110); a.note (60, 110); std::vector<float> l; a.render ((int) (48000.0 * 3.0 / 512), 0.0, true, &l);
+          a.note (48, 0); a.note (55, 0); a.note (60, 0); a.render (60, 3.0, true); return loudness (l, (size_t) (48000 * 0.6), l.size()); };
+        const Swing G0 = gate (0.0f), G1 = gate (mHi);
+        snprintf (b, sizeof b, "gating %.2f dB with Macro 1 at full, %.2f dB at zero (the lane's own Depth is 0)", G1.swingDb, G0.swingDb);
+        chk (G1.swingDb > G0.swingDb + 10.0, "G  a MACRO drives a Shaper lane's DEPTH (a new destination, and a family flow knobs used to drop)", b);
+    }
     printf ("\n  %d passed, %d failed\n\n", pass, fail);
     a.close(); return fail ? 1 : 0;
 }

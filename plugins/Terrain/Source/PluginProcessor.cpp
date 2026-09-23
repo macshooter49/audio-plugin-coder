@@ -13716,17 +13716,31 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             flowLfoAmt[dI - (int) wc::ModDest::LfoAmt1] += monoEnvLevelOf (sI) * as.depth;
     }
     auto flowBase = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, rawParam (id)->load()); };  // ->load(): atomic<float> can't deduce in jlimit
+    /* 🚨 tp96 — THE FLOW / CARD KNOBS READ ONLY TWO FAMILIES. This pass accepted LFO and envelope sources and nothing
+       else — so a macro, velocity, the wheel, aftertouch, key, a follower, random or alt aimed at an Arp / Glitch /
+       Shaper knob was silently NOTHING, and it applied neither the route's CURVE (fb554) nor its aux ("Scale by").
+       The MOD page now offers every one of those, so this reads every family through the processor's one reader
+       (sourceValueOfSrc, the twin of the voice's), curves it, scales it by the bent / inverted aux, applies the
+       polarity override, and lets the SHAPE families own the knob exactly as the other two passes do. */
+    const wc::ModCurveSet* flowCurves = modCurvesLive_.load (std::memory_order_acquire);
     auto flowMod  = [&] (wc::ModDest dest, float& oW, float& oV) -> float {
         float sum = 0.0f; const auto& info = wc::kDestInfo[(int) dest];
         for (int a = 0; a < synModCfg.numAssignments; ++a) {
             const auto& as = synModCfg.assignments[a];
             if (! as.enabled || as.dest != dest) continue;
-            const int si = (int) as.source - (int) wc::ModSource::L1;
-            if (wc::isEnvModSource ((int) as.source))             // fb184 — envs OWN flow/card knobs (mono tap value, ownership math)
-            { const float dwF = std::abs (as.depth);
-              oW += dwF; oV += dwF * (monoEnvLevelOf ((int) as.source) + 1.0f); continue; }
-            if (si < 0 || si >= wc::NUM_LFOS) continue;           // only LFO sources have a global value
-            sum += wc::routeContribution (info, flowLfo_[si].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + flowLfoAmt[si]), as.depth);   // fb245 — LfoAmt scales flow/card knobs too
+            const int sI = (int) as.source;
+            float v; bool ok = true;
+            if (sI >= (int) wc::ModSource::L1 && sI < (int) wc::ModSource::L1 + wc::NUM_LFOS)
+            { const int si = sI - (int) wc::ModSource::L1; v = flowLfo_[si].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + flowLfoAmt[si]); }   // fb245 — LfoAmt scales flow/card knobs too
+            else v = sourceValueOfSrc (sI, ok, (int) dest);
+            if (! ok) continue;
+            if (as.curve >= 0) v = wc::applyModCurve (flowCurves, as.curve, sI, v);   // fb554 — the one curve law
+            float d = as.depth;
+            if (as.useAux) { bool okA = true; const float av = sourceValueOfSrc ((int) as.auxSource, okA, (int) dest + wc::kRandAuxDestBias);
+                             if (okA) d *= wc::auxScale (wc::sourceTo01 ((int) as.auxSource, av), as.auxCrv, as.auxInv); }
+            bool shapeLaw = true; v = wc::applyPolarity (sI, as.pol, v, shapeLaw);
+            if (shapeLaw) { const float dwF = std::abs (d); oW += dwF; oV += dwF * (v + 1.0f); continue; }   // fb184 — shapes OWN flow/card knobs
+            sum += wc::routeContribution (info, v, d);
         }
         return sum; };
     // Each mode reads its OWN 5 knob params (per-mode knob memory: ARP=FLOW_ARP_*, SEQ=FLOW_SEQ_*).
@@ -15824,7 +15838,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const auto& R = shpRefs_[inst][ln];
             if (R.on == nullptr) continue;
-            sh.setLaneCtl (ln, R.on->load() > 0.5f, juce::jlimit (0.0f, 1.0f, R.depth->load()), (int) R.rate->load(), (int) R.mode->load(), R.trig != nullptr ? (int) R.trig->load() : 0);
+            /* tp96 — a lane's DEPTH is a mod destination (ShaperDepthBase + inst*18 + lane), read through the flow knobs' own law */
+            float dep = juce::jlimit (0.0f, 1.0f, R.depth->load());
+            { float oW = 0.0f, oV = 0.0f; const float m = flowMod ((wc::ModDest) ((int) wc::ModDest::ShaperDepthBase + inst * wc::kShaperLanes + ln), oW, oV);
+              if (m != 0.0f || oW > 0.0f) { const float w = juce::jmin (1.0f, oW); dep = juce::jlimit (0.0f, 1.0f, (dep + m) * (1.0f - w) + oV); } }
+            sh.setLaneCtl (ln, R.on->load() > 0.5f, dep, (int) R.rate->load(), (int) R.mode->load(), R.trig != nullptr ? (int) R.trig->load() : 0);
         }
         /* tp83 — and the chain itself, from its own eight parameters */
         shpRoster_[inst].refreshNoise();   // tp84 — once a block: the sample's shared_ptr never moves on the audio thread
@@ -17031,6 +17049,8 @@ float TerrainAudioProcessor::globalSourceTo01 (int wire, int dest) noexcept
     return (sI < 0) ? 1.0f : wc::sourceTo01 (sI, globalSourceValue (wire, dest));
 }
 
+static_assert (wc::kShaperLanes * wc::kFlowInstances == (int) wc::ModDest::ShaperDepthEnd - (int) wc::ModDest::ShaperDepthBase,
+    "tp96 - the Shaper Depth destinations are laid out lane-major per Chop instance (18 x 4); a new lane or instance must grow ModDest");
 void TerrainAudioProcessor::setSynthModMatrix (const juce::String& json)
 {
     synModVersion_.fetch_add (1, std::memory_order_acq_rel);   // fb570 — every page re-reads (the editor's relay)
