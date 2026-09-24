@@ -52,7 +52,7 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
      rows:[...card.querySelectorAll('.pane .gboxrow')].length, boxes:[...card.querySelectorAll('.pane.on .gbox .gbl')].map(e=>e.textContent),
      tilePaths:tile?tile.querySelectorAll('svg path').length:-1, tileCircles:tile?tile.querySelectorAll('svg circle').length:-1, tileTitle:tile?tile.getAttribute('title'):null, tileAnim:tile?!!tile.querySelector('animateTransform, animate'):false, tileSine:tile?!!tile.querySelector('path.shpWave'):false, tileClip:tile?!!tile.querySelector('clipPath'):false,
      caps:[...scr.querySelectorAll('div:not(.mv-ov):not(.mv-c):not(.field)')].map(e=>e.textContent.trim()).filter(t=>t&&!/Point|Gate|Ladder/.test(t)) }; });
- ok(!r0.err && r0.boot && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===124 && r0.field && r0.lent && r0.chips.join('|')==='Point|Sine|' && r0.chevs===2 && r0.icons===0 && r0.selects===3 && r0.chipPx<=7.5 && r0.barH<=18 && r0.togs===0 && r0.tabCaps==='none' && r0.ttCaps==='none' && r0.lbCaps==='none' && r0.tileCaps==='uppercase' && r0.curInk==='rgb(91, 33, 182)' && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
+ ok(!r0.err && r0.boot && r0.open && r0.title==='Shaper' && r0.mix && r0.width===316 && r0.scrH===124 && r0.field && r0.lent && r0.chips.join('|')==='Point|Sine|' && r0.chevs===3   /* tp102 — the type chip is a dropdown too (chevron, no arrows) */ && r0.icons===0 && r0.selects===3 && r0.chipPx<=7.5 && r0.barH<=18 && r0.togs===0 && r0.tabCaps==='none' && r0.ttCaps==='none' && r0.lbCaps==='none' && r0.tileCaps==='uppercase' && r0.curInk==='rgb(91, 33, 182)' && r0.tiles===8 && r0.cur==='truefalsefalsefalsefalsefalsefalsefalse' && r0.leds===8 && r0.tabs.join('|')==='Shape|Target|Clock' && r0.chain && r0.rows===3 && r0.boxes.join('|')==='Volume|Cycle' && r0.caps.length===0,
     '🚨 [0] the page BOOTED whole (the frame dispatcher, the wind clock and the filter roster are all there — a parse error in any script block fails here); the Glitch chassis (316 wide, the screen now 124 px, eight tiles with dots, Shape / Target / Clock, two boxes a row, the chain) with the LFO\'s field in the screen and a small bar (≤ 7.5 px chips, ≤ 18 px tall, three NATIVE dropdowns, no glyphs); no On toggle anywhere; no caps but the tiles; the lit + selected Volume tile is white-filled with dark ink', JSON.stringify(r0));
  ok(r0.tilePaths===1 && r0.tileCircles===0 && r0.tileTitle==='Shaper' && !r0.tileAnim && r0.tileSine && !r0.tileClip, '[0b] the tile\'s emblem is ONE sawtooth path between fixed ends — no clip, no SMIL, nothing else on it', JSON.stringify({paths:r0.tilePaths,circles:r0.tileCircles,title:r0.tileTitle,anim:r0.tileAnim,sine:r0.tileSine,clip:r0.tileClip}));
  const nm=await p.evaluate(()=>{ try{ return (function(){ const s=document.documentElement.outerHTML; return /FLOWNAME=\{arp:'Arp',drift:'Robin',chop:'Shaper'/.test(s); })(); }catch(e){ return false; } });
@@ -332,24 +332,23 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
  ok(q26.typeVis && q26.off<=0.5 && q26.words[2].length>q26.words[0].length,
     '[26] the middle chip is centred in the bar to half a pixel even with a long word on the right', JSON.stringify(q26));
 
- // ── [27] THE ARROWS HUG THE WORD AND WALK THE ROSTER (the filter's own grammar, and the synth page's
- //        '‹ Sine ›'). Max: "the Ladder LP, that's supposed to have the arrows … make sure they hug the
- //        word and they don't get too far out." They ride above the invisible <select>, so a click on one
- //        must reach them and must NOT fall through to the two-pane browser. ──
+ // ── [27] tp102 — THE TYPE CHIP IS A DROPDOWN (Max: "the arrows on the clips n such are WAY TOO big, can we just have a
+ //        dropdown menu"). No ‹ ›; a chevron like its neighbours, on the bar's line. On a roster lane (Drive) a click opens
+ //        the house .pmenu glass (not a native list); a pick changes the chip and closes the menu. ──
  const q27=await p.evaluate(async()=>{ const card=document.querySelector('.ti-card.shp-ext.open');
-   const type=card.querySelector('.ch-type'), t=type.querySelector('.t'), L=type.querySelector('.ar.l'), R=type.querySelector('.ar.r');
-   if(!L||!R) return {err:'no arrows'};
-   const gap=(a,b)=>Math.abs(b.getBoundingClientRect().left-a.getBoundingClientRect().right);
-   const before=t.textContent, gl=+gap(L,t).toFixed(2), gr=+gap(t,R).toFixed(2);
+   const drv=[...card.querySelectorAll('.fxb')].find(b=>b.textContent.trim().toUpperCase()==='DRIVE'); if(drv) drv.click();
+   await new Promise(r=>setTimeout(r,250));
+   const type=card.querySelector('.ch-type'), t=type.querySelector('.t'), chev=type.querySelector('svg.chev');
+   const arrows=type.querySelectorAll('.ar').length;
    const midOf=e=>{ const q=e.getBoundingClientRect(); return q.top+q.height/2; };
-   const lined=Math.max(Math.abs(midOf(L)-midOf(t)),Math.abs(midOf(R)-midOf(t)));
-   R.click(); await new Promise(r=>setTimeout(r,250)); const fwd=t.textContent;
-   L.click(); await new Promise(r=>setTimeout(r,250)); const back=t.textContent;
-   const param=window.__params?window.__params['FLOW_CHOP_FILT_MODE']:null;
-   const browser=!!document.querySelector('.tpb, .two-pane, .tpb-wrap');
-   return { before, fwd, back, gl, gr, lined:+lined.toFixed(2), walked:fwd!==before, home:back===before, browser, param }; });
- ok(!q27.err && q27.walked && q27.home && q27.gl<=8 && q27.gr<=8 && q27.lined<=0.5 && !q27.browser,   /* device px at the card's 1.756 zoom ≈ 4.5 CSS px — the arrow's own padding and nothing more */
-    '[27] the type chip wears the filter’s two arrows: they hug the word (≤ 8 device px ≈ 4.5 CSS), sit on its line, step the roster forward and back, and never drop the click through to the browser', JSON.stringify(q27));
+   const lined=chev?Math.abs(midOf(chev)-midOf(t)):99;
+   const before=t.textContent; type.click(); await new Promise(r=>setTimeout(r,200));
+   const m=[...document.querySelectorAll('body > .pmenu')].pop(); const rows=m?[...m.querySelectorAll('.pi')]:[];
+   const pick=rows.find(r=>!r.classList.contains('cur')); if(pick) pick.click(); await new Promise(r=>setTimeout(r,200));
+   const after=t.textContent, closed=!!m&&!m.isConnected;   /* THIS menu is gone (other cards keep their own .pmenu parked) */
+   return { arrows, chev:!!chev, lined:+lined.toFixed(2), menu:!!m, rows:rows.length, before, after, changed:after!==before, closed }; });
+ ok(!q27.err && q27.arrows===0 && q27.chev && q27.lined<=1 && q27.menu && q27.rows>1 && q27.changed && q27.closed,
+    '[27] the type chip is a dropdown: no arrows, a chevron on its line, a click opens the house glass list, a pick changes the type and closes it', JSON.stringify(q27));
 
  // ── [28] A SINE IS A SINE. Max: "that's not a fucking sine wave, that's a triangle spike wave with a
  //        couple curvature." The segment law is an exponential bend, which cannot draw a cosine across

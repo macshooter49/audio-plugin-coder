@@ -1698,7 +1698,11 @@ html.ti-mod-glass #plugin > #footer { visibility: hidden; }
 .pmenu.tp-menu .pi:hover .dx { display: block; }
 .pmenu.tp-menu .pi .dx:hover { color: var(--rose); }
 .pmenu.tp-menu .pi.imp, .pmenu.tp-menu .pi.imp:hover { color: var(--purple-400); }
-.pmenu.tp-menu.tp-q .ps { color: var(--purple-400); }   /* POLISH — the mini-browser's category titles (Atmosphere / Poly Lead / …) read as CATEGORIES, not presets: the import-pack purple. Scoped to .tp-q so context menus keep their faint headers. */
+.pmenu.tp-menu.tp-q .ps { color: var(--purple-400); }
+/* tp102 — Max: "make the categories purple, just like the mini browser" — the Shaper's effects list (right-click a
+   tile): Distortion / Filter / Level / Modulation / Space / … are CATEGORIES, so they wear the same flat purple (no glow).
+   The "Position N in the chain" / "Chain" titles are not categories and keep their grey. */
+.pmenu .ps.cat, :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu) .syn-ctx-section.cat { color: var(--purple-400); text-shadow: none; }   /* POLISH — the mini-browser's category titles (Atmosphere / Poly Lead / …) read as CATEGORIES, not presets: the import-pack purple. Scoped to .tp-q so context menus keep their faint headers. */
 .pmenu.tp-menu .pi.dim { color: var(--menu-fg-faint); cursor: default; }
 .pmenu.tp-menu .pi.dim:hover { background: transparent; color: var(--menu-fg-faint); }
 .pmenu.tp-menu .pi.off { opacity: .4; pointer-events: none; }
@@ -4037,6 +4041,9 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
   position:absolute;left:0;right:0;top:0;bottom:0;margin:0;flex:none;
   justify-content:center;align-items:center;pointer-events:none;}
 .arp-ext .h .pset .pn,.gli-ext .h .pset .pn,.rbn-ext .h .pset .pn,.chop-ext .h .pset .pn{pointer-events:auto;}
+/* tp102 — MEASURED (ink gate): the 9 px Init word's ink sat 1.52 px ABOVE the header centreline on every card while Mix / Dock / ×
+   sit within ±0.5. An optical correction on the glyph only (transform: nothing else moves). */
+.arp-ext .h .pset .pn,.gli-ext .h .pset .pn,.rbn-ext .h .pset .pn,.chop-ext .h .pset .pn{transform:translateY(1.5px);}
 
 /* ══ tp73 — THE TERRAIN SHAPER card = THE GLITCH CARD WITH THE LFO IN ITS SCREEN (.shp-ext rides .chop-ext's chassis; the
    numbers below are the Glitch's and the LFO pane's, copied). Max: "take the exact same glitch and just replace everything
@@ -4062,7 +4069,7 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .shp-ext .screen .mv-ov.bot{bottom:0;height:18px;padding:0 10px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;}   /* tp77 — ONE MIDLINE (Max: "draw a line through the center … it needs to go through the middle of them both"). THREE COLUMNS, the outer two equal: the middle chip is centred in the bar however long the outer words are. justify-content:space-between only centred it when both sides weighed the same, and 'Point' against 'Ladder LP 24' never did (Max: "sign is not in the middle"). */
 .shp-ext .screen .mv-ov.bot .ch-brush{justify-self:start;}
 .shp-ext .screen .mv-ov.bot .ch-shape{justify-self:center;}
-.shp-ext .screen .mv-ov.bot .ch-type{justify-self:end;}
+.shp-ext .screen .mv-ov.bot .ch-type{justify-self:end;margin-right:.47px;}   /* tp102 — MEASURED: the type chip's chevron ink now sits exactly as far from the right edge as "Point"'s P from the left */
 .shp-ext .screen .mv-c{height:100%;min-width:0;}   /* tp77 — every chip owns the bar's full height and centres its own ink, so all three sit on ONE line whatever they contain */
 .shp-ext .screen .mv-c{position:relative;display:flex;align-items:center;gap:3px;font-size:7px;letter-spacing:.9px;font-weight:300;color:rgba(255,255,255,0.5);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;line-height:1;}
 .shp-ext .screen .mv-c:hover{color:#fff;}
@@ -4080,7 +4087,7 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
    left into the centred shape chip — the exact walking tp77/tp93 fought with tracking hacks. A hard width +
    ellipsis pins the box: a long name gets a "…", the arrows and every position stay EXACTLY put, whatever the
    name. Centred so short names sit between the arrows the way the filter's do. */
-.shp-ext .screen .ch-type .t{width:92px;max-width:92px;flex:none;text-align:center;}
+.shp-ext .screen .ch-type .t{width:auto;max-width:92px;flex:0 1 auto;text-align:right;}   /* tp102 — right-anchored: a longer name grows LEFT, the chevron's edge never moves (mirror of "Point" on the left) */
 .shp-ext .screen .mv-c select{position:absolute;inset:0;width:auto;height:auto;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none;border:none;background:transparent;}   /* tp77 — THE BAR WALKED ON EVERY CLICK. The select hung 3 px past the screen's floor, so focusing it made the browser scroll its overflow:hidden ancestor to reveal it (measured .screen.scrollTop 0 → 2.85 on the first click) and the whole bar rode with it — Max: "every time I try to click on point or custom, it gets lower". Flush now; a JS belt in the card keeps it at zero. */
 .shp-ext .screen .mv-c.browser select{display:none;}
 .shp-ext .screen .sh-ghost{fill:none;stroke:rgba(236,232,242,.17);stroke-width:1;pointer-events:none;}
@@ -4135,11 +4142,11 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .pmenu::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.13);border-radius:3px;}
 .pmenu::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.30);}
 .pmenu .pinp{width:130px;background:transparent;border:none;outline:none;color:#fff;font:inherit;text-align:center;}
-.ti-card .mix{margin-left:auto;display:flex;align-items:baseline;gap:4px;cursor:ew-resize;
+.ti-card .mix{margin-left:12px;display:flex;align-items:baseline;gap:4px;cursor:ew-resize;   /* tp102 — Max: Mix goes right NEXT TO THE TITLE; Init owns the centre */
   font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.40);}
 .ti-card .mix b{font-size:11px;font-weight:200;letter-spacing:.3px;color:rgba(255,255,255,.92);
-  font-family:-apple-system,'SF Pro Display',sans-serif;min-width:27px;text-align:right;}
-.ti-card .h .pop{position:relative;top:1px;margin-left:12px;font-size:7px;   /* fb236 — MEASURED: ink center was +1.92px below the header line at 2px (title/Init/100%/x all within ±0.35); 1px = the optical center between Max's two readings */letter-spacing:1.2px;text-transform:uppercase;
+  font-family:-apple-system,'SF Pro Display',sans-serif;min-width:27px;text-align:left;}   /* tp102 — hugs its label; the number grows right, the label never moves */
+.ti-card .h .pop{position:relative;top:1px;margin-left:auto;font-size:7px;   /* fb236 — MEASURED: ink center was +1.92px below the header line at 2px (title/Init/100%/x all within ±0.35); 1px = the optical center between Max's two readings */letter-spacing:1.2px;text-transform:uppercase;
   color:rgba(255,255,255,.45);font-weight:500;cursor:pointer;line-height:1;white-space:nowrap;}
 .ti-card .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px;cursor:pointer;line-height:1;}
 .ti-card .h .pop:hover,.ti-card .h .x:hover{color:#fff;}
@@ -4211,10 +4218,14 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .ti-card .cell.k .ctl{position:relative;}
 /* only the value that knobCell nests INSIDE the dial (.ctl > .vl) moves to the centre; a card that
    builds its own .cell.k with the value BELOW the dial (glitch Hold/Loop) keeps it there untouched. */
-.ti-card .cell.k .ctl > .vl{position:absolute;inset:0;margin:0;min-height:0;
+/* tp102 — Max: "the numbers aren't in the middle of the circle, looks glitched" (Glitch's Decay/Drop/Streak/Stereo sat at the
+   TOP of the ring). The value was centred on the whole .ctl box, which on the Glitch is taller than the ring (the ring sits at
+   its bottom, align-items:flex-end). It is now centred on the RING: a box the ring's own size, pinned to the bottom. */
+.arp-ext{--kz:34px;--kv-lift:.55px;} .gli-ext{--kz:32px;} .rbn-ext{--kz:30px;} .chop-ext{--kz:30px;} .lfo-ext{--kz:30px;}   /* --kv-lift = the MEASURED optical lift (ink centre on the ring centre, tp102 ink gate) */
+.ti-card .cell.k .ctl > .vl{position:absolute;inset:auto 0 0 0;height:var(--kz,100%);margin:0;min-height:0;
   display:flex;align-items:center;justify-content:center;pointer-events:none;box-sizing:border-box;
   font-family:-apple-system,'SF Pro Display',sans-serif;font-weight:300;font-size:8.5px;
-  letter-spacing:0;line-height:1;padding-top:.2em;white-space:nowrap;
+  letter-spacing:0;line-height:1;padding:0 0 var(--kv-lift,0) 0;white-space:nowrap;
   color:rgba(255,255,255,.92);font-variant-numeric:tabular-nums;text-transform:none;}
 
 /* hairline knob ring (r=14 · rotate 128 — the locked ring) sizes per card */
@@ -7573,7 +7584,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   #st-overlay .tr::before{content:'';position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,0.16);}
   #st-overlay .tr u{position:absolute;left:50%;top:50%;width:1px;height:7px;transform:translate(-50%,-50%);background:rgba(255,255,255,0.28);pointer-events:none;}
   #st-overlay .tr i{position:absolute;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;background:rgba(255,255,255,.92);pointer-events:none;}
-  #st-overlay .tr i.lv{background:#B794FF!important;box-shadow:0 0 4px rgba(183,148,255,.65);}
+  #st-overlay .tr i.lv{background:#B794FF!important;box-shadow:none;}   /* tp102 — Max: "no GLOW on the line" — flat purple */
   #st-overlay .tr b{position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#fff;transform:translate(-50%,-50%);pointer-events:none;}
   #st-overlay .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px;cursor:pointer;}
   #st-overlay .sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26);transition:background .12s,border-color .12s;}
@@ -24658,7 +24669,7 @@ setTimeout(function wireSynControls () {
           }
           if (it.isHeader) {
             const sh = document.createElement('div');
-            sh.className = 'syn-ctx-section';
+            sh.className = 'syn-ctx-section' + (it.cat ? ' cat' : '');   /* tp102 — category titles read purple */
             sh.textContent = it.label;
             menuEl.appendChild(sh);
             return;
@@ -36924,14 +36935,20 @@ restoreThemeFromBackend();
       function C01(n){ return Math.max(0,Math.min(1,n)); }
       function el(html){ var t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
       function EA(list,f){ Array.prototype.forEach.call(list,f); }
-      function pct(n){ return Math.round(n*100)+'%'; }
+      function pct(n){ return String(Math.round(n*100)); }   /* tp102 — Max: "remove the % signs" on the cards */
+      function np(t){ return String(t).replace(/\s*%\s*$/,''); }   /* tp102 — strip a trailing % from any card readout */
       function inum(a,b){ return function(n){ return String(Math.round(a+n*(b-a))); }; }
       // knob ring — r=14, C≈88, rotate(128): dash n*88 of a 132 pattern (the locked look)
       function knobSVG(){ return '<svg viewBox="0 0 36 36">'
         +'<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>'
         +'<circle class="kf" cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2" stroke-linecap="round" stroke-dasharray="0 132" transform="rotate(90 18 18)"/></svg>'; }   /* fb150 — zero at the BOTTOM (was 128deg = 7:30): 50% fills exactly half the ring and lands at 12 o'clock (Max: "50% looked like three-fourths") */
-      function setRing(host,n){ var d=C01(n)*88, kf=host.querySelector('.kf');
-        if(kf) kf.setAttribute('stroke-dasharray', d.toFixed(1)+' '+(132-d).toFixed(1)); }
+      function setRing(host,n){ var v=C01(n), d=v*88, kf=host.querySelector('.kf');
+        if(!kf) return;
+        /* tp102 — Max: "at 100 there's this white dot instead of the circle going FULL". The value is a dash with ROUND
+           caps; at 100 the dash wraps the whole ring and the two round caps overlap at 6 o'clock — a bump. A full ring is
+           drawn as one closed stroke with butt caps: no seam, no dot. */
+        if(v>=0.999){ kf.setAttribute('stroke-linecap','butt'); kf.setAttribute('stroke-dasharray','88 44'); return; }
+        kf.setAttribute('stroke-linecap','round'); kf.setAttribute('stroke-dasharray', d.toFixed(1)+' '+(132-d).toFixed(1)); }
 
       /* pointer drag → normalized value; dblclick = reset (suppressed 400ms after a drag) */
       function dragify(elm,o){
@@ -37025,7 +37042,7 @@ restoreThemeFromBackend();
         var c=el('<div class="cell k"><div class="ctl">'+knobSVG()+'<span class="vl"></span></div><span class="lb">'+label+'</span></div>');
         c.setAttribute('data-ti-key',key);   /* fb145 — LFO drop-target identity */
         var vl=c.querySelector('.vl');
-        function paint(){ setRing(c,S.v[key]); vl.textContent=(fmt||pct)(S.v[key]); }
+        function paint(){ setRing(c,S.v[key]); vl.textContent=np((fmt||pct)(S.v[key])); }
         dragify(c.querySelector('svg'),{get:function(){return S.v[key];},set:function(n){S.set(key,n);},reset:(reset==null?0.5:reset)});
         S.on(function(k){ if(k===key)paint(); }); paint(); return c; }
       /* fb143 — ONE slider everywhere: the osc-menu Volume/Pan/Semitone component,
@@ -37043,7 +37060,7 @@ restoreThemeFromBackend();
           if(bip){ if(n>=0.5){ fi.style.left='50%'; fi.style.width=(p-50).toFixed(1)+'%'; }
                    else{ fi.style.left=p.toFixed(1)+'%'; fi.style.width=(50-p).toFixed(1)+'%'; } }
           else{ fi.style.left='0%'; fi.style.width=p.toFixed(1)+'%'; }
-          vl.textContent=(fmt||pct)(n); }
+          vl.textContent=np((fmt||pct)(n)); }
         dragify(c.querySelector('.tr'),{axis:'x',get:function(){return S.v[key];},set:function(n){S.set(key,n);},span:64,reset:rst});
         S.on(function(k){ if(k===key)paint(); }); paint(); return c; }
       function vsStepCell(S,key,list,label,resetIx){
@@ -37076,7 +37093,7 @@ restoreThemeFromBackend();
           if(bip){ if(n>=0.5){ fi.style.bottom='50%'; fi.style.height=(p-50).toFixed(1)+'%'; }
                    else{ fi.style.bottom=p.toFixed(1)+'%'; fi.style.height=(50-p).toFixed(1)+'%'; } }
           else{ fi.style.bottom='0%'; fi.style.height=p.toFixed(1)+'%'; }
-          vl.textContent=(fmt||pct)(n); }
+          vl.textContent=np((fmt||pct)(n)); }
         dragify(c.querySelector('.vsl'),{get:function(){return S.v[key];},set:function(n){S.set(key,n);},span:56,reset:rst});
         S.on(function(k){ if(k===key)paint(); }); paint(); return c; }
       /* value picker (fb95): native Apple dropdown in the quiet box; state = INDEX */
@@ -37106,7 +37123,7 @@ restoreThemeFromBackend();
       function mixBind(card,pid,def,fmt){
         var st=null, local=def, b=card.querySelector('.mix b'), mx=card.querySelector('.mix');
         function cur(){ if(st){ try{ return st.getNormalisedValue(); }catch(e){} } return local; }
-        function paint(){ b.textContent=fmt?fmt(cur()):(Math.round(cur()*100)+'%'); }
+        function paint(){ b.textContent=np(fmt?fmt(cur()):String(Math.round(cur()*100))); }
         function resolve(p){ st=null;
           if(p!=null){
             if(window.__cardOnly&&window.__synSliderShim){ st=window.__synSliderShim(p,def); }
@@ -38013,7 +38030,7 @@ restoreThemeFromBackend();
           TIC.EA(bleds,function(d,i){ var f=FX[i][0];
             d.classList.toggle('on',!!(sim.firing&&sim.firing.fx===f)); }); }
         var g5=TIC.el('<div class="grid5">'
-          +'<div class="cell chcell" data-ti-key="chance"><div class="ctl"><span class="big"><span class="bn">50</span><i>%</i></span></div>'
+          +'<div class="cell chcell" data-ti-key="chance"><div class="ctl"><span class="big"><span class="bn">50</span></span></div>'
           +'<span class="lb" style="transform:translateX(-5px)">Chance</span><span class="vl"></span></div></div>');
         (function(){ var big=g5.querySelector('.big'), bn=g5.querySelector('.bn');
           function paint(){ var v=Math.round(S.v.chance*100);
@@ -38804,7 +38821,7 @@ restoreThemeFromBackend();
         var scr=TIC.el('<div class="screen"><div class="field"></div>'
           +'<div class="mv-ov bot"><span class="mv-c ch-brush"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span>'
           +'<span class="mv-c ch-shape"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span>'
-          +'<span class="mv-c ch-type"><span class="ar l">\u2039</span><span class="t"></span><span class="ar r">\u203A</span><select></select></span></div></div>');
+          +'<span class="mv-c ch-type"><span class="t"></span>'+(LF?LF.CHEV:'')+'<select></select></span></div></div>');   /* tp102 — a dropdown like its neighbours; no ‹ › */
         var field=scr.querySelector('.field'), chBrush=scr.querySelector('.ch-brush'), chShape=scr.querySelector('.ch-shape'), chType=scr.querySelector('.ch-type');
         function fillSel(chip,names,cur,groups){ var se=chip.querySelector('select'); se.innerHTML=''; var host=se, lastG=null;
           names.forEach(function(n,k){ var g=groups?groups[k]:null; if(g!==lastG){ lastG=g; if(g){ host=document.createElement('optgroup'); host.label=g; se.appendChild(host); } else host=se; }
@@ -38956,8 +38973,22 @@ restoreThemeFromBackend();
         (function(){ var g=nsFn('getNoiseSampleSel',1); if(!g)return;
           try{ Promise.resolve(g()).then(function(js){ var o={}; try{ o=JSON.parse(js||'{}'); }catch(e){} if(o&&o.name){ S.set('nsname',o.name); paintChips(); } }).catch(function(){}); }catch(e){} })();
 
+        /* tp102 — every other roster lane (Drive, Phase, Crush, Reverb, Delay, …) opens the house .pmenu glass, exactly like the
+           Shape chip beside it — no native Apple list. The <select> stays as the state bridge but never opens. */
+        chType.querySelector('select').style.pointerEvents='none';
+        var tyMenu=null;
+        function closeTypeMenu(){ if(tyMenu){ try{ tyMenu.remove(); }catch(e){} tyMenu=null; document.removeEventListener('pointerdown',tyOutside,true); } }
+        function tyOutside(ev){ if(tyMenu&&!tyMenu.contains(ev.target)&&!chType.contains(ev.target)) closeTypeMenu(); }
+        function openTypeMenu(){ if(tyMenu){ closeTypeMenu(); return; } var i=lane(), l=lkey(); if(!ROSTER[l]) return;
+          var M=LNMODE(l), cur=S.v['mode'+i]|0, m=TIC.el('<div class="pmenu"></div>');
+          M.forEach(function(name,idx){ var r=TIC.el('<div class="pi'+(idx===cur?' cur':'')+'"><span class="nm"></span></div>'); r.querySelector('.nm').textContent=name;
+            r.addEventListener('click',function(ev){ ev.stopPropagation(); S.set('mode'+i,idx); paintChips(); closeTypeMenu(); }); m.appendChild(r); });
+          document.body.appendChild(m); var bb=chType.getBoundingClientRect();
+          m.style.left=Math.max(6,Math.min(window.__vw()-m.offsetWidth-6,bb.right-m.offsetWidth))+'px';
+          var top=bb.bottom+4; if(top+m.offsetHeight>window.__vh()-6) top=Math.max(6,bb.top-4-m.offsetHeight);
+          m.style.top=top+'px'; tyMenu=m; setTimeout(function(){ document.addEventListener('pointerdown',tyOutside,true); },0); }
         chType.addEventListener('click',function(e){ if(lkey()==='noise'){ e.stopPropagation(); noiseBrowser(e); return; }
-          if(lkey()!=='filt')return; e.stopPropagation(); var i=lane(), M=LNMODE('filt'), cur=S.v['mode'+i]|0;
+          if(lkey()!=='filt'){ e.preventDefault(); e.stopPropagation(); openTypeMenu(); return; } e.stopPropagation(); var i=lane(), M=LNMODE('filt'), cur=S.v['mode'+i]|0;
           /* the filter's 118: the rack's own two-pane browser (fb603), its categories */
           var G=window.__FLT_ENGGRP||[], GN=window.__FLT_GRPNAMES||[], cats=[], byG={};
           for(var k=0;k<M.length;k++){ var g=GN[G[k]]||'Other'; if(!byG[g]){ byG[g]={label:g,items:[]}; cats.push(byG[g]); } (function(idx){ byG[g].items.push({ name:M[idx], sel:idx===cur, pick:function(){ S.set('mode'+i,idx); paintChips(); } }); })(k); }
@@ -39114,7 +39145,7 @@ restoreThemeFromBackend();
           var m=TIC.el('<div class="pmenu"></div>');
           rows.forEach(function(r){ if(!r)return;
             if(r.node){ m.appendChild(r.node); return; }
-            if(r.isHeader){ var s=TIC.el('<div class="ps"></div>'); s.textContent=r.label||''; m.appendChild(s); return; }
+            if(r.isHeader){ var s=TIC.el('<div class="ps'+(r.cat?' cat':'')+'"></div>'); s.textContent=r.label||''; m.appendChild(s); return; }
             var pi=TIC.el('<div class="pi'+(r.isChecked?' cur':'')+'"><span class="nm"></span></div>');
             pi.querySelector('.nm').textContent=r.label||'';
             if(!r.isDisabled) pi.addEventListener('click',function(ev){ ev.stopPropagation(); try{ r.onPick&&r.onPick(); }catch(e){} if(!r.keepOpen) closePm(); });
@@ -39170,7 +39201,7 @@ restoreThemeFromBackend();
           /* 2026-09-23 (Max) — the effects list is ALPHABETICALLY CATEGORISED (SHP_CAT): categories A→Z,
              the effects inside each A→Z. The pick still SWAPS the kind into this position (tp79/tp80). */
           var byCat={}; LN.forEach(function(l,k){ var cat=SHP_CAT[l[2]]||'Other'; (byCat[cat]=byCat[cat]||[]).push({k:k,name:l[2]}); });
-          Object.keys(byCat).sort().forEach(function(cat){ rows.push({ isHeader:true, label:cat });
+          Object.keys(byCat).sort().forEach(function(cat){ rows.push({ isHeader:true, cat:true, label:cat });   /* tp102 — a CATEGORY title reads purple, like the mini browser's */
             byCat[cat].sort(function(a,b){ return a.name<b.name?-1:1; }).forEach(function(it){
               rows.push({ label:it.name, white:true, isChecked:it.k===here, onPick:(function(k){ return function(){ place(k); }; })(it.k) }); }); });
           rows.push({ isHeader:true, label:'Chain' });
