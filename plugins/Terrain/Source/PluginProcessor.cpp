@@ -3381,16 +3381,21 @@ void TerrainAudioProcessor::organicsFillMeta (OrgSlot& s, const juce::String& id
     if (s.name.isEmpty()) s.name = id;
 }
 
-// Post an instrument to the audio thread. The mailbox holds ONE; if the audio thread has not emptied it yet (no block
-// ran), publishPending keeps the request and the next tick retries. Never blocks, never allocates on the audio side.
+// Post an instrument to the audio thread. The mailbox holds ONE, and the NEWEST wins: a delivery the audio thread has
+// not taken yet (no block ran — a paused host, an offline render with a frozen message loop, a cached instrument that
+// answered within a block) is TAKEN BACK and replaced, so a quick answer never waits behind the nullptr the request
+// posted first. States: 0 empty · 1 full · 2 busy (whoever holds it). The audio thread's take is one CAS; if it is
+// mid-take (2) the message thread retries on the next tick (publishPending). Never blocks, never frees on the audio side.
 void TerrainAudioProcessor::organicsPublish (int o)
 {
     auto& s = orgSlot_[o];
-    if (orgMailFull_[o].load (std::memory_order_acquire)) { s.publishPending = true; return; }
-    s.prev = s.published;                    // keep the outgoing one alive until the audio thread has taken the new
+    int st = orgMailState_[o].load (std::memory_order_acquire);
+    if (st == 2 || ! orgMailState_[o].compare_exchange_strong (st, 2, std::memory_order_acq_rel)) { s.publishPending = true; return; }
+    if (st == 0) s.prev = s.published;       // the audio thread holds `published`: keep it alive until it has taken the new
+    // st == 1: the audio thread never saw `published` — it still holds `prev`, which stays held
     s.published = s.inst;
-    orgMail_[o] = s.inst;
-    orgMailFull_[o].store (true, std::memory_order_release);
+    orgMail_[o] = s.inst;                    // a taken-back value is dropped HERE, on the message thread
+    orgMailState_[o].store (1, std::memory_order_release);
     s.publishPending = false;
 }
 
@@ -3411,6 +3416,9 @@ void TerrainAudioProcessor::organicsRequest (int o, const juce::String& id, bool
     if (id.isEmpty()) { s.status = {}; organicsPublish (o); return; }
     s.status = "loading";
     organicsPublish (o);
+    if (std::getenv ("TERRAIN_ORGANICS_DEBUG") != nullptr)
+        std::fprintf (stderr, "[organics] osc %d requesting '%s' from %s (fromState %d)\n", o, id.toRawUTF8(),
+                      tw::OrganicsLibrary::get().root().getFullPathName().toRawUTF8(), fromState ? 1 : 0);
     if (orgAlive_ == nullptr) orgAlive_ = std::make_shared<int> (0);   // the callback's liveness token (first use only)
     std::weak_ptr<int> alive = orgAlive_;
     TerrainAudioProcessor* selfP = this;
@@ -3419,6 +3427,9 @@ void TerrainAudioProcessor::organicsRequest (int o, const juce::String& id, bool
         if (alive.expired()) return;         // the instance is gone
         auto* self = selfP;
         auto& sl = self->orgSlot_[o];
+        static const bool dbg = std::getenv ("TERRAIN_ORGANICS_DEBUG") != nullptr;   // a harness's eyes (off in every session)
+        if (dbg) std::fprintf (stderr, "[organics] osc %d request '%s' -> %s (gen %u, current %u)\n", o, id.toRawUTF8(),
+                               inst != nullptr ? "loaded" : "nullptr", (unsigned) gen, (unsigned) sl.reqGen);
         if (sl.reqGen != gen) return;                                   // superseded by a newer pick
         if (inst != nullptr)
         {
@@ -3458,11 +3469,8 @@ void TerrainAudioProcessor::organicsTick()
     for (int o = 0; o < ParameterIDs::kOscCount; ++o)
     {
         auto& s = orgSlot_[o];
-        if (! orgMailFull_[o].load (std::memory_order_acquire))
-        {
-            s.prev = nullptr;
-            if (s.publishPending) organicsPublish (o);
-        }
+        if (orgMailState_[o].load (std::memory_order_acquire) == 0) s.prev = nullptr;
+        if (s.publishPending) organicsPublish (o);
     }
     const juce::uint32 now = juce::Time::getMillisecondCounter();
     const juce::uint64 seq = audioSeq_.load (std::memory_order_seq_cst);
@@ -3534,6 +3542,7 @@ juce::String TerrainAudioProcessor::organicsJsonOf (int o) const
     obj->setProperty ("hasRelease", s.hasRelease);
     obj->setProperty ("status", s.status.isEmpty() ? juce::String (s.id.isEmpty() ? "" : "ok") : s.status);
     obj->setProperty ("rev", s.rev);
+    obj->setProperty ("artic", (int) *rawParam (ParameterIDs::kOsc_ORG_ARTIC[juce::jlimit (0, ParameterIDs::kOscCount - 1, o)]));   // the page's articulation select
     if (s.wantedId.isNotEmpty()) { obj->setProperty ("wantedId", s.wantedId); obj->setProperty ("wantedName", s.wantedName); }
     return juce::JSON::toString (juce::var (obj), true);
 }
@@ -11186,11 +11195,12 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //  voices re-hand it to their engines on their next render. The message thread still holds the outgoing one, so the
     //  reference this drops is never the last (no free on the audio thread). Idle: eight relaxed-acquire loads.
     for (int o = 0; o < ParameterIDs::kOscCount; ++o)
-        if (orgMailFull_[o].load (std::memory_order_acquire))
+        if (int full = 1; orgMailState_[o].load (std::memory_order_relaxed) == 1
+                          && orgMailState_[o].compare_exchange_strong (full, 2, std::memory_order_acq_rel))
         {
             orgAudioInst_[o] = std::move (orgMail_[o]);
             ++orgInstGen_[o];
-            orgMailFull_[o].store (false, std::memory_order_release);
+            orgMailState_[o].store (0, std::memory_order_release);
             // every voice of that bank, sounding or not (an idle engine must not pin the outgoing instrument)
             const bool isB = o >= ParameterIDs::kOscPerBank;
             if (! isB || bankB_.load (std::memory_order_acquire) != nullptr)

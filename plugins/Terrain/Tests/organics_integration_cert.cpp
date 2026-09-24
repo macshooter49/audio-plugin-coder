@@ -64,7 +64,7 @@
 #undef protected
 
 // The runtime's test hooks (OrganicEngine.h). Weak: when the stub is linked they do not exist and [3] reports so.
-namespace tw { namespace organics_debug { int lastRenderReaders() noexcept __attribute__((weak)); int lastLiveReaders() noexcept __attribute__((weak)); } }
+namespace tw { namespace organics_debug { int lastRenderReaders() noexcept __attribute__((weak)); int lastLiveReaders() noexcept __attribute__((weak)); int lastNoteRegion() noexcept __attribute__((weak)); int steals() noexcept __attribute__((weak)); } }
 
 static int npass = 0, nfail = 0, nskip = 0;
 static void chk (bool ok, const char* what, const std::string& d = "")
@@ -91,6 +91,7 @@ struct Inst
         p = std::make_unique<TerrainAudioProcessor>();
         p->setPlayConfigDetails (0, 2, SR, BLK);
         p->prepareToPlay (SR, BLK);
+        if (std::getenv ("ORG_NONRT")) p->setNonRealtime (true);   // the offline-bounce path (8-tap sinc)
     }
     void block (std::initializer_list<std::pair<int,int>> ev = {}, const juce::MidiBuffer* extra = nullptr)
     {
@@ -113,7 +114,9 @@ struct Inst
         {
             tick(); block();
             const auto st = p->organicSlot (osc).status;
-            if (st != "loading") return st;
+            // landed = decided AND delivered: the mailbox holds one instrument, so a fast (cached) answer can wait one
+            // timer tick behind the nullptr the request posted first (organicsPublish's publishPending)
+            if (st != "loading" && ! p->orgSlot_[osc].publishPending && ! (p->orgMailState_[osc].load() != 0)) { block(); return st; }
         }
         return p->organicSlot (osc).status;
     }
@@ -192,6 +195,8 @@ static void useOrganic (Inst& a, int osc, const juce::String& id)
     juce::ignoreUnused (js);
 }
 
+static bool want (int k) { const char* o = std::getenv ("ORG_ONLY"); return o == nullptr || std::strchr (o, (char) ('0' + k)) != nullptr; }
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI init;
@@ -203,6 +208,7 @@ int main()
 
     // ═══ [0] UNUSED ═══
     std::printf ("\n[0] Unused: zero allocation, no library, no thread\n");
+    if (want (0))
     {
         Inst a; a.block ({ {48,1},{55,1},{60,1},{64,1} }); a.run (0.5); a.block ({ {48,0},{55,0},{60,0},{64,0} }); a.run (0.3);
         chk (a.p->organicsAllocatedVoiceCount() == 0 && ! a.p->organicsTouchedLibrary() && ! organicsThreadExists(),
@@ -214,6 +220,7 @@ int main()
     // ═══ [1] OSC A + test.sine, pitch, through the filter ═══
     std::printf ("\n[1] Osc A on Organics + test.sine: pitch and the filter\n");
     std::vector<float> refA; double refRms = 0;
+    if (want (1))
     {
         Inst a; useOrganic (a, 0, "test.sine");
         const auto st = a.waitLoaded (0);
@@ -245,6 +252,7 @@ int main()
 
     // ═══ [2] MOD ROUTE → ORG_TONE ═══
     std::printf ("\n[2] A mod route to ORG_TONE (osc A) moves the brightness\n");
+    if (want (2))
     {
         auto run = [] (float depth, double& cen)
         {
@@ -265,10 +273,17 @@ int main()
 
     // ═══ [3] UNISON 4 → 4 PLAYERS ═══
     std::printf ("\n[3] Unison 4 → 4 players (Ensemble)\n");
+    if (want (3))
     {
         Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
         setP (*a.p, ParameterIDs::SYN_OSC_A_UNISON, 4.f);
         a.clear(); a.block ({ {69,1} }); a.block(); a.run (0.1);
+        if (std::getenv ("ORG_DEBUG"))
+            for (int i = 0; i < TerrainAudioProcessor::kSynthVoiceCount; ++i)
+                if (auto* v = a.p->synthVoices_[(size_t) i]) if (v->isVoiceActive())
+                    std::printf ("   dbg voice %d: note %d eng %d ready %d active %d seen %u gen %u blk %p lvl %.3f rms %.1f region %d steals %d\n", i, v->getCurrentlyPlayingNote(), (int) v->engine_,
+                                 v->orgReady_.load() ? 1 : 0, v->orgV_ && v->orgV_->eng[0].isActive() ? 1 : 0, v->orgInstSeen_[0], a.p->orgInstGen_[0],
+                                 (const void*) v->orgBlkL_[0], v->orgV_ ? v->orgV_->eng[0].readLevel() : -1.f, dbOf (rmsOf (a.L, a.L.size() - 4096, a.L.size())), tw::organics_debug::lastNoteRegion ? tw::organics_debug::lastNoteRegion() : -9, tw::organics_debug::steals ? tw::organics_debug::steals() : -9);
         if (! runtime) skip ("3 unison 4 → 4 players", "the runtime's reader count is not linked (stub)");
         else
         {
@@ -279,6 +294,7 @@ int main()
 
     // ═══ [4] OSC F (BANK B) ═══
     std::printf ("\n[4] Osc F (bank B) plays too\n");
+    if (want (4))
     {
         Inst a;
         setP (*a.p, ParameterIDs::SYN_OSC_A_ENABLE, 0.f);
@@ -295,12 +311,14 @@ int main()
 
     // ═══ [5] STATE ROUND TRIP ═══
     std::printf ("\n[5] State: save → a new instance → load\n");
+    if (want (5))
     {
         juce::MemoryBlock blob; double r1 = 0, c1 = 0;
         {
             Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
             setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_TONE, 0.8f);
-            a.clear(); a.block ({ {69,1} }); a.run (0.6);
+            setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.0f);   // deterministic (no fake RR); note 57 = a zone with no real RR
+            a.clear(); a.block ({ {57,1} }); a.run (0.6);
             const size_t s0 = (size_t) (0.2 * SR); r1 = rmsOf (a.L, s0, s0 + 16384); c1 = centroid (a.L, s0);
             a.p->getStateInformation (blob);
         }
@@ -310,11 +328,17 @@ int main()
         Inst b; b.p->setStateInformation (blob.getData(), (int) blob.getSize());
         const auto st = b.waitLoaded (0);
         const float tone = b.p->apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ORG_TONE)->load();
-        b.clear(); b.block ({ {69,1} }); b.run (0.6);
+        b.clear(); b.block ({ {57,1} }); b.run (0.6);
+        if (std::getenv ("ORG_DEBUG"))
+            std::printf ("   dbg: armed %d · gen %u · audioInst %d · published %d · mailFull %d · pending %d · engine %d · enable %.0f · level %.2f\n",
+                         b.p->organicsArmedVoiceCount(), b.p->orgInstGen_[0], b.p->orgAudioInst_[0] != nullptr ? 1 : 0,
+                         b.p->orgSlot_[0].published != nullptr ? 1 : 0, b.p->orgMailState_[0].load(), b.p->orgSlot_[0].publishPending ? 1 : 0,
+                         (int) *b.p->apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ENGINE), b.p->apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ENABLE)->load(),
+                         b.p->apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_LEVEL)->load());
         const size_t s0 = (size_t) (0.2 * SR); const double r2 = rmsOf (b.L, s0, s0 + 16384), c2 = centroid (b.L, s0);
         chk (b.p->organicSlot (0).id == "test.sine" && std::fabs (tone - 0.8f) < 1e-3, "5b the new instance holds the same id and knob",
              ("id " + b.p->organicSlot (0).id + " · status " + st).toStdString() + fmt (" · tone %.3f", tone));
-        chk (r1 > 1e-3 && std::fabs (dbOf (r2) - dbOf (r1)) < 1.0 && std::fabs (c2 - c1) < 0.05 * c1, "5c ...and the same sound (RMS within 1 dB, centroid within 5 %)",
+        chk (r1 > 1e-3 && std::fabs (dbOf (r2) - dbOf (r1)) < 1.0 && std::fabs (c2 - c1) < 0.05 * c1, "5c ...and the same sound (note 57, Human 0: RMS within 1 dB, centroid within 5 %)",
              fmt ("rms %.2f → %.2f dBFS · centroid %.0f → %.0f Hz", dbOf (r1), dbOf (r2), c1, c2));
         juce::String js = b.p->organicsStateJson (0);
         chk (js.contains ("\"test.sine\"") && js.contains ("\"status\""), "5d organicsGetState reads it back (the page's reopen)", js.removeCharacters ("\n").toStdString());
@@ -322,6 +346,7 @@ int main()
 
     // ═══ [6] MISSING ═══
     std::printf ("\n[6] A missing instrument\n");
+    if (want (6))
     {
         auto stateWith = [] (const juce::String& id, const juce::String& family) -> juce::MemoryBlock
         {
@@ -359,6 +384,7 @@ int main()
 
     // ═══ [7] THE WAY BACK ═══
     std::printf ("\n[7] Switch the engine away → memory back within 6 s\n");
+    if (want (7))
     {
         Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
         a.block ({ {69,1} }); a.run (0.3); a.block ({ {69,0} }); a.run (0.3);
@@ -381,6 +407,7 @@ int main()
 
     // ═══ [8] PREVIEW ═══
     std::printf ("\n[8] organicsPreview\n");
+    if (want (8))
     {
         Inst a; a.run (0.1);
         const auto f = tw::OrganicsLibrary::get().root().getChildFile ("test.sine").getChildFile ("preview.flac");
@@ -393,6 +420,7 @@ int main()
 
     // ═══ [9] organicViz ═══
     std::printf ("\n[9] The organicViz feed\n");
+    if (want (9))
     {
         Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
         a.p->uiClients_.store (1);                             // a page is watching (vizConsumersLive)

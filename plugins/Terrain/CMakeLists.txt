@@ -74,7 +74,7 @@ if (EXISTS "${TERRAIN_ORG_DIR}/OrganicEngine_test.cpp" AND EXISTS "${TERRAIN_ORG
     target_sources(organics_engine_test PRIVATE
         Source/organics/OrganicEngine_test.cpp Source/organics/OrganicEngine.cpp Source/organics/OrganicsLibrary.cpp)
     target_include_directories(organics_engine_test PRIVATE Source Source/organics)
-    target_compile_definitions(organics_engine_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 _USE_MATH_DEFINES
+    target_compile_definitions(organics_engine_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 _USE_MATH_DEFINES JUCE_MODAL_LOOPS_PERMITTED=1
         TERRAIN_ORGANICS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/Tests/fixtures/organics")
     if (MSVC)
         target_compile_options(organics_engine_test PRIVATE /bigobj /utf-8)

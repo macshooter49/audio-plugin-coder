@@ -3085,7 +3085,7 @@ private:
     OrgSlot orgSlot_[ParameterIDs::kOscCount];
     // the mailbox (message → audio), one per osc: the audio thread MOVES the shared_ptr out, the message thread refills
     std::shared_ptr<const tw::OrganicInstrument> orgMail_[ParameterIDs::kOscCount];
-    std::atomic<bool> orgMailFull_[ParameterIDs::kOscCount] {};
+    std::atomic<int>  orgMailState_[ParameterIDs::kOscCount] {};   // 0 empty · 1 full · 2 busy (see organicsPublish)
     std::shared_ptr<const tw::OrganicInstrument> orgAudioInst_[ParameterIDs::kOscCount];   // AUDIO THREAD — the voices copy from here
     std::uint32_t orgInstGen_[ParameterIDs::kOscCount] {};                                // AUDIO THREAD — bumped per delivery
     juce::uint32 orgUnusedSinceMs_ = 0; juce::uint64 orgDisarmSeq_ = 0;
