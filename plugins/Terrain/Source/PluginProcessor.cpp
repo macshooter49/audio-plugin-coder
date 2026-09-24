@@ -9678,6 +9678,9 @@ void TerrainAudioProcessor::rebuildChainOrder() noexcept
 
 void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    // tp100 — the standalone app's own transport (Settings → Audio & MIDI → Tempo). See standaloneHead_.
+    if (wrapperType == wrapperType_Standalone && getPlayHead() == nullptr)
+        setPlayHead (&standaloneHead_);
     armedMidi_.ensureSize (8192);   // tp49 — the armed-chop MIDI filter never allocates on the audio thread
     crossBus_.prepare (samplesPerBlock);   // tp53 — the cross-bank modulator board: the ONLY place it allocates
     {   // fb575 — the macro base's smoother starts where the knob stands (no glide on transport start), and the
@@ -10493,6 +10496,35 @@ TiProf tiProf_;
 }
 #define TI_PROF(name) tiProf_.mark (name)
 
+// tp100 — the Test audio chime: E5 then A5 120 ms later (a rising fourth), each a sine + a soft octave partial
+// with a 6 ms attack and an exponential decay, 0.9 s long, a 50 ms fade at the end so it can never click.
+// ~-15 dBFS peak. Written for the standalone (the only caller), harmless anywhere.
+void TerrainAudioProcessor::renderTestTone (juce::AudioBuffer<float>& b) noexcept
+{
+    const double sr  = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    const int    len = (int) (0.9 * sr), fade = juce::jmax (1, (int) (0.05 * sr));
+    const int    mask = testToneMask_.load (std::memory_order_relaxed);
+    const int    n = b.getNumSamples(), nch = b.getNumChannels();
+    int pos = testTonePos_.load (std::memory_order_relaxed);
+    constexpr double tau = juce::MathConstants<double>::twoPi;
+    auto note = [] (double f, double u) noexcept
+    {
+        if (u < 0.0) return 0.0;
+        const double env = juce::jmin (1.0, u / 0.006) * std::exp (-u * 5.5);
+        return env * (std::sin (tau * f * u) + 0.25 * std::sin (tau * 2.0 * f * u));
+    };
+    for (int i = 0; i < n && pos < len; ++i, ++pos)
+    {
+        const double t   = (double) pos / sr;
+        const double end = juce::jmin (1.0, (double) (len - pos) / (double) fade);
+        const float  v   = (float) (0.16 * end * (note (659.255, t) + note (880.0, t - 0.12)));
+        if (nch >= 2) { if (mask & 1) b.addSample (0, i, v); if (mask & 2) b.addSample (1, i, v); }
+        else if (nch == 1) b.addSample (0, i, v);
+    }
+    testTonePos_.store (pos, std::memory_order_relaxed);
+    if (pos >= len) testToneArmed_.store (false, std::memory_order_relaxed);
+}
+
 void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -10529,6 +10561,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             p.dspSamples_.fetch_add (n, std::memory_order_relaxed);
         }
     } dspClock_ { *this, numSamples };
+
+    // tp100 — Settings → Audio & MIDI → Test audio. A scope guard (like dspClock_): its destructor runs on
+    // EVERY return path, after the buffer is final, and mixes the chime on top. Idle = one atomic load.
+    struct TestToneScope
+    {
+        TerrainAudioProcessor& p; juce::AudioBuffer<float>& b;
+        ~TestToneScope() { if (p.testToneArmed_.load (std::memory_order_acquire)) p.renderTestTone (b); }
+    } testToneScope_ { *this, buffer };
 
     // fb484 — standalone QWERTY-to-MIDI: drain the key-note ring into the normal MIDI stream.
     if (wrapperType == wrapperType_Standalone)

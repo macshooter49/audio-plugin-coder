@@ -7700,7 +7700,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   function el(html){ var t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function $(id){ return document.getElementById(id); }
-  function nfn(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+  /* tp100 — JUCE's getNativeFunction returns a callable for ANY name (it only console.warns for an unknown one),
+     so "is this native there?" was always yes inside the real plugin and every unbuilt row looked LIVE while doing
+     nothing. Ask the backend's own registry (initialisationData.__juce__functions) first. */
+  function nfn(n){ try{ var J=window.__JUCE__, L=J&&J.initialisationData&&J.initialisationData.__juce__functions;
+      if(L&&L.indexOf&&L.indexOf(n)<0) return null;
+      return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
   function callN(n){ var f=nfn(n); if(!f) return null; try{ return f.apply(null,Array.prototype.slice.call(arguments,1)); }catch(e){ return null; } }
   var PL=$('plugin');
   function PR(){ return PL?PL.getBoundingClientRect():{left:0,top:0,right:820,bottom:656}; }
@@ -7828,20 +7833,22 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 
    /* ── AUDIO & MIDI (standalone) ── */
    {p:'audio',g:'Audio device',id:'driver',label:'Audio driver',help:'The kind of audio system Terrain talks to. On a Mac it is Core Audio; on Windows you would see ASIO, WASAPI and DirectSound here.',where:'Standalone app only',need:'setAudioSetup',
-     ctl:menu('driver',function(){ return [{label:'CoreAudio'},{sec:'Windows only'},{label:'ASIO',off:true},{label:'Windows Audio (WASAPI)',off:true},{label:'DirectSound',off:true}]; })},
+     ctl:menu('driver',function(){ return (AS&&AS.drivers&&AS.drivers.length)?AS.drivers.map(function(n){ return {label:n}; }):[{label:'CoreAudio'}]; })},
    {p:'audio',g:'Audio device',id:'out',label:'Output device',help:'Where Terrain plays. Unplugging it falls back to the system output and says so.',where:'Standalone app only',need:'setAudioSetup',
      ctl:menu('out',function(){ return (audioOuts||['System output']).map(function(n){ return {label:n}; }); })},
-   {p:'audio',g:'Audio device',id:'outCh',label:'Output channels',help:'Which pair of outputs Terrain’s stereo bus lands on.',where:'Standalone app only',need:'setAudioSetup',ctl:menu('outCh',function(){ return ['1 + 2','3 + 4','5 + 6'].map(function(n){ return {label:n}; }); })},
+   {p:'audio',g:'Audio device',id:'outCh',label:'Output channels',help:'Which pair of outputs Terrain’s stereo bus lands on.',where:'Standalone app only',need:'setAudioSetup',ctl:menu('outCh',function(){ return ((AS&&AS.outChs&&AS.outChs.length)?AS.outChs:['1 + 2']).map(function(n){ return {label:n}; }); })},
    {p:'audio',g:'Audio device',id:'inDev',label:'Input device',help:'Terrain’s live input (the granular engine and DAW capture can listen to it). None keeps the microphone closed.',where:'Standalone app only',need:'setAudioSetup',
      ctl:menu('inDev',function(){ return (audioIns||['None']).map(function(n){ return {label:n}; }); },null,function(v){ if(v==='None') S.inCh='Off'; else if(S.inCh==='Off') S.inCh='1 + 2'; })},
    {p:'audio',g:'Audio device',id:'inCh',label:'Input channels',help:'Which inputs feed Terrain. Mono inputs are copied to both sides.',where:'Standalone app only',need:'setAudioSetup',
-     ctl:menu('inCh',function(){ return S.inDev==='None'?[{label:'Off'}]:['1','2','1 + 2','3 + 4'].map(function(n){ return {label:n}; }); })},
+     ctl:menu('inCh',function(){ return S.inDev==='None'?[{label:'Off'}]:((AS&&AS.inChs&&AS.inChs.length)?AS.inChs:['1','2','1 + 2']).map(function(n){ return {label:n}; }); })},
    {p:'audio',g:'Audio device',id:'sr',label:'Sample rate',help:'Your device’s rate.',where:'Standalone app only',need:'setAudioSetup',
-     ctl:{t:'chips',opts:['44.1','48','88.2','96'],get:function(){ return String(S.sr/1000); },set:function(v){ S.sr=Math.round(parseFloat(v)*1000); },unit:'kHz'}},
+     ctl:{t:'chips',get opts(){ return (AS&&AS.rates&&AS.rates.length)?AS.rates.map(function(r){ return String(Math.round(r/100)/10); }):['44.1','48','88.2','96']; },get:function(){ return String(Math.round(S.sr/100)/10); },set:function(v){ var k=parseFloat(v)*1000, best=k; if(AS&&AS.rates&&AS.rates.length) best=AS.rates.reduce(function(a,r){ return Math.abs(r-k)<Math.abs(a-k)?r:a; },AS.rates[0]); S.sr=Math.round(best); },unit:'kHz'}},
    {p:'audio',g:'Audio device',id:'buf',label:'Buffer size',help:'Smaller = the keys answer sooner, but the computer works harder. 256 is a safe start; go to 64 or 128 to play live, 1024 when a big patch crackles.',where:'Standalone app only',need:'setAudioSetup',
-     ctl:menu('buf',function(){ return BUFS.map(function(b){ return {label:b+' samples',value:b,ct:ms(b)}; }); },function(v){ return v+' samples<span class="u">'+ms(v)+'</span>'; })},
+     ctl:menu('buf',function(){ return ((AS&&AS.bufs&&AS.bufs.length)?AS.bufs:BUFS).map(function(b){ return {label:b+' samples',value:b,ct:ms(b)}; }); },function(v){ return v+' samples<span class="u">'+ms(v)+'</span>'; })},
    {p:'audio',g:'Audio device',id:'lat',label:'Latency',help:'What you feel between a key and the sound: the buffer, once each way, plus the device’s own safety margin.',where:'Standalone app only',
-     ctl:{t:'info',get:function(){ var one=S.buf/S.sr*1000, dev=(ac&&ac.outputLatency?ac.outputLatency*1000:(ac&&ac.baseLatency?ac.baseLatency*1000:2.9)); return one.toFixed(1)+' ms out  ·  '+(2*one+dev).toFixed(1)+' ms round trip'; }}},
+     ctl:{t:'info',get:function(){ var one=S.buf/S.sr*1000;
+       if(AS&&AS.standalone&&AS.outLatMs!=null){ var o=Math.max(one,AS.outLatMs), i=Math.max(0,AS.inLatMs||0); return o.toFixed(1)+' ms out  ·  '+(o+i).toFixed(1)+' ms round trip'; }
+       var dev=(ac&&ac.outputLatency?ac.outputLatency*1000:(ac&&ac.baseLatency?ac.baseLatency*1000:2.9)); return one.toFixed(1)+' ms out  ·  '+(2*one+dev).toFixed(1)+' ms round trip'; }}},
    {p:'audio',g:'Audio device',id:'test',blk:'test',label:'Test audio',help:'Plays a short chime through the device and channels above — press it after changing anything to hear that sound really comes out.',where:'Standalone app only'},
    {p:'audio',g:'MIDI inputs',id:'ports',blk:'ports',label:'MIDI inputs',help:'Tick every keyboard or controller Terrain should listen to. The lamp flashes when a port sends anything.',where:'Standalone app only',need:'setMidiInput'},
    {p:'audio',g:'MIDI inputs',id:'qwerty',label:'Computer keyboard',help:'A W S E D F T G Y H U J K play an octave from C, at velocity 100.',where:'Standalone app only',ctl:{t:'chips',opts:['On','Off'],get:function(){ return S.qwerty?'On':'Off'; },set:function(v){ S.qwerty=v==='On'; }}},
@@ -7941,9 +7948,29 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       case 'rtQ': callN('setRtQuality', S.rtQ); break;
       case 'hover': bodyGate('ti-hover-off', S.hover!=='On'); break;
       case 'usage': logEvent('usage:'+S.usage.toLowerCase()); break;
+      /* tp100 — the standalone's real audio device (setAudioSetup answers with the device as it now stands) */
+      case 'driver': case 'out': case 'outCh': case 'inDev': case 'inCh': case 'sr': case 'buf': pushAudio(id); break;
+      case 'tempo': callN('setStandaloneBpm', S.tempo); break;
+      case 'qwerty': window.__tiQwertyOff = !S.qwerty; break;
     }
   }
-  function applyAll(){ ['theme','motion','capture','bend','a4','voices','vel','chan','fps','size','mpe','mpeBend','openOn','cpu','sleep','tails','rtQ','hover'].forEach(applyRow);
+  /* tp100 — AS = the device as the standalone app reports it (getAudioSetup). null in a DAW / before the first read. */
+  var AS=null, asBusy=false;
+  function takeAudio(txt){ try{ var j=typeof txt==='string'?JSON.parse(txt):txt; if(!j) return; AS=j;
+      if(!j.standalone) return;
+      if(j.outputs) audioOuts=j.outputs; if(j.inputs) audioIns=j.inputs;
+      ['driver','out','inDev','outCh','inCh'].forEach(function(k){ if(j[k]!=null&&j[k]!=='') S[k]=String(j[k]); });
+      if(j.sr) S.sr=Math.round(j.sr); if(j.buf) S.buf=+j.buf;
+      if(j.midi){ var seen={}; j.midi.forEach(function(m){ seen[m.name]=true; S.ports[m.name]=!!m.on; });
+        Object.keys(S.ports).forEach(function(n){ if(!seen[n]) delete S.ports[n]; }); }
+      if(j.error) try{ toast('The device said: '+j.error); }catch(e){}
+      save(); if(cur==='audio'&&!q) paintPage(); }catch(e){} }
+  function pullAudio(){ var f=nfn('getAudioSetup'); if(!f||asBusy) return; asBusy=true;
+    Promise.resolve(f()).then(function(t){ asBusy=false; takeAudio(t); },function(){ asBusy=false; }); }
+  function pushAudio(id){ var f=nfn('setAudioSetup'); if(!f) return; var o={};
+    if(id==='inDev'){ o.inDev=S.inDev; if(S.inDev!=='None') o.inCh=S.inCh; } else o[id]=(id==='sr'||id==='buf')?+S[id]:S[id];
+    Promise.resolve(f(JSON.stringify(o))).then(takeAudio,function(){}); }
+  function applyAll(){ ['theme','motion','capture','bend','a4','voices','vel','chan','fps','size','mpe','mpeBend','openOn','cpu','sleep','tails','rtQ','hover','tempo','qwerty'].forEach(applyRow);
     try{ window.__terrainUiPrefs={ drag:S.drag, sens:S.sens, wheel:S.wheel, dbl:S.dbl, values:S.values, hover:S.hover, pickup:S.pickup }; }catch(e){} }
 
   /* ═══ PRIVACY — opt-in only. A tiny LOCAL log of anonymized counters when S.usage==='On'; the network
@@ -7964,7 +7991,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       var d=el('<div class="ri'+(p.id===cur&&!q?' cur':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p.ic+'</svg><span class="nm">'+esc(p.short||p.name)+'</span></div>');
       d.onclick=function(){ go(p.id); }; r.appendChild(d); });
     r.style.opacity=q?'.35':''; }
-  function go(id,flashId){ cur=id; q=''; var se=$('st-search'); if(se) se.value=''; closeMenu(); renderRail(); paintPage(); var pn=$('st-pane'); if(pn) pn.scrollTop=0;
+  function go(id,flashId){ cur=id; q=''; if(id==='audio') pullAudio(); var se=$('st-search'); if(se) se.value=''; closeMenu(); renderRail(); paintPage(); var pn=$('st-pane'); if(pn) pn.scrollTop=0;
     if(flashId){ var r=document.querySelector('#st-overlay [data-row="'+flashId+'"]'); if(r){ r.scrollIntoView({block:'center'}); r.classList.add('flash'); setTimeout(function(){ r.classList.remove('flash'); },1200); } } }
 
   /* ═══ CONTROLS ═══ */
@@ -8006,9 +8033,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   var NEED={ driver:'setAudioSetup', out:'setAudioSetup', outCh:'setAudioSetup', inDev:'setAudioSetup', inCh:'setAudioSetup', sr:'setAudioSetup', buf:'setAudioSetup',
     tempo:'setStandaloneBpm', chan:'setMidiChannel', a4:'setA4', mpe:'setMpeOn', mpeBend:'setMpeOn',
     voices:'setVoiceCeiling', rtQ:'setRtQuality', offQ:'setRtQuality', lockQ:'setRtQuality', sleep:'setSleepWhenSilent', tails:'setCutTailsOnStop', size:'setBootWidth' };
-  function isSoon(r){ return r.st==='soon' || (NEED[r.id] && !nfn(NEED[r.id])); }
+  /* tp100 — a "Standalone app only" row inside a DAW is not "coming soon": the DAW owns the sound card. */
+  function appOnly(r){ return !!r && r.where==='Standalone app only' && !window.__isStandalone; }
+  function isSoon(r){ return r.st==='soon' || appOnly(r) || (NEED[r.id] && !nfn(NEED[r.id])); }
+  function soonTag(r){ return '<span class="tag">'+(appOnly(r)?'App only':'Soon')+'</span>'; }
   function rowEl(r,withPage){ var soon=isSoon(r);
-    var d=el('<div class="sr'+(soon?' soon':'')+'" data-row="'+r.id+'"><div class="lbl"><span class="t"></span>'+(soon?'<span class="tag">Soon</span>':'')+'</div></div>');
+    var d=el('<div class="sr'+(soon?' soon':'')+'" data-row="'+r.id+'"><div class="lbl"><span class="t"></span>'+(soon?soonTag(r):'')+'</div></div>');
     d.querySelector('.t').textContent=r.label;
     if(withPage){ var pg=PAGES.filter(function(p){ return p.id===r.p; })[0]; var s=el('<span class="pg">'+esc(pg.name)+'</span>'); s.onclick=function(){ go(r.p,r.id); }; d.insertBefore(s,d.firstChild); }
     if(r.ctl) d.appendChild(ctlEl(r));
@@ -8032,11 +8062,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      add.onclick=function(){ var inp=el('<input class="tp-in" type="text" maxlength="20" placeholder="Your own" style="width:96px;height:22px;font-size:10px;padding:0 7px">'); lane.replaceChild(inp,add); inp.focus();
        inp.onkeydown=function(e){ e.stopPropagation(); if(e.key==='Enter'){ var w=inp.value.trim(); if(w&&S.roleVocab.indexOf(w)<0){ S.roleVocab.push(w); S.roles.push(w); save(); } paintPage(); } if(e.key==='Escape') paintPage(); }; };
      hoverable(d,r); return d; },
-   test:function(r){ var soon=!nfn('playTestTone'); var d=el('<div class="sr'+(soon?' soon':'')+'" data-row="test"><div class="lbl"><span class="t">Test audio</span>'+(soon?'<span class="tag">Soon</span>':'')+'</div><div class="lane"><button class="tp-btn pri" style="flex:none;padding:0 12px;height:24px">Play</button></div></div>');
+   test:function(r){ var soon=appOnly(r)||!nfn('playTestTone'); var d=el('<div class="sr'+(soon?' soon':'')+'" data-row="test"><div class="lbl"><span class="t">Test audio</span>'+(soon?soonTag(r):'')+'</div><div class="lane"><button class="tp-btn pri" style="flex:none;padding:0 12px;height:24px">Play</button></div></div>');
      var lane=d.querySelector('.lane');
      ['Left','Both','Right'].forEach(function(o){ var c=el('<button class="tp-chip'+(S.testCh===o?' active':'')+'">'+o+'</button>'); c.onclick=function(){ S.testCh=o; save(); paintPage(); }; lane.appendChild(c); });
      var tr=el('<div class="tr" style="flex:1;margin-left:6px;cursor:default"><i class="lv" style="left:0;width:0"></i></div>'); lane.appendChild(tr); meters.push(tr);
-     lane.firstChild.onclick=function(){ var f=nfn('playTestTone'); if(f){ try{ f(S.testCh==='Left'?1:(S.testCh==='Right'?2:3)); }catch(e){} } chime(); }; hoverable(d,r); return d; },
+     lane.firstChild.onclick=function(){ var f=nfn('playTestTone'); if(f){ try{ f(S.testCh==='Left'?1:(S.testCh==='Right'?2:3)); }catch(e){} return; } chime(); }; hoverable(d,r); return d; },
    ports:function(r){ var b=el('<div class="blk" data-row="ports"><div class="lst"></div></div>'), L=b.firstChild;
      var names=Object.keys(S.ports);
      L.appendChild(el('<div class="r hd"><span style="width:20px"></span><span class="n">Port</span><span class="c2">Activity</span></div>'));
@@ -8300,7 +8330,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 
   /* ═══ HEADER, OPEN / CLOSE, SEARCH ═══ */
   function openSettings(on){ var ov=$('st-overlay'); if(!ov) return; ov.classList.toggle('on',on); bodyGate('st-open',on); closeMenu();
-    if(on){ arm(); renderRail(); paintPage(); paintHeaderCpu(); logEvent('open:settings'); } }
+    if(on){ arm(); renderRail(); paintPage(); paintHeaderCpu(); logEvent('open:settings'); if(cur==='audio') pullAudio(); } }
   function toggleSettings(){ openSettings(!$('st-overlay').classList.contains('on')); }
   (function(){ var g=$('settings-btn'); if(g){ g.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); toggleSettings(); }, true); } })();
   $('st-close').onclick=function(){ openSettings(false); };
@@ -43114,7 +43144,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     function nf(){ try{ var b=window.Juce||window.juce; return (b&&b.getNativeFunction)?b.getNativeFunction('qwertyNote'):null; }catch(_){ return null; } }
     function tOk(e){ var t=e.target; if(!t) return true; var n=(t.tagName||'').toLowerCase(); return !(n==='input'||n==='textarea'||t.isContentEditable); }
     document.addEventListener('keydown',function(e){
-      if(!window.__isStandalone||e.repeat||!tOk(e)||e.metaKey||e.ctrlKey||e.altKey) return;
+      if(!window.__isStandalone||window.__tiQwertyOff||e.repeat||!tOk(e)||e.metaKey||e.ctrlKey||e.altKey) return;   /* tp100 — Settings → Computer keyboard */
       var k=(e.key||'').toLowerCase();
       if(k==='z'){ oct=Math.max(-3,oct-1); return; }
       if(k==='x'){ oct=Math.min(3,oct+1); return; }

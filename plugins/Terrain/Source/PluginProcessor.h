@@ -1946,6 +1946,39 @@ public:
         return dspLoadLast_;
     }
     long long dspLoadT0_ = 0, dspLoadS0_ = 0;   // fb-settings — getDspLoadPercent state (message thread only)
+
+    // ══ tp100 — Settings → Audio & MIDI (the STANDALONE app's own transport + test chime) ═══════════════
+    // TEMPO: the standalone has no DAW, so getPlayHead() used to be JUCE's per-callback head with no BPM and
+    //   every BPM reader (flow LFOs, arp, delays, Chop, grain sync) fell back to its default. This playhead is
+    //   installed in prepareToPlay ONLY for wrapperType_Standalone; JUCE's AudioProcessorPlayer leaves a
+    //   processor's own playhead alone (useThisPlayhead = getPlayHead() == nullptr). Not playing, 4/4.
+    struct StandalonePlayHead final : juce::AudioPlayHead
+    {
+        std::atomic<double> bpm { 120.0 };
+        juce::Optional<PositionInfo> getPosition() const override
+        {
+            PositionInfo p;
+            p.setBpm (bpm.load (std::memory_order_relaxed));
+            p.setTimeSignature (juce::AudioPlayHead::TimeSignature { 4, 4 });
+            p.setIsPlaying (false);
+            return p;
+        }
+    };
+    StandalonePlayHead standaloneHead_;
+    void   setStandaloneBpm (double b) noexcept { standaloneHead_.bpm.store (juce::jlimit (20.0, 400.0, b), std::memory_order_relaxed); }
+    double getStandaloneBpm() const noexcept    { return standaloneHead_.bpm.load (std::memory_order_relaxed); }
+    // TEST AUDIO: a short soft two-note chime mixed into the OUTPUT after all processing (a scope guard at
+    //   the top of processBlock, so every return path plays it). mask 1 = left, 2 = right, 3 = both.
+    //   Idle cost: one relaxed atomic load per block.
+    void startTestTone (int channelMask) noexcept
+    {
+        testToneMask_.store (juce::jlimit (1, 3, channelMask), std::memory_order_relaxed);
+        testTonePos_.store (0, std::memory_order_relaxed);
+        testToneArmed_.store (true, std::memory_order_release);
+    }
+    void renderTestTone (juce::AudioBuffer<float>& b) noexcept;
+    std::atomic<bool> testToneArmed_ { false };
+    std::atomic<int>  testToneMask_ { 3 }, testTonePos_ { 0 };
     double    dspLoadLast_ = 0.0;
     bool uiStatic() const noexcept { return ! motionEnabled_.load (std::memory_order_relaxed); }
     // a decorative feed's AUDIO-DRIVEN number: itself while motion is on, a constant rest while off

@@ -22,6 +22,147 @@ void  tiDisarmPeerRescue (void* peerHwnd, void* token);
 #endif
 #include "BinaryData.h"
 
+// ══ tp100 — Settings → Audio & MIDI, for real (the STANDALONE app's device manager) ══════════════════
+// The standalone wrapper owns the AudioDeviceManager (juce::StandalonePluginHolder). Its header is all
+// in-class / inline (currentInstance is a C++17 inline static), so including it here is ODR-safe; in the
+// AU / VST3 binaries nothing ever creates a holder, getInstance() is null and these natives answer
+// {"standalone":false} — the page then shows those rows as "App only".
+#if JucePlugin_Build_Standalone
+ #include <juce_audio_utils/juce_audio_utils.h>
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+static juce::StandalonePluginHolder* tiStandaloneHolder() { return juce::StandalonePluginHolder::getInstance(); }
+#else
+namespace juce { class StandalonePluginHolder; }
+static juce::StandalonePluginHolder* tiStandaloneHolder() { return nullptr; }
+#endif
+
+namespace
+{
+    // "3 + 4" -> {2,3}; "2" -> {1}; "Off"/"" -> {}
+    juce::Array<int> tiParseChannels (const juce::String& label)
+    {
+        juce::Array<int> out;
+        for (auto& tok : juce::StringArray::fromTokens (label, "+", ""))
+        {
+            const int c = tok.trim().getIntValue();
+            if (c >= 1) out.add (c - 1);
+        }
+        return out;
+    }
+    juce::String tiChannelsLabel (const juce::BigInteger& bits)
+    {
+        juce::StringArray parts;
+        for (int i = bits.findNextSetBit (0); i >= 0; i = bits.findNextSetBit (i + 1)) parts.add (juce::String (i + 1));
+        return parts.isEmpty() ? juce::String ("Off") : parts.joinIntoString (" + ");
+    }
+
+   #if JucePlugin_Build_Standalone
+    juce::String tiAudioSetupJson (juce::StandalonePluginHolder* h, const juce::String& error = {})
+    {
+        auto* o = new juce::DynamicObject();
+        juce::var root (o);
+        o->setProperty ("standalone", h != nullptr);
+        if (h == nullptr) return juce::JSON::toString (root, true);
+        auto& dm = h->deviceManager;
+        if (error.isNotEmpty()) o->setProperty ("error", error);
+
+        juce::Array<juce::var> drivers;
+        for (auto* t : dm.getAvailableDeviceTypes()) drivers.add (t->getTypeName());
+        o->setProperty ("drivers", drivers);
+        o->setProperty ("driver", dm.getCurrentAudioDeviceType());
+
+        const auto setup = dm.getAudioDeviceSetup();
+        juce::Array<juce::var> outs, ins;
+        ins.add ("None");
+        if (auto* type = dm.getCurrentDeviceTypeObject())
+        {
+            for (auto& nm : type->getDeviceNames (false)) outs.add (nm);
+            for (auto& nm : type->getDeviceNames (true))  ins.add (nm);
+        }
+        o->setProperty ("outputs", outs);
+        o->setProperty ("inputs",  ins);
+        o->setProperty ("out",   setup.outputDeviceName);
+        o->setProperty ("inDev", setup.inputDeviceName.isEmpty() ? juce::String ("None") : setup.inputDeviceName);
+
+        if (auto* dev = dm.getCurrentAudioDevice())
+        {
+            const double sr = dev->getCurrentSampleRate();
+            juce::Array<juce::var> rates, bufs, outChs, inChs;
+            for (auto r : dev->getAvailableSampleRates()) rates.add (r);
+            for (auto b : dev->getAvailableBufferSizes()) bufs.add (b);
+            const int nOut = dev->getOutputChannelNames().size(), nIn = dev->getInputChannelNames().size();
+            for (int i = 0; i + 1 < nOut; i += 2) outChs.add (juce::String (i + 1) + " + " + juce::String (i + 2));
+            if (nOut == 1) outChs.add ("1");
+            for (int i = 0; i < nIn; ++i) inChs.add (juce::String (i + 1));
+            for (int i = 0; i + 1 < nIn; i += 2) inChs.add (juce::String (i + 1) + " + " + juce::String (i + 2));
+            o->setProperty ("rates", rates);
+            o->setProperty ("bufs",  bufs);
+            o->setProperty ("outChs", outChs);
+            o->setProperty ("inChs",  inChs);
+            o->setProperty ("sr",  sr);
+            o->setProperty ("buf", dev->getCurrentBufferSizeSamples());
+            o->setProperty ("outCh", tiChannelsLabel (dev->getActiveOutputChannels()));
+            o->setProperty ("inCh",  setup.inputDeviceName.isEmpty() ? juce::String ("Off") : tiChannelsLabel (dev->getActiveInputChannels()));
+            const double s = juce::jmax (1.0, sr);
+            o->setProperty ("outLatMs", 1000.0 * dev->getOutputLatencyInSamples() / s);
+            o->setProperty ("inLatMs",  1000.0 * dev->getInputLatencyInSamples()  / s);
+        }
+
+        juce::Array<juce::var> midi;
+        for (auto& d : juce::MidiInput::getAvailableDevices())
+        {
+            auto* m = new juce::DynamicObject();
+            m->setProperty ("name", d.name);
+            m->setProperty ("id",   d.identifier);
+            m->setProperty ("on",   dm.isMidiInputDeviceEnabled (d.identifier));
+            midi.add (juce::var (m));
+        }
+        o->setProperty ("midi", midi);
+        return juce::JSON::toString (root, true);
+    }
+
+    // Applies the fields present in `j` (driver / out / inDev / outCh / inCh / sr / buf); returns an error
+    // string ("" = fine). The holder's device state is saved so the choice survives a relaunch.
+    juce::String tiApplyAudioSetup (juce::StandalonePluginHolder& h, const juce::var& j)
+    {
+        auto& dm = h.deviceManager;
+        if (j.hasProperty ("driver"))
+        {
+            const auto want = j["driver"].toString();
+            if (want.isNotEmpty() && want != dm.getCurrentAudioDeviceType())
+                dm.setCurrentAudioDeviceType (want, true);
+        }
+        auto setup = dm.getAudioDeviceSetup();
+        if (j.hasProperty ("out"))   setup.outputDeviceName = j["out"].toString();
+        if (j.hasProperty ("inDev"))
+        {
+            const auto in = j["inDev"].toString();
+            setup.inputDeviceName = (in == "None") ? juce::String() : in;
+            if (in == "None") { setup.inputChannels.clear(); setup.useDefaultInputChannels = false; }
+            else if (setup.inputChannels.isZero()) { setup.inputChannels.setRange (0, 2, true); setup.useDefaultInputChannels = false; }
+        }
+        if (j.hasProperty ("sr"))    { const double r = (double) j["sr"];  if (r > 0.0) setup.sampleRate = r; }
+        if (j.hasProperty ("buf"))   { const int    b = (int)    j["buf"]; if (b > 0)   setup.bufferSize = b; }
+        if (j.hasProperty ("outCh"))
+        {
+            setup.outputChannels.clear();
+            for (int c : tiParseChannels (j["outCh"].toString())) setup.outputChannels.setBit (c);
+            if (setup.outputChannels.countNumberOfSetBits() == 1) setup.outputChannels.setBit (setup.outputChannels.findNextSetBit (0) + 1);
+            setup.useDefaultOutputChannels = setup.outputChannels.isZero();
+        }
+        if (j.hasProperty ("inCh"))
+        {
+            setup.inputChannels.clear();
+            for (int c : tiParseChannels (j["inCh"].toString())) setup.inputChannels.setBit (c);
+            setup.useDefaultInputChannels = false;
+        }
+        const auto err = dm.setAudioDeviceSetup (setup, true);
+        h.saveAudioDeviceState();
+        return err;
+    }
+   #endif
+}
+
 // fb602 — ONE data root for everything this TU writes. JUCE resolves
 // userApplicationDataDirectory to "~/Library" on macOS (juce_Files_mac.mm:209) and to
 // %APPDATA% on Windows (CSIDL_APPDATA, juce_Files_windows.cpp:719), so on macOS this is
@@ -4408,6 +4549,63 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 complete (juce::var (audioProcessor.getDspLoadPercent()));
+            })
+            // ── tp100 — Settings → Audio & MIDI (standalone app). In AU/VST3 every one answers
+            //    {"standalone":false} and does nothing; the page shows the rows as "App only". ──
+            .withNativeFunction("getAudioSetup", [](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+               #if JucePlugin_Build_Standalone
+                complete (juce::var (tiAudioSetupJson (tiStandaloneHolder())));
+               #else
+                complete (juce::var ("{\"standalone\":false}"));
+               #endif
+            })
+            .withNativeFunction("setAudioSetup", [](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+               #if JucePlugin_Build_Standalone
+                auto* h = tiStandaloneHolder();
+                juce::String err;
+                if (h != nullptr && args.size() >= 1)
+                    err = tiApplyAudioSetup (*h, juce::JSON::parse (args[0].toString()));
+                complete (juce::var (tiAudioSetupJson (h, err)));
+               #else
+                juce::ignoreUnused (args);
+                complete (juce::var ("{\"standalone\":false}"));
+               #endif
+            })
+            .withNativeFunction("playTestTone", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = 1 left, 2 right, 3 both — mixed into Terrain's own output (see renderTestTone)
+                audioProcessor.startTestTone (args.size() >= 1 ? (int) args[0] : 3);
+                complete (juce::var{});
+            })
+            .withNativeFunction("setMidiInput", [](const juce::Array<juce::var>& args,
+                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = port NAME (as listed by getAudioSetup), args[1] = 1 on / 0 off
+               #if JucePlugin_Build_Standalone
+                if (auto* h = tiStandaloneHolder(); h != nullptr && args.size() >= 2)
+                {
+                    const auto name = args[0].toString();
+                    const bool on = (int) args[1] != 0;
+                    for (auto& d : juce::MidiInput::getAvailableDevices())
+                        if (d.name == name || d.identifier == name)
+                            h->deviceManager.setMidiInputDeviceEnabled (d.identifier, on);
+                    h->saveAudioDeviceState();
+                }
+               #else
+                juce::ignoreUnused (args);
+               #endif
+                complete (juce::var{});
+            })
+            .withNativeFunction("setStandaloneBpm", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1) audioProcessor.setStandaloneBpm ((double) args[0]);
+                complete (juce::var{});
             })
             // setVelCurve: the velocity curve (Settings → Controllers). args[0] = c in [-1,1], or 999 = FIXED.
             .withNativeFunction("setVelCurve", [this](const juce::Array<juce::var>& args,
