@@ -1713,6 +1713,8 @@ public:
     int                           modPtNpShared_[2][wc::kMaxModCurves] {}, modPtNpAudio_[wc::kMaxModCurves] {};
     bool                          modPtHasModShared_[2] { false, false }, modPtHasModAudio_ = false, modPtDirty_ = false;
     int                           modPtPubIdx_ = 0;                          // the published half — written and read under synModLock
+    int                           modCurveCountShared_[2] { 0, 0 };          // tp101 — curve slots in use per half (the copy moves only these)
+    int                           modCurveCountAudio_ = 0;                   // tp101 — slots in use in modCurveAudio_ (audio thread)
     std::atomic<int>              modPtVersion_ { 0 };
     void refreshModCurveAudio() noexcept;   // audio thread, UNDER synModLock: copy the published set + points on change
     void rebakeModCurveAudio()  noexcept;   // audio thread: re-bake every slot with a point mod from the bank's peeks (the 0.002 gate)
