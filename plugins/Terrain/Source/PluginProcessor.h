@@ -1201,6 +1201,13 @@ public:
      *  Returns {0.0, 1.0} if no scan-on voice is sounding on this slice. */
     ScanWindowBounds getScanWindowBounds (int sliceIndex) const noexcept;
 
+    /** tp101 — the PITCH-MODE PLAYHEADS: one entry per sounding pitch-mode voice (sliceIndex -1)
+     *  on the editing layer that is NOT ping-pong scanning (a scanning voice already has its own
+     *  line). Writes up to maxOut (voice index, source position 0..1 over the whole sample,
+     *  velocity in sample-fractions / second) triples and returns the count. Message thread;
+     *  reads per-voice atomics only. */
+    int getPitchPlayheads (int* voiceIdx, float* pos, float* vel, int maxOut) const noexcept;
+
     // Active slice index — used in CHROMATIC sub-mode. Atomic so JS push
     // and audio thread read are race-free.
     // Task 5: owned by LayerState; route via layers[editingLayer].activeSliceIndex.

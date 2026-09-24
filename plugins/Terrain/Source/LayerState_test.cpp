@@ -41,7 +41,7 @@ public:
         beginTest ("Synth has expected voice count after construction");
         {
             tw::LayerState layer;
-            expectEquals (layer.synth.getNumVoices(), 32, "32 voices per layer (matches Mark 1.5)");
+            expectEquals (layer.synth.getNumVoices(), tw::kSamplerVoicesPerLayer, "64 voices per layer (tp101 — LAYER mode fires one per chop, up to 64)");
         }
     }
 };

@@ -95,7 +95,7 @@ const mids = () => [...document.querySelectorAll('#ti-root-picker, #ti-layer-pad
   await p.mouse.click(ft.x + Math.round(ft.w * 0.9), ft.y); await sleep(300);
   const fine = await p.evaluate(() => ({ cents: document.querySelector('#ti-chop-panel .ov-ad-row[data-h="F"] .ov-ad-val').textContent,
                                          semis: document.querySelector('#ti-chop-panel .ov-ctrl[data-ctrl="pitch"] .ov-val').textContent }));
-  ok(/^\+[1-9]\d? ¢$/.test(fine.cents) && fine.semis === '+0 st',
+  ok(/^\+[1-9]\d? ¢$/.test(fine.cents) && /^\+0 st$/i.test(fine.semis),   /* tp101 — tp100 made it "+0 ST" (crisp caps) */
      '🚨 [7] FINE TUNE — Max: "we gotta have a way to fine tune chops, not just semitone." The engine always could: Slice::pitchOffsetSemis is a FLOAT and the emblem\'s Math.round was throwing the cents away. The cents move and the semitone stays put.', JSON.stringify(fine));
 
   ok(errs.length === 0, 'no page errors', errs.join(' | '));

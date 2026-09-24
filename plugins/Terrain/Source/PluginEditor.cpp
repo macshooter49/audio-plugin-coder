@@ -3180,7 +3180,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // args[0] = number of slices (positive int)
-                const int n = args.size() > 0 ? juce::jlimit (1, 128, (int) args[0]) : 16;
+                const int n = args.size() > 0 ? juce::jlimit (1, tw::kMaxChops, (int) args[0]) : 16;   // tp101 — 64 is the pill's top, and the voice pool is sized to it
                 auto buf = audioProcessor.getSampleBuffer().load();
                 if (! buf || buf->getNumSamples() < 64)
                 {
@@ -3988,14 +3988,19 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 }
                 else
                 {
+                    // 🚨 tp101 — THESE WERE BORN WITH CONCRETE ENVELOPES. `{ 0, snapped, false, 0.0f }`
+                    // aggregate-initialises the rest of the Slice from its struct defaults (30 ms attack,
+                    // 300 ms decay, 70 % sustain, 800 ms release, 100 %) — an OVERRIDE on every field, so
+                    // a double-click-to-chop never heard the pitch-mode baseline Max had set. Born
+                    // inheriting, like the grid and the transient detector.
                     if (snapped > 0 && snapped < total)
                     {
-                        copy.push_back ({ 0,       snapped, false, 0.0f });
-                        copy.push_back ({ snapped, total,   false, 0.0f });
+                        copy.push_back (tw::makeInheritingSlice (0,       snapped));
+                        copy.push_back (tw::makeInheritingSlice (snapped, total));
                     }
                     else
                     {
-                        copy.push_back ({ 0, total, false, 0.0f });
+                        copy.push_back (tw::makeInheritingSlice (0, total));
                     }
                 }
                 audioProcessor.replaceSlices (std::move (copy));
@@ -4041,6 +4046,18 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 const int sliceIndex = args.size() > 0 ? (int) args[0] : -1;
                 const float pos = audioProcessor.getScanPosition (sliceIndex);
                 complete (juce::var ((double) pos));
+            })
+            .withNativeFunction("getPitchPlayheads", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // tp101 — flat [voice, pos, vel, voice, pos, vel, …] for the pitch-mode playhead lines.
+                int   vi[tw::kSamplerVoicesPerLayer];
+                float ps[tw::kSamplerVoicesPerLayer], vl[tw::kSamplerVoicesPerLayer];
+                const int n = audioProcessor.getPitchPlayheads (vi, ps, vl, tw::kSamplerVoicesPerLayer);
+                juce::Array<juce::var> out;
+                out.ensureStorageAllocated (n * 3);
+                for (int i = 0; i < n; ++i) { out.add (vi[i]); out.add ((double) ps[i]); out.add ((double) vl[i]); }
+                complete (juce::var (out));
             })
             .withNativeFunction("getScanWindowBounds", [this](const juce::Array<juce::var>& args,
                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -9968,6 +9985,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           '<div class="ti-grid-pill" data-n="16">16</div>' +
           '<div class="ti-grid-pill" data-n="24">24</div>' +
           '<div class="ti-grid-pill" data-n="32">32</div>' +
+          '<div class="ti-grid-pill" data-n="64">64</div>' +   /* tp101 — Max: slices go to 64 (the engine holds 64 voices) */
         '</div>' +
         '<div class="ti-drawer-row" id="ti-submode-toggle">' +
           '<div class="ti-submode-pill active" data-sub="0">CHOP</div>' +
@@ -10048,10 +10066,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
       // MOTION row — SCAN on/off pill + RATE vertical-drag display.
       // Lives between the mode emblems and the ADSR canvas (Layout C).
       '<div class="motion-row">' +
-        '<span class="motion-label">Motion</span>' +
-        '<span class="scan-pill off" id="scan-pill">Scan Off</span>' +
+        /* tp101 — Max: "rename Motion to Ping-pong — it IS ping-pong." The row, its pill and the
+           rate drag are unchanged; only the words say what the engine does (a ping-pong scan). */
+        '<span class="motion-label">Ping-pong</span>' +
+        '<span class="scan-pill off" id="scan-pill" title="Ping-pong — play the chop back and forth">Off</span>' +
         '<span class="rate-display dim" id="rate-display" ' +
-              'title="Drag vertically to set scan rate. Rates &lt; 1.0 drop pitch (varispeed character). ' +
+              'title="Drag vertically to set the ping-pong rate. Rates &lt; 1.0 drop pitch (varispeed character). ' +
                      'For pitch-locked slow scan, set warp mode to TONES with stretch ratio = 1 / rate ' +
                      '(e.g. rate 0.5 + stretch 2.0).">' +
           '<span class="rate-label">Rate</span>' +
@@ -11794,10 +11814,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   /*  tp54 — the cents half of `pitch`. The semitone is Math.round(pitch); the cents are what is
       left, and they are what the Fine row moves. Clamped to +/-50 so the two controls never argue
       about the same value: past half a semitone it IS the next semitone. */
+  /* tp101 — the pitch-mode transpose a chop inherits (0 for the pitch-mode panel itself), and the
+     one door that turns a DISPLAYED (effective) pitch back into the chop's own stored offset. The
+     own offset stays inside setSlicePitch's -12..+12, so the effective range is base +/- 12. */
+  function ovPitchBase (idx) {
+    if (idx === -1) return 0;
+    var b = state.pitchModeSlice ? Number(state.pitchModeSlice.pitch) : 0;
+    return isFinite(b) ? b : 0;
+  }
+  function ovPitchOwn (idx, eff) {
+    var own = Number(eff) - ovPitchBase(idx);
+    own = Math.round(own * 10000) / 10000;   /* float dust from the subtraction never reaches the patch */
+    return Math.max(-12, Math.min(12, own));
+  }
   function ovCents (pitch) { var p = Number(pitch) || 0; return Math.max(-50, Math.min(50, (p - Math.round(p)) * 100)); }
   function fmtCents (c) { var r = Math.round(c); return (r > 0 ? '+' : '') + r + ' \u00a2'; }
 
-  // Skew-aware normalize/denormalize so the envelope zones feel like the
+  // tp101 — piece boundary (msvc_string_literal_gate: the pitch helpers took this piece past 16,380).
+)TIHX") + juce::String (R"TIHX(  // Skew-aware normalize/denormalize so the envelope zones feel like the
   // global ATTACK/RELEASE knobs (most travel covers small ms).
   function denormSkew (t, min, max, skew) {
     t = Math.max(0, Math.min(1, t));
@@ -11839,7 +11873,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     if (key === 'decay')   { var vd = inh(s.decayMs,      base.decayMs);      return (vd == null || vd < 0) ? 0   : Number(vd); }
     if (key === 'sustain') { var vs = inh(s.sustainLevel, base.sustainLevel); return (vs == null || vs < 0) ? 1.0 : Number(vs); }
     if (key === 'volume')  { var vv = inh(s.volume,       base.volume);       return (vv == null || vv < 0) ? 1.0 : Number(vv); }
-    if (key === 'pitch')   return Number(s.pitch || 0);
+    /* tp101 — TUNING SHOWS WHAT PLAYS. The DSP adds the pitch-mode transpose (fine tune included)
+       to every chop's own detune (TerrainSynth::applyPitchModeBaseline), so a chop's panel shows
+       the SUM: a fresh chop under a "-2 st -37 c" pitch mode reads -2 ST / -37 c, not +0 / 0 — Max
+       read the zeros as "my fine tune didn't carry". Edits convert back (ovPitchOwn). */
+    if (key === 'pitch')   return Number(s.pitch || 0) + ovPitchBase(idx);
     if (key === 'stretch') return Number(s.stretchRatio || 1.0);
     return null;
   }
@@ -11983,7 +12021,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         var r = tr.getBoundingClientRect();
         var t = Math.max(0, Math.min(1, (ev.clientX - r.left) / Math.max(1, r.width)));
         //  the Fine row rides the SEMITONE it is under: it replaces the fraction, never the note.
-        write(idx, s2, fine ? (Math.round(Number(s2.pitch) || 0) + (t * 100 - 50) / 100) : ovAdsrV(key, t));
+        //  tp101 — on the EFFECTIVE pitch (what the panel shows), stored back as the chop's own offset.
+        if (fine) { var effF = ovValueFromState(idx, 'pitch'); write(idx, s2, ovPitchOwn(idx, Math.round(effF) + (t * 100 - 50) / 100)); }
+        else write(idx, s2, ovAdsrV(key, t));
         ovRedrawEnvelope(idx);
       }
       tr.addEventListener('mousedown', function (e) {
@@ -12007,7 +12047,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           var s2 = getSliceData(idx); if (!s2) return;
           write(idx, s2, (which === 'A' || which === 'R') ? -1
                        : (which === 'S') ? 1.0
-                       : (which === 'F') ? Math.round(Number(s2.pitch) || 0)   // dead on the semitone
+                       : (which === 'F') ? ovPitchOwn(idx, Math.round(ovValueFromState(idx, 'pitch')))   // dead on the (effective) semitone
                        : 0);
           requestAnimationFrame(function () {
             try { if (getSliceData(idx)) ovRedrawEnvelope(idx); } catch (_) {}
@@ -12038,7 +12078,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           var v = denormSkew(t, range.min, range.max, range.skew);
           //  tp54 — the semitone snaps, and the cents the Fine row set ride along with it. Before
           //  this the emblem's Math.round silently threw away every fine adjustment on the next drag.
-          if (key === 'pitch') v = Math.round(v) + ovCents(s2.pitch) / 100;
+          //  tp101 — the emblem moves the EFFECTIVE pitch (24 st across the 200 px, as before) and
+          //  keeps its cents; ovPitchOwn stores it as the chop's own offset under the pitch-mode base.
+          if (key === 'pitch') { v = startV + deltaT * (range.max - range.min);
+                                 v = ovPitchOwn(idx, Math.round(v) + ovCents(startV) / 100); }
           if (key === 'volume') {
             s2.volume = v;
             var fn = getNativeFn('setSliceVolume'); if (fn) { try { fn(idx, v); } catch (_) {} }
@@ -12241,7 +12284,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     var on   = !!s.scanEnabled;
     var rate = (typeof s.scanRate === 'number' && s.scanRate > 0.05) ? s.scanRate : 1.0;
     scanPill.classList.toggle('off', !on);
-    scanPill.textContent = on ? 'Scan On' : 'Scan Off';   /* tp53 — the house case */
+    scanPill.textContent = on ? 'On' : 'Off';   /* tp53 — the house case · tp101 — the row's label says Ping-pong */
     rateDisplay.classList.toggle('dim', !on);
     rateValue.textContent = rate.toFixed(2) + '\xd7';
   }
@@ -12364,6 +12407,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         var n = parseInt(pill.dataset.n, 10) || 16;
         var fn = getNativeFn('gridSliceSlices');
         if (!fn) return;
+        /* tp101 — Max: "choosing the Slices count (clicking 8) switches to Slice mode." A count is
+           a request for chops; leaving the page in PITCH mode after it would build eight chops you
+           cannot see or play. The same two calls the PITCH/SLICE pill makes, in the same order. */
+        if (state.sliceMode !== 1) {
+          setSliceModeUI(1);
+          var fnM = getNativeFn('setSliceMode');
+          if (fnM) { try { fnM(1); } catch (_) {} }
+          openSlicerDrawer();   /* setSliceModeUI only CLOSES it (on PITCH); the click came from inside it */
+        }
         try {
           var r = fn(n);
           if (r && typeof r.then === 'function') r.then(applySlicesJson);
@@ -13041,12 +13093,51 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
 
   var _scanInterp = {};  // keyed by slice index (string)
 
+  /* ══ tp101 — THE PITCH-MODE PLAYHEAD ══════════════════════════════════════════════════════════
+     Max: "when a note plays in pitch mode, show a simple moving MIDI playhead line on the waveform,
+     like the ping-pong indicator, for every sounding voice." One white line per voice, the SAME
+     1.5 px / 70 % white the ping-pong line wears (recycled, not re-invented), on the same canvas.
+     C++ (getPitchPlayheads) hands back [voice, pos, vel] per sounding pitch-mode voice: pos is the
+     source read point over the WHOLE sample, vel its speed in sample-fractions per second, so the
+     line glides between the 60 Hz polls instead of stepping. A ping-pong voice is left out there —
+     it already has its own line. Slices keep their purple glow; this runs in PITCH mode only. */
+  var _phInterp = {};    // keyed 'v' + voice index
+  function pollPitchPlayheads () {
+    var fn = getNativeFn('getPitchPlayheads');
+    if (!fn) return;
+    var r; try { r = fn(); } catch (_) { return; }
+    Promise.resolve(r).then(function (arr) {
+      var now = performance.now(), seen = {};
+      if (state.sliceMode === 0 && arr && arr.length) {
+        for (var i = 0; i + 2 < arr.length; i += 3) {
+          var pos = Number(arr[i + 1]), vel = Number(arr[i + 2]);
+          if (!isFinite(pos) || pos < 0) continue;
+          var key = 'v' + (arr[i] | 0);
+          seen[key] = true;
+          var e = _phInterp[key] || (_phInterp[key] = { opacity: 0 });
+          e.pos = Math.min(1, pos); e.vel = isFinite(vel) ? vel : 0; e.t = now;
+          e.predictedPos = e.pos; e.opacityTarget = 1;
+        }
+      }
+      for (var k in _phInterp) if (!seen[k]) { _phInterp[k].opacityTarget = 0; _phInterp[k].vel = 0; }
+      kickScanViz();
+    }).catch(function () {});
+  }
+  window.__tiPitchPlayheads = function () {   /* the gate's eye: what the canvas is drawing */
+    var out = []; for (var k in _phInterp) { var e = _phInterp[k]; if (e.opacity > 0.005 || e.opacityTarget > 0) out.push({ key: k, pos: e.predictedPos, op: e.opacity, target: e.opacityTarget }); }
+    return out;
+  };
+
   // Poll: fetch truth from C++ and update velocity estimate.
   function pollScanViz () {
     var getScanPos    = getNativeFn('getScanPosition');
     var getScanBounds = getNativeFn('getScanWindowBounds');
     if (!getScanPos || !getScanBounds) return;
     var now = performance.now();
+
+    // tp101 — the pitch-mode playheads (every sounding voice), polled beside the scan truth.
+    if (state.sliceMode === 0) pollPitchPlayheads();
+    else for (var _pk in _phInterp) { _phInterp[_pk].opacityTarget = 0; _phInterp[_pk].vel = 0; }
 
     // Bug D — pitch mode scan viz: poll sliceIndex=-1 when in Whole-sample mode.
     if (state.sliceMode === 0) {
@@ -13221,6 +13312,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         entry.predictedPos = pred;
       }
     }
+    // tp101 — the pitch-mode playheads glide on their own velocity (capped at 80 ms past the last
+    // truth so a missed poll can never fling a line across the waveform) and fade in / out faster
+    // than the scan line, because a note-off is an event and the line should leave with it.
+    for (var pk in _phInterp) {
+      var pe = _phInterp[pk];
+      pe.opacity += (pe.opacityTarget - pe.opacity) * 0.25;
+      if (pe.opacityTarget === 0 && pe.opacity < 0.005) { delete _phInterp[pk]; continue; }
+      if (pe.opacityTarget === 1 && pe.opacity > 0.995) pe.opacity = 1;
+      if (pe.vel) pe.predictedPos = Math.max(0, Math.min(1, pe.pos + pe.vel * Math.min(80, now - pe.t) / 1000));
+    }
     // Wrap drawScanViz in try/catch so a thrown exception (e.g. layouts
     // undefined, see drawScanViz comments) cannot prevent the next rAF
     // from being scheduled. Previously a single throw here killed the
@@ -13236,6 +13337,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     for (var k in _scanInterp) {
       var e = _scanInterp[k];
       if (e && (e.opacity > 0 || e.opacityTarget > 0)) return true;
+    }
+    for (var k2 in _phInterp) {   /* tp101 — a sounding pitch-mode voice keeps the draw loop awake */
+      var e2 = _phInterp[k2];
+      if (e2 && (e2.opacity > 0 || e2.opacityTarget > 0)) return true;
     }
     return false;
   }
@@ -13345,6 +13450,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         ctx.fillStyle = 'rgba(255, 255, 255, ' + (pitchEntry.opacity * 0.7).toFixed(3) + ')';
         ctx.fillRect(Math.floor(scanPixel) - 0.75, 0, 1.5, H);
       }
+      // tp101 — one playhead per sounding voice, the scan line's exact ink. pos is over the WHOLE
+      // sample, which is what the pitch-mode waveform spans edge to edge.
+      for (var phk in _phInterp) {
+        var phe = _phInterp[phk];
+        if (!phe || phe.opacity < 0.005) continue;
+        ctx.fillStyle = 'rgba(255, 255, 255, ' + (phe.opacity * 0.7).toFixed(3) + ')';
+        ctx.fillRect(Math.floor(phe.predictedPos * W) - 0.75, 0, 1.5, H);
+      }
     }
   }
 
@@ -13355,6 +13468,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   // stale scan line must not sit on the waveform), and the draw loop runs just long enough to fade it.
   tiFrontLoop(function () { pollScanViz(); kickScanViz(); }, 16, tiGlowNeed, function () {
     for (var k in _scanInterp) { var e = _scanInterp[k]; if (e) { e.opacityTarget = 0.0; e.truth = null; e.velocity = 0; } }
+    for (var pk in _phInterp) { _phInterp[pk].opacityTarget = 0; _phInterp[pk].vel = 0; }   /* tp101 */
     kickScanViz();
   });
 
