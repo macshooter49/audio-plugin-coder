@@ -26,12 +26,22 @@ namespace tw
         float body    = 0.0f;    // Body      −1..+1  zone lookup shift ±6 st, repitched back (formant-like)
         float attack  = 0.0f;    // Attack    −1..+1  Gentle (fade + softer layer) … Natural … Tight (air trim + lift)
         float human   = 0.25f;   // Human      0..1   per-note detune/level/start/tone/timing + fake RR
-        float release = 0.5f;    // Release    0..1   release-trigger level (0.5 = authored, 1 = +6 dB) + decay handoff
-        float noise   = 0.5f;    // Noise      0..1   mechanical-noise regions (0.5 = authored)
+        float release = 0.5f;    // Release    0..1   tp105: note-off decay TIME 20 ms..10 s (taper) + release-sample level; 1 = ≥10 s
+        float noise   = 0.5f;    // Noise      0..1   mechanical-noise regions, trig on|off (0 silent, 0.5 authored, 1 = +12 dB)
         float sustain = 0.0f;    // Sustain    0..1   crossfade into the compile-time tail loop; 1 = holds forever
         float velo    = 0.75f;   // Velocity   0..1   velocity→amplitude depth (and velocity→brightness for Tone)
         float image   = 1.0f;    // Image      0..1.5 mid/side width of the sample (APVTS 0..1 × 1.5; default 0.667 → 1.0)
         int   artic   = 0;       // Articulation index into map.json "artics" (0 when the instrument has one)
+
+        // ── tp105 amendment (Max, 2026-09-24): Attack leaves the front panel (the amp envelope owns attack);
+        //    VIBRATO takes its knob + mod slot. Release becomes a real release linked to the amp envelope.
+        float vibrato   = 0.0f;  // Vibrato    0..1   depth 0..±50 cents (taper: musical in the first half, wild at 1), per note
+        float vibRate   = 5.5f;  // back panel 3..9 Hz (rises ~+0.6 Hz with depth, like a player)
+        float vibDelay  = 0.35f; // back panel 0..2 s  onset delay, then a 250 ms fade-in (natural vibrato)
+        float ampAttack  = 0.0f; // the voice's amp-envelope attack  (s) — Gentle onsets follow it, no double fade
+        float ampRelease = 0.0f; // the voice's amp-envelope release (s) — note-off fade = max(this, Release knob time)
+        int   velCurve  = 1;     // back panel 0 Soft · 1 Linear (authored) · 2 Hard
+        int   tuning    = 1;     // back panel 0 As recorded · 1 Equal (apply the compiler's per-region "tfix" cents)
     };
 
     /** A compiled .torg instrument, loaded in RAM (int16 samples + the region table + the
