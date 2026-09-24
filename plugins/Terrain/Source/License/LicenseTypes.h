@@ -63,15 +63,25 @@ namespace terrain::license
     };
 
     // -------------------------------------------------------------------------
-    //  Registration identity — comes from the settings registration flow
-    //  (name -> email -> authorization code "TRRN-XXXX-XXXX"). See the settings
-    //  mockup: Design/settings-mockup.html (natives registerStart/registerVerify).
+    //  Seat model: one purchase (keyed by the buyer's order email) carries
+    //  kSeatsPerPurchase authorization codes; each code activates ONE computer.
+    //  Seats are enforced server-side; the client only displays the counts.
+    // -------------------------------------------------------------------------
+    inline constexpr std::uint32_t kSeatsPerPurchase = 3;
+
+    // -------------------------------------------------------------------------
+    //  Activation identity — comes from the settings activation flow
+    //  (name -> purchase email [lookup] -> authorization code [activate]).
+    //  Nothing is emailed by the plugin: codes are issued when the Shopify order
+    //  is paid, delivered with the order, and listed in the customer's Waves
+    //  Crate account ("Licenses"). JS natives: licenseLookup / licenseActivate /
+    //  licenseDeactivate (see index.html #st-overlay, "ACTIVATION").
     // -------------------------------------------------------------------------
     struct RegistrationIdentity
     {
         std::string name;               // Display / author name; signs presets.
-        std::string email;              // Where the authorization code was mailed.
-        std::string authorizationCode;  // "TRRN-XXXX-XXXX" the server issued+mailed.
+        std::string email;              // The email the purchase was made with.
+        std::string authorizationCode;  // "TRRN-XXXX-XXXX", one of that purchase's codes.
     };
 
     // -------------------------------------------------------------------------
@@ -92,13 +102,15 @@ namespace terrain::license
     struct LicenseFile
     {
         std::uint32_t schemaVersion = 0;
+        std::string   keyId;            // which server signing key (rotation), e.g. "k1"
         std::string   product;          // "Terrain"
         std::uint32_t productMajor = 0; // licence valid for this major version line
         std::string   licenseId;        // server-side unique id (for seat mgmt)
         std::string   boundName;        // identity the licence was issued to
         std::string   boundEmail;
         std::string   boundMachineId;   // MachineFingerprint.value at issue time
-        std::uint32_t maxSeats = 0;     // informational; seats enforced server-side
+        std::string   activationId;     // server id of this (code, machine) activation
+        std::uint32_t maxSeats = 0;     // informational (3); seats enforced server-side
         UnixTime      issuedAt = 0;
         UnixTime      expiresAt = 0;    // 0 == perpetual (no expiry)
         Bytes         signature;        // detached Ed25519 signature over canonical bytes
@@ -144,20 +156,104 @@ namespace terrain::license
     };
 
     // -------------------------------------------------------------------------
-    //  Registration server round-trip results (server side is out-of-process;
-    //  these model the two natives the settings UI calls). See design doc §Server.
+    //  Licensing-server round trips. The server is Max's own small HTTPS
+    //  service (spec: plugins/Terrain/.ideas/licensing-server-spec.md). These
+    //  model the three natives the settings UI calls.
     // -------------------------------------------------------------------------
-    struct RegistrationChallenge
+
+    // Transport / availability outcomes shared by every call.
+    enum class ServerOutcome
     {
-        bool        accepted = false;   // server accepted name+email, mailed a code
-        std::string requestId;          // opaque handle to correlate the code check
-        std::string userMessage;        // "We sent a code to <email>", or an error
+        Ok = 0,         // the server answered; read the call-specific status
+        NotConfigured,  // no endpoint configured in this build -> nothing sent
+        Offline,        // DNS / TLS / timeout / no network
+        RateLimited,    // HTTP 429
+        ServerError     // 5xx, malformed JSON, unexpected shape
     };
 
-    struct RegisterResult
+    // POST /v1/lookup {email, product}
+    enum class LookupStatus { Found, NotFound };
+    struct PurchaseLookupResult
     {
-        bool        success = false;    // code verified AND a signed licence stored
-        GateReason  failure = GateReason::None;
-        std::string userMessage;
+        ServerOutcome outcome    = ServerOutcome::NotConfigured;
+        LookupStatus  status     = LookupStatus::NotFound;
+        std::uint32_t seatsTotal = kSeatsPerPurchase;
+        std::uint32_t seatsUsed  = 0;
+        std::string   userMessage;
     };
+
+    // POST /v1/activate {email, code, machineId, name, product, productMajor}
+    enum class ActivationStatus
+    {
+        Activated,      // signed licence received, verified and stored
+        BadCode,        // code unknown, or not issued to this email
+        CodeInUse,      // code already bound to a DIFFERENT machine
+        SeatsFull,      // every code on the purchase is in use
+        LicenseRejected // server said OK but the licence failed local verification
+    };
+    struct ActivationResult
+    {
+        ServerOutcome    outcome    = ServerOutcome::NotConfigured;
+        ActivationStatus status     = ActivationStatus::BadCode;
+        std::uint32_t    seatsTotal = kSeatsPerPurchase;
+        std::uint32_t    seatsUsed  = 0;
+        Bytes            licenseBlob;                     // signed Licence.json (Activated only)
+        GateReason       failure    = GateReason::None;   // set for LicenseRejected
+        std::string      userMessage;
+
+        bool success() const noexcept
+        {
+            return outcome == ServerOutcome::Ok && status == ActivationStatus::Activated;
+        }
+    };
+
+    // POST /v1/deactivate {licenseId, activationId, machineId}
+    struct DeactivationResult
+    {
+        ServerOutcome outcome = ServerOutcome::NotConfigured;
+        bool          freed   = false;   // server released the seat
+    };
+
+    // -------------------------------------------------------------------------
+    //  The JSON "status" string the natives hand back to the settings UI.
+    //  Keep in lock-step with regNet() in index.html.
+    // -------------------------------------------------------------------------
+    inline const char* outcomeStatus(ServerOutcome o) noexcept
+    {
+        switch (o)
+        {
+            case ServerOutcome::NotConfigured: return "not_configured";
+            case ServerOutcome::Offline:       return "offline";
+            case ServerOutcome::RateLimited:   return "rate_limited";
+            case ServerOutcome::ServerError:   return "error";
+            case ServerOutcome::Ok:            break;
+        }
+        return "error";
+    }
+
+    inline const char* jsStatus(const PurchaseLookupResult& r) noexcept
+    {
+        if (r.outcome != ServerOutcome::Ok) return outcomeStatus(r.outcome);
+        return r.status == LookupStatus::Found ? "found" : "not_found";
+    }
+
+    inline const char* jsStatus(const ActivationResult& r) noexcept
+    {
+        if (r.outcome != ServerOutcome::Ok) return outcomeStatus(r.outcome);
+        switch (r.status)
+        {
+            case ActivationStatus::Activated:       return "activated";
+            case ActivationStatus::BadCode:         return "bad_code";
+            case ActivationStatus::CodeInUse:       return "code_in_use";
+            case ActivationStatus::SeatsFull:       return "seats_full";
+            case ActivationStatus::LicenseRejected: return "error";
+        }
+        return "error";
+    }
+
+    inline const char* jsStatus(const DeactivationResult& r) noexcept
+    {
+        if (r.outcome != ServerOutcome::Ok) return outcomeStatus(r.outcome);
+        return r.freed ? "deactivated" : "error";
+    }
 }

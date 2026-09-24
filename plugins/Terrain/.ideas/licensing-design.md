@@ -2,6 +2,11 @@
 
 **Status:** DESIGN + compiling client skeleton. **Not wired into the audio path.**
 To be reviewed before hook-up.
+**Revised 2026-09-23:** activation is now **purchase-verified** (Max's spec): the
+buyer enters the email on their Shopify order, the server looks the purchase up,
+and the buyer pastes one of the **three codes** issued to that email (one code =
+one computer). Nothing is emailed from the plugin. Server side:
+`licensing-server-spec.md`.
 **Scope of this document:** the legitimate, standard offline copy-protection scheme
 for Terrain — how the plugin verifies a licence, runs a 14-day demo, and fails
 closed — plus what the server must provide and how it snaps onto the existing
@@ -64,7 +69,7 @@ legal risk) outweighs the marginal protection.
 | Ed25519 **private** key | **NEVER** | Lives only in the signing service. |
 | Any server secret / HMAC key | **NEVER** | The client has no secret to keep. |
 | Machine-fingerprint salt | Yes (compile-time const) | Only salts a one-way hash. |
-| Network endpoints | Only at release; **placeholders in skeleton** | `beginRegistration` / `completeRegistration`. |
+| Network endpoint (base URL) | **No** — `LicenseServerConfig.baseUrl` is **empty** in every build until configured | `LicenseServerClient.h`; empty ⇒ `NotConfigured`, nothing sent. |
 
 Because the client holds **no secret**, a leak of the binary leaks nothing that
 lets anyone mint licences. That is the whole point of asymmetric (public-key)
@@ -84,10 +89,12 @@ authenticity are what matter.
 | Field | Purpose |
 |---|---|
 | `schemaVersion` | forward-compat |
+| `keyId` | which server signing key signed it (key rotation) |
 | `product` = `"Terrain"`, `productMajor` | licence scoped to a product + major line |
 | `licenseId` | server-side id, for seat management |
 | `boundName`, `boundEmail` | the registered identity |
 | `boundMachineId` | this machine's fingerprint at activation |
+| `activationId` | server id of the (code, machine) pair — used to free the seat on sign-out |
 | `maxSeats` | informational (seats enforced server-side) |
 | `issuedAt`, `expiresAt` | `expiresAt == 0` ⇒ perpetual |
 | `signature` | **detached Ed25519 signature over the canonical bytes of all other fields** |
@@ -97,7 +104,8 @@ the signed fields **identically and unambiguously** (fixed field order, fixed
 number formatting, no incidental whitespace) so the client re-derives the exact
 byte string the server signed. This is the `canonicalBytes()` seam in
 `LicenseManager.h`. Getting this wrong = signatures never verify; getting it
-loosely right = signature-malleability bugs. Specify it once, test it both sides.
+loosely right = signature-malleability bugs. **Now specified** in
+`licensing-server-spec.md` §6.4 (fixed-order `key=value` lines + a shared test vector).
 
 **Verification order** (`LicenseManager::evaluate`, all must pass):
 1. Parse the file (fail → `StoreCorrupt`).
@@ -189,38 +197,53 @@ trial verifies against the public key. Not required for v1.)*
 
 ---
 
-## 7. Integrating with the existing registration UI
+## 7. The activation flow (settings UI ↔ client ↔ server)
 
-The settings mockup already designs the whole flow — this scheme just supplies its
-backend. Source of truth: `Design/settings-mockup.html` (Account → Registration,
-About → Licence).
+UI source of truth: the `ACTIVATION` block of the `#st-overlay` script in
+`Source/ui/public/index.html` (Settings → Account → Registration → **Activate Terrain**).
 
-**The flow (unchanged):** **name → email → authorization code `TRRN-XXXX-XXXX` →
-welcome.** The mockup's own note already describes the backing:
-> "A LicenceManager on the processor: load/verify a signed licence file at boot;
-> natives `registerStart(name,email)`, `registerVerify(code)`, `signOut()`; a server
-> endpoint to mail + check codes."
+**The flow (4 steps, dots in the sheet header):**
+1. **Name** — local only; becomes the preset author immediately.
+2. **Purchase email** — "Which email address did you use to buy Terrain?" →
+   `licenseLookup`. *Not found* → "We couldn't find a Terrain purchase for …" with
+   **Try again** / **Buy Terrain**. *Found* → step 3 opens with "Found your purchase."
+   and the free-seat count ("2 of 3 computers free").
+3. **Authorization code** `TRRN-XXXX-XXXX` — one of the codes issued to that email
+   (in the order email and in the customer's Waves Crate account → Licenses) →
+   `licenseActivate`. Errors: `bad_code`, `code_in_use` (bound to another computer),
+   `seats_full`. Success → "Terrain is activated" (name, email, author, "N of 3 in use").
+4. **Anonymous usage opt-in** — shown once, the last step before first use.
+   Two equal-weight buttons (**Not now** / **Share anonymous usage**), nothing
+   pre-selected; Escape / click-outside = Not now. Stored as `S.usage` +
+   `S.usageAsked`; switchable later in Settings → Account → Privacy.
 
-**Native ↔ skeleton mapping** (natives are registered with `withNativeFunction` in
-`Source/PluginEditor.cpp`, alongside `loadPreset`, `savePatchFile`, … — same pattern):
+Transport states shown on steps 2 and 3: `not_configured` ("**Activation server not
+configured yet.** … Nothing was sent."), `offline`, `rate_limited`, `error`. The UI
+never fakes success: a missing native is treated exactly like `not_configured`.
 
-| JS native (settings UI) | `LicenseManager` method | Effect |
+**Native ↔ skeleton mapping** (to register with `withNativeFunction` in
+`PluginEditor.cpp` at hook-up — not done here). Each native takes one JSON string,
+runs the blocking call on a background thread, and resolves with a JSON string
+`{status, seatsTotal?, seatsUsed?}` where `status = jsStatus(result)`:
+
+| JS native | `LicenseManager` method | `status` values |
 |---|---|---|
-| `registerStart(name, email)` | `beginRegistration({name,email})` → `RegistrationChallenge` | Server mails a `TRRN-XXXX-XXXX` code. |
-| `registerVerify(code)` | `completeRegistration(code)` → `RegisterResult` | Server checks code, returns a **signed** `Licence.json`; client verifies + stores; re-evaluates. |
-| `signOut()` | `signOut(now)` | Removes `Licence.json` from **this machine only**; trial untouched. |
-| (boot / UI timer) | `initialiseAtBoot` / `currentDecision` | Drives "Registered to …", "1 of 3", trial days left. |
+| `licenseLookup({email})` | `lookupPurchase(email)` | `found`, `not_found` + transport |
+| `licenseActivate({name,email,code})` | `activate(identity, now)` | `activated`, `bad_code`, `code_in_use`, `seats_full`, `error` + transport |
+| `licenseDeactivate({})` | `deactivate(now)` | `deactivated` + transport (local licence removed regardless) |
+| `licenseOpenStore()` *(optional)* | opens `LicenseServerConfig.storeUrl` | — (UI falls back to a toast) |
+| (boot / UI timer) | `initialiseAtBoot` / `currentDecision` | drives "Registered to …", trial days left |
 
-The UI already renders every state this design produces: registered
-(name/email/since), not-registered, the 3-machine limit, the "code already used on
-3 computers" error, and the beta "Ad-hoc · Developer ID at 1.0" signing line — no
-UI changes are required by this document (and none are made).
+Transport statuses: `not_configured`, `offline`, `rate_limited`, `error`
+(`ServerOutcome` → `outcomeStatus()` in `LicenseTypes.h`).
 
-**Naming note:** the mockup uses British `Licence` / `LicenceManager` and the file
-`Licence.json`; the skeleton uses American `License` (matching the requested
-`Source/License/` path and `LicenseManager.h`). This is a one-word reconciliation
-to settle at hook-up; the **on-disk file name should stay `Licence.json`** to match
-the mockup, exposed via a single constant. Nothing load-bearing.
+**`activate()` only reports success after the returned licence verifies locally**
+(signature, product, machine). A server that says "ok" with a bad licence yields
+`LicenseRejected` → `error`, and the bad file is removed. The server can never unlock
+audio by assertion alone.
+
+**Naming note:** C++ symbols are American (`License…`); the on-disk file stays
+`Licence.json` to match the mockup.
 
 ---
 
@@ -234,10 +257,11 @@ This design **does not** include, and Terrain must **never** ship, any of:
 - **Machine-harming anti-analysis** (kernel drivers, rootkits, boot-persistence,
   destructive anti-debug).
 - **Persistence** outside Terrain's own app-support directory.
-- **Data collection without opt-in.** The only network calls are the two the user
-  initiates by registering (send/verify a code). The mockup's "Anonymous usage
-  data" toggle is **off by default** and explicitly opt-in; this scheme adds no
-  telemetry of its own.
+- **Data collection without opt-in.** The only licensing network calls are the
+  ones the user initiates (lookup, activate, sign-out). Anonymous usage data is
+  **off by default**, asked once as the last onboarding step with no pre-selected
+  answer, and switchable off any time in Settings → Account → Privacy. Its
+  contents and ingest endpoint are specified in `licensing-server-spec.md` §8.
 
 **The entire enforcement surface is:** on failure, `buffer.clear()` (silence) +
 show the gate. That is the maximum consequence, by design.
@@ -246,27 +270,14 @@ show the gate. That is the maximum consequence, by design.
 
 ## 9. What the SERVER must provide
 
-The server side is **out of process** and out of scope to build here, but the
-client depends on it doing exactly this:
+Fully specified in **`licensing-server-spec.md`** (Max's own small Vercel service):
+Shopify `orders/paid` webhook (HMAC-verified) → purchase + 3 codes for the buyer
+email; `POST /v1/lookup`, `/v1/activate` (→ Ed25519-signed licence, private key only
+on the server), `/v1/deactivate`; admin grant page; customer "Licenses" page shared by
+future Waves Crate plugins; opt-in telemetry ingest `POST /v1/events` + daily summary.
 
-1. **Issue + email authorization codes.** On `registerStart(name,email)`: create a
-   pending registration, generate a one-time `TRRN-XXXX-XXXX` code, email it to the
-   address. Rate-limit; expire codes.
-2. **Verify codes and enforce seats.** On `registerVerify(code)`: validate the code,
-   check the machine fingerprint against the licence's seat allowance (e.g. 3),
-   refuse if exhausted (drives the mockup's "used on 3 computers" message), allow a
-   released seat to be reused.
-3. **Sign licence files.** With the **private** Ed25519 key (held only here, e.g.
-   in an HSM / KMS), produce the `canonicalBytes` of the payload and sign; return
-   `Licence.json`. The private key **never** ships in the plugin.
-4. **Manage seats / sign-out.** Track `licenseId → machines`; free a seat on
-   `signOut`.
-5. **Key management.** Keep the signing key offline/HSM; have a key-rotation plan
-   (bump `schemaVersion`, ship a new embedded public key in a plugin update).
-
-Client trusts the server's signature, not the transport — so even plain HTTPS
-issues are non-fatal to authenticity (though HTTPS is still required for the code
-exchange and to protect the email address).
+The client trusts the server's **signature**, not the transport — HTTPS is still
+required (it protects the email address and the code in flight).
 
 ---
 
@@ -281,7 +292,8 @@ Header-only, framework-free C++17 under `plugins/Terrain/Source/License/`:
 | `SignatureVerifier.h` | Ed25519 verify **interface** + **empty** embedded-key placeholder + fail-closed stub. |
 | `MachineBinding.h` | fingerprint interface + fail-closed stub. |
 | `LicenseStore.h` | persistence interface + in-memory store (test only). |
-| `LicenseManager.h` | the façade: fail-closed, lock-free `isAudioAllowed()`, registration seams. |
+| `LicenseServerClient.h` | `LicenseServerConfig` (**empty** endpoint = disabled), `ILicenseServerClient` (lookup / activate / deactivate), `DisabledServerClient` default. |
+| `LicenseManager.h` | the façade: fail-closed, lock-free `isAudioAllowed()`, `lookupPurchase` / `activate` / `deactivate`. |
 
 **Deliberately framework-free** so the licence core is unit-testable and builds in
 isolation; at hook-up the string/byte types map to `juce::String` / `juce::MemoryBlock`
@@ -302,6 +314,9 @@ stays denied, and a pre-evaluation manager defaults to **DENY**.
 
 ## 11. Open items for the review (before hook-up)
 - Lock the **canonical serialization** of `LicenseFile` (client == server, byte-exact).
+- Implement `HttpsServerClient` (juce::URL, background thread) and register the
+  `licenseLookup` / `licenseActivate` / `licenseDeactivate` natives; source
+  `LicenseServerConfig` from a build setting, never a literal in source.
 - Choose the crypto dependency (**libsodium** preferred, or a small vendored
   ed25519) and wire `Ed25519Verifier`.
 - Implement `MachineBinding` per-OS (IOKit / registry) + pick the salt.
