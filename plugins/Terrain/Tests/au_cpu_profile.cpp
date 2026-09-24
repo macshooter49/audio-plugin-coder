@@ -15,6 +15,10 @@
 //            -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreAudio
 //    /tmp/aucpu            -> the scenario table
 //    /tmp/aucpu list <sub> -> parameters whose name contains <sub>
+//    TERRAIN_ORGANICS_DIR=<lib> /tmp/aucpu organic [id]   -> tp104: the Organics engine vs Wavetable (design §8 CPU
+//          test): 4-note chord at unison 1 and 8-note chord at unison 7, same patch otherwise. The instrument (default
+//          test.sine, the fixture) is handed over the way a host restores state: <ORGANICS><OSC slot="0" id=…/> in
+//          jucePluginState, then the engine choice set to 7 (ORGANIC), then a pump so the library's load lands.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -95,6 +99,30 @@ struct Au
         free (abl);
     }
     void close() { if (au) { AudioUnitUninitialize (au); AudioComponentInstanceDispose (au); au = nullptr; } }
+    // tp104 — splice <ORGANICS><OSC slot="0" id="…" rev="1"/></ORGANICS> into the plugin's own state (JUCE's binary XML:
+    //   u32 magic 0x21324356, u32 byte count, UTF-8 XML + NUL) and hand it back through ClassInfo, like a host restore.
+    bool injectOrganic (const std::string& id)
+    {
+        CFPropertyListRef dict = nullptr; UInt32 sz = sizeof dict;
+        if (AudioUnitGetProperty (au, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &dict, &sz) != noErr || dict == nullptr) return false;
+        CFDataRef d0 = (CFDataRef) CFDictionaryGetValue ((CFDictionaryRef) dict, CFSTR ("jucePluginState"));
+        if (d0 == nullptr) { CFRelease (dict); return false; }
+        const UInt8* b = CFDataGetBytePtr (d0); const CFIndex n = CFDataGetLength (d0);
+        if (n < 9) { CFRelease (dict); return false; }
+        std::string xml ((const char*) b + 8, (size_t) (n - 8)); while (! xml.empty() && xml.back() == 0) xml.pop_back();
+        const size_t close = xml.rfind ("</");
+        if (close == std::string::npos) { CFRelease (dict); return false; }
+        xml.insert (close, "<ORGANICS><OSC slot=\"0\" id=\"" + id + "\" rev=\"1\"/></ORGANICS>");
+        std::vector<UInt8> out (8 + xml.size() + 1, 0);
+        const uint32_t magic = 0x21324356u, len = (uint32_t) (xml.size() + 1);
+        std::memcpy (out.data(), &magic, 4); std::memcpy (out.data() + 4, &len, 4); std::memcpy (out.data() + 8, xml.data(), xml.size());
+        CFMutableDictionaryRef m = CFDictionaryCreateMutableCopy (nullptr, 0, (CFDictionaryRef) dict);
+        CFDataRef data = CFDataCreate (nullptr, out.data(), (CFIndex) out.size());
+        CFDictionarySetValue (m, CFSTR ("jucePluginState"), data);
+        CFPropertyListRef pl = m; const OSStatus st = AudioUnitSetProperty (au, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &pl, sizeof pl);
+        CFRelease (data); CFRelease (m); CFRelease (dict);
+        return st == noErr;
+    }
 };
 // median is the honest statistic here: the first blocks after a note-on carry one-off setup,
 // and the OS will occasionally steal the thread. The mean would report both as DSP cost.
@@ -333,6 +361,30 @@ int main (int argc, char** argv)
         return 0;
     }
 
+    // ── tp104 — organic [id]: the Organics engine against Wavetable, the design §8 CPU bar ──
+    if (argc > 1 && ! std::strcmp (argv[1], "organic"))
+    {
+        const std::string id = argc > 2 ? argv[2] : "test.sine";
+        const std::vector<int> c4 { 60, 64, 67, 71 }, c8 { 48, 52, 55, 59, 60, 64, 67, 71 };
+        printf ("\n== tp104 - THE ORGANICS ENGINE vs WAVETABLE ==   instrument '%s' (TERRAIN_ORGANICS_DIR=%s)\n\n", id.c_str(),
+                getenv ("TERRAIN_ORGANICS_DIR") ? getenv ("TERRAIN_ORGANICS_DIR") : "(the installed library)");
+        auto org = [id] (Au& a) { a.injectOrganic (id); a.setIdx ("Synth OSC A Engine", 7); a.pump (1.5); };
+        baseUs = -1;
+        run ("idle, no notes",                                 {},  [] (Au&) {});
+        baseUs = rows.back().us;
+        run ("WT       4-note chord, unison 1",                c4,  [] (Au&) {});
+        const double wt4 = rows.back().us;
+        run ("ORGANIC  4-note chord, unison 1",                c4,  org);
+        const double or4 = rows.back().us;
+        run ("WT       8-note chord, unison 7",                c8,  [] (Au& a) { a.set ("Synth OSC A Unison", 6.0f / 15.0f); });
+        const double wt8 = rows.back().us;
+        run ("ORGANIC  8-note chord, unison 7 (Ensemble)",     c8,  [org] (Au& a) { a.set ("Synth OSC A Unison", 6.0f / 15.0f); org (a); });
+        const double or8 = rows.back().us;
+        printf ("\n  4-note: Organic %.0f us vs WT %.0f us  -> %s\n", or4, wt4, or4 <= wt4 ? "PASS (not slower than WT)" : "FAIL (slower than WT)");
+        printf ("  8-note unison 7: Organic %.0f us vs WT %.0f us  -> %s\n\n", or8, wt8, or8 <= wt8 ? "PASS" : "FAIL");
+        return (or4 <= wt4 && or8 <= wt8) ? 0 : 1;
+    }
+
     printf ("\n== tp32 - WHERE THE CPU GOES ==   512 frames @ 48 kHz = a %.0f us budget per block\n\n", budgetUs());
     const std::vector<int> none {};
     const std::vector<int> one  { 60 };
@@ -387,9 +439,10 @@ int main (int argc, char** argv)
 
     // ── THE ENGINE. Same chord, same filter, different oscillator engine. ──
     printf ("\n  -- the same 4-note chord, sweeping the OSCILLATOR ENGINE --\n");
-    static const char* const kEng[] = { "Wavetable", "Sample", "Granular", "Geode/Spectral", "FM", "Harmonic", "Modal" };
+    static const char* const kEng[] = { "Wavetable", "Sample", "Granular", "Geode/Spectral", "FM", "Harmonic", "Modal",
+                                        "Organic (no instrument)" };   // tp104 — the choice is 12 wide now (8..11 reserved)
     baseUs = -1;
-    for (int e = 0; e < 7; ++e)
+    for (int e = 0; e < 8; ++e)
     { char lab[96]; snprintf (lab, sizeof lab, "engine = %s", kEng[e]);
       run (lab, sev, [e] (Au& a) { a.setIdx ("Synth OSC A Engine", e); }); }
     run ("engine = Harmonic, 512 partials", sev, [] (Au& a) {

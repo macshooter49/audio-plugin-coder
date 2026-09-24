@@ -284,7 +284,14 @@ enum class ModDest : int
     //    Appended at the tail; index.html's MOD page mirrors SHAPER_DEPTH_BASE = 5200.
     ShaperDepthBase = LfoRateGlobal + 1,
     ShaperDepthEnd  = ShaperDepthBase + 4 * 18,
-    NumDests = ShaperDepthEnd
+    // ── tp104 · THE ORGANICS ENGINE'S TEN KNOBS × EIGHT OSCILLATORS (contract §5). Appended at the tail (saved routes
+    //    store ints). dest = OrganicBase + osc(0..7)·10 + knob, knob order Dynamics Tone Body Attack Human | Release Noise
+    //    Sustain Velocity Image. E–H are EXPLICIT here (osc 4..7), not the +OscBank2Base mirror (the mirror only covers the
+    //    legacy 1890): destForBank() rebases them onto bank 1's A–D slots (−40), so both banks' gathers read
+    //    OrganicBase + o·10 + k with o = 0..3. index.html's KNOBDEST mirrors ORGANIC_BASE = 5272.
+    OrganicBase = ShaperDepthEnd,
+    OrganicEnd  = OrganicBase + 8 * 10,
+    NumDests = OrganicEnd
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
@@ -309,8 +316,14 @@ inline constexpr int kFlowSpan = (int) ModDest::EnvPBase - (int) ModDest::FlowTi
 static_assert ((int) ModDest::OscBank2Base == 1890 && (int) ModDest::FlowInstBase == 3780 && kFlowSpan == 473
             && (int) ModDest::FlowInstEnd == 3780 + 3 * 473,
     "tp20 - index.html mirrors OSCBANK2_BASE=1890, FLOWINST_BASE=3780, FLOW_SPAN=473; a shift here re-points every saved pool route");
-static_assert ((int) ModDest::LfoRateGlobal == 5199 && (int) ModDest::ShaperDepthBase == 5200 && (int) ModDest::NumDests == 5272,
+static_assert ((int) ModDest::LfoRateGlobal == 5199 && (int) ModDest::ShaperDepthBase == 5200 && (int) ModDest::ShaperDepthEnd == 5272,
     "tp37 - index.html mirrors window.__LFO_GLOBAL_DEST=5199 (the global LFO rate, appended after the flow pool); a shift here re-points saved routes");
+static_assert ((int) ModDest::OrganicBase == 5272 && (int) ModDest::OrganicEnd == 5352 && (int) ModDest::NumDests == 5352,
+    "tp104 - the Organics dests are frozen by OrganicsApi.h (organics::kDestBase 5272 / kDestEnd 5352) and index.html's KNOBDEST ORG_*; a shift re-points saved routes");
+inline constexpr int kOrganicKnobs = 10;
+/** tp104 — the Organics dest for oscillator o (0..7) and knob k (0..9). */
+inline constexpr int organicDest (int o, int k) noexcept { return (int) ModDest::OrganicBase + o * kOrganicKnobs + k; }
+inline constexpr bool isOrganicDest (int d) noexcept { return d >= (int) ModDest::OrganicBase && d < (int) ModDest::OrganicEnd; }
 /** A destination that belongs to ONE oscillator (its letter is in its name). Every such family is
  *  laid out A,B,C,D contiguously, so the ranges below are the families' first A and last D. */
 inline constexpr bool isOscLetteredDest (int d) noexcept
@@ -320,7 +333,8 @@ inline constexpr bool isOscLetteredDest (int d) noexcept
         || in (ModDest::FrameC,       ModDest::FoldD)       || in (ModDest::CoarseA,   ModDest::SubHeatD)
         || in (ModDest::LevelA,       ModDest::PanD)        || in (ModDest::BlendDepthA1, ModDest::HarmFizzD)
         || in (ModDest::SpectralA,    ModDest::UniWidthD)   || in (ModDest::FmRatio1A, ModDest::GrainDirD)
-        || in (ModDest::SubRangeA,    ModDest::OscF2SendD)  || in (ModDest::SpecLoA,   ModDest::PhaseAmtD);
+        || in (ModDest::SubRangeA,    ModDest::OscF2SendD)  || in (ModDest::SpecLoA,   ModDest::PhaseAmtD)
+        || (d >= (int) ModDest::OrganicBase && d < (int) ModDest::OrganicEnd);   // tp104 — A–H, each osc's ten contiguous
 }
 /** The int a route to oscillator `bank`'s knob stores: bank 0 = the legacy int, bank 1 = the mirror. */
 inline constexpr int oscBankDest (int bank, int legacyDest) noexcept
@@ -329,6 +343,12 @@ inline constexpr int oscBankDest (int bank, int legacyDest) noexcept
  *  Returns -1 when the route is another bank's oscillator knob. Global dests reach every bank. */
 inline constexpr int destForBank (int bank, int storedDest) noexcept
 {
+    if (storedDest >= (int) ModDest::OrganicBase && storedDest < (int) ModDest::OrganicEnd)   // tp104 — the explicit A–H block
+    {
+        const bool eh = storedDest >= (int) ModDest::OrganicBase + 4 * 10;                     // oscillators E–H
+        if (! eh) return bank == 0 ? storedDest : -1;                                          // A–D: bank 0's own
+        return bank == 1 ? storedDest - 4 * 10 : -1;                                           // E–H: bank 1's A–D slots
+    }
     if (storedDest >= (int) ModDest::OscBank2Base && storedDest < (int) ModDest::OscBank2End)
         return bank == 1 ? storedDest - (int) ModDest::OscBank2Base : -1;              // the mirror: bank 1's own knobs
     if (storedDest < 0 || storedDest >= (int) ModDest::LegacyDestsEnd) return bank == 0 ? storedDest : -1;   // flow-instance dests: the flow stage reads them by exact int
@@ -1091,6 +1111,9 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     a[(size_t) ModDest::LfoRateGlobal] = DestInfo { ModDomain::Linear01, 1.0f };
     // tp96 — the Shaper lanes' Depth (0..1 knob travel). Without these rows they would be value-initialised to scale 0.
     for (int i = (int) ModDest::ShaperDepthBase; i < (int) ModDest::ShaperDepthEnd; ++i) a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
+    // tp104 — the Organics knobs (all 0..1 APVTS travel; the bipolar four centre at 0.5). The tp37 law: a dest past the
+    //   pool with no row here is scale 0 and an envelope routed to it contributes nothing.
+    for (int i = (int) ModDest::OrganicBase; i < (int) ModDest::OrganicEnd; ++i) a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;
 }
 static constexpr auto kDestInfo = makeDestInfo();

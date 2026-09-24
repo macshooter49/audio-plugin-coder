@@ -740,6 +740,16 @@ private:
     juce::WebSliderRelay synOscDModalAgeRelay { ParameterIDs::SYN_OSC_D_MODAL_AGE };
     juce::WebSliderRelay synOscDModalBodyRelay { ParameterIDs::SYN_OSC_D_MODAL_BODY };
 
+    // ════ tp104 — ORGANICS-ENGINE relays: 12 × osc A–D (the four-point law: relay here · withOptionsFrom in
+    //  withOrganics() · a WebSliderParameterAttachment in the constructor · the page reads it). E–H ride the pool
+    //  slider state (getSynParams / setSynParam), like every other E–H knob. Built in withOrganics(), which the
+    //  constructor calls while assembling the Options, i.e. BEFORE the WebView exists; declared before webView, so
+    //  they are destroyed after it.
+    static constexpr int kOrgRelayKnobs = 12;
+    std::unique_ptr<juce::WebSliderRelay> orgRelay_[4][kOrgRelayKnobs];
+    juce::WebBrowserComponent::Options withOrganics (juce::WebBrowserComponent::Options o);
+    juce::uint32 orgVizEmitMs_ = 0;   // the organicViz feed's ≤ 15 Hz clock
+
     // ════ UNIVERSAL OSC BOXES — COARSE + SUB relays (5 × 4 osc, 2026-07-09) ════
     juce::WebSliderRelay synOscACoarseRelay { ParameterIDs::SYN_OSC_A_COARSE };
     juce::WebSliderRelay synOscBCoarseRelay { ParameterIDs::SYN_OSC_B_COARSE };
@@ -1551,6 +1561,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalHaloAttachment, synOscBModalHaloAttachment, synOscCModalHaloAttachment, synOscDModalHaloAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalAgeAttachment, synOscBModalAgeAttachment, synOscCModalAgeAttachment, synOscDModalAgeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalBodyAttachment, synOscBModalBodyAttachment, synOscCModalBodyAttachment, synOscDModalBodyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> orgAtt_[4][kOrgRelayKnobs];   // tp104 — ORGANICS (A–D)
     // UNIVERSAL OSC BOXES — COARSE + SUB attachments
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscACoarseAttachment, synOscBCoarseAttachment, synOscCCoarseAttachment, synOscDCoarseAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASubRangeAttachment, synOscBSubRangeAttachment, synOscCSubRangeAttachment, synOscDSubRangeAttachment;

@@ -208,8 +208,9 @@ int main (int argc, char** argv)
     a.set (wtp, 4.0f / 45.0f);            // Prophet Saw
     if (! uni.empty()) a.set (uni, 0.0f); // ONE voice — no detune fan, no per-voice drift
     if (! pha.empty()) a.set (pha, 0.0f); // RETRIG — not RANDOM
-    // FM engine: the choice is 0..6, FM is index 4
-    if (! eng.empty()) a.set (eng, 4.0f / 6.0f);
+    // FM engine is index 4. tp104: the choice is 0..11 now (7 = Organics, 8..11 reserved), so the normalised value is
+    // taken from the parameter's own range instead of a hard-coded 6 (4/6 would now land on index 7).
+    if (! eng.empty()) { const auto& pi = a.info.at (a.byName.at (eng)); a.set (eng, 4.0f / std::max (1.0f, pi.maxValue - pi.minValue)); }
     a.pump (0.5);
 
     // a spread of FM settings so the dump exercises every branch: algorithms, feedback,

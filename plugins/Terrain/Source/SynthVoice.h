@@ -25,6 +25,7 @@
 #include "ResynthEngine.h"           // GEODE-ENGINE-VOICE — per-OSC resynthesis core (Engine::SPEC)
 #include "HarmonicEngine.h"       // HARMONIC-ENGINE-VOICE — per-OSC additive bank (Engine::HARM)
 #include "ModalEngine.h"          // MODAL-ENGINE-VOICE — per-OSC physical model (Engine::MODAL)
+#include "organics/OrganicsApi.h" // tp104 — ORGANICS-ENGINE-VOICE — per-OSC multi-sampled instrument (Engine::ORGANIC)
 #include "SubOsc.h"               // SUB — voice-anchored sub oscillator (universal osc box)
 #include "Warp/WarpProcessor.h"    // SAMPLE-ENGINE-VOICE — STRETCH + FORMANT (Signalsmith Tones)
 #include <atomic>
@@ -166,7 +167,12 @@ class SynthVoice : public juce::SynthesiserVoice
         /** Phase 3 — OSC engine choice. Order matches the SYN_OSC_A_ENGINE
          *  StringArray in createParameterLayout: WT, SAMP, GRAN, SPEC, FM, HARM (slot 5
          *  was the never-exposed NOISE engine — ID frozen, meaning remapped to HARMONIC). */
-        enum class Engine : int { WT = 0, SAMP = 1, GRAN = 2, SPEC = 3, FM = 4, HARM = 5, MODAL = 6 };
+        enum class Engine : int { WT = 0, SAMP = 1, GRAN = 2, SPEC = 3, FM = 4, HARM = 5, MODAL = 6, ORGANIC = 7 };
+        /** tp104 — the last LIVE engine. The choice has 12 entries (8..11 reserved + hidden, taken once so the host
+         *  automation lanes never shift again); a reserved index that reaches a voice plays the default (WT). */
+        static constexpr int kEngineMax = 7;
+        static constexpr Engine engineFromIndex (int idx) noexcept
+        { return static_cast<Engine> ((idx < 0 || idx > kEngineMax) ? 0 : idx); }
 
         static constexpr int kMaxUnison = 16;   // Serum-parity unison ceiling (was 8)
 
@@ -843,6 +849,8 @@ class SynthVoice : public juce::SynthesiserVoice
             harmBlkA_.setSize (2, spb, false, false, true);  harmBlkB_.setSize (2, spb, false, false, true);
             harmBlkC_.setSize (2, spb, false, false, true);  harmBlkD_.setSize (2, spb, false, false, true);
             modalBlkA_.setSize (2, spb, false, false, true); modalBlkB_.setSize (2, spb, false, false, true);   // MODAL-ENGINE-VOICE
+            orgMaxBlock_ = spb;   // tp104 — the Organics arm sizes its (lazy) blocks from this; nothing is allocated here
+            orgReady_.store (false, std::memory_order_release);   // a new rate / block size re-prepares on the next arm
             modalBlkC_.setSize (2, spb, false, false, true); modalBlkD_.setSize (2, spb, false, false, true);
             geodeBlkA_.setSize (2, spb, false, false, true); geodeBlkB_.setSize (2, spb, false, false, true);
             geodeBlkC_.setSize (2, spb, false, false, true); geodeBlkD_.setSize (2, spb, false, false, true);
@@ -1190,8 +1198,7 @@ class SynthVoice : public juce::SynthesiserVoice
          *  SYN_OSC_A_ENGINE APVTS choice. Out-of-range clamps to nearest end. */
         void setEngine (int idx) noexcept
         {
-            const int clamped = juce::jlimit (0, 6, idx);
-            engine_ = static_cast<Engine> (clamped);
+            engine_ = engineFromIndex (idx);   // tp104 — 0..7 live, 8..11 reserved → WT
         }
 
         /** Test-only accessor — not used in production audio path. */
@@ -1431,6 +1438,68 @@ class SynthVoice : public juce::SynthesiserVoice
                     ? (std::exp (kFmTaperRate * dc) - 1.0f) * kFmTaperNorm          // FM / PD / AM / FM CLAMP — 361:1
                     : (std::exp (2.0f * dc) - 1.0f) / (std::exp (2.0f) - 1.0f);     // house exp-bias curve (RM)
         }
+        // ══ tp104 — ORGANICS-ENGINE-VOICE: the public seam (processor → voice) ══════════════════════════════════════
+        //  Params: pushed per block by the gather (the ORG_* knobs + their mod, de-normalised to OrganicParams).
+        //  Instruments: the processor owns one shared_ptr per oscillator of this voice's bank (audio thread) plus a
+        //  generation; a voice re-hands it to its engine whenever the generation moves (a copy = a refcount bump,
+        //  no allocation). Both pointers stay valid for the processor's lifetime.
+        void setOrganicParams (int osc, const tw::OrganicParams& p) noexcept { if ((unsigned) osc < 4u) orgParams_[osc] = p; }
+        void setOrganicInstrumentSource (const std::shared_ptr<const tw::OrganicInstrument>* inst4, const std::uint32_t* gen4) noexcept
+        { orgInstSrc_ = inst4; orgInstGenSrc_ = gen4; }
+        void setOrganicNonRealtime (bool b) noexcept { orgNonRt_ = b; }
+        /** AUDIO THREAD, right after the processor took a new delivery for osc `osc` of this voice's bank: hand it to the
+            engine NOW, sounding or idle — an idle voice must not keep the outgoing instrument alive (the library frees
+            an instrument 5 s after its last user, and "switch away → memory back" is a gate). nullptr = silent. */
+        void syncOrganicInstrument (int osc, const std::shared_ptr<const tw::OrganicInstrument>& inst, std::uint32_t gen) noexcept
+        {
+            if ((unsigned) osc >= 4u || ! orgReady_.load (std::memory_order_acquire) || orgV_ == nullptr) return;
+            orgV_->eng[osc].setInstrument (inst);
+            orgInstSeen_[osc] = gen;
+        }
+        // fb498's lazy arm, the Organics clone. MESSAGE THREAD ONLY. Until an oscillator selects Engine::ORGANIC nothing
+        // below exists: no engine object, no block buffer, not one byte (the "unused = zero allocation" law). One-way
+        // publication through orgReady_ (release here, acquire in renderOrganicBlocks), exactly like prepareModalEngines.
+        void prepareOrganicEngines()
+        {
+            if (orgReady_.load (std::memory_order_acquire)) return;
+            const int mb = juce::jmax (1, orgMaxBlock_);
+            if (orgV_ == nullptr || orgV_->sr != sampleRate_ || orgV_->maxBlock < mb)
+            {
+                auto v = std::make_unique<OrgVoice>();
+                v->sr = sampleRate_; v->maxBlock = mb;
+                for (int o = 0; o < 4; ++o)
+                {
+                    v->eng[o].prepare (sampleRate_, mb);
+                    v->blk[o].setSize (2, mb, false, true, false);
+                }
+                orgV_ = std::move (v);   // any previous set is only replaced while unarmed AND unreleased-by-the-audio-thread (see releaseOrganicEngines)
+            }
+            for (auto& g : orgInstSeen_) g = 0xFFFFFFFFu;   // hand every engine its instrument on the first armed block
+            orgNonRtApplied_ = -1;
+            orgReady_.store (true, std::memory_order_release);
+        }
+        void disarmOrganicEngines() noexcept { orgReady_.store (false, std::memory_order_release); }
+        // tp63's way back: the processor calls this once the audio thread has provably left every block that could have
+        // been inside renderOrganicBlocks (audioSeq + 3 after the disarm). Destroying the engines drops their instrument
+        // references HERE, on the message thread, so the library's 5 s idle release can run.
+        void releaseOrganicEngines() noexcept
+        {
+            if (orgReady_.load (std::memory_order_acquire)) return;   // re-armed meanwhile: keep it
+            orgV_.reset();
+        }
+        bool organicArmed() const noexcept { return orgReady_.load (std::memory_order_acquire); }
+        bool organicAllocated() const noexcept { return orgV_ != nullptr; }
+        /** AUDIO THREAD (the processor's viz snapshot, after the render): is osc `osc`'s engine sounding, at what level. */
+        bool organicVizOf (int osc, int& note, float& level) const noexcept
+        {
+            if ((unsigned) osc >= 4u || ! orgReady_.load (std::memory_order_acquire) || orgV_ == nullptr) return false;
+            const Engine oe[4] = { engine_, engineB_, engineC_, engineD_ };
+            if (oe[osc] != Engine::ORGANIC) return false;
+            const auto& e = orgV_->eng[osc];
+            if (! e.isActive()) return false;
+            note = orgNote_; level = e.readLevel();
+            return true;
+        }
         void setModalParamsA (const tw::ModalParams& p) noexcept { modalParamsA_ = p; }   // MODAL-ENGINE-PUSH
         void setModalParamsB (const tw::ModalParams& p) noexcept { modalParamsB_ = p; }
         void setModalParamsC (const tw::ModalParams& p) noexcept { modalParamsC_ = p; }
@@ -1484,8 +1553,7 @@ class SynthVoice : public juce::SynthesiserVoice
 
         void setEngineB (int idx) noexcept
         {
-            const int clamped = juce::jlimit (0, 6, idx);
-            engineB_ = static_cast<Engine> (clamped);
+            engineB_ = engineFromIndex (idx);   // tp104
         }
 
         // ── Phase 8b — Unison + EROSION + HORIZON setters ────────────────
@@ -2917,8 +2985,8 @@ class SynthVoice : public juce::SynthesiserVoice
         void setWavetableFrameD (float pos) noexcept { framePosBaseD_ = juce::jlimit (0.0f, 1.0f, pos); }
         void setWarpC (int mode, float amount) noexcept { warpModeC_ = juce::jlimit(0,kWarpModeMax,mode); warpAmountBaseC_ = juce::jlimit(0.0f,1.0f,amount); }
         void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,kWarpModeMax,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
-        void setEngineC (int idx) noexcept { engineC_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
-        void setEngineD (int idx) noexcept { engineD_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
+        void setEngineC (int idx) noexcept { engineC_ = engineFromIndex (idx); }   // tp104
+        void setEngineD (int idx) noexcept { engineD_ = engineFromIndex (idx); }
         void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (2, activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); }   // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (3, activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); }   // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,kWarpModeMax,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,kWarpModeMax,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
@@ -3027,6 +3095,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 stealing_         = false;
                 stealingFade_     = 1.0f;
                 stealingFadeStep_ = 0.0f;
+                orgKillPending_   = false;   // tp104 — the stopNote(0,false) JUCE sent before a legato retarget is not a steal
 
                 const double fromPitch = glideNote_;   // mid-slide continuity
                 currentMidiNote_ = midiNote;
@@ -3102,6 +3171,9 @@ class SynthVoice : public juce::SynthesiserVoice
             geodeNoteOnPending_  = true;   // GEODE-ENGINE-VOICE
             harmNoteOnPending_   = true;   // HARMONIC-ENGINE-VOICE
             modalNoteOnPending_  = true;   // MODAL-ENGINE-VOICE
+            orgNoteOnPending_    = true;   // tp104 — ORGANICS-ENGINE-VOICE (the render does noteOn with the block's params)
+            orgNoteOffPending_   = false;
+            orgNote_             = midiNote;
 
             // fb66 — NOISE play-mode note-on: Random drops the loop head at a fresh random spot each note
             // (the deliberate version of today's feel); Envelope restarts the one-shot from the top. Free
@@ -3258,6 +3330,8 @@ class SynthVoice : public juce::SynthesiserVoice
 
         void stopNote (float, bool allowTailOff) override
         {
+            if (allowTailOff) orgNoteOffPending_ = true;   // tp104 — the key (or the pedal) let go: release regions
+            else              orgKillPending_    = true;   // tp104 — a steal: the engine's own 5 ms kill fade (a legato retarget disarms it)
             if (allowTailOff)
             {
                 ampEnv_.noteOff();
@@ -4347,7 +4421,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 const Engine eng[4] = { engine_, engineB_, engineC_, engineD_ };
                 auto isBlock = [] (Engine e) noexcept {
                     return e == Engine::SAMP || e == Engine::GRAN || e == Engine::SPEC
-                        || e == Engine::HARM || e == Engine::MODAL; };
+                        || e == Engine::HARM || e == Engine::MODAL || e == Engine::ORGANIC; };
                 for (int o = 0; o < 4; ++o) { modSrcForce_[o] = false; blkCarrierArmed_[o] = false; }
                 // fb551 — THE CARRIER'S OWN RATE, snapshotted once per block. Read by modes 9 and
                 //  10 and by nothing else (mode 1 is Hz-absolute and must stay that way — fb523).
@@ -4493,6 +4567,7 @@ class SynthVoice : public juce::SynthesiserVoice
             renderGeodeBlocks (numSamples);      // GEODE-ENGINE-VOICE — render any SPEC oscillators' blocks
             renderHarmonicBlocks (numSamples);   // HARMONIC-ENGINE-VOICE — render any HARM oscillators' blocks
             renderModalBlocks (numSamples);      // MODAL-ENGINE-VOICE — render any MODAL oscillators' blocks
+            renderOrganicBlocks (numSamples);    // tp104 — ORGANICS-ENGINE-VOICE — render any ORGANIC oscillators' blocks
 
             // CPU: SAMP/GRAN/SPEC oscs render whole blocks above and their result REPLACES the
             // unison sum below — the per-sine u-loop only produces zeros for them (fold of 0,
@@ -4501,10 +4576,10 @@ class SynthVoice : public juce::SynthesiserVoice
             // mode / round-robin gated it dead, so it can still modulate. Its audible output is still
             // zeroed by the per-osc gate (gA..gD) in the mix; only modPrev_ sees it. Bit-identical
             // when nothing is blended (modSrcForce_ all false).
-            const bool uLoopA = (! oscDead_[0] || modSrcForce_[0]) && (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC && engine_  != Engine::HARM && engine_  != Engine::MODAL);
-            const bool uLoopB = (! oscDead_[1] || modSrcForce_[1]) && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC && engineB_ != Engine::HARM && engineB_ != Engine::MODAL);
-            const bool uLoopC = (! oscDead_[2] || modSrcForce_[2]) && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC && engineC_ != Engine::HARM && engineC_ != Engine::MODAL);
-            const bool uLoopD = (! oscDead_[3] || modSrcForce_[3]) && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL);
+            const bool uLoopA = (! oscDead_[0] || modSrcForce_[0]) && (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC && engine_  != Engine::HARM && engine_  != Engine::MODAL && engine_ != Engine::ORGANIC);
+            const bool uLoopB = (! oscDead_[1] || modSrcForce_[1]) && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC && engineB_ != Engine::HARM && engineB_ != Engine::MODAL && engineB_ != Engine::ORGANIC);
+            const bool uLoopC = (! oscDead_[2] || modSrcForce_[2]) && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC && engineC_ != Engine::HARM && engineC_ != Engine::MODAL && engineC_ != Engine::ORGANIC);
+            const bool uLoopD = (! oscDead_[3] || modSrcForce_[3]) && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL && engineD_ != Engine::ORGANIC);
             // fb523 — does this osc's signal reach modPrev_ THROUGH the unison pan tables? Only WT
             //  and FM render inside the unison loop; every block engine bypasses cos/sin entirely.
             const bool mcOnA = (engine_  == Engine::WT || engine_  == Engine::FM);
@@ -4932,6 +5007,7 @@ class SynthVoice : public juce::SynthesiserVoice
                         case Engine::SPEC:
                         case Engine::HARM:
                         case Engine::MODAL:
+                        case Engine::ORGANIC:   // tp104
                             sAu = 0.0f; break;
                     }
 
@@ -4977,6 +5053,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 if (engine_ == Engine::SPEC) { sA_L = geodeBlkAL_[(size_t) i]; sA_R = geodeBlkAR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engine_ == Engine::HARM) { sA_L = harmBlkAL_[(size_t) i]; sA_R = harmBlkAR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engine_ == Engine::MODAL) { sA_L = modalBlkAL_[(size_t) i]; sA_R = modalBlkAR_[(size_t) i]; } // MODAL-ENGINE-VOICE
+                if (engine_ == Engine::ORGANIC) { sA_L = orgBlkL_[0] != nullptr ? orgBlkL_[0][(size_t) i] : 0.0f; sA_R = orgBlkR_[0] != nullptr ? orgBlkR_[0][(size_t) i] : 0.0f; } // tp104 ORGANICS (null = unarmed / level 0 → silence)
                 if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     airSmA_ += (sampleParamsA_.air - airSmA_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
                     const float airA = airSmA_;
@@ -4992,7 +5069,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engine_ == Engine::SAMP || engine_ == Engine::GRAN || engine_ == Engine::SPEC || engine_ == Engine::HARM || engine_ == Engine::MODAL) {
+                if (engine_ == Engine::SAMP || engine_ == Engine::GRAN || engine_ == Engine::SPEC || engine_ == Engine::HARM || engine_ == Engine::MODAL || engine_ == Engine::ORGANIC) {
                     const float warpA = sampleParamsA_.warp;
                     if (warpA > 0.001f) {
                         switch (sampleParamsA_.warpMode) {
@@ -5309,6 +5386,7 @@ class SynthVoice : public juce::SynthesiserVoice
                         case Engine::SPEC:
                         case Engine::HARM:
                         case Engine::MODAL:
+                        case Engine::ORGANIC:   // tp104
                             sBu = 0.0f; break;
                     }
 
@@ -5353,6 +5431,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 if (engineB_ == Engine::SPEC) { sB_L = geodeBlkBL_[(size_t) i]; sB_R = geodeBlkBR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engineB_ == Engine::HARM) { sB_L = harmBlkBL_[(size_t) i]; sB_R = harmBlkBR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineB_ == Engine::MODAL) { sB_L = modalBlkBL_[(size_t) i]; sB_R = modalBlkBR_[(size_t) i]; } // MODAL-ENGINE-VOICE
+                if (engineB_ == Engine::ORGANIC) { sB_L = orgBlkL_[1] != nullptr ? orgBlkL_[1][(size_t) i] : 0.0f; sB_R = orgBlkR_[1] != nullptr ? orgBlkR_[1][(size_t) i] : 0.0f; } // tp104 ORGANICS (null = unarmed / level 0 → silence)
                 if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     airSmB_ += (sampleParamsB_.air - airSmB_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
                     const float airB = airSmB_;
@@ -5368,7 +5447,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineB_ == Engine::SAMP || engineB_ == Engine::GRAN || engineB_ == Engine::SPEC || engineB_ == Engine::HARM || engineB_ == Engine::MODAL) {
+                if (engineB_ == Engine::SAMP || engineB_ == Engine::GRAN || engineB_ == Engine::SPEC || engineB_ == Engine::HARM || engineB_ == Engine::MODAL || engineB_ == Engine::ORGANIC) {
                     const float warpB = sampleParamsB_.warp;
                     if (warpB > 0.001f) {
                         switch (sampleParamsB_.warpMode) {
@@ -5674,6 +5753,7 @@ class SynthVoice : public juce::SynthesiserVoice
                         case Engine::SPEC:
                         case Engine::HARM:
                         case Engine::MODAL:
+                        case Engine::ORGANIC:   // tp104
                             sCu = 0.0f; break;
                     }
 
@@ -5718,6 +5798,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 if (engineC_ == Engine::SPEC) { sC_L = geodeBlkCL_[(size_t) i]; sC_R = geodeBlkCR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engineC_ == Engine::HARM) { sC_L = harmBlkCL_[(size_t) i]; sC_R = harmBlkCR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineC_ == Engine::MODAL) { sC_L = modalBlkCL_[(size_t) i]; sC_R = modalBlkCR_[(size_t) i]; } // MODAL-ENGINE-VOICE
+                if (engineC_ == Engine::ORGANIC) { sC_L = orgBlkL_[2] != nullptr ? orgBlkL_[2][(size_t) i] : 0.0f; sC_R = orgBlkR_[2] != nullptr ? orgBlkR_[2][(size_t) i] : 0.0f; } // tp104 ORGANICS (null = unarmed / level 0 → silence)
                 if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     airSmC_ += (sampleParamsC_.air - airSmC_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
                     const float airC = airSmC_;
@@ -5733,7 +5814,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineC_ == Engine::SAMP || engineC_ == Engine::GRAN || engineC_ == Engine::SPEC || engineC_ == Engine::HARM || engineC_ == Engine::MODAL) {
+                if (engineC_ == Engine::SAMP || engineC_ == Engine::GRAN || engineC_ == Engine::SPEC || engineC_ == Engine::HARM || engineC_ == Engine::MODAL || engineC_ == Engine::ORGANIC) {
                     const float warpC = sampleParamsC_.warp;
                     if (warpC > 0.001f) {
                         switch (sampleParamsC_.warpMode) {
@@ -6039,6 +6120,7 @@ class SynthVoice : public juce::SynthesiserVoice
                         case Engine::SPEC:
                         case Engine::HARM:
                         case Engine::MODAL:
+                        case Engine::ORGANIC:   // tp104
                             sDu = 0.0f; break;
                     }
 
@@ -6083,6 +6165,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 if (engineD_ == Engine::SPEC) { sD_L = geodeBlkDL_[(size_t) i]; sD_R = geodeBlkDR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engineD_ == Engine::HARM) { sD_L = harmBlkDL_[(size_t) i]; sD_R = harmBlkDR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineD_ == Engine::MODAL) { sD_L = modalBlkDL_[(size_t) i]; sD_R = modalBlkDR_[(size_t) i]; } // MODAL-ENGINE-VOICE
+                if (engineD_ == Engine::ORGANIC) { sD_L = orgBlkL_[3] != nullptr ? orgBlkL_[3][(size_t) i] : 0.0f; sD_R = orgBlkR_[3] != nullptr ? orgBlkR_[3][(size_t) i] : 0.0f; } // tp104 ORGANICS (null = unarmed / level 0 → silence)
                 if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     airSmD_ += (sampleParamsD_.air - airSmD_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
                     const float airD = airSmD_;
@@ -6098,7 +6181,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineD_ == Engine::SAMP || engineD_ == Engine::GRAN || engineD_ == Engine::SPEC || engineD_ == Engine::HARM || engineD_ == Engine::MODAL) {
+                if (engineD_ == Engine::SAMP || engineD_ == Engine::GRAN || engineD_ == Engine::SPEC || engineD_ == Engine::HARM || engineD_ == Engine::MODAL || engineD_ == Engine::ORGANIC) {
                     const float warpD = sampleParamsD_.warp;
                     if (warpD > 0.001f) {
                         switch (sampleParamsD_.warpMode) {
@@ -7804,6 +7887,27 @@ class SynthVoice : public juce::SynthesiserVoice
         // publishes with release; renderHarmonicBlocks and harmLiveBins load with acquire).
         std::atomic<bool> harmReady_ { false };
         tw::ModalParams modalParamsA_, modalParamsB_, modalParamsC_, modalParamsD_;
+        // ── tp104 — ORGANICS-ENGINE-VOICE state. Everything that costs memory lives in OrgVoice, built only by the lazy
+        //    arm; an instance whose oscillators never select ORGANIC carries a null pointer and a few scalars.
+        struct OrgVoice
+        {
+            tw::OrganicEngine        eng[4];
+            juce::AudioBuffer<float> blk[4];
+            double sr = 0.0; int maxBlock = 0;
+        };
+        std::unique_ptr<OrgVoice> orgV_;
+        std::atomic<bool> orgReady_ { false };
+        int  orgMaxBlock_ = 512;
+        tw::OrganicParams orgParams_[4];
+        const std::shared_ptr<const tw::OrganicInstrument>* orgInstSrc_ = nullptr;   // the processor's 4 for this bank
+        const std::uint32_t* orgInstGenSrc_ = nullptr;
+        std::uint32_t orgInstSeen_[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+        const float* orgBlkL_[4] = { nullptr, nullptr, nullptr, nullptr };
+        const float* orgBlkR_[4] = { nullptr, nullptr, nullptr, nullptr };
+        bool orgPedal_[4] = { false, false, false, false };
+        bool orgNoteOnPending_ = false, orgNoteOffPending_ = false, orgKillPending_ = false;
+        bool orgNonRt_ = false; int orgNonRtApplied_ = -1;
+        int  orgNote_ = 60;
 
         // ── BLEND MODES (Serum-2-style cross-osc warp) — per-voice state ──
         struct BlendSlotV { int mode = 0; int src = 0; float depth = 0.f; bool memoValid = false; int memoMode = -1; std::uint32_t memoDcBits = 0;   /* fb636 — setBlendSlot taper memo */ };   // depth = exp-biased target
@@ -8550,6 +8654,94 @@ class SynthVoice : public juce::SynthesiserVoice
             renderModalOsc (modalEngC_, modalParamsC_, engineC_ == Engine::MODAL, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, modalBlkC_, modalBlkCL_, modalBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, mReady ? mLvC : 0.0f, exL[2], exN[2], exR[2]);
             renderModalOsc (modalEngD_, modalParamsD_, engineD_ == Engine::MODAL, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, modalBlkD_, modalBlkDL_, modalBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, mReady ? mLvD : 0.0f, exL[3], exN[3], exR[3]);
             modalNoteOnPending_ = false;
+        }
+
+        // ══ tp104 — ORGANICS-ENGINE-VOICE: renderModalOsc's shape. ONE tw::OrganicEngine per oscillator slot; unison
+        //  is INSIDE it ("Ensemble": players = the unison count, each its own RR pick / Human seed / k·7 ms timing), so
+        //  the voice calls noteOn once per note with the player count and the per-player detune. Design §2.5: the
+        //  detune SPREAD is scaled 0.25× on this engine (25 cents on a piano is out of tune, not fat); the STACK's
+        //  whole-semitone layers are NOT scaled (octave doubling works unchanged).
+        //  Pitch: everything the voice already applies, relative to the note the engine was started on — the glide
+        //  (legato slides with it), OCT/SEMI/FINE, the COARSE lane (mod, pitch bend, this note's MPE bend, A4).
+        //  The engine ADDS into the block; the block goes where every block engine's goes (engine → FILTER → FX).
+        void renderOrganicOsc (int o, bool isOrg, int oct, int semi, float cent,
+                               int numSamples, std::uint32_t seed, bool doNoteOn,
+                               int uniCount, const float* uDetuneCents, float uNorm, float level) noexcept
+        {
+            orgBlkL_[o] = orgBlkR_[o] = nullptr;   // null = silence at the consumer
+            if (! isOrg) return;
+            auto& e = orgV_->eng[o];
+            if (orgInstSrc_ != nullptr && orgInstGenSrc_ != nullptr && orgInstSeen_[o] != orgInstGenSrc_[o])
+            {
+                e.setInstrument (orgInstSrc_[o]);   // a copy: a refcount bump on the audio thread, never a free (the processor keeps the old one)
+                orgInstSeen_[o] = orgInstGenSrc_[o];
+            }
+            if (orgKillPending_) e.kill();
+            if (level <= 0.0f)
+            {
+                if (orgNoteOffPending_) e.noteOff (isSustainPedalDown());
+                return;   // gated / muted: nothing rendered (a note that starts muted does not sound — modal's law)
+            }
+            if (doNoteOn)
+            {
+                if (e.isActive()) e.kill();   // this voice's previous note: a 5 ms fade, never a cut, never a ghost under the new one
+                const int   N   = juce::jlimit (1, kMaxUnison, uniCount);
+                const int   stk = uniStack_[(size_t) o];
+                const int   nL  = kStackLayers[stk];
+                const int   per = (stk > 0) ? (N / nL) : 0;
+                float det[kMaxUnison];
+                for (int u = 0; u < N; ++u)
+                {
+                    const float stackC = (per >= 1) ? 100.0f * (float) kStackSemis[stk][juce::jmin (nL - 1, u / per)] : 0.0f;
+                    const float c = (uDetuneCents != nullptr && N > 1) ? uDetuneCents[(size_t) u] : 0.0f;
+                    det[u] = (c - stackC) * 0.25f + stackC;
+                }
+                e.noteOn (orgNote_, juce::jlimit (0.0f, 1.0f, currentVelocity_), N, det, seed);
+            }
+            if (orgNoteOffPending_) e.noteOff (isSustainPedalDown());
+            const bool pd = isSustainPedalDown();
+            if (pd != orgPedal_[o]) { e.pedal (pd); orgPedal_[o] = pd; }
+            auto& blk = orgV_->blk[o];
+            if (blk.getNumSamples() < numSamples) return;   // a host block past prepare's size: silence, never an audio-thread allocation
+            float* wL = blk.getWritePointer (0);
+            float* wR = blk.getWritePointer (1);
+            juce::FloatVectorOperations::clear (wL, numSamples);
+            juce::FloatVectorOperations::clear (wR, numSamples);
+            if (! e.isActive() && ! doNoteOn) return;   // idle: 0 µs (and the consumer reads null → 0)
+            const float pitchCents = (float) ((glideNote_ - (double) orgNote_) * 100.0) + (float) (oct * 1200 + semi * 100) + cent;
+            e.render (orgParams_[o], pitchCents, wL, wR, numSamples);
+            if (uniCount > 1)
+            {
+                juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);   // the house unison auto-gain (RMS-constant)
+                juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
+            }
+            orgBlkL_[o] = wL; orgBlkR_[o] = wR;
+        }
+
+        void renderOrganicBlocks (int numSamples) noexcept
+        {
+            if (engine_ != Engine::ORGANIC && engineB_ != Engine::ORGANIC
+                && engineC_ != Engine::ORGANIC && engineD_ != Engine::ORGANIC)
+                return;   // no ORGANIC oscillators → free no-op (the common case, bit-identical)
+            // The arm is also the bounds guard: until prepareOrganicEngines() has published, orgV_ may not exist.
+            // Unarmed, every ORGANIC osc reads null (silence) and the pending note events WAIT for the arm (≤ one
+            // 60 Hz tick) instead of being dropped, so the first note after selecting the engine still plays.
+            if (! orgReady_.load (std::memory_order_acquire))
+            {
+                for (int o = 0; o < 4; ++o) { orgBlkL_[o] = orgBlkR_[o] = nullptr; }
+                return;
+            }
+            if (orgNonRtApplied_ != (orgNonRt_ ? 1 : 0))
+            {
+                for (auto& e : orgV_->eng) e.setNonRealtime (orgNonRt_);
+                orgNonRtApplied_ = orgNonRt_ ? 1 : 0;
+            }
+            const bool doOn = orgNoteOnPending_;
+            renderOrganicOsc (0, engine_  == Engine::ORGANIC, octOffset_,  semiOffset_,  centsOffset_  + coarseModA_ * 100.f, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderOrganicOsc (1, engineB_ == Engine::ORGANIC, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderOrganicOsc (2, engineC_ == Engine::ORGANIC, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderOrganicOsc (3, engineD_ == Engine::ORGANIC, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
+            orgNoteOnPending_ = false; orgNoteOffPending_ = false; orgKillPending_ = false;
         }
 
         Engine               engine_           = Engine::WT;
