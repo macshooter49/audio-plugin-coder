@@ -86,6 +86,9 @@ namespace tw
 
         bool isReady() const noexcept { return ready && inner.isReady(); }
 
+        /** CHOP-STRETCH — 5× STFT overlap on the inner Signalsmith (see SignalsmithEngine). Before prepare(). */
+        void setHighOverlap (bool b) noexcept { inner.setHighOverlap (b); }
+
         void setStretchRatio (float r) noexcept
         {
             baseStretchRatio = juce::jlimit (0.1f, 15.0f, r);
@@ -99,6 +102,7 @@ namespace tw
         }
 
         int inputLatency() const noexcept { return inner.inputLatency(); }
+        int outputLatency() const noexcept { return inner.outputLatency(); }   // CHOP-STRETCH
         int  outputSeekLength() const noexcept { return inner.outputSeekLength(); }             // fb642
         void outputSeek (const float* l, const float* r, int n) { inner.outputSeek (l, r, n); }  // fb642
 
@@ -164,7 +168,14 @@ namespace tw
                         // Normal scatter jump.
                         if (xfadePos > 0)
                             currentReadOffset = targetReadOffset;
-                        targetReadOffset = rng.nextInt (maxJumpOffset + 1);
+                        // CHOP-STRETCH — never jump further back than the history actually holds.
+                        // Early in a note (the first jump lands ~80 ms in, the offset reaches 80–400 ms)
+                        // the target used to point into the reset()-zeroed ring: the crossfade faded
+                        // into silence, then the read ran forward off the end of that silence into the
+                        // first written sample — a hard step, replayed on every jump that hit it. The
+                        // read position (write − 1 − offset) now stays ≥ 0 for good (it only grows).
+                        const int written = juce::jmax (0, historyWriteIdx - 1);
+                        targetReadOffset = rng.nextInt (juce::jmin (maxJumpOffset, written) + 1);
                         xfadePos = xfadeLen;
                     }
                 }

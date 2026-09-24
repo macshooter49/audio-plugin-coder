@@ -43,7 +43,22 @@ namespace tw
             // That's what lets STRETCH/FORMANT be turned up on all 4 oscillators (each
             // owns a phase-vocoder) without a CPU spike. Near-identical on sustained
             // sample material. setFormantFactor(1.0) keeps formants correct at any pitch.
-            stretcher.presetCheaper (channels, (float) sampleRate);
+            //
+            // 🔇 CHOP-STRETCH (highOverlap) — presetCheaper's 100 ms block / 40 ms hop is a 2.5× overlap,
+            // and at any ratio ≠ 1 the synthesis overlap-add is not smooth enough at that density: every
+            // hop leaves a faint broadband tick (measured by Source/ChopStretch_test.cpp: a band-limited
+            // pad stretched 2× through the chop voice → one HF click event per 40 ms hop, 50 in 2 s, to
+            // −18 dB of the local level; the crackle Max hears on stretched chops). Same 100 ms block at a
+            // 25 ms hop (4× overlap) removes the hop-rate ticks (49 → 2 events, the 2 being the source's
+            // own start/end). Transients need a little more: a drum loop stretched 2× still left a splat
+            // on every kick at 4× (11 events); a 20 ms hop (5× overlap) takes it to 1. Cost, measured on
+            // an M-series core: 0.56 % → 0.97 % of one core per warped voice. The CHOP voice opts in; the
+            // synth's Sample-oscillator voices keep presetCheaper (all-4-oscs CPU fix) — bit-identical there.
+            if (highOverlap)
+                stretcher.configure (channels, (int) std::round (sampleRate * 0.100),
+                                     (int) std::round (sampleRate * 0.020), /*splitComputation*/ true);
+            else
+                stretcher.presetCheaper (channels, (float) sampleRate);
             stretcher.setFormantFactor (formantFactor);
 
             // fb642 — outputSeek() sizes two internal scratch vectors the first time it runs. Run it ONCE here, off the
@@ -68,6 +83,10 @@ namespace tw
 
         bool isReady() const noexcept { return ready; }
 
+        /** 5× STFT overlap instead of presetCheaper's 2.5× (see prepare). Takes effect at the next
+         *  prepare() — set it BEFORE preparing. Default false = the synth's CPU-lean configuration. */
+        void setHighOverlap (bool b) noexcept { highOverlap = b; }
+
         void setStretchRatio (float r) noexcept
         {
             stretchRatio = juce::jlimit (0.1f, 15.0f, r);
@@ -90,6 +109,12 @@ namespace tw
         int inputLatency() const noexcept
         {
             return const_cast<signalsmith::stretch::SignalsmithStretch<float>&>(stretcher).inputLatency();
+        }
+
+        /** CHOP-STRETCH — synthesis-side latency (samples). */
+        int outputLatency() const noexcept
+        {
+            return const_cast<signalsmith::stretch::SignalsmithStretch<float>&>(stretcher).outputLatency();
         }
 
         /** Prime the engine with input samples after reset(). Call this once
@@ -173,5 +198,6 @@ namespace tw
         float  pitchSemitones = 0.0f;
         float  formantFactor  = 1.0f;   // SAMPLE-ENGINE-FORMANT
         bool   ready          = false;
+        bool   highOverlap    = false;  // CHOP-STRETCH — 4× overlap (chop voices)
     };
 }
