@@ -1,0 +1,29 @@
+{
+ "id": "karoryfer.guitar.emily",
+ "name": "Clean Electric",
+ "family": "guitar",
+ "category": "Plucked",
+ "tags": [
+  "guitar",
+  "electric",
+  "clean",
+  "di",
+  "flatwound"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Emilyguitar, CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.emilyguitar",
+ "licenceDir": "sfzinstruments/karoryfer.emilyguitar",
+ "noise": [
+  "noise",
+  "release"
+ ],
+ "artics": [
+  {
+   "name": "Clean",
+   "sfz": "sfzinstruments/karoryfer.emilyguitar/emily_clean.sfz"
+  }
+ ],
+ "velPowerMin": 0.6
+}

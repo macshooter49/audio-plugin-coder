@@ -1,0 +1,28 @@
+{
+ "id": "vcsl.keys.steinway-b",
+ "name": "Steinway B",
+ "family": "grand",
+ "category": "Keys",
+ "tags": [
+  "piano",
+  "grand",
+  "acoustic",
+  "steinway"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "piano": true,
+ "budgetMB": 96,
+ "capScale": true,
+ "releaseCap": 2.0,
+ "polyMax": 64,
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VCSL/Chordophones/Zithers/Grand Piano, Steinway B.sfz"
+  }
+ ]
+}

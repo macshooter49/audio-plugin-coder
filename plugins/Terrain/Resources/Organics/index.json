@@ -1,0 +1,936 @@
+[
+ {
+  "id": "vcsl.keys.tx81z-clavisynth",
+  "name": "Clavisynth",
+  "family": "clav",
+  "category": "Keys",
+  "tags": [
+   "clav",
+   "fm",
+   "funk"
+  ],
+  "sizeMB": 24.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "salamander.grand.v3",
+  "name": "Concert Grand",
+  "family": "grand",
+  "category": "Keys",
+  "tags": [
+   "piano",
+   "grand",
+   "acoustic",
+   "yamaha c5",
+   "flagship"
+  ],
+  "sizeMB": 156.6,
+  "licence": "CC-BY-3.0",
+  "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate"
+ },
+ {
+  "id": "gsullivan.ep.cp80",
+  "name": "Electric Grand CP",
+  "family": "rhodes",
+  "category": "Keys",
+  "tags": [
+   "electric grand",
+   "cp80",
+   "vintage",
+   "80s"
+  ],
+  "sizeMB": 40.5,
+  "licence": "CC-BY-3.0",
+  "credit": "Yamaha CP80 samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "licenceRisk": "R4 \u2014 author statement pending"
+ },
+ {
+  "id": "vcsl.keys.tx81z-fm-piano",
+  "name": "FM Electric Piano",
+  "family": "rhodes",
+  "category": "Keys",
+  "tags": [
+   "electric piano",
+   "fm",
+   "80s",
+   "tine"
+  ],
+  "sizeMB": 38.5,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.keys.harpsichord-flemish",
+  "name": "Harpsichord",
+  "family": "harpsi",
+  "category": "Keys",
+  "tags": [
+   "harpsichord",
+   "baroque",
+   "plucked keys"
+  ],
+  "sizeMB": 47.9,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "freepats.keys.old-piano",
+  "name": "Old Upright",
+  "family": "upright",
+  "category": "Keys",
+  "tags": [
+   "piano",
+   "honky-tonk",
+   "player piano",
+   "character"
+  ],
+  "sizeMB": 58.7,
+  "licence": "CC0-1.0",
+  "credit": "FreePats Old Piano FB (Piotr Barcz), CC0"
+ },
+ {
+  "id": "gsullivan.ep.pianet-t",
+  "name": "Pianet",
+  "family": "rhodes",
+  "category": "Keys",
+  "tags": [
+   "electric piano",
+   "pianet",
+   "vintage",
+   "reed"
+  ],
+  "sizeMB": 31.8,
+  "licence": "CC-BY-3.0",
+  "credit": "Hohner Pianet T samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "licenceRisk": "R4 \u2014 author statement pending"
+ },
+ {
+  "id": "gsullivan.ep.wurlitzer-ep200",
+  "name": "Reed EP 200",
+  "family": "rhodes",
+  "category": "Keys",
+  "tags": [
+   "electric piano",
+   "wurlitzer",
+   "reed",
+   "vintage"
+  ],
+  "sizeMB": 24.1,
+  "licence": "CC-BY-3.0",
+  "credit": "Wurlitzer EP200 samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "licenceRisk": "R4 \u2014 author statement pending"
+ },
+ {
+  "id": "vcsl.keys.steinway-b",
+  "name": "Steinway B",
+  "family": "grand",
+  "category": "Keys",
+  "tags": [
+   "piano",
+   "grand",
+   "acoustic",
+   "steinway"
+  ],
+  "sizeMB": 75.0,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.keys.upright-yamaha",
+  "name": "Upright Piano",
+  "family": "upright",
+  "category": "Keys",
+  "tags": [
+   "piano",
+   "upright",
+   "felt",
+   "lo-fi"
+  ],
+  "sizeMB": 56.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "freepats.organ.accordion",
+  "name": "Accordion",
+  "family": "organ",
+  "category": "Organs",
+  "tags": [
+   "accordion",
+   "reed",
+   "folk",
+   "musette"
+  ],
+  "sizeMB": 6.4,
+  "licence": "CC0-1.0",
+  "credit": "FreePats project (Jeff Stauffer), CC0"
+ },
+ {
+  "id": "vcsl.organ.renaissance",
+  "name": "Chamber Organ",
+  "family": "organ",
+  "category": "Organs",
+  "tags": [
+   "organ",
+   "renaissance",
+   "chamber",
+   "flue"
+  ],
+  "sizeMB": 46.8,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "freepats.organ.drawbar",
+  "name": "Drawbar Organ",
+  "family": "tonewheel",
+  "category": "Organs",
+  "tags": [
+   "organ",
+   "drawbar",
+   "tonewheel",
+   "jazz"
+  ],
+  "sizeMB": 5.8,
+  "licence": "CC0-1.0",
+  "credit": "FreePats project (setBfree render), CC0"
+ },
+ {
+  "id": "vcsl.organ.pipe",
+  "name": "Pipe Organ",
+  "family": "organ",
+  "category": "Organs",
+  "tags": [
+   "organ",
+   "church",
+   "pipe"
+  ],
+  "sizeMB": 27.8,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "freepats.organ.rock",
+  "name": "Rock Organ",
+  "family": "tonewheel",
+  "category": "Organs",
+  "tags": [
+   "organ",
+   "rock",
+   "tonewheel",
+   "percussive"
+  ],
+  "sizeMB": 12.5,
+  "licence": "CC0-1.0",
+  "credit": "FreePats project (setBfree render), CC0"
+ },
+ {
+  "id": "vsco2.strings.cello-section",
+  "name": "Cello Section",
+  "family": "cello",
+  "category": "Strings",
+  "tags": [
+   "strings",
+   "ensemble",
+   "cello",
+   "orchestral",
+   "bowed"
+  ],
+  "sizeMB": 34.3,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vsco2.strings.contrabass",
+  "name": "Contrabass",
+  "family": "bass",
+  "category": "Strings",
+  "tags": [
+   "strings",
+   "solo",
+   "double bass",
+   "low"
+  ],
+  "sizeMB": 45.7,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "karoryfer.strings.erhu",
+  "name": "Erhu",
+  "family": "violin",
+  "category": "Strings",
+  "tags": [
+   "erhu",
+   "chinese",
+   "world",
+   "bowed"
+  ],
+  "sizeMB": 32.3,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer aliexpress erhu, CC0"
+ },
+ {
+  "id": "karoryfer.strings.cello",
+  "name": "Solo Cello",
+  "family": "cello",
+  "category": "Strings",
+  "tags": [
+   "strings",
+   "solo",
+   "cello",
+   "bowed",
+   "deep rr"
+  ],
+  "sizeMB": 43.2,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer x bigcat cello (played by Kamila Borowiak), CC0"
+ },
+ {
+  "id": "vsco2.strings.solo-violin",
+  "name": "Solo Violin",
+  "family": "violin",
+  "category": "Strings",
+  "tags": [
+   "strings",
+   "solo",
+   "violin",
+   "bowed"
+  ],
+  "sizeMB": 47.4,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "karoryfer.strings.meatbass",
+  "name": "Upright Bass",
+  "family": "bass",
+  "category": "Strings",
+  "tags": [
+   "double bass",
+   "upright",
+   "jazz",
+   "arco",
+   "pizzicato"
+  ],
+  "sizeMB": 32.3,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Meatbass (1958 Otto Rubner double bass), CC0"
+ },
+ {
+  "id": "vsco2.strings.viola-section",
+  "name": "Viola Section",
+  "family": "violin",
+  "category": "Strings",
+  "tags": [
+   "strings",
+   "ensemble",
+   "viola",
+   "orchestral",
+   "bowed"
+  ],
+  "sizeMB": 43.2,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vsco2.strings.violin-section",
+  "name": "Violin Section",
+  "family": "violin",
+  "category": "Strings",
+  "tags": [
+   "strings",
+   "ensemble",
+   "orchestral",
+   "bowed"
+  ],
+  "sizeMB": 41.4,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "karoryfer.guitar.shinyguitar",
+  "name": "Archtop Guitar",
+  "family": "guitar",
+  "category": "Plucked",
+  "tags": [
+   "guitar",
+   "archtop",
+   "jazz",
+   "acoustic",
+   "deep rr"
+  ],
+  "sizeMB": 43.9,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Shinyguitar, CC0"
+ },
+ {
+  "id": "versilian.harp.etherealwinds",
+  "name": "Celtic Harp",
+  "family": "harp",
+  "category": "Plucked",
+  "tags": [
+   "harp",
+   "lever harp",
+   "celtic",
+   "chromatic"
+  ],
+  "sizeMB": 45.1,
+  "licence": "CC-BY-4.0",
+  "credit": "Etherealwinds Harp II: CE by Versilian Studios LLC, CC BY 4.0, modified by Waves Crate"
+ },
+ {
+  "id": "karoryfer.guitar.emily",
+  "name": "Clean Electric",
+  "family": "guitar",
+  "category": "Plucked",
+  "tags": [
+   "guitar",
+   "electric",
+   "clean",
+   "di",
+   "flatwound"
+  ],
+  "sizeMB": 41.5,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Emilyguitar, CC0"
+ },
+ {
+  "id": "vcsl.plucked.concert-harp",
+  "name": "Concert Harp",
+  "family": "harp",
+  "category": "Plucked",
+  "tags": [
+   "harp",
+   "orchestral",
+   "pedal harp"
+  ],
+  "sizeMB": 40.5,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.plucked.dan-tranh",
+  "name": "Dan Tranh",
+  "family": "koto",
+  "category": "Plucked",
+  "tags": [
+   "zither",
+   "vietnamese",
+   "world",
+   "koto-like"
+  ],
+  "sizeMB": 46.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "itsclipping.plucked.ganjo",
+  "name": "Ganjo",
+  "family": "guitar",
+  "category": "Plucked",
+  "tags": [
+   "banjo",
+   "guitar-banjo",
+   "folk",
+   "twang"
+  ],
+  "sizeMB": 7.8,
+  "licence": "CC0-1.0",
+  "credit": "Ganjo by itsclipping, CC0"
+ },
+ {
+  "id": "karoryfer.plucked.hungarian-zither",
+  "name": "Hungarian Zither",
+  "family": "koto",
+  "category": "Plucked",
+  "tags": [
+   "zither",
+   "folk",
+   "world"
+  ],
+  "sizeMB": 38.6,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Hungarian zither, CC0"
+ },
+ {
+  "id": "karoryfer.bass.growlybass",
+  "name": "Jazz Bass",
+  "family": "guitar",
+  "category": "Plucked",
+  "tags": [
+   "bass",
+   "electric bass",
+   "fingerstyle"
+  ],
+  "sizeMB": 42.4,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Growlybass, CC0"
+ },
+ {
+  "id": "freepats.guitar.nylon",
+  "name": "Nylon Guitar",
+  "family": "guitar",
+  "category": "Plucked",
+  "tags": [
+   "guitar",
+   "nylon",
+   "classical",
+   "acoustic"
+  ],
+  "sizeMB": 18.0,
+  "licence": "CC0-1.0",
+  "credit": "FreePats Spanish Classical Guitar, CC0"
+ },
+ {
+  "id": "vcsl.winds.alto-recorder",
+  "name": "Alto Recorder",
+  "family": "flute",
+  "category": "Winds",
+  "tags": [
+   "recorder",
+   "baroque",
+   "breathy",
+   "flute"
+  ],
+  "sizeMB": 16.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "mtg.sax.alto",
+  "name": "Alto Sax",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "reed",
+   "jazz",
+   "alto"
+  ],
+  "sizeMB": 9.9,
+  "licence": "CC-BY-4.0",
+  "credit": "MTG Solo Saxophones (Alto Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+ },
+ {
+  "id": "mtg.sax.baritone",
+  "name": "Baritone Sax",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "reed",
+   "jazz",
+   "baritone",
+   "low"
+  ],
+  "sizeMB": 12.7,
+  "licence": "CC-BY-4.0",
+  "credit": "MTG Solo Saxophones (Baritone Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+ },
+ {
+  "id": "vsco2.woodwinds.bassoon",
+  "name": "Bassoon",
+  "family": "clarinet",
+  "category": "Winds",
+  "tags": [
+   "woodwind",
+   "double reed",
+   "low",
+   "orchestral"
+  ],
+  "sizeMB": 30.0,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vsco2.woodwinds.clarinet",
+  "name": "Clarinet",
+  "family": "clarinet",
+  "category": "Winds",
+  "tags": [
+   "woodwind",
+   "single reed",
+   "orchestral"
+  ],
+  "sizeMB": 26.2,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vsco2.woodwinds.flute",
+  "name": "Flute",
+  "family": "flute",
+  "category": "Winds",
+  "tags": [
+   "woodwind",
+   "orchestral",
+   "solo",
+   "breath"
+  ],
+  "sizeMB": 31.4,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vcsl.winds.harmonica",
+  "name": "Harmonica",
+  "family": "clarinet",
+  "category": "Winds",
+  "tags": [
+   "harmonica",
+   "blues",
+   "folk",
+   "reed"
+  ],
+  "sizeMB": 8.5,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vsco2.woodwinds.oboe",
+  "name": "Oboe",
+  "family": "clarinet",
+  "category": "Winds",
+  "tags": [
+   "woodwind",
+   "double reed",
+   "orchestral"
+  ],
+  "sizeMB": 27.8,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "mtg.sax.soprano",
+  "name": "Soprano Sax",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "reed",
+   "jazz",
+   "soprano"
+  ],
+  "sizeMB": 9.4,
+  "licence": "CC-BY-4.0",
+  "credit": "MTG Solo Saxophones (Soprano Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+ },
+ {
+  "id": "mtg.sax.tenor",
+  "name": "Tenor Sax",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "reed",
+   "jazz",
+   "tenor"
+  ],
+  "sizeMB": 8.7,
+  "licence": "CC-BY-4.0",
+  "credit": "MTG Solo Saxophones (Tenor Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+ },
+ {
+  "id": "vcsl.winds.tenor-sax",
+  "name": "Tenor Sax (VCSL)",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "tenor",
+   "reed"
+  ],
+  "sizeMB": 42.2,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "karoryfer.sax.bear",
+  "name": "Vintage Bari Sax",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "baritone",
+   "vintage",
+   "1926 conn",
+   "deep rr"
+  ],
+  "sizeMB": 41.7,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Bear Sax (1926 Conn baritone), CC0"
+ },
+ {
+  "id": "karoryfer.brass.war-tuba",
+  "name": "Folk Tuba",
+  "family": "horn",
+  "category": "Brass",
+  "tags": [
+   "brass",
+   "tuba",
+   "folk",
+   "deep rr",
+   "oompah"
+  ],
+  "sizeMB": 38.7,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer War Tuba (played by Jakub Lewicki), CC0"
+ },
+ {
+  "id": "vsco2.brass.french-horn",
+  "name": "French Horn",
+  "family": "horn",
+  "category": "Brass",
+  "tags": [
+   "brass",
+   "horn",
+   "orchestral",
+   "soft brass"
+  ],
+  "sizeMB": 37.0,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vsco2.brass.trombone",
+  "name": "Trombone",
+  "family": "trumpet",
+  "category": "Brass",
+  "tags": [
+   "brass",
+   "trombone",
+   "orchestral",
+   "low"
+  ],
+  "sizeMB": 34.5,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vsco2.brass.trumpet",
+  "name": "Trumpet",
+  "family": "trumpet",
+  "category": "Brass",
+  "tags": [
+   "brass",
+   "trumpet",
+   "orchestral",
+   "mute"
+  ],
+  "sizeMB": 46.3,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vsco2.brass.tuba",
+  "name": "Tuba",
+  "family": "horn",
+  "category": "Brass",
+  "tags": [
+   "brass",
+   "tuba",
+   "orchestral",
+   "low"
+  ],
+  "sizeMB": 19.3,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vcsl.mallets.glockenspiel",
+  "name": "Glockenspiel",
+  "family": "glock",
+  "category": "Mallets & Bells",
+  "tags": [
+   "mallets",
+   "glockenspiel",
+   "bells",
+   "bright"
+  ],
+  "sizeMB": 13.0,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.bells.hand-chimes",
+  "name": "Hand Chimes",
+  "family": "glock",
+  "category": "Mallets & Bells",
+  "tags": [
+   "bells",
+   "chimes",
+   "celesta-like",
+   "soft"
+  ],
+  "sizeMB": 23.3,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.mallets.kalimba",
+  "name": "Kalimba",
+  "family": "kalimba",
+  "category": "Mallets & Bells",
+  "tags": [
+   "kalimba",
+   "thumb piano",
+   "african",
+   "tine"
+  ],
+  "sizeMB": 10.5,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.mallets.marimba",
+  "name": "Marimba",
+  "family": "marimba",
+  "category": "Mallets & Bells",
+  "tags": [
+   "mallets",
+   "marimba",
+   "wood"
+  ],
+  "sizeMB": 13.1,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.bells.tubular",
+  "name": "Tubular Bells",
+  "family": "glock",
+  "category": "Mallets & Bells",
+  "tags": [
+   "bells",
+   "chimes",
+   "tubular",
+   "orchestral"
+  ],
+  "sizeMB": 41.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.mallets.vibraphone",
+  "name": "Vibraphone",
+  "family": "marimba",
+  "category": "Mallets & Bells",
+  "tags": [
+   "mallets",
+   "vibes",
+   "jazz",
+   "bowed"
+  ],
+  "sizeMB": 41.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.mallets.xylophone",
+  "name": "Xylophone",
+  "family": "marimba",
+  "category": "Mallets & Bells",
+  "tags": [
+   "mallets",
+   "xylophone",
+   "bright",
+   "wood"
+  ],
+  "sizeMB": 8.9,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "karoryfer.voice.male-aah",
+  "name": "Male Aah",
+  "family": "choir",
+  "category": "Choir & Voice",
+  "tags": [
+   "voice",
+   "male",
+   "aah",
+   "solo",
+   "choir pad"
+  ],
+  "sizeMB": 17.4,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer legato vocal tutorial (Hadzi-Fia subset, CC0)"
+ },
+ {
+  "id": "freepats.voice.synth-choir",
+  "name": "Synth Choir",
+  "family": "choir",
+  "category": "Choir & Voice",
+  "tags": [
+   "choir",
+   "pad",
+   "synthetic",
+   "vintage gm"
+  ],
+  "sizeMB": 13.7,
+  "licence": "CC0-1.0",
+  "credit": "FreePats project (ZynAddSubFX render), CC0"
+ },
+ {
+  "id": "vcsl.perc.balafon",
+  "name": "Balafon",
+  "family": "marimba",
+  "category": "Percussion",
+  "tags": [
+   "balafon",
+   "african",
+   "wood",
+   "mallets"
+  ],
+  "sizeMB": 6.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "freepats.perc.hang",
+  "name": "Hang Drum",
+  "family": "marimba",
+  "category": "Percussion",
+  "tags": [
+   "hang",
+   "handpan",
+   "d minor",
+   "meditative"
+  ],
+  "sizeMB": 21.1,
+  "licence": "CC0-1.0",
+  "credit": "FreePats project (Andrea Biasior / FreePats), CC0"
+ },
+ {
+  "id": "jlearman.perc.steel-pan",
+  "name": "Steel Pan",
+  "family": "marimba",
+  "category": "Percussion",
+  "tags": [
+   "steel drum",
+   "pan",
+   "caribbean",
+   "deep rr"
+  ],
+  "sizeMB": 28.5,
+  "licence": "Unlicense",
+  "credit": "jSteelDrum by Jeff Learman (Unlicense)"
+ },
+ {
+  "id": "freepats.perc.water-glasses",
+  "name": "Water Glasses",
+  "family": "glock",
+  "category": "Percussion",
+  "tags": [
+   "glass",
+   "tuned percussion",
+   "bells",
+   "delicate"
+  ],
+  "sizeMB": 21.8,
+  "licence": "CC0-1.0",
+  "credit": "FreePats project (FreePats), CC0"
+ }
+]

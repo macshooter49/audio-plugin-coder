@@ -1,0 +1,23 @@
+{
+ "id": "jlearman.perc.steel-pan",
+ "name": "Steel Pan",
+ "family": "marimba",
+ "category": "Percussion",
+ "tags": [
+  "steel drum",
+  "pan",
+  "caribbean",
+  "deep rr"
+ ],
+ "licence": "Unlicense",
+ "credit": "jSteelDrum by Jeff Learman (Unlicense)",
+ "author": "Jeff Learman",
+ "url": "https://github.com/sfzinstruments/jlearman.SteelDrum",
+ "licenceDir": "sfzinstruments/jlearman.SteelDrum",
+ "artics": [
+  {
+   "name": "Normal",
+   "sfz": "sfzinstruments/jlearman.SteelDrum/jSteelDrum-noxfade.sfz"
+  }
+ ]
+}

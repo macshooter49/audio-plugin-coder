@@ -1,0 +1,86 @@
+{
+ "id": "salamander.grand.v3",
+ "name": "Concert Grand",
+ "family": "grand",
+ "category": "Keys",
+ "tags": [
+  "piano",
+  "grand",
+  "acoustic",
+  "yamaha c5",
+  "flagship"
+ ],
+ "licence": "CC-BY-3.0",
+ "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+ "author": "Alexander Holm; SFZ mapping by kinwie",
+ "url": "https://github.com/sfzinstruments/SalamanderGrandPiano (original: https://archive.org/details/SalamanderGrandPianoV3)",
+ "licenceDir": "sfzinstruments/SalamanderGrandPiano",
+ "piano": true,
+ "budgetMB": 160,
+ "polyMax": 64,
+ "maxLayers": 8,
+ "noise": [
+  "/rel\\d+\\.flac$"
+ ],
+ "artics": [
+  {
+   "name": "Natural",
+   "sfz": "sfzinstruments/SalamanderGrandPiano/Salamander Grand Piano V3.sfz",
+   "sw": "C0"
+  },
+  {
+   "name": "Retuned",
+   "sfz": "sfzinstruments/SalamanderGrandPiano/Salamander Grand Piano V3.sfz",
+   "sw": "C#0"
+  }
+ ],
+ "capScale": true,
+ "releaseCap": 2.5,
+ "minLayers": 6,
+ "budgetSteps": [
+  [
+   "cap",
+   8
+  ],
+  [
+   "cap",
+   6
+  ],
+  [
+   "cap",
+   5
+  ],
+  [
+   "cap",
+   4.5
+  ],
+  [
+   "layers",
+   7
+  ],
+  [
+   "cap",
+   4
+  ],
+  [
+   "layers",
+   6
+  ],
+  [
+   "cap",
+   3.5
+  ],
+  [
+   "cap",
+   3
+  ],
+  [
+   "cap",
+   2.5
+  ],
+  [
+   "cap",
+   2
+  ]
+ ]
+}

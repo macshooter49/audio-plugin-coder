@@ -1,0 +1,42 @@
+{
+ "id": "vsco2.strings.viola-section",
+ "name": "Viola Section",
+ "family": "violin",
+ "category": "Strings",
+ "tags": [
+  "strings",
+  "ensemble",
+  "viola",
+  "orchestral",
+  "bowed"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VSCO-2-CE/ViolaEns-KS.sfz",
+   "sw": "c2",
+   "sustaining": true
+  },
+  {
+   "name": "Tremolo",
+   "sfz": "VSCO-2-CE/ViolaEns-KS.sfz",
+   "sw": "c#2",
+   "sustaining": true
+  },
+  {
+   "name": "Spiccato",
+   "sfz": "VSCO-2-CE/ViolaEns-KS.sfz",
+   "sw": "d2"
+  },
+  {
+   "name": "Pizzicato",
+   "sfz": "VSCO-2-CE/ViolaEns-KS.sfz",
+   "sw": "d#2"
+  }
+ ]
+}

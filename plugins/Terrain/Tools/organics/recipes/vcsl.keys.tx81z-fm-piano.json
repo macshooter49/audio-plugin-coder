@@ -1,0 +1,30 @@
+{
+ "id": "vcsl.keys.tx81z-fm-piano",
+ "name": "FM Electric Piano",
+ "family": "rhodes",
+ "category": "Keys",
+ "tags": [
+  "electric piano",
+  "fm",
+  "80s",
+  "tine"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "extendTail": 4,
+ "artics": [
+  {
+   "name": "FM Piano",
+   "sfz": "VCSL/Electrophones/TX81Z - Keyswitch.sfz",
+   "sw": "113"
+  },
+  {
+   "name": "Piano 1",
+   "sfz": "VCSL/Electrophones/TX81Z - Keyswitch.sfz",
+   "sw": "112"
+  }
+ ]
+}

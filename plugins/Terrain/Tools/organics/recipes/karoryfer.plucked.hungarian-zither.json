@@ -1,0 +1,22 @@
+{
+ "id": "karoryfer.plucked.hungarian-zither",
+ "name": "Hungarian Zither",
+ "family": "koto",
+ "category": "Plucked",
+ "tags": [
+  "zither",
+  "folk",
+  "world"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Hungarian zither, CC0",
+ "url": "https://github.com/sfzinstruments/hungarian_zither",
+ "licenceDir": "sfzinstruments/hungarian_zither",
+ "artics": [
+  {
+   "name": "Melody",
+   "sfz": "sfzinstruments/hungarian_zither/Programs/hungarian_zither_mel_strings_poly.sfz"
+  }
+ ]
+}

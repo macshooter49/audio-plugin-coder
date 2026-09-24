@@ -1,0 +1,34 @@
+{
+ "id": "vcsl.plucked.dan-tranh",
+ "name": "Dan Tranh",
+ "family": "koto",
+ "category": "Plucked",
+ "tags": [
+  "zither",
+  "vietnamese",
+  "world",
+  "koto-like"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Normal",
+   "sfz": "VCSL/Chordophones/Zithers/Dan Tranh - Keyswitch.sfz",
+   "sw": "36"
+  },
+  {
+   "name": "Vibrato",
+   "sfz": "VCSL/Chordophones/Zithers/Dan Tranh - Keyswitch.sfz",
+   "sw": "37"
+  },
+  {
+   "name": "Tremolo",
+   "sfz": "VCSL/Chordophones/Zithers/Dan Tranh - Keyswitch.sfz",
+   "sw": "40"
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "id": "gsullivan.ep.wurlitzer-ep200",
+ "name": "Reed EP 200",
+ "family": "rhodes",
+ "category": "Keys",
+ "tags": [
+  "electric piano",
+  "wurlitzer",
+  "reed",
+  "vintage"
+ ],
+ "licence": "CC-BY-3.0",
+ "credit": "Wurlitzer EP200 samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+ "author": "Greg Sullivan; SFZ mapping by kinwie",
+ "url": "https://github.com/sfzinstruments/GregSullivan.E-Pianos",
+ "licenceDir": "sfzinstruments/GregSullivan.E-Pianos",
+ "licenceRisk": "R4 \u2014 author statement pending",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "sfzinstruments/GregSullivan.E-Pianos/Wurlitzer EP200/Wurlitzer EP200.sfz"
+  }
+ ],
+ "extendTail": 6
+}

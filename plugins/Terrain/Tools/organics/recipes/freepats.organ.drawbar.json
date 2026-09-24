@@ -1,0 +1,24 @@
+{
+ "id": "freepats.organ.drawbar",
+ "name": "Drawbar Organ",
+ "family": "tonewheel",
+ "category": "Organs",
+ "tags": [
+  "organ",
+  "drawbar",
+  "tonewheel",
+  "jazz"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats project (setBfree render), CC0",
+ "author": "setBfree render",
+ "url": "https://freepats.zenvoid.org/",
+ "licenceDir": "FreePats/DrawbarOrganEmulation-SFZ-20190712/DrawbarOrganEmulation-SFZ-20190712",
+ "artics": [
+  {
+   "name": "Drawbar",
+   "sfz": "FreePats/DrawbarOrganEmulation-SFZ-20190712/DrawbarOrganEmulation-SFZ-20190712/DrawbarOrganEmulation-20190712.sfz",
+   "sustaining": true
+  }
+ ]
+}

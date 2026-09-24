@@ -1,0 +1,33 @@
+{
+ "id": "vcsl.keys.harpsichord-flemish",
+ "name": "Harpsichord",
+ "family": "harpsi",
+ "category": "Keys",
+ "tags": [
+  "harpsichord",
+  "baroque",
+  "plucked keys"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Full",
+   "sfz": "VCSL/Chordophones/Zithers/Harpsichord, Flemish - Keyswitch.sfz",
+   "sw": "96"
+  },
+  {
+   "name": "8'",
+   "sfz": "VCSL/Chordophones/Zithers/Harpsichord, Flemish - Keyswitch.sfz",
+   "sw": "95"
+  },
+  {
+   "name": "4'",
+   "sfz": "VCSL/Chordophones/Zithers/Harpsichord, Flemish - Keyswitch.sfz",
+   "sw": "94"
+  }
+ ]
+}

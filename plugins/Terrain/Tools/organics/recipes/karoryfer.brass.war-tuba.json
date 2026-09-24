@@ -1,0 +1,39 @@
+{
+ "id": "karoryfer.brass.war-tuba",
+ "name": "Folk Tuba",
+ "family": "horn",
+ "category": "Brass",
+ "tags": [
+  "brass",
+  "tuba",
+  "folk",
+  "deep rr",
+  "oompah"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer War Tuba (played by Jakub Lewicki), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.war-tuba",
+ "licenceDir": "sfzinstruments/karoryfer.war-tuba",
+ "artics": [
+  {
+   "name": "Staccato",
+   "sfz": "sfzinstruments/karoryfer.war-tuba/Programs/2-solo-poly.sfz",
+   "sw": "25",
+   "includeUnswitched": false
+  },
+  {
+   "name": "Sustain",
+   "sfz": "sfzinstruments/karoryfer.war-tuba/Programs/2-solo-poly.sfz",
+   "sw": "26",
+   "sustaining": true,
+   "includeUnswitched": false
+  },
+  {
+   "name": "Staccatissimo",
+   "sfz": "sfzinstruments/karoryfer.war-tuba/Programs/2-solo-poly.sfz",
+   "sw": "24",
+   "includeUnswitched": false
+  }
+ ]
+}

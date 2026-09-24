@@ -1,0 +1,43 @@
+{
+ "id": "vsco2.brass.trumpet",
+ "name": "Trumpet",
+ "family": "trumpet",
+ "category": "Brass",
+ "tags": [
+  "brass",
+  "trumpet",
+  "orchestral",
+  "mute"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VSCO-2-CE/TrumpetSus.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Vibrato",
+   "sfz": "VSCO-2-CE/TrumpetSusVib.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Staccato",
+   "sfz": "VSCO-2-CE/TrumpetStac.sfz"
+  },
+  {
+   "name": "Harmon Mute",
+   "sfz": "VSCO-2-CE/TrumpetHarmonMuteSus.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Straight Mute",
+   "sfz": "VSCO-2-CE/TrumpetStraightMuteSus.sfz",
+   "sustaining": true
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "id": "karoryfer.voice.male-aah",
+ "name": "Male Aah",
+ "family": "choir",
+ "category": "Choir & Voice",
+ "tags": [
+  "voice",
+  "male",
+  "aah",
+  "solo",
+  "choir pad"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer legato vocal tutorial (Hadzi-Fia subset, CC0)",
+ "url": "https://github.com/sfzinstruments/legato_vocal_tutorial",
+ "licenceDir": "sfzinstruments/legato_vocal_tutorial",
+ "artics": [
+  {
+   "name": "Aah",
+   "sfz": "sfzinstruments/legato_vocal_tutorial/Programs/01-no_legato_polyphonic_only_no_vibrato_a.sfz",
+   "sustaining": true
+  }
+ ]
+}

@@ -1,0 +1,24 @@
+{
+ "id": "freepats.organ.accordion",
+ "name": "Accordion",
+ "family": "organ",
+ "category": "Organs",
+ "tags": [
+  "accordion",
+  "reed",
+  "folk",
+  "musette"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats project (Jeff Stauffer), CC0",
+ "author": "Jeff Stauffer",
+ "url": "https://freepats.zenvoid.org/",
+ "licenceDir": "FreePats/ButtonAccordionHN-SFZ+FLAC-20240329/Button Accordion HN SFZ+FLAC-20240329",
+ "artics": [
+  {
+   "name": "Accordion",
+   "sfz": "FreePats/ButtonAccordionHN-SFZ+FLAC-20240329/Button Accordion HN SFZ+FLAC-20240329/PRESET Button Accordion HN tuned.sfz",
+   "sustaining": true
+  }
+ ]
+}

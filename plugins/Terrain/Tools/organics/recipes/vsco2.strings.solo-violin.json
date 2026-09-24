@@ -1,0 +1,37 @@
+{
+ "id": "vsco2.strings.solo-violin",
+ "name": "Solo Violin",
+ "family": "violin",
+ "category": "Strings",
+ "tags": [
+  "strings",
+  "solo",
+  "violin",
+  "bowed"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Vibrato",
+   "sfz": "VSCO-2-CE/SViolinVib.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Tremolo",
+   "sfz": "VSCO-2-CE/SViolinTrem.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Spiccato",
+   "sfz": "VSCO-2-CE/SViolinSpic.sfz"
+  },
+  {
+   "name": "Pizzicato",
+   "sfz": "VSCO-2-CE/SViolinPizz.sfz"
+  }
+ ]
+}

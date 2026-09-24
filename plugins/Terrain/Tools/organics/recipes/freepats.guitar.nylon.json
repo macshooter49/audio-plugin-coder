@@ -1,0 +1,23 @@
+{
+ "id": "freepats.guitar.nylon",
+ "name": "Nylon Guitar",
+ "family": "guitar",
+ "category": "Plucked",
+ "tags": [
+  "guitar",
+  "nylon",
+  "classical",
+  "acoustic"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats Spanish Classical Guitar, CC0",
+ "author": "FreePats project (freepats.zenvoid.org)",
+ "url": "http://freepats.zenvoid.org/Guitar/acoustic-guitar.html",
+ "licenceDir": "FreePats/SpanishClassicalGuitar-SFZ+FLAC-20190618/SpanishClassicalGuitar-SFZ+FLAC-20190618",
+ "artics": [
+  {
+   "name": "Plucked",
+   "sfz": "FreePats/SpanishClassicalGuitar-SFZ+FLAC-20190618/SpanishClassicalGuitar-SFZ+FLAC-20190618/SpanishClassicalGuitar-20190618.sfz"
+  }
+ ]
+}

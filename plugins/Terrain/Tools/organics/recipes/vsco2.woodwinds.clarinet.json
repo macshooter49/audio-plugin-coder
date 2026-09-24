@@ -1,0 +1,27 @@
+{
+ "id": "vsco2.woodwinds.clarinet",
+ "name": "Clarinet",
+ "family": "clarinet",
+ "category": "Winds",
+ "tags": [
+  "woodwind",
+  "single reed",
+  "orchestral"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VSCO-2-CE/ClarinetSus.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Staccato",
+   "sfz": "VSCO-2-CE/ClarinetStac.sfz"
+  }
+ ]
+}

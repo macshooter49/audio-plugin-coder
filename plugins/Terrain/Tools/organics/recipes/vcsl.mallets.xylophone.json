@@ -1,0 +1,31 @@
+{
+ "id": "vcsl.mallets.xylophone",
+ "name": "Xylophone",
+ "family": "marimba",
+ "category": "Mallets & Bells",
+ "tags": [
+  "mallets",
+  "xylophone",
+  "bright",
+  "wood"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Medium Mallets",
+   "sfz": "VCSL/Idiophones/Struck Idiophones/Xylophone - Medium Mallets.sfz"
+  },
+  {
+   "name": "Hard Mallets",
+   "sfz": "VCSL/Idiophones/Struck Idiophones/Xylophone - Hard Mallets.sfz"
+  },
+  {
+   "name": "Soft Mallets",
+   "sfz": "VCSL/Idiophones/Struck Idiophones/Xylophone - Soft Mallets.sfz"
+  }
+ ]
+}
