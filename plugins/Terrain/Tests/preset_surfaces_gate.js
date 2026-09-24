@@ -555,11 +555,18 @@ const STUB = (MUT) => {
     const sMid  = await seam (540, 570, 540, 570);     // between the preset "›" and SYN
     const sRest = sEdge.d > sMid.d ? sEdge : sMid;      // report the worse of the two
     await openBrowser(); await wait (320);
+    /* tp101 — browsing, the header and the sheet are content on ONE window-wide glass coat
+       (#plugin::before): neither paints its own, and the coat wears the house glass (--menu-bg + blur). */
     const brow = await p.evaluate (() => {
       const cs = getComputedStyle (document.getElementById ('header'));
       const gl = getComputedStyle (document.getElementById ('tp-b'));
-      return { bg: cs.backgroundColor, blur: cs.backdropFilter || cs.webkitBackdropFilter,
-               glassBg: gl.backgroundColor, glassBlur: gl.backdropFilter || gl.webkitBackdropFilter,
+      const co = getComputedStyle (document.getElementById ('plugin'), '::before');
+      const mb = getComputedStyle (document.documentElement).getPropertyValue ('--menu-bg').replace (/\s+/g, '');
+      const clr = (v) => v === 'rgba(0, 0, 0, 0)' ? 'clear' : v, nb = (v) => (! v || v === 'none') ? 'none' : v;
+      return { bg: clr (cs.backgroundColor) + '/' + nb (cs.backdropFilter || cs.webkitBackdropFilter),
+               glassBg: clr (gl.backgroundColor) + '/' + nb (gl.backdropFilter || gl.webkitBackdropFilter),
+               blur: co.backgroundColor.replace (/\s+/g, '') === mb ? 'coat' : 'coat ' + co.backgroundColor,
+               glassBlur: /blur/.test (co.backdropFilter || co.webkitBackdropFilter || '') ? 'coat' : 'coat unblurred',
                flag: document.documentElement.classList.contains ('tp-glassup') };
     });
     const sBrow = await seam (180, 270, 350, 600, 50, 70); // browser: header vs empty glass between search and the count
@@ -685,7 +692,15 @@ const STUB = (MUT) => {
       document.documentElement.setAttribute ('data-theme', 'dark');   // the last open happened under dark ([21])
       const mb = (getComputedStyle (document.documentElement).getPropertyValue ('--menu-bg') || '').match (/[\d.]+/g).map (Number);
       const gb = (getComputedStyle (document.getElementById ('plugin')).backgroundColor || '').match (/[\d.]+/g).map (Number);
-      const a = mb[3], mix = i => Math.round (mb[i] * a + gb[i] * (1 - a)), hx = v => v.toString (16).padStart (2, '0');
+      /* tp101 — the glass saturate()s what it frosts, so the ground goes through the CSS saturate matrix
+         (amount read off the house .tp-glass coat) before --menu-bg is laid over it */
+      const probe = document.createElement ('div'); probe.className = 'tp-glass'; document.body.appendChild (probe);
+      const sm = /saturate\(\s*([\d.]+)/.exec (getComputedStyle (probe).backdropFilter || getComputedStyle (probe).webkitBackdropFilter || ''), s = sm ? +sm[1] : 1;
+      probe.remove();
+      const [R, G, B] = gb, sat = [(0.213 + 0.787 * s) * R + (0.715 - 0.715 * s) * G + (0.072 - 0.072 * s) * B,
+                                   (0.213 - 0.213 * s) * R + (0.715 + 0.285 * s) * G + (0.072 - 0.072 * s) * B,
+                                   (0.213 - 0.213 * s) * R + (0.715 - 0.715 * s) * G + (0.072 + 0.928 * s) * B];
+      const a = mb[3], mix = i => Math.max (0, Math.min (255, Math.round (mb[i] * a + sat[i] * (1 - a)))), hx = v => v.toString (16).padStart (2, '0');
       const ons = calls.filter (c => c.args[0] === '1');
       const out = { n: calls.length, on: ons[ons.length - 1], off: calls.filter (c => c.args[0] === '0').length,
                     expect: 'ff' + hx (mix (0)) + hx (mix (1)) + hx (mix (2)) };
