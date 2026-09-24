@@ -17,6 +17,16 @@
    - licence: source/LICENCE.txt, source/provenance.csv (one row per sample, sha256), a mapping file;
      CC-BY instruments carry a credit in index.json AND in Resources/Organics/CREDITS.md;
 3. ids.json is append-only against the committed Resources/Organics/ids.json (and the frozen fixture ids.json).
+4. tp105 (contract amendment): every noise region has trig "on"|"off"; every pitched region carries tfix within
+   ±60 ¢ (noise: 0); every sample a noise region plays is traced in provenance.csv (origin recording, licence,
+   sha256, and for shared-library noise the extracted file + its sha256), CC-BY noise ⇒ the instrument is in the
+   Required section of CREDITS.md; the round trip checks tfix (±10 ¢ authored tune ⇒ ∓10 ¢) and unit tests cover
+   measure_f0, inject_noise and repair_rr;
+5. no silent round robin (Max's xylophone report): for every articulation × key × velocity (all 127), each
+   seq position 1..seq_length and the random slots [0, 1) resolve to a region, and no attack region is near-silent
+   (segment peak < −50 dBFS, or a static gain 40 dB under the instrument's median);
+6. loudness: every instrument's centre key at velocity 100 (Velocity 0.75) within ±1 dB of the library target
+   (K-weighted, first 1 s), velocity-127 peak at that key ≤ −1 dBFS.
 Exit code 0 = all pass.
 """
 from __future__ import annotations
@@ -137,6 +147,124 @@ def check_schema(d: str, m: dict, idx_entry: dict | None):
         check(idx_entry.get("family") == m["family"] and idx_entry.get("category") == m["category"],
               f"{iid}: index.json family/category disagree with map.json")
     return frames
+
+
+# ---------------------------------------------------------------------------------------------- tp105 fields
+ALLOWED_LICENCES = {"CC0-1.0", "CC-BY-3.0", "CC-BY-4.0", "Unlicense", "Proprietary-WavesCrate"}
+
+
+def check_tp105(d: str, m: dict, credits_md: str):
+    """trig on noise regions; tfix on every pitched region (±60 ¢); every noise sample traced in provenance.csv."""
+    iid = m["id"]
+    bad_trig = [i for i, r in enumerate(m["regions"]) if r["kind"] == "noise" and r.get("trig") not in ("on", "off")]
+    check(not bad_trig, f"{iid}: {len(bad_trig)} noise regions without a valid trig (on|off), e.g. region {bad_trig[:3]}")
+    stray = [i for i, r in enumerate(m["regions"]) if r["kind"] != "noise" and "trig" in r]
+    check(not stray, f"{iid}: trig on non-noise regions {stray[:3]}")
+    bad_tfix = [i for i, r in enumerate(m["regions"]) if r["kind"] in ("attack", "release")
+                and not (isinstance(r.get("tfix"), (int, float)) and not isinstance(r.get("tfix"), bool)
+                         and -60.0 <= r["tfix"] <= 60.0)]
+    check(not bad_tfix, f"{iid}: {len(bad_tfix)} pitched regions without tfix in ±60 ¢, e.g. {[m['regions'][i].get('tfix') for i in bad_tfix[:3]]}")
+    nz_tfix = [i for i, r in enumerate(m["regions"]) if r["kind"] == "noise" and r.get("tfix", 0.0) != 0.0]
+    check(not nz_tfix, f"{iid}: unpitched noise regions carry a tfix {nz_tfix[:3]}")
+    # provenance of every sample a noise region plays
+    pv = os.path.join(d, "source", "provenance.csv")
+    if not os.path.exists(pv):
+        return
+    rows = {r["file"]: r for r in csv.DictReader(open(pv))}
+    lic_cc_by = False
+    for smp in sorted({r["smp"] for r in m["regions"] if r["kind"] == "noise"}):
+        f = "samples/" + m["samples"][smp]
+        row = rows.get(f)
+        if not check(row is not None, f"{iid}: noise sample {f} has no provenance row"):
+            continue
+        ok = (row.get("source_file") and row.get("licence") in ALLOWED_LICENCES and len(row.get("sha256", "")) == 64
+              and row.get("url") and row.get("author"))
+        if row.get("noise_set"):
+            ok = ok and row.get("extract_file") and len(row.get("extract_sha256", "")) == 64
+        check(ok, f"{iid}: noise sample {f} provenance incomplete: {dict(row)}")
+        lic_cc_by = lic_cc_by or row.get("licence", "").upper().startswith("CC-BY")
+    if lic_cc_by:
+        required = credits_md.split("## With thanks")[0]
+        check(f"`{iid}`" in required, f"{iid}: plays CC-BY noise samples but is missing from the Required section of "
+                                      "Resources/Organics/CREDITS.md")
+
+
+_PEAK_CACHE: dict = {}
+
+
+def region_peak_db(d: str, m: dict, r: dict) -> float:
+    key = (d, r["smp"], r["start"], r["end"])
+    if key not in _PEAK_CACHE:
+        x, _ = sf.read(os.path.join(d, "samples", m["samples"][r["smp"]]), dtype="float32", always_2d=True,
+                       start=r["start"], stop=r["end"])
+        _PEAK_CACHE[key] = an.db(float(np.abs(x).max())) if len(x) else -200.0
+    return _PEAK_CACHE[key]
+
+
+def check_rr_audible(d: str, m: dict):
+    """Max's xylophone bug class ("round-robinning to a silence"): for EVERY articulation × key × velocity, every
+    round-robin index 1..seq_length of every sequence the cell uses resolves to a region, the random slots cover
+    [0, 1), and every attack region that can be picked is audible (its segment peaks above −50 dBFS and its static
+    gain is not buried 40 dB under the instrument's median)."""
+    iid = m["id"]
+    gains = [r["gainDb"] + an.db(max(r["gainNorm"], 1e-9)) for r in m["regions"] if r["kind"] == "attack"]
+    med = float(np.median(gains)) if gains else 0.0
+    bad_cells = 0
+    first = None
+    for a in range(len(m["artics"])):
+        rs = [r for r in m["regions"] if r["a"] == a and r["kind"] == "attack"]
+        if not rs:
+            continue
+        cov = {}
+        for r in rs:
+            for k in range(r["lk"], r["hk"] + 1):
+                cov.setdefault(k, []).append(r)
+        for k, lst in cov.items():
+            for v in range(1, 128):
+                here = [r for r in lst if r["lv"] <= v <= r["hv"]]
+                if not here:
+                    continue
+                by_len = {}
+                for r in here:
+                    by_len.setdefault(r["rr"][1], set()).add(r["rr"][0])
+                ok = all(pos == set(range(L)) for L, pos in by_len.items())
+                edge = 0.0
+                for lo, hi in sorted({tuple(r["rand"]) for r in here}):
+                    if lo > edge + 1e-6:
+                        break
+                    edge = max(edge, hi)
+                ok = ok and edge >= 1.0 - 1e-6
+                if not ok:
+                    bad_cells += 1
+                    first = first or (m["artics"][a], k, v, sorted(by_len.items()))
+    check(bad_cells == 0, f"{iid}: {bad_cells} artic×key×velocity cells with an incomplete round-robin set, first {first}")
+    quiet = []
+    for i, r in enumerate(m["regions"]):
+        if r["kind"] != "attack":
+            continue
+        if region_peak_db(d, m, r) < -50.0 or r["gainDb"] + an.db(max(r["gainNorm"], 1e-9)) < med - 40.0:
+            quiet.append(i)
+    check(not quiet, f"{iid}: {len(quiet)} near-silent attack regions (a silent step), e.g. region {quiet[:3]}")
+
+
+def check_loudness(lib: str, idx: dict):
+    """tp105 normalisation: centre key, velocity 100 (Velocity 0.75) within ±1 dB of the library target; velocity-127
+    peaks ≤ −1 dBFS (the compiler's own measurement, re-verified by rendering here)."""
+    ach = {}
+    for iid in idx:
+        rp = os.path.join(lib, iid, "build-report.json")
+        rep = json.load(open(rp)) if os.path.exists(rp) else {}
+        L = rep.get("loudness")
+        if not check(L is not None, f"{iid}: build-report has no loudness calibration (rebuild with tp105 torgc)"):
+            continue
+        check(L["peak127Db"] <= torgc.PEAK_CEIL_DB + 0.05, f"{iid}: velocity-127 peak {L['peak127Db']} dBFS > ceiling")
+        ach[iid] = L.get("verify", L["achieved"])
+    if ach:
+        lo, hi = min(ach.values()), max(ach.values())
+        check(hi - torgc.CALIB_LUFS <= 1.0 and torgc.CALIB_LUFS - lo <= 1.0,
+              f"loudness spread {lo:.2f}..{hi:.2f} LUFS is outside target {torgc.CALIB_LUFS} ± 1 dB: "
+              f"{sorted(ach.items(), key=lambda t: t[1])[:3]} … {sorted(ach.items(), key=lambda t: t[1])[-3:]}")
+        print(f"   loudness: {len(ach)} instruments, {lo:.2f} … {hi:.2f} LUFS (target {torgc.CALIB_LUFS})")
 
 
 # ---------------------------------------------------------------------------------------------- coverage
@@ -291,6 +419,10 @@ def round_trip():
         check(a["rr"] == [0, 2] and b["rr"] == [1, 2], f"round trip: rr {a['rr']} {b['rr']}")
         check(a["cents"] == -10.0 and b["cents"] == 10.0, f"round trip: tune {a['cents']} {b['cents']}")
         check((a["lv"], a["hv"]) == (1, 127), "round trip: RR regions should span all velocities")
+        # the fixture's samples are exactly C4; tune=−10/+10 per RR take → tfix +10/−10 (per take, ±0.5 ¢)
+        check(abs(a["tfix"] - 10.0) <= 0.5 and abs(b["tfix"] + 10.0) <= 0.5, f"round trip: tfix {a['tfix']} {b['tfix']}")
+    if len(att0) == 2:
+        check(all(abs(r["tfix"]) <= 0.5 for r in att0), f"round trip: in-tune sustain tfix {[r['tfix'] for r in att0]}")
         vc = dict((v, g) for v, g in a["velCurve"])
         check(abs(vc[127] - 1.0) < 1e-3 and abs(vc[1] - 0.2) < 0.02, f"round trip: amp_velcurve evaluated {vc[1]} {vc[127]}")
         check(a["loop"] == "no_loop" and a["tailLe"] > a["tailLs"] > 0, "round trip: decaying staccato should get a tail loop")
@@ -334,6 +466,43 @@ def sf2_round_trip():
     return d, m
 
 
+def unit_tfix_and_noise():
+    """measure_f0 on detuned synthetic notes; inject_noise zones/trig/random slots; repair_rr fills a missing take."""
+    sr = 48000
+    t = np.arange(int(1.5 * sr)) / sr
+    for note, c in ((28, -17.0), (60, 23.0), (100, -41.0)):
+        f = an.midi_hz(note) * 2 ** (c / 1200.0)
+        x = sum((0.6 ** h) * np.sin(2 * np.pi * f * (h + 1) * t) for h in range(6)) * np.exp(-t * 2.0)
+        r = an.measure_f0(x, sr, 0, len(x), an.midi_hz(note))
+        check(abs(r["cents"] - c) <= 0.5, f"measure_f0: note {note} {c:+} ¢ measured {r['cents']:+.2f}")
+    tmp = tempfile.mkdtemp(prefix="torgc-noise-")
+    nd = os.path.join(tmp, "TerrainNoise", "unit-set")
+    os.makedirs(nd)
+    files = []
+    for i in range(3):
+        sf.write(os.path.join(nd, f"n{i}.wav"), 0.1 * np.random.default_rng(i).standard_normal(4800), sr, subtype="PCM_24")
+        files.append({"file": f"n{i}.wav", "origin": {"source_file": "x", "url": "u", "author": "a", "licence": "CC0-1.0",
+                                                      "sha256": "0" * 64, "edits": "e"}})
+    json.dump({"set": "unit-set", "licence": "CC0-1.0", "credit": "unit", "files": files},
+              open(os.path.join(nd, "manifest.json"), "w"))
+    base = torgc.Reg(a=0, kind="attack", src="s", lk=40, hk=75, lv=1, hv=127, root=60, cents=0.0, gain_db=0.0, pan=0.0,
+                     offset=0, end=None, loop_mode="no_loop", ls=None, le=None, xf_s=0.0, rr=(0, 1), rand=(0.0, 1.0),
+                     grp=0, off_by=0, off_mode="normal", env={}, rt_decay=0.0, curve=[1.0] * 128)
+    rec = {"artics": [{"name": "Sustain"}, {"name": "Pizzicato"}],
+           "noiseMap": [{"set": "unit-set", "trig": "on", "relDb": -30, "zone": 12, "exclude": "pizz"}]}
+    inj = torgc.inject_noise(rec, tmp, [base, torgc.replace(base, a=1)], 2)
+    check(inj and all(r.kind == "noise" and r.trig == "on" and r.a == 0 for r in inj), "inject_noise: kind/trig/exclude")
+    zones = sorted({(r.lk, r.hk) for r in inj})
+    check(zones == [(40, 51), (52, 63), (64, 75)], f"inject_noise: zones {zones}")
+    for z in zones:
+        sl = sorted(r.rand for r in inj if (r.lk, r.hk) == z)
+        check(sl[0][0] == 0.0 and sl[-1][1] == 1.0 and len(sl) == 3, f"inject_noise: random slots {sl}")
+    recs = [{"a": 0, "kind": "attack", "lk": 60, "hk": 60, "lv": 1, "hv": 127, "rr": [p, 3], "rand": [0.0, 1.0]}
+            for p in (0, 2)]
+    fx = torgc.repair_rr(recs)
+    check(sorted(r["rr"][0] for r in recs) == [0, 1, 2] and fx["seqCloned"] == 1, f"repair_rr: {recs}")
+
+
 # ---------------------------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
@@ -347,6 +516,10 @@ def main():
     check_coverage(m)
     check_audio(d, m, frames, 48.0, None, False)
     check_licence(d, m, {"licence": "CC0-1.0"}, credits_md)
+    check_tp105(d, m, credits_md)
+    check_rr_audible(d, m)
+    print("== unit: measure_f0 / inject_noise / repair_rr")
+    unit_tfix_and_noise()
     print("== round trip (generated SF2 → .torg)")
     d2, m2 = sf2_round_trip()
     frames = check_schema(d2, m2, None)
@@ -368,11 +541,14 @@ def main():
             budget = float(rec.get("budgetMB", 160.0 if rec.get("piano") else 48.0))
             ram, n, worst = check_audio(d, m, frames, budget, idx[iid].get("sizeMB"), a.quick)
             check_licence(d, m, idx[iid], credits_md)
+            check_tp105(d, m, credits_md)
+            check_rr_audible(d, m)
             check(os.path.exists(os.path.join(d, "preview.flac")), f"{iid}: preview.flac missing")
             if os.path.exists(os.path.join(d, "preview.flac")):
                 check(sf.info(os.path.join(d, "preview.flac")).duration <= 3.001, f"{iid}: preview > 3 s")
             print(f"   {'ok ' if len(FAILS) == f0 else 'FAIL'} {iid:44s} {ram:6.1f} MB  loops {n:4d} worst seam {worst:.2f}")
         check_ids(a.lib)
+        check_loudness(a.lib, idx)
     else:
         print(f"== no library at {a.lib}; only the round trip ran")
     print(f"\n{PASSES[0]} checks passed, {len(FAILS)} failed")

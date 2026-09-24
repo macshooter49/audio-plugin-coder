@@ -1,0 +1,25 @@
+{
+ "id": "vcsl.perc.timpani",
+ "name": "Timpani",
+ "family": "marimba",
+ "category": "Percussion",
+ "tags": [
+  "timpani",
+  "orchestral",
+  "drum",
+  "pitched"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Hits",
+   "sfz": "VCSL/Membranophones/Struck Membranophones/Timpani 2 - Scale.sfz"
+  }
+ ],
+ "unpitched": true,
+ "unpitchedWhy": "a drum's principal mode is not a harmonic pitch; the SFZ's own tune values are kept"
+}

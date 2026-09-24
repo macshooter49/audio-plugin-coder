@@ -1,13 +1,14 @@
 {
- "id": "vcsl.keys.upright-yamaha",
- "name": "Upright Piano",
+ "id": "vcsl.keys.upright-knight",
+ "name": "Knight Upright",
  "family": "upright",
  "category": "Keys",
  "tags": [
   "piano",
   "upright",
-  "felt",
-  "lo-fi"
+  "acoustic",
+  "warm",
+  "home"
  ],
  "licence": "CC0-1.0",
  "credit": "Versilian Community Sample Library (VCSL), CC0",
@@ -15,12 +16,12 @@
  "url": "https://github.com/sgossner/VCSL",
  "licenceDir": "VCSL",
  "piano": true,
- "budgetMB": 64,
+ "budgetMB": 96,
  "capScale": true,
  "artics": [
   {
    "name": "Sustain",
-   "sfz": "VCSL/Chordophones/Zithers/Upright Piano, Yamaha.sfz"
+   "sfz": "VCSL/Chordophones/Zithers/Upright Piano, Knight.sfz"
   }
  ],
  "noiseMap": [

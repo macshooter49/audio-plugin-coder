@@ -1,13 +1,14 @@
 {
- "id": "vcsl.keys.upright-yamaha",
- "name": "Upright Piano",
- "family": "upright",
+ "id": "vcsl.keys.kawai-grand",
+ "name": "Kawai Grand",
+ "family": "grand",
  "category": "Keys",
  "tags": [
   "piano",
-  "upright",
-  "felt",
-  "lo-fi"
+  "grand",
+  "acoustic",
+  "kawai",
+  "bright"
  ],
  "licence": "CC0-1.0",
  "credit": "Versilian Community Sample Library (VCSL), CC0",
@@ -15,12 +16,12 @@
  "url": "https://github.com/sgossner/VCSL",
  "licenceDir": "VCSL",
  "piano": true,
- "budgetMB": 64,
+ "budgetMB": 120,
  "capScale": true,
  "artics": [
   {
    "name": "Sustain",
-   "sfz": "VCSL/Chordophones/Zithers/Upright Piano, Yamaha.sfz"
+   "sfz": "VCSL/Chordophones/Zithers/Grand Piano, Kawai.sfz"
   }
  ],
  "noiseMap": [

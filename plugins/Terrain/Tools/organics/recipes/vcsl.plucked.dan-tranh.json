@@ -30,5 +30,15 @@
    "sfz": "VCSL/Chordophones/Zithers/Dan Tranh - Keyswitch.sfz",
    "sw": "40"
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "guitar-fret",
+   "trig": "off",
+   "relDb": -40,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.4
+  }
  ]
 }

@@ -80,5 +80,15 @@
    2.5
   ]
  ],
- "velPowerMin": 0.9
+ "velPowerMin": 0.9,
+ "noiseMap": [
+  {
+   "set": "guitar-fret",
+   "trig": "off",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.4
+  }
+ ]
 }

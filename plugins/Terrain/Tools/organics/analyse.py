@@ -295,11 +295,171 @@ def read_smpl_loops(path: str) -> Tuple[Optional[int], List[Tuple[int, int]]]:
     return None, []
 
 
+# --------------------------------------------------------------------------------------------- pitch (tfix)
+def _yin_cmnd(frame: np.ndarray, tau_max: int) -> np.ndarray:
+    """YIN cumulative-mean-normalised difference d'(tau), tau = 0..tau_max (de Cheveigné & Kawahara 2002)."""
+    n = len(frame)
+    w = n - tau_max
+    x = frame.astype(np.float64)
+    # d(tau) = Σ_{j<w} (x_j − x_{j+tau})² = e0 + e_tau − 2 r(tau), with an FFT cross-correlation
+    nfft = 1 << int(math.ceil(math.log2(n + w)))
+    X = np.fft.rfft(x, nfft)
+    Y = np.fft.rfft(x[:w], nfft)
+    r = np.fft.irfft(X * np.conj(Y), nfft)[: tau_max + 1]
+    c = np.concatenate([[0.0], np.cumsum(x ** 2)])
+    e0 = c[w]
+    et = c[np.arange(tau_max + 1) + w] - c[np.arange(tau_max + 1)]
+    d = np.maximum(e0 + et - 2.0 * r, 0.0)
+    cm = np.cumsum(d[1:]) / np.arange(1, tau_max + 1)
+    out = np.ones(tau_max + 1)
+    out[1:] = d[1:] / np.maximum(cm, 1e-20)
+    return out
+
+
+def measure_f0(mono: np.ndarray, sr: int, onset: int, end: int, f_expect: float,
+               search_cents: float = 150.0) -> Dict[str, float]:
+    """Pitch of the sustained part of a note, near f_expect (the region's root in equal temperament).
+
+    YIN over up to 8 frames from ~onset+max(60 ms, 6 periods) while the level stays within 35 dB of the note's
+    peak. The lag is searched only within ±search_cents of k·T0, where k is the smallest multiple of the
+    expected period that spans ≥ 256 samples (a k-period lag has k-fold finer resolution for high notes), and
+    refined by parabolic interpolation. Returns {hz, cents (vs f_expect), spread (IQR, cents), conf (1−d'),
+    frames}; hz = 0 when nothing periodic was found."""
+    res = {"hz": 0.0, "cents": 0.0, "spread": 0.0, "conf": 0.0, "frames": 0}
+    if f_expect <= 0 or end - onset < int(0.03 * sr):
+        return res
+    T0 = sr / f_expect
+    k = max(1, int(math.ceil(256.0 / T0)))
+    lo1 = max(2, int(math.floor(T0 * 2 ** (-search_cents / 1200.0))) - 1)
+    hi1 = int(math.ceil(T0 * 2 ** (search_cents / 1200.0))) + 1
+    hi = int(math.ceil(k * hi1 + T0)) + 2
+    win = int(max(3 * hi, 0.04 * sr))
+    seg = mono[onset:end]
+    env = envelope_db(seg, sr)
+    if len(env) == 0:
+        return res
+    pk = float(env.max())
+    skip = int(max(0.06 * sr, 6 * T0))
+    if len(seg) - skip < win + hi:                    # short notes (staccato/pizz): start earlier
+        skip = int(max(0.015 * sr, 2 * T0))
+    hop_env = int(sr * HOP_S)
+    starts = []
+    s = skip
+    step = max(int(0.05 * sr), win // 2)
+    while s + win + hi <= len(seg) and len(starts) < 8:
+        e0 = min(len(env) - 1, s // hop_env)
+        e1 = min(len(env) - 1, (s + win) // hop_env)
+        if env[e0:e1 + 1].min() < pk - 35.0:
+            break
+        starts.append(s)
+        s += step
+
+    def _parab(d, i):
+        a, b, c = d[i - 1], d[i], d[i + 1]
+        den = a - 2 * b + c
+        off = 0.5 * (a - c) / den if abs(den) > 1e-12 else 0.0
+        return i + max(-0.5, min(0.5, off)), float(b)
+
+    ests, confs = [], []
+    for s in starts:
+        fr = seg[s:s + win + hi]
+        d = _yin_cmnd(fr, hi)
+        # stage 1: the single period, within ±search_cents of the expected one
+        i1 = int(np.argmin(d[lo1:hi1 + 1])) + lo1
+        if i1 <= lo1 or i1 >= hi1:
+            continue                                  # minimum on the search edge: not the expected pitch
+        lag1, b1 = _parab(d, i1)
+        # stage 2: the k-th multiple of that period (k-fold resolution), searched within ±T/3
+        if k > 1:
+            c2 = k * lag1
+            lo2, hi2 = int(math.floor(c2 - lag1 / 3)), int(math.ceil(c2 + lag1 / 3))
+            if hi2 + 1 <= hi:
+                i2 = int(np.argmin(d[lo2:hi2 + 1])) + lo2
+                if lo2 < i2 < hi2:
+                    lag2, _ = _parab(d, i2)
+                    lag1 = lag2 / k
+        ests.append(sr / lag1)
+        confs.append(1.0 - b1)
+    if not ests:
+        return res
+    cents = 1200.0 * np.log2(np.array(ests) / f_expect)
+    good = np.array(confs) >= 0.6
+    if good.sum() >= 1:
+        cents = cents[good]
+        confs = list(np.array(confs)[good])
+    med = float(np.median(cents))
+    q = np.percentile(cents, [25, 75]) if len(cents) > 1 else [med, med]
+    res.update(hz=float(f_expect * 2 ** (med / 1200.0)), cents=med, spread=float(q[1] - q[0]),
+               conf=float(np.median(confs)), frames=int(len(cents)), method="yin")
+    # refinement: the frequency of the fundamental PARTIAL (what a tuner measures), from a long Hann-windowed FFT
+    # around the YIN estimate — immune to the inharmonic upper partials that bias a period estimate on high piano
+    # notes. Used when the fundamental is within 24 dB of the strongest partial (a weak-fundamental bass note keeps
+    # the YIN period, which follows the low partials the ear uses there).
+    a0 = starts[0]
+    b0 = min(len(seg), max(starts[-1] + win, a0 + int(0.25 * sr)))       # the span the YIN frames covered
+    e_ok = a0
+    while e_ok + hop_env <= b0 and env[min(len(env) - 1, e_ok // hop_env)] >= pk - 35.0:
+        e_ok += hop_env
+    fr = seg[a0:e_ok]
+    if len(fr) >= int(8 * T0) and len(fr) >= int(0.08 * sr):
+        nfft = 1 << int(math.ceil(math.log2(len(fr) * 4)))
+        X = np.abs(np.fft.rfft(fr * np.hanning(len(fr)), nfft))
+        lx = 20 * np.log10(np.maximum(X, 1e-12))
+        hz0 = res["hz"]
+        i_lo = int(hz0 * 2 ** (-40 / 1200.0) * nfft / sr)
+        i_hi = int(math.ceil(hz0 * 2 ** (40 / 1200.0) * nfft / sr))
+        top = float(lx[int(20 * nfft / sr):].max())
+        if 1 <= i_lo < i_hi < len(lx) - 1:
+            i = int(np.argmax(lx[i_lo:i_hi + 1])) + i_lo
+            if i_lo < i < i_hi and lx[i] >= top - 24.0:
+                a, b, c = lx[i - 1], lx[i], lx[i + 1]
+                den = a - 2 * b + c
+                off = 0.5 * (a - c) / den if abs(den) > 1e-12 else 0.0
+                hz_s = (i + max(-0.5, min(0.5, off))) * sr / nfft
+                c_s = float(1200.0 * math.log2(hz_s / f_expect))
+                # agree = |partial − YIN| in cents: a note whose pitch moves (a bent/sliding take) disagrees
+                res.update(hz=float(hz_s), cents=c_s, method="partial", agree=abs(c_s - med))
+    return res
+
+
+def midi_hz(n: float) -> float:
+    return 440.0 * 2.0 ** ((n - 69.0) / 12.0)
+
+
+# --------------------------------------------------------------------------------------------- loudness
+def _k_filter_coeffs(sr: int):
+    """ITU-R BS.1770 K-weighting (shelf + RLB high-pass) for any sample rate (the standard's analog prototypes,
+    bilinear-transformed — identical to the published 48 kHz coefficients at 48 kHz)."""
+    f0, G, Q = 1681.974450955533, 3.999843853973347, 0.7071752369554196
+    K = math.tan(math.pi * f0 / sr)
+    Vh = 10 ** (G / 20.0)
+    Vb = Vh ** 0.4996667741545416
+    a0 = 1.0 + K / Q + K * K
+    b1 = [(Vh + Vb * K / Q + K * K) / a0, 2.0 * (K * K - Vh) / a0, (Vh - Vb * K / Q + K * K) / a0]
+    a1 = [1.0, 2.0 * (K * K - 1.0) / a0, (1.0 - K / Q + K * K) / a0]
+    f0, Q = 38.13547087602444, 0.5003270373238773
+    K = math.tan(math.pi * f0 / sr)
+    a0 = 1.0 + K / Q + K * K
+    b2 = [1.0, -2.0, 1.0]
+    a2 = [1.0, 2.0 * (K * K - 1.0) / a0, (1.0 - K / Q + K * K) / a0]
+    return (b1, a1), (b2, a2)
+
+
+def loudness_k(x: np.ndarray, sr: int) -> float:
+    """K-weighted loudness (LUFS-style, ungated) of a (frames, ch) block: −0.691 + 10·log10(Σ_ch mean(y²))."""
+    from scipy.signal import lfilter
+    x = x if x.ndim == 2 else x[:, None]
+    (b1, a1), (b2, a2) = _k_filter_coeffs(sr)
+    y = lfilter(b2, a2, lfilter(b1, a1, x, axis=0), axis=0)
+    p = float(np.sum(np.mean(y ** 2, axis=0)))
+    return -0.691 + 10.0 * math.log10(p) if p > 1e-20 else -200.0
+
+
 # --------------------------------------------------------------------------------------------- renderer
 class Renderer:
     """Offline mix of the regions a note would trigger. Linear-phase FFT resampling per region."""
 
-    def __init__(self, inst_dir: str, out_sr: int = 48000):
+    def __init__(self, inst_dir: str, out_sr: int = 48000, velo: float = 1.0):
         import json
         import soundfile as sf
         self.sf = sf
@@ -307,6 +467,7 @@ class Renderer:
         with open(os.path.join(inst_dir, "map.json")) as f:
             self.map = json.load(f)
         self.sr = out_sr
+        self.velo = velo                   # the runtime's Velocity knob: gain = 1 − velo·(1 − curve(vel))
         self._cache: Dict[int, Tuple[np.ndarray, int]] = {}
 
     def sample(self, smp: int) -> Tuple[np.ndarray, int]:
@@ -385,7 +546,7 @@ class Renderer:
         out = np.zeros((n_out, 2), dtype=np.float64)
         k = min(n_out, len(y))
         out[:k] = y[:k]
-        g = 10 ** (r["gainDb"] / 20.0) * r["gainNorm"] * self.vel_gain(r["velCurve"], vel)
+        g = 10 ** (r["gainDb"] / 20.0) * r["gainNorm"] * (1.0 - self.velo * (1.0 - self.vel_gain(r["velCurve"], vel)))
         p = max(-1.0, min(1.0, r["pan"] / 100.0))
         out[:, 0] *= g * math.cos((p + 1) * math.pi / 4) * math.sqrt(2)
         out[:, 1] *= g * math.sin((p + 1) * math.pi / 4) * math.sqrt(2)
@@ -402,14 +563,20 @@ class Renderer:
         return out
 
     def render(self, note: int, vel: int, dur: float = 3.0, hold: float = 2.0, artic: int = 0,
-               with_release: bool = True) -> np.ndarray:
+               with_release: bool = True, with_noise: bool = True) -> np.ndarray:
         out = np.zeros((int(dur * self.sr), 2))
         for r, w in self.pick(note, vel, artic, "attack"):
             out += w * self.render_region(r, note, dur, vel, hold)
+        if with_noise:                                     # note-on mechanical noise (trig "on")
+            for r, w in self.pick(note, vel, artic, "noise"):
+                if r.get("trig") == "on":
+                    out += w * self.render_region(dict(r, loop="no_loop"), note, dur, vel, dur)
         if with_release and hold < dur:
             h = int(hold * self.sr)
             for kind in ("release", "noise"):
                 for r, w in self.pick(note, vel, artic, kind):
+                    if kind == "noise" and (r.get("trig", "off") != "off" or not with_noise):
+                        continue
                     y = w * self.render_region(dict(r, loop="no_loop"), note, dur - hold, vel, dur)
                     y *= 10 ** (-r["rtDecay"] * hold / 20.0)
                     out[h:h + len(y)] += y[: len(out) - h]

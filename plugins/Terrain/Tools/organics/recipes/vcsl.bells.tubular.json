@@ -19,5 +19,7 @@
    "name": "Normal",
    "sfz": "VCSL/Idiophones/Struck Idiophones/Tubular Bells 1.sfz"
   }
- ]
+ ],
+ "unpitched": true,
+ "unpitchedWhy": "a bell's strike note is a virtual pitch, not a partial; the recording's tuning is kept"
 }
