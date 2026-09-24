@@ -9295,6 +9295,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     opacity: 1; pointer-events: auto;
     transform: translate(-50%, -50%) scale(1);
   }
+  /* tp100 — Max: "the right-click pitch menu is blurry … make sure that never happens". translate(-50%,-50%) on an
+     odd-height panel (and the 0.97 scale) put the 20px backdrop-filter on a half device pixel, and WebKit re-rasterised
+     the blur — text included — soft. ovSnap() pins left/top to WHOLE device pixels and drops the transform, so the
+     glass always rests on the pixel grid; only opacity animates. */
+  #ti-chop-panel.ti-snap, #ti-chop-panel.ti-snap.open {
+    transform: none;
+    transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
   /* Kill italics globally inside the panel — Terrain has no italic typography. */
   #ti-chop-panel em, #ti-chop-panel i { font-style: normal; }
 
@@ -9448,7 +9456,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     font: 500 9.5px/1 -apple-system; letter-spacing: .03em; text-transform: none;
     color: rgba(245,243,255,0.45);
   }
-  #ti-chop-panel .rate-display .rate-value { color: rgba(245,243,255,0.92); font-weight: 600; }
+  #ti-chop-panel .rate-display .rate-value { color: #FFFFFF; font-weight: 200; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; }   /* tp100 — ultra-thin white number */
   #ti-chop-panel .rate-display.dim .rate-value { color: rgba(245,243,255,0.30); }
   /* Mod ring: active LFO assignment on activeChopScanRate */
   #ti-chop-panel .rate-display.mod-active .rate-value {
@@ -9520,10 +9528,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     color: rgba(245,243,255,0.55); flex-shrink: 0;   /* tp53 — ink, not a purple accent */
   }
   #ti-chop-panel .ov-ctrl .ov-val {
-    font: 600 12px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    font: 200 12px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;   /* tp100 — Max: every number is the ultra-thin white SF Pro (was 600, read thick) */
     font-variant-numeric: tabular-nums;   /* fixed-width digits — no column shift on value change */
     white-space: nowrap;                  /* "+12 st" never wraps onto two lines */
-    color: rgba(245,243,255,0.92); letter-spacing: 0.02em;
+    color: #FFFFFF; letter-spacing: 0.02em;
     flex: 1; min-width: 0;                /* fill remaining ctrl space, allow shrinking under tight columns */
     text-align: right;                    /* value hugs the right edge — emblem stays fixed on the left */
   }
@@ -9912,7 +9920,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
             '<line x1="11" y1="11" x2="11" y2="17"/>' +
             '<circle cx="11" cy="18" r="1.4" fill="currentColor" stroke="none"/>' +
           '</svg>' +
-          '<div class="ov-val">+0 st</div>' +
+          '<div class="ov-val">+0 ST</div>' +
         '</div>' +
         '<div class="ov-ctrl warp-only" data-ctrl="stretch" title="stretch — drag vertically">' +
           '<svg class="ov-emblem ov-emblem-stretch" width="22" height="20" viewBox="0 0 22 20" fill="currentColor" stroke="none">' +
@@ -11656,7 +11664,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   function fmtMs (ms)   { return (ms >= 1000) ? ((ms / 1000).toFixed(2) + ' s') : (Math.round(ms) + ' ms'); }
   function fmtPct (v)   { return Math.round(v * 100) + '%'; }
   window.__tiFmtMs = fmtMs;   /* tp57 — the gate reads the SHIPPED formatter, never a copy of it */
-  function fmtPitch (v) { var s = Math.round(v); return (s >= 0 ? '+' : '') + s + ' st'; }
+  function fmtPitch (v) { var s = Math.round(v); return (s >= 0 ? '+' : '') + s + ' ST'; }
   // Drop the unit suffix entirely — the emblem already reads as "stretch", and the multiplication
   // sign mojibake'd in the WebView. Just the number.
   function fmtStretch(v){ return v.toFixed(2); }
@@ -12081,15 +12089,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     ovRedrawScan(idx);
   }
 
+  /* tp100 — pin the chop/pitch panel to whole DEVICE pixels (see #ti-chop-panel.ti-snap). devicePixelRatio already
+     carries the host pageZoom in WKWebView, so rounding in device px lands the glass on the real screen grid. */
+  function ovSnap () {
+    var pn = document.getElementById('ti-chop-panel');
+    if (!pn) return;
+    var d = window.devicePixelRatio || 1;
+    var w = pn.offsetWidth, h = pn.offsetHeight;
+    var x = Math.round(((window.innerWidth  - w) / 2) * d) / d;
+    var y = Math.round(((window.innerHeight - h) / 2) * d) / d;
+    pn.style.left = x + 'px'; pn.style.top = y + 'px';
+    pn.classList.add('ti-snap');
+    if (!pn.__tiSnapRO && window.ResizeObserver) {   /* content swaps (multi, pitch mode) change the height */
+      pn.__tiSnapRO = new ResizeObserver(function () { if (pn.classList.contains('open')) ovSnap(); });
+      pn.__tiSnapRO.observe(pn);
+      window.addEventListener('resize', function () { if (pn.classList.contains('open')) ovSnap(); });
+    }
+  }
+
   function openChopOverlay (idx) {
     // idx === -1 = pitch-mode virtual slice; regular idx guards state.slices array.
     if (idx !== -1 && !state.slices[idx]) return;
     if (idx === -1 && !state.pitchModeSlice) return;
     ovEnsureWired();
+    ovSnap();
     document.getElementById('ti-chop-backdrop').classList.add('open');
     document.getElementById('ti-chop-panel').classList.add('open');
     // Apply state AFTER opening so getBoundingClientRect returns real sizes.
-    requestAnimationFrame(function () { ovApplyState(idx); });
+    requestAnimationFrame(function () { ovApplyState(idx); ovSnap(); });
   }
 
   function closeChopOverlay () {
