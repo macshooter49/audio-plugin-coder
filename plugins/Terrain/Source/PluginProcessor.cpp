@@ -17955,6 +17955,23 @@ TerrainAudioProcessor::getScanWindowBounds (int sliceIndex) const noexcept
     return { 0.0f, 1.0f };
 }
 
+int TerrainAudioProcessor::getPitchPlayheads (int* voiceIdx, float* pos, float* vel, int maxOut) const noexcept
+{
+    const size_t el = (size_t) editingLayer.load();
+    int n = 0;
+    for (int i = 0; i < layers[el].synth.getNumVoices() && n < maxOut; ++i)
+    {
+        if (auto* v = dynamic_cast<const tw::SamplerVoice*> (layers[el].synth.getVoice (i)))
+        {
+            if (! v->isPlaying() || v->getSliceIndex() != -1 || v->isScanActive()) continue;
+            const float p = v->getPlayheadNorm();
+            if (p < 0.0f) continue;
+            voiceIdx[n] = i; pos[n] = p; vel[n] = v->getPlayheadVelocity(); ++n;
+        }
+    }
+    return n;
+}
+
 void TerrainAudioProcessor::auditionSlice (int sliceIndex)
 {
     const int n = getNumSlices();

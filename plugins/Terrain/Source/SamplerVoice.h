@@ -342,6 +342,17 @@ namespace tw
             return juce::jlimit (0.0f, 1.0f, scanPositionNorm_.load (std::memory_order_acquire));
         }
 
+        /** tp101 — the source read position normalised over the WHOLE buffer [0..1], or -1 when
+         *  the voice is silent. Written once per block by renderNextBlock (PlayheadPublisher);
+         *  read by the UI poll. Velocity is in buffer-fractions per second (signed) so the page
+         *  can glide the line between 60 Hz polls instead of stepping it. */
+        float getPlayheadNorm() const noexcept
+        {
+            if (! isActive || envStage == EnvStage::Off) return -1.0f;
+            return playNorm_.load (std::memory_order_relaxed);
+        }
+        float getPlayheadVelocity() const noexcept { return playVel_.load (std::memory_order_relaxed); }
+
 #if JUCE_DEBUG
         // Test-only accessors for scan-mode unit tests (Task 5).
         bool   getReversePlay() const noexcept { return reversePlay; }
@@ -391,6 +402,12 @@ namespace tw
 
             auto buf = sample.load();
             if (! buf || buf->getNumSamples() == 0) return;
+
+            // tp101 — THE PITCH-MODE PLAYHEAD. Publish where this voice is reading the SOURCE
+            // (normalised over the whole buffer) once per block, on EVERY way out of this
+            // function (the render has a dozen returns), so the Chop page can draw one moving
+            // line per sounding voice. Two relaxed atomic stores per block; nothing allocates.
+            PlayheadPublisher publishOnExit_ { *this, buf->getNumSamples(), numSamples };
 
             // Cache the host block size so the loop crossfade gate (below
             // and in pullSourceIntoScratch) can derive its actual firing
@@ -1440,6 +1457,35 @@ namespace tw
         // Lock-free atomic avoids data races; torn reads produce at most one
         // frame of jitter, which is imperceptible.
         mutable std::atomic<float> scanPositionNorm_ { 0.0f };
+
+        // tp101 — the pitch-mode playhead feed (see getPlayheadNorm). RAII so every return in
+        // renderNextBlock publishes: the destructor runs after the block's last sample.
+        std::atomic<float> playNorm_ { -1.0f };
+        std::atomic<float> playVel_  {  0.0f };
+        struct PlayheadPublisher
+        {
+            SamplerVoice& v; const int len; const int n; const double startPh;
+            PlayheadPublisher (SamplerVoice& voice, int bufLen, int numSamples) noexcept
+                : v (voice), len (bufLen), n (numSamples), startPh (voice.playhead) {}
+            ~PlayheadPublisher()
+            {
+                if (! v.isActive || v.envStage == EnvStage::Off || len <= 0)
+                {
+                    v.playNorm_.store (-1.0f, std::memory_order_relaxed);
+                    v.playVel_ .store ( 0.0f, std::memory_order_relaxed);
+                    return;
+                }
+                const double L   = (double) len;
+                const double dir = v.reversePlay ? -1.0 : 1.0;
+                // Measured source travel this block, in buffer-fractions per second. A loop wrap
+                // (travel against the play direction) falls back to the nominal read rate.
+                double vel = (n > 0) ? (v.playhead - startPh) / (double) n * v.sampleRateForEnv / L : 0.0;
+                if (vel * dir < 0.0 || std::abs (vel) > 64.0)
+                    vel = dir * v.pitchRatio * v.sampleRateForEnv / L;
+                v.playNorm_.store ((float) juce::jlimit (0.0, 1.0, v.playhead / L), std::memory_order_relaxed);
+                v.playVel_ .store ((float) vel, std::memory_order_relaxed);
+            }
+        };
 
         // Warp dispatcher + scratch buffers. Engine is lazily allocated inside
         // WarpProcessor on the first non-None setMode call; voices that never

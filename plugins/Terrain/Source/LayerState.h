@@ -123,14 +123,14 @@ namespace tw
 
         // ── Constructor ───────────────────────────────────────────────────────
         // Adds one SamplerSound (so the synth has a valid sound list) then
-        // populates 32 SamplerVoices, each referencing THIS layer's atomics.
+        // populates kSamplerVoicesPerLayer (64, tp101 — was 32) SamplerVoices, each referencing THIS layer's atomics.
         // ModulationEngine and WarpRenderCache are optional; pass nullptr to omit
         // (they can be wired later via the processor, which holds the real instances).
         LayerState()
         {
             synth.addSound (new SamplerSound());
 
-            for (int i = 0; i < 32; ++i)
+            for (int i = 0; i < tw::kSamplerVoicesPerLayer; ++i)
             {
                 synth.addVoice (new SamplerVoice (
                     sampleBuffer,

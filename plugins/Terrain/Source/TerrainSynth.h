@@ -91,13 +91,16 @@ namespace tw
         /** Set from the processor at the top of processBlock. Cheap copy. */
         void setSliceContext (const SliceContext& ctx) noexcept
         {
-            // Stored as shared_ptr<const SliceContext> for atomic swap to
-            // avoid taking the synth lock just to update context. The
-            // noteOn override snapshots the pointer once per note.
-            std::atomic_store (&context, std::make_shared<SliceContext> (ctx));
+            // tp101 — NO ALLOCATION. This ran std::make_shared every block for every populated
+            // layer: a heap allocation (and a free of the previous context) on the audio thread
+            // 4x per block. The writer (processBlock) and every reader (noteOn inside
+            // renderNextBlock, auditionSlice from the audition drain) are the SAME audio thread,
+            // strictly sequenced, so a plain value member is race-free. The copy only bumps the
+            // slice list's refcount.
+            context = ctx;
         }
 
-        /** Audition a single slice once at unity pitch, force-one-shot.
+        /** Audition a single slice once, force-one-shot, at the pitch its own key plays (tp101).
          *  Bypasses MIDI dispatch — called directly from the audio thread
          *  (processor's audition queue drain). Channel/note are arbitrary
          *  internal values picked to never collide with real MIDI input. */
@@ -107,7 +110,6 @@ namespace tw
             vc.startSample    = s.startSample;
             vc.endSample      = s.endSample;
             vc.reverse        = s.reverse;
-            vc.pitchSemitones = 0.0f;
             vc.forceOneShot   = true;
             vc.sliceIndex     = sliceIndex;
             // Stamp source version so warp+audition hits the cache instead of
@@ -116,17 +118,12 @@ namespace tw
             vc.sourceVersionId = sourceVersionId;
             vc.warpMode       = s.warpMode;
             vc.stretchRatio   = s.stretchRatio;
-            // Audition inherits the pitch-mode ENVELOPE baseline (so a fresh inherit-sentinel
-            // chop previews with the real envelope, never silent) while pitch stays at unity.
-            {
-                const auto ctxS = std::atomic_load (&context);
-                const tw::Slice base = ctxS ? ctxS->pitchModeSlice : tw::Slice{};
-                vc.attackMs     = (s.attackMs     >= 0.0f) ? s.attackMs     : base.attackMs;
-                vc.releaseMs    = (s.releaseMs    >= 0.0f) ? s.releaseMs    : base.releaseMs;
-                vc.decayMs      = (s.decayMs      >= 0.0f) ? s.decayMs      : base.decayMs;
-                vc.sustainLevel = (s.sustainLevel >= 0.0f) ? s.sustainLevel : base.sustainLevel;
-                vc.volume       = (s.volume       >= 0.0f) ? s.volume       : base.volume;
-            }
+            // Audition inherits the pitch-mode baseline EXACTLY as a played chop does — envelope,
+            // volume AND tuning. 🚨 tp101: this used to keep the pitch at unity, so clicking a chop
+            // to hear it dropped the pitch-mode transpose + fine tune (and the chop's own detune)
+            // that the keyboard plays: "the chops don't keep my fine tune". The note offset is 0
+            // — an audition is the chop at its own key, the same as CHOP mode's key map.
+            applyPitchModeBaseline (vc, s, context.pitchModeSlice, 0.0f);
             vc.scanEnabled    = false;  // audition is fire-and-forget; scan would loop forever — override slice setting
             vc.scanRate       = s.scanRate;    // kept for state cleanliness
             vc.scanWindow     = s.scanWindow;
@@ -157,8 +154,7 @@ namespace tw
     protected:
         void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
         {
-            auto ctx = std::atomic_load (&context);
-            if (! ctx) ctx = std::make_shared<SliceContext>();
+            const SliceContext* ctx = &context;   // tp101 — see setSliceContext (audio thread only)
 
             // Resolve voice config based on mode.
             VoiceConfig vc;
@@ -411,7 +407,7 @@ namespace tw
         }
 
     private:
-        std::shared_ptr<SliceContext> context;
+        SliceContext context;   // tp101 — a value, written + read on the audio thread only
 
         // ── ChromaticRandom state ─────────────────────────────────────────
         // No-repeat random slice pick. noteOn runs on the audio thread under
