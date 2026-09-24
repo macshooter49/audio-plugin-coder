@@ -54,6 +54,7 @@
 //  Build test: g++ -std=c++17 Source/ResonatorNode_test.cpp -o /tmp/rn && /tmp/rn
 // =============================================================================
 
+#include "TerrainTuning.h"   // tp103
 #include <cmath>
 #include <algorithm>
 #include <cstdint>
@@ -556,7 +557,7 @@ private:
 
     static bool isHeld (int note, const int* held, int nHeld) noexcept
     { for (int h = 0; h < nHeld; ++h) if (held[h] == note) return true; return false; }
-    static float noteToHz (int note) noexcept { return 440.0f * std::pow (2.0f, (float) (note - 69) / 12.0f); }
+    static float noteToHz (int note) noexcept { return wc::tuningA4Hz().load (std::memory_order_relaxed) * std::pow (2.0f, (float) (note - 69) / 12.0f); }   // tp103 — follows A4
 
     // phase delay (in samples) of a one-pole low-pass  y=(1-g)y1+g x  at angular freq w
     static float phaseDelayLP (float g, float w) noexcept

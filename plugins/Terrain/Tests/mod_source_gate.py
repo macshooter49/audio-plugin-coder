@@ -54,7 +54,8 @@ else:
     tbl = dict((k.strip(), int(v)) for k, v in re.findall(r'(\w+)\s*:\s*(\d+)', wt.group(1)))
     PAIRS = (('ENV', 'kEnvSrcBase'), ('VEL', 'kVelSrc'), ('NOTE', 'kNoteSrc'), ('FOL', 'kFollowSrcBase'), ('NFOL', 'kNumFollowers'),
              ('MACRO', 'kMacroSrcBase'), ('NMACRO', 'kNumMacros'), ('WHEEL', 'kWheelSrc'), ('AT', 'kAftertouchSrc'),
-             ('BEND', 'kBendSrc'), ('RAND', 'kRandSrcBase'), ('NRAND', 'kNumRands'), ('ALT', 'kAltSrc'))
+             ('BEND', 'kBendSrc'), ('RAND', 'kRandSrcBase'), ('NRAND', 'kNumRands'), ('ALT', 'kAltSrc'),
+             ('SLIDE', 'kSlideSrc'))   # tp103 — CC 74 / MPE slide
     for jk, ck in PAIRS:
         want = const(ck)
         if jk not in tbl: fails.append("the JS WIRE table has no %s (C++ %s = %d) — the UI cannot express that family" % (jk, ck, want))
@@ -63,7 +64,7 @@ else:
 enc = re.search(r'function encodeSrc\(a\)\{ return (.*?); \}', js)
 if not enc: fails.append("could not find the JS wire encoder (encodeSrc)")
 else:
-    for tok in ('WIRE.FOL', 'WIRE.VEL', 'WIRE.ENV', 'WIRE.NOTE', 'WIRE.MACRO', 'WIRE.WHEEL', 'WIRE.AT', 'WIRE.BEND', 'WIRE.RAND', 'WIRE.ALT'):
+    for tok in ('WIRE.FOL', 'WIRE.VEL', 'WIRE.ENV', 'WIRE.NOTE', 'WIRE.MACRO', 'WIRE.WHEEL', 'WIRE.AT', 'WIRE.BEND', 'WIRE.RAND', 'WIRE.ALT', 'WIRE.SLIDE'):
         if tok not in enc.group(1):
             fails.append("encodeSrc never emits %s — the UI cannot express that source" % tok)
 if 's:encodeSrc(a)' not in js.replace(' ', ''):
@@ -96,14 +97,14 @@ elif int(card.group(1)) != VEL:
 helper = re.search(r'inline int phase2SourceForWire \(int wire\) noexcept\s*\{(.*?)\n\}', cfg, re.S)
 if not helper: fails.append("SynthModConfig.h has no phase2SourceForWire()")
 else:
-    for tok in ('kMacroSrcBase', 'kWheelSrc', 'kAftertouchSrc', 'kBendSrc', 'kRandSrcBase', 'kAltSrc'):
+    for tok in ('kMacroSrcBase', 'kWheelSrc', 'kAftertouchSrc', 'kBendSrc', 'kRandSrcBase', 'kAltSrc', 'kSlideSrc'):
         if tok not in helper.group(1): fails.append("phase2SourceForWire() never maps %s — that family is dropped at every C++ door" % tok)
 if 'phase2SourceForWire (r.src)' not in door:
     fails.append("the setSynthModMatrix door never asks phase2SourceForWire — macros, wheel, aftertouch, bend, random and alt are dropped silently")
 if proc.count('phase2SourceForWire (r.src)') < 3:
     fails.append("phase2SourceForWire is asked at %d site(s); the door, the per-voice build and the block loop make 3" % proc.count('phase2SourceForWire (r.src)'))
 sv_ = (root / 'Source' / 'SynthVoice.h').read_text()
-for tok in ('wc::isMacroModSource (sI)', 'wc::ModSource::Wheel', 'wc::ModSource::Aftertouch', 'wc::ModSource::Bend', 'wc::isRandModSource (sI)', 'wc::ModSource::Alt'):
+for tok in ('wc::isMacroModSource (sI)', 'wc::ModSource::Wheel', 'wc::ModSource::Aftertouch', 'wc::ModSource::Bend', 'wc::isRandModSource (sI)', 'wc::ModSource::Alt', 'wc::ModSource::Slide'):
     if tok not in sv_: fails.append("SynthVoice never evaluates %s — declared and inert (the fb555 shape)" % tok)
 # fb572 — the voice's Random branch hashes the ROUTE (seed, dest, ordinal); the processor's two readers too; the page carries the twin
 if 'wc::randForRoute (noteSeed_, dest, wc::randIndexOf (sI))' not in sv_:

@@ -7832,11 +7832,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     roleVocab:['Producer','Sound designer','Composer','Artist','Mix engineer','DJ','Educator'], sign:'On', usage:'Off', usageAsked:false,
     driver:'CoreAudio', out:'System output', outCh:'1 + 2', inDev:'None', inCh:'Off', sr:48000, buf:256, testCh:'Both',
     ports:{}, qwerty:true, tempo:120,
-    chan:'Omni', vcurve:0, vmode:'Curve', bend:2, mpe:'Off', mpeBend:48, pickup:'Hook', pc:'Off', mapFromPreset:'Off', a4:440,
+    chan:'Omni', vcurve:0, vmode:'Curve', bend:2, mpe:'Off', mpeBend:48, mpeArmed:0, pickup:'Hook', pc:'Off', mapFromPreset:'Off', a4:440,
     cc:[{cc:1,p:'Mod Wheel',fixed:true}],
     onStart:'Init', autoVer:'Off', scan:'On',
     theme:'Dark', size:100, motion:'On', hover:'On', values:'On', drag:'Vertical', sens:.5, wheel:'On', dbl:'Reset', openOn:'Last used',
-    cpuMeter:'Off', rtQ:'Standard', offQ:'High', lockQ:'Off', voices:32, sleep:'On', tails:'Off', capture:'On', fps:60,
+    cpuMeter:'Off', rtQ:'Standard', offQ:'High', lockQ:'Off', voices:96, sleep:'On', tails:'Off', capture:'On', fps:60,
     autoUpd:'On', chanUpd:'Beta' };
   var S=JSON.parse(JSON.stringify(DEF));
   if(window.__stInitS){ try{ Object.keys(window.__stInitS).forEach(function(k){ if(k in DEF) S[k]=window.__stInitS[k]; }); }catch(e){} }
@@ -7930,16 +7930,18 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      ctl:{t:'num',key:'tempo',min:40,max:240,step:1,unit:'BPM',reset:120,fmt:function(v){ return v.toFixed(0); },tap:true}},
 
    /* ── MIDI & CONTROLLERS (every host) ── */
-   {p:'control',g:'Receiving',id:'chan',label:'MIDI channel',help:'Omni plays from every channel. Pick one to let Terrain share a controller with other instruments.',where:'Every host · every instance',
+   {p:'control',g:'Receiving',id:'chan',label:'MIDI channel',help:'Omni plays from every channel. Pick one to let Terrain share a controller with other instruments: every other channel is ignored (notes, bend, pressure, CCs). While MPE is on this is set aside, because MPE uses every channel. The computer keyboard always plays.',where:'Every host · saved with the instance',
      ctl:menu('chan',function(){ var a=[{label:'Omni'}]; for(var i=1;i<=16;i++) a.push({label:'Channel '+i}); return a; })},
    {p:'control',g:'Receiving',id:'vel',blk:'vel',label:'Velocity curve',help:'How hard you play → how loud and bright Terrain answers. Drag the curve up for a softer touch (quiet playing sounds fuller), down for a harder one. Hit the keys: the higher on a key you click, the harder the hit. You hear the curve.',where:'Every host · every instance'},
    {p:'control',g:'Receiving',id:'bend',label:'Pitch bend range',help:'How far the wheel bends, in semitones. Drag the number, double-click for 2.',where:'Every host · saved with the patch',
      ctl:{t:'num',key:'bend',min:0,max:24,step:1,unit:'ST',reset:2,fmt:function(v){ return v.toFixed(0); }}},
-   {p:'control',g:'Receiving',id:'a4',label:'Tuning reference',help:'Concert pitch for A4. Scala / .tun files and MTS-ESP come later.',where:'Every host · every instance',
+   {p:'control',g:'Receiving',id:'a4',label:'Tuning reference',help:'Concert pitch for A4. Every oscillator, the sub, the resonator and a pitched chop pad follow it, and a dropped sample is named on this grid. 432 is 31.8 cents below 440. Scala / .tun files and MTS-ESP come later.',where:'Every host · every instance',
      ctl:{t:'num',key:'a4',min:415,max:466,step:1,unit:'Hz',reset:440,fmt:function(v){ return v.toFixed(0); }}},
-   {p:'control',g:'Expression',id:'mpe',label:'MPE',help:'For Roli, LinnStrument, Osmose, Push 3: each note gets its own bend, pressure and slide (CC 74). In Ableton use the AU — Live’s VST3 path drops per-note expression.',where:'Every host · every instance',ctl:onoff('mpe')},
-   {p:'control',g:'Expression',id:'mpeBend',label:'MPE bend range',help:'Per-note bend in semitones. 48 is the MPE standard; your controller should match.',where:'Every host',
+   {p:'control',g:'Expression',id:'mpe',label:'MPE',help:'For Roli, LinnStrument, Osmose, Push 3 and PolyBrute 12 (MPE Receive): each note gets its own bend, pressure and slide (CC 74), on its own channel; channel 1 is the master (the wheel, the pedal). Pressure and Slide are mod-matrix sources; bend moves the note’s pitch. In Ableton use the AU — Live’s VST3 path drops per-note expression. A controller or host that sends the MPE configuration message turns it on by itself.',where:'Every host · saved with the instance',ctl:onoff('mpe')},
+   {p:'control',g:'Expression',id:'mpeBend',label:'MPE bend range',help:'Per-note bend in semitones. 48 is the MPE standard; your controller should match (a controller that sends its range over MIDI overrides it).',where:'Every host · saved with the instance',
      ctl:{t:'num',key:'mpeBend',min:1,max:96,step:1,unit:'ST',reset:48,fmt:function(v){ return v.toFixed(0); }},dim:function(){ return S.mpe!=='On'; }},
+   {p:'control',g:'Expression',id:'polyat',label:'Poly aftertouch',help:'Always on. Key pressure (poly aftertouch) moves only the note you press — an Arturia PolyBrute on Aftertouch Poly or any FullTouch mode sends it. Channel (mono) pressure moves every note. Route Aftertouch in the mod matrix to hear it.',where:'Every host',
+     ctl:{t:'info',get:function(){ return 'Per key — each note follows its own pressure'; }}},
    {p:'control',g:'Controllers',id:'ccmap',blk:'ccmap',label:'MIDI learn',help:'Right-click any knob → MIDI Learn, then move a control. Or press Learn here and turn a knob on your controller. Mod wheel is always CC 1.',where:'Saved with the instance'},
    {p:'control',g:'Controllers',id:'pickup',label:'Knob pickup',help:'When a hardware knob and Terrain disagree: Jump snaps at once, Hook waits until you pass the current value, Scale glides the rest of the way.',where:'Every host',ctl:chips(['Jump','Hook','Scale'],'pickup')},
    {p:'control',g:'Controllers',id:'mapFromPreset',label:'Presets carry their MIDI map',help:'On: loading a preset also loads the CC map it was saved with. Off: your map stays put whatever you load.',where:'Every host',ctl:onoff('mapFromPreset')},
@@ -7949,8 +7951,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    {p:'perf',g:'Quality',id:'rtQ',label:'Playing quality',help:'Oversampling while you play. Eco saves CPU on big patches; High is cleaner on bright FM, folding and distortion.',where:'Every host · every instance',ctl:chips(['Eco','Standard','High'],'rtQ')},
    {p:'perf',g:'Quality',id:'offQ',label:'Bounce quality',help:'Used automatically when the DAW renders offline — slower than real time, so it can afford more.',where:'Every host',ctl:chips(['Same','High','Best'],'offQ')},
    {p:'perf',g:'Quality',id:'lockQ',label:'Presets can change quality',help:'Off keeps your choice above no matter what a preset asks for.',where:'Every host',ctl:onoff('lockQ')},
-   {p:'perf',g:'CPU',id:'voices',label:'Voice ceiling',help:'The most notes Terrain will ever sound at once, across unison. Lower it on a laptop; the oldest note is released first.',where:'Every host · every instance',
-     ctl:{t:'num',key:'voices',min:8,max:96,step:1,unit:'voices',reset:32,fmt:function(v){ return v.toFixed(0); }}},
+   {p:'perf',g:'CPU',id:'voices',label:'Voice ceiling',help:'The most voices Terrain will ever sound at once, counting unison: 8 notes of 4-voice unison are 32. Lower it on a laptop; past it the oldest note is released first, with a short fade. The Voices knob on the synth still caps a patch below this.',where:'Every host · every instance',
+     ctl:{t:'num',key:'voices',min:8,max:96,step:1,unit:'voices',reset:96,fmt:function(v){ return v.toFixed(0); }}},
    {p:'perf',g:'CPU',id:'sleep',label:'Sleep when silent',help:'When nothing plays and every tail has died, Terrain stops computing until the next note.',where:'Every host',ctl:onoff('sleep')},
    {p:'perf',g:'CPU',id:'tails',label:'Cut tails when the DAW stops',help:'On: pressing stop silences reverb and delay tails at once.',where:'Every host',ctl:onoff('tails')},
    {p:'perf',g:'CPU',id:'cpu',blk:'cpu',label:'CPU meter in the header',help:'A small meter on the left of the header, opposite the version. The measurement already exists (the DSP clock); this shows it.',where:'Every host'},
@@ -8007,14 +8009,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       case 'motion': bodyGate('ti-motion-off',S.motion!=='On'); if(S.motion!=='On'){ try{ if(window.__tiMotionRest) window.__tiMotionRest(); }catch(e){} } callN('setMotionEnabled',S.motion==='On'?1:0); try{ if(window.__tiRepaint) window.__tiRepaint(); }catch(e){} break;
       case 'capture': bodyGate('ti-capture-off',S.capture!=='On'); callN('setCaptureEnabled',S.capture==='On'?1:0); break;
       case 'bend': try{ if(window.__setSynParam) window.__setSynParam('SYN_BEND_RANGE', C01(S.bend/24)); }catch(e){} break;
-      case 'a4': callN('setA4', S.a4); break;
-      case 'voices': callN('setVoiceCeiling', S.voices); break;
+      case 'a4': midiCall('setA4', S.a4); break;
+      case 'voices': midiCall('setVoiceCeiling', S.voices); break;
       case 'vel': callN('setVelCurve', S.vmode==='Fixed'? 999 : S.vcurve); break;
-      case 'chan': callN('setMidiChannel', S.chan==='Omni'?0:parseInt(String(S.chan).replace('Channel ',''),10)); break;
+      case 'chan': midiCall('setMidiChannel', S.chan==='Omni'?0:parseInt(String(S.chan).replace('Channel ',''),10)); break;
       case 'fps': try{ window.__UI_FPS = (+S.fps===30) ? 30 : null; }catch(e){} break;
       case 'size': callN('setBootWidth', Math.round(820*S.size/100)); break;
-      case 'mpe': try{ if(window.__setSynParam) window.__setSynParam('SYN_MPE_ON', S.mpe==='On'?1:0); }catch(e){} break;
-      case 'mpeBend': try{ if(window.__setSynParam) window.__setSynParam('SYN_MPE_BEND', C01((S.mpeBend-1)/95)); }catch(e){} break;
+      case 'mpe': case 'mpeBend': midiCall('setMpeOn', S.mpe==='On'?1:0, S.mpeBend); break;
       case 'openOn': callN('setOpenOnPage', String(S.openOn)); break;
       case 'cpu': paintHeaderCpu(); break;
       case 'sleep': callN('setSleepWhenSilent', S.sleep==='On'?1:0); break;
@@ -8044,7 +8045,21 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   function pushAudio(id){ var f=nfn('setAudioSetup'); if(!f) return; var o={};
     if(id==='inDev'){ o.inDev=S.inDev; if(S.inDev!=='None') o.inCh=S.inCh; } else o[id]=(id==='sr'||id==='buf')?+S[id]:S[id];
     Promise.resolve(f(JSON.stringify(o))).then(takeAudio,function(){}); }
-  function applyAll(){ ['theme','motion','capture','bend','a4','voices','vel','chan','fps','size','mpe','mpeBend','openOn','cpu','sleep','tails','rtQ','hover','tempo','qwerty'].forEach(applyRow);
+  /* tp103 — MPE, the MPE range, the MIDI channel, A4 and the voice ceiling live in the PROCESSOR (the instance's
+     project state, or MidiSettings.json for every instance). The page reads them back (getMidiSettings) and
+     writes only when the user changes one; it never pushes its own copy over them on open — a project that was
+     saved with MPE on must open with MPE on. Every setter answers with the processor's real state. */
+  function takeMidi(txt){ try{ var j=typeof txt==='string'?JSON.parse(txt):txt; if(!j) return;
+      var was=[S.mpe,S.mpeBend,S.mpeArmed,S.chan,S.a4,S.voices].join('|');
+      if(j.mpe!=null) S.mpe=(+j.mpe||+j.mpeArmed)?'On':'Off'; if(j.mpeBend!=null) S.mpeBend=Math.round(+j.mpeBend); S.mpeArmed=+j.mpeArmed||0;
+      if(j.chan!=null) S.chan=(+j.chan>=1&&+j.chan<=16)?('Channel '+(+j.chan)):'Omni';
+      if(j.a4!=null) S.a4=Math.round(+j.a4); if(j.voices!=null) S.voices=+j.voices;
+      if(was===[S.mpe,S.mpeBend,S.mpeArmed,S.chan,S.a4,S.voices].join('|')) return;   /* the echo of a drag: nothing to repaint (a repaint would drop the grip) */
+      save(); if(!q&&(cur==='control'||cur==='perf')&&$('st-overlay').classList.contains('on')) paintPage(); }catch(e){} }
+  function midiCall(){ var a=Array.prototype.slice.call(arguments), f=nfn(a[0]); if(!f) return; try{ Promise.resolve(f.apply(null,a.slice(1))).then(takeMidi,function(){}); }catch(e){} }
+  function pullMidi(){ var f=nfn('getMidiSettings'); if(!f) return; try{ Promise.resolve(f()).then(takeMidi,function(){}); }catch(e){} }
+  window.__stPullMidi=pullMidi;
+  function applyAll(){ ['theme','motion','capture','bend','vel','fps','size','openOn','cpu','sleep','tails','rtQ','hover','tempo','qwerty'].forEach(applyRow); pullMidi();
     try{ window.__terrainUiPrefs={ drag:S.drag, sens:S.sens, wheel:S.wheel, dbl:S.dbl, values:S.values, hover:S.hover, pickup:S.pickup }; }catch(e){} }
 
   /* ═══ PRIVACY — opt-in only. A tiny LOCAL log of anonymized counters when S.usage==='On'; the network
@@ -8065,7 +8080,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       var d=el('<div class="ri'+(p.id===cur&&!q?' cur':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p.ic+'</svg><span class="nm">'+esc(p.short||p.name)+'</span></div>');
       d.onclick=function(){ go(p.id); }; r.appendChild(d); });
     r.style.opacity=q?'.35':''; }
-  function go(id,flashId){ cur=id; q=''; if(id==='audio') pullAudio(); var se=$('st-search'); if(se) se.value=''; closeMenu(); renderRail(); paintPage(); var pn=$('st-pane'); if(pn) pn.scrollTop=0;
+  function go(id,flashId){ cur=id; q=''; if(id==='audio') pullAudio(); if(id==='control'||id==='perf') pullMidi(); var se=$('st-search'); if(se) se.value=''; closeMenu(); renderRail(); paintPage(); var pn=$('st-pane'); if(pn) pn.scrollTop=0;
     if(flashId){ var r=document.querySelector('#st-overlay [data-row="'+flashId+'"]'); if(r){ r.scrollIntoView({block:'center'}); r.classList.add('flash'); setTimeout(function(){ r.classList.remove('flash'); },1200); } } }
 
   /* ═══ CONTROLS ═══ */
@@ -8485,7 +8500,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 
   /* ═══ HEADER, OPEN / CLOSE, SEARCH ═══ */
   function openSettings(on){ var ov=$('st-overlay'); if(!ov) return; ov.classList.toggle('on',on); bodyGate('st-open',on); closeMenu();
-    if(on){ arm(); renderRail(); paintPage(); paintHeaderCpu(); logEvent('open:settings'); if(cur==='audio') pullAudio(); } }
+    if(on){ arm(); renderRail(); paintPage(); paintHeaderCpu(); logEvent('open:settings'); if(cur==='audio') pullAudio(); pullMidi(); } }
   function toggleSettings(){ openSettings(!$('st-overlay').classList.contains('on')); }
   (function(){ var g=$('settings-btn'); if(g){ g.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); toggleSettings(); }, true); } })();
   $('st-close').onclick=function(){ openSettings(false); };
@@ -35398,10 +35413,10 @@ restoreThemeFromBackend();
      so a Filter 1 / Filter 2 route came back from the processor as "LFO 216"; the card's receiver
      special-cased 200 and turned a Key drop (201) into a Velocity route. One encoder, one decoder,
      both here, and Tests/mod_source_gate.py reads the constants out of this table against the C++. */
-  var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7, MACRO:220, NMACRO:9, WHEEL:230, AT:231, BEND:232, RAND:240, NRAND:4, ALT:244};
+  var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7, MACRO:220, NMACRO:9, WHEEL:230, AT:231, BEND:232, RAND:240, NRAND:4, ALT:244, SLIDE:245};
   /* == kEnvSrcBase · kVelSrc · kNoteSrc · kFollowSrcBase · kNumFollowers · kMacroSrcBase · kNumMacros · kWheelSrc · kAftertouchSrc · kBendSrc · kRandSrcBase · kNumRands · kAltSrc
      fb563 Phase 2 — the six new families ride the same table, the same encoder and the same decoder. */
-  function encodeSrc(a){ return a.note?WIRE.NOTE:(a.fol?WIRE.FOL+(a.fol-1):(a.vel?WIRE.VEL:(a.env?WIRE.ENV+(a.env-1):(a.mac?WIRE.MACRO+(a.mac-1):(a.whl?WIRE.WHEEL:(a.at?WIRE.AT:(a.bend?WIRE.BEND:(a.rnd?WIRE.RAND+(a.rnd-1):(a.alt?WIRE.ALT:a.lfo-1))))))))); }
+  function encodeSrc(a){ return a.note?WIRE.NOTE:(a.fol?WIRE.FOL+(a.fol-1):(a.vel?WIRE.VEL:(a.env?WIRE.ENV+(a.env-1):(a.mac?WIRE.MACRO+(a.mac-1):(a.whl?WIRE.WHEEL:(a.at?WIRE.AT:(a.bend?WIRE.BEND:(a.rnd?WIRE.RAND+(a.rnd-1):(a.alt?WIRE.ALT:(a.sld?WIRE.SLIDE:a.lfo-1)))))))))); }
   function decodeSrc(sv){ sv=sv|0;
     if(sv>=WIRE.FOL&&sv<WIRE.FOL+WIRE.NFOL) return {fol:sv-WIRE.FOL+1};
     if(sv>=WIRE.MACRO&&sv<WIRE.MACRO+WIRE.NMACRO) return {mac:sv-WIRE.MACRO+1};
@@ -35410,15 +35425,16 @@ restoreThemeFromBackend();
     if(sv===WIRE.AT)    return {at:1};
     if(sv===WIRE.BEND)  return {bend:1};
     if(sv===WIRE.ALT)   return {alt:1};
+    if(sv===WIRE.SLIDE) return {sld:1};   /* tp103 — CC 74 / MPE slide */
     if(sv===WIRE.NOTE) return {note:1};
     if(sv===WIRE.VEL)  return {vel:1};
     if(sv>=WIRE.ENV&&sv<WIRE.ENV+32) return {env:sv-WIRE.ENV+1};   /* Env 1..32, the same [100,132) the processor accepts */
     if(sv>=0&&sv<10)   return {lfo:sv+1};
     return null; }   /* an unknown code is NOT an LFO — it is dropped, never invented */
-  var SRC_KEYS=['note','fol','vel','env','lfo','mac','whl','at','bend','rnd','alt'];   /* every family an assign can carry — ONE list, so a new family is one word here */
+  var SRC_KEYS=['note','fol','vel','env','lfo','mac','whl','at','bend','rnd','alt','sld'];   /* every family an assign can carry — ONE list, so a new family is one word here */
   function srcKey(a){ for(var i=0;i<SRC_KEYS.length;i++){ var k=SRC_KEYS[i]; if(a[k]) return k+a[k]; } return '?'; }
   function srcOf(a){ for(var i=0;i<SRC_KEYS.length;i++){ var k=SRC_KEYS[i]; if(a[k]){ var o={}; o[k]=a[k]; return o; } } return {}; }
-  function srcTag(a){ return a.note?'key':(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:(a.lfo?'lfo'+a.lfo:(a.mac?'mac'+a.mac:(a.whl?'whl':(a.at?'at':(a.bend?'bend':(a.rnd?'rnd'+a.rnd:(a.alt?'alt':'?')))))))))); }   /* the gate surface's spelling */
+  function srcTag(a){ return a.note?'key':(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:(a.lfo?'lfo'+a.lfo:(a.mac?'mac'+a.mac:(a.whl?'whl':(a.at?'at':(a.bend?'bend':(a.rnd?'rnd'+a.rnd:(a.alt?'alt':(a.sld?'sld':'?'))))))))))); }   /* the gate surface's spelling */
   function srcDefaultDepth(S){ return S.lfo?0.5:1.0; }   /* the DROP defaults: an LFO lands at half, everything else at full (fb178/fb263/fb552) */
   function isMagnitudeSrc(a){ return !!(a.env||a.fol||a.note); }   /* the shape sources — the C++ takes |depth|; every other family carries a SIGNED depth */
   function findRoute(S,dest){ var k=srcKey(S); for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcKey(a)===k) return a; } return null; }
@@ -35842,7 +35858,7 @@ restoreThemeFromBackend();
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
   var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise','Filter 1','Filter 2'];   /* fb552 · fb556 */
-  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):(a.lfo?('LFO '+a.lfo):(a.mac?((window.__macroName&&window.__macroName(a.mac))||('Macro '+a.mac)):(a.whl?'Mod Wheel':(a.at?'Aftertouch':(a.bend?'Pitch Bend':(a.rnd?'Random':(a.alt?'Alt':'?')))))))))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
+  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):(a.lfo?('LFO '+a.lfo):(a.mac?((window.__macroName&&window.__macroName(a.mac))||('Macro '+a.mac)):(a.whl?'Mod Wheel':(a.at?'Aftertouch':(a.bend?'Pitch Bend':(a.rnd?'Random':(a.alt?'Alt':(a.sld?'Slide':'?'))))))))))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   /* fb563 (3) — "LFO 2 × Macro 1 · 45%", "Env 1 · off": one spelling for the hover list and the menu row */
   function routeLabel(a){ return srcName(a)+(a.aux?(' \u00D7 '+srcName(a.aux)):'')+' \u00B7 '+(a.byp?'off':(Math.round(a.depth*100)+'%')); }
@@ -36036,7 +36052,7 @@ restoreThemeFromBackend();
     return [ {label:'Envelopes',items:envs}, {label:'LFOs',items:lfos}, {label:'Macros',items:macs},
              {label:'Keys',items:[mk({vel:1},'Velocity'),mk({note:1},'Key')].concat(rnds,[mk({alt:1},'Alt')])},
              {label:'Audio',items:FOL_NAME.map(function(nm,k){ return mk({fol:k+1},nm); })},
-             {label:'MIDI',items:[mk({whl:1},'Mod Wheel'),mk({at:1},'Aftertouch'),mk({bend:1},'Pitch Bend')]} ]; }
+             {label:'MIDI',items:[mk({whl:1},'Mod Wheel'),mk({at:1},'Aftertouch'),mk({bend:1},'Pitch Bend'),mk({sld:1},'Slide')]} ]; }
   /* Reset = exactly what a double-click does on that control (the fb363 law), so the two can never disagree. */
   function resetDest(g){ var el=g.el; if(!el) return;
     var t=(el.querySelector&&(el.querySelector('.knob-ring')||el.querySelector('.fxr-dial')||el.querySelector('.ctl svg')||el.querySelector('.vm-mk')||el.querySelector('canvas')))||el;
@@ -36294,7 +36310,8 @@ restoreThemeFromBackend();
       if(a.at){  if(C&&C.a!=null) return p2At(C.a,Pv?Pv.a:null); return (window.__mvAT!=null)?window.__mvAT:-1; }
       if(a.bend){ if(C&&C.b!=null){ var bb=p2At(C.b,Pv?Pv.b:null); return (bb+1)/2; } return (window.__mvBend!=null)?(window.__mvBend+1)/2:-1; }
       if(a.rnd)  return (window.__mvRandSeed!=null&&window.__mvRandSeed>=0)? randForRoute(window.__mvRandSeed>>>0, a.dest|0, (a.rnd-1)|0) : -1;   /* fb572 — this route's own draw from the sounding note's seed (the C++ twin, held bit-exact by Tests/rand_hash_gate.py) */
-      if(a.alt)  return (window.__mvAlt!=null)?window.__mvAlt:-1; }catch(e){}
+      if(a.alt)  return (window.__mvAlt!=null)?window.__mvAlt:-1;
+      if(a.sld)  return (window.__mvSlide!=null)?window.__mvSlide:-1; }catch(e){}   /* tp103 — CC 74 / MPE slide */
     return null; }
   window.__tiP2Value=function(S){ return p2v(S); };   /* gate hook — the value the comet would draw right now */
   /* ═══ MOD RING (Max, 2026-09-23) ═════════════════════════════════════════════════════════════
@@ -47356,7 +47373,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     paint(); b.__paint=paint; return b; }
   function chip(kind,a){ var c=el('<span class="mv-c"><span class="ar">‹</span><span class="t"></span><span class="ar">›</span>'+CHEV+(kind==='s'?'<span class="sc pro"></span>':'')+'</span>');
     var ars=c.querySelectorAll('.ar');
-    function setSrc(S){ var keep={dest:a.dest}; ['lfo','env','vel','note','fol','mac','whl','at','bend','rnd','alt'].forEach(function(k){ delete a[k]; });
+    function setSrc(S){ var keep={dest:a.dest}; ['lfo','env','vel','note','fol','mac','whl','at','bend','rnd','alt','sld'].forEach(function(k){ delete a[k]; });
       for(var k in S) a[k]=S[k]; a.dest=keep.dest; }
     function step(dir){ if(kind==='d'){ var ix=DST_ORDER.indexOf(a.dest); a.dest=DST_ORDER[(ix+dir+DST_ORDER.length)%DST_ORDER.length]; a.el=API().el(a.dest); }
       else { var L=srcList(), cur=kind==='s'?a:a.aux, keys=L.map(function(o){ return sKey(o.S); });

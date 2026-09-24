@@ -1,6 +1,7 @@
 // SamplerVoice.h
 #pragma once
 
+#include "TerrainTuning.h"   // tp103
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "SampleBuffer.h"
@@ -167,6 +168,10 @@ namespace tw
             if (keyInfo_.detected && sample.getSampleRate() > 0.0 && sampleRateForEnv > 0.0)
                 activeConfig.pitchSemitones +=
                     (float) (12.0 * std::log2 (sample.getSampleRate() / sampleRateForEnv));
+            // tp103 — CONCERT PITCH. The auto-key promise is "the snapped pad lands on the SAME C as the oscillators";
+            //  the oscillators follow A4, so a pitched (detected) pad moves with them. Beat material (undetected)
+            //  keeps its native-speed playback, exactly as above. 440 → + 0.
+            if (keyInfo_.detected) activeConfig.pitchSemitones += wc::tuningA4Semis();
 
             updatePitchRatio();
 

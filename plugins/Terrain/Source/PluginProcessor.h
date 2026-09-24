@@ -175,6 +175,20 @@ class UnisonSynth : public juce::Synthesiser
 public:
     void setVoiceCap (int cap) noexcept { voiceCap_ = juce::jlimit (1, 96, cap); }
     void setRobinBrain (wc::FlowRobin* b) noexcept { robinBrain_ = b; }   // fb122 — the Wheel
+    void setGlobalSources (const wc::GlobalModSources* g) noexcept { gsrc_ = g; }   // tp103 — MPE zone (the master fan-out)
+
+    /* tp103 — MPE MASTER CHANNEL. juce::Synthesiser applies a pedal / all-notes-off only to the voices on the channel it
+       arrived on, but in MPE the pedal lives on the zone's MASTER channel (1 lower, 16 upper) and every note on a member
+       channel. So a master-channel pedal is also applied to each member channel. MPE off (mask 0): the base, untouched. */
+    void handleController (int midiChannel, int controllerNumber, int controllerValue) override
+    {
+        juce::Synthesiser::handleController (midiChannel, controllerNumber, controllerValue);
+        const uint32_t mask = gsrc_ != nullptr ? gsrc_->mpeMemberMask.load (std::memory_order_relaxed) : 0u;
+        if (mask == 0 || (midiChannel != 1 && midiChannel != 16) || ((mask >> midiChannel) & 1u) != 0) return;
+        if (controllerNumber != 0x40 && controllerNumber != 0x42 && controllerNumber != 0x43) return;
+        for (int c = 1; c <= 16; ++c)
+            if ((mask >> c) & 1u) juce::Synthesiser::handleController (c, controllerNumber, controllerValue);
+    }
 
     // fb-settings — VELOCITY CURVE (Settings → Controllers → Velocity curve). c in [-1, 1]:
     //   out = pow(in, 2^(2.6*c))  (the mod-matrix CRV law) — c<0 softer touch, c>0 harder.
@@ -302,6 +316,10 @@ public:
 
     void allNotesOff (int midiChannel, bool allowTailOff) override
     {
+        {   // tp103 — MPE: all-notes-off on a zone's master channel ends every note of the zone
+            const uint32_t mask = gsrc_ != nullptr ? gsrc_->mpeMemberMask.load (std::memory_order_relaxed) : 0u;
+            if (mask != 0 && (midiChannel == 1 || midiChannel == 16) && ((mask >> midiChannel) & 1u) == 0) midiChannel = 0;
+        }
         heldCount_ = 0;   // never let panic/transport-stop leave stale stack entries
         if (robinBrain_ != nullptr) robinBrain_->allOff();                     // fb122
         juce::Synthesiser::allNotesOff (midiChannel, allowTailOff);
@@ -458,6 +476,7 @@ private:
 
     int voiceCap_ = 32;  // safe default; PluginProcessor pushes the real value per-block
     wc::FlowRobin* robinBrain_ = nullptr;   // fb122 — owned by the processor
+    const wc::GlobalModSources* gsrc_ = nullptr;   // tp103 — owned by the processor
 };
 
 //==============================================================================
@@ -631,6 +650,9 @@ public:
 
     const juce::String getName() const override;
     bool acceptsMidi() const override;
+    // tp103 — MPE. A constant, as JUCE asks (the AU's kAudioUnitProperty_SupportsMPE): Live configures itself
+    //  for an AU that says yes. Whether Terrain READS per-note expression is the Settings toggle (setMpeOn).
+    bool supportsMPE() const override { return true; }
     bool producesMidi() const override;
     bool isMidiEffect() const override;
     double getTailLengthSeconds() const override;
@@ -1300,6 +1322,48 @@ public:
     std::atomic<float> altVis_ { 0.f };
     float midiWheelT_ = 0.f, midiAtT_ = 0.f, midiBendT_ = 0.f;          // audio thread only: the last MIDI value seen
     float midiWheelSm_ = 0.f, midiAtSm_ = 0.f, midiBendSm_ = 0.f;       // audio thread only: 10 ms one-pole at block rate
+
+    // ══ tp103 — EXPRESSION + MIDI SETTINGS (Settings → MIDI & Controllers, Performance → Voice ceiling) ══════════
+    //  Per INSTANCE, saved with the project (a DAW recall restores them; a PRESET load does not touch them —
+    //  see ScopedKeepInstanceMidi): MPE on/off, the MPE bend range, the MIDI channel filter.
+    //  Per PROCESS (every instance, the settings file): A4 (wc::tuningA4Hz) and the voice ceiling.
+    std::atomic<bool>  mpeSetting_ { false };        // the Settings toggle
+    std::atomic<float> mpeBendSetting_ { 48.0f };    // semitones, 1..96
+    std::atomic<int>   midiChannelFilter_ { 0 };     // 0 = Omni, 1..16 = only that channel (ignored while MPE is on)
+    std::atomic<int>   mpeArmedByHost_ { 0 };        // mirror of the audio thread's MCM state (RPN 6), for the page
+    std::atomic<bool>  mpeDisarmReq_ { false };      // the user switched MPE off: drop a host MCM too
+    int   keepInstanceMidi_ = 0;                     // > 0 while a PRESET / Init replays a chunk: the instance's MIDI settings stay
+    // audio thread only
+    float midiSlideT_ = 0.f, midiSlideSm_ = 0.f;                        // CC 74, non-member channels
+    float chBendT_[17] {}, chPressT_[17] {}, chSlideT_[17] {};          // MPE member channels (index = channel)
+    float chBendSm_[17] {}, chPressSm_[17] {}, chSlideSm_[17] {};
+    float polyAtT_[128] {}, polyAtSm_[128] {};                          // poly key pressure per note
+    bool  polyAtAny_ = false;
+    int   rpnMsb_[17] {}, rpnLsb_[17] {};                               // RPN select per channel (127 = null)
+    int   mcmLower_ = 0, mcmUpper_ = 0;                                 // MPE Configuration Message: member counts per zone
+    bool  mcmSeen_ = false;
+    float mpeRangeRt_ = 48.0f, mpeRangeSeen_ = -1.0f;                   // runtime member bend range (RPN 0 may move it)
+    int   lastMpeCh_ = 0;                                               // the newest MPE note's channel (the rack's Slide view)
+    uint32_t mpeMaskLast_ = 0;
+    juce::MidiBuffer midiFiltScratch_;                                  // the channel filter's kept events (reserved in prepareToPlay)
+    uint32_t mpeMemberMaskFor() const noexcept;                         // audio thread: the member channels right now
+public:
+    void  setMpeOn (bool on, float bendSemis, bool persist);
+    void  setMidiChannelFilter (int ch, bool persist);
+    void  setTuningA4 (float hz, bool persist);
+    void  setVoiceCeiling (int voices, bool persist);
+    static int  getVoiceCeiling() noexcept;
+    juce::String getMidiSettingsJson() const;
+    static juce::File midiPrefsFile();
+    void  loadMidiPrefs();                           // constructor: the process-wide values + new-instance defaults
+    void  saveMidiPrefs() const;
+    struct ScopedKeepInstanceMidi
+    {
+        TerrainAudioProcessor& p;
+        explicit ScopedKeepInstanceMidi (TerrainAudioProcessor& pp) : p (pp) { ++p.keepInstanceMidi_; }
+        ~ScopedKeepInstanceMidi() { --p.keepInstanceMidi_; }
+    };
+    float modVizSlide() const noexcept { return globalSrc_.slide.load (std::memory_order_relaxed); }
     float modVizMacro (int k) const noexcept { return (k >= 0 && k < wc::kNumMacros) ? globalSrc_.macro[k].load (std::memory_order_relaxed) : 0.f; }
     float modVizMacroBase (int k) const noexcept { return (k >= 0 && k < wc::kNumMacros) ? macroBaseVis_[k].load (std::memory_order_relaxed) : 0.f; }   // fb565 — the knob, not the modulation
     float modVizWheel() const noexcept      { return globalSrc_.wheel.load (std::memory_order_relaxed); }

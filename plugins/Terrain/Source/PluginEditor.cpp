@@ -4624,6 +4624,40 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (args.size() >= 1) audioProcessor.setStandaloneBpm ((double) args[0]);
                 complete (juce::var{});
             })
+            // ── tp103 — Settings → MIDI & Controllers (MPE, channel, A4) and Performance (voice ceiling). The processor
+            //    owns the values; every setter answers with getMidiSettings' JSON so the page paints what is REAL.
+            //    persist = true: the choice is also the default for the next instance (MidiSettings.json).
+            .withNativeFunction ("getMidiSettings", [this] (const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getMidiSettingsJson()));
+            })
+            .withNativeFunction ("setMpeOn", [this] (const juce::Array<juce::var>& args,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // args[0] = 1 on / 0 off, args[1] = the per-note bend range in semitones (1..96)
+                if (args.size() >= 1)
+                    audioProcessor.setMpeOn ((int) args[0] != 0,
+                                             args.size() >= 2 ? (float) (double) args[1] : audioProcessor.mpeBendSetting_.load(), true);
+                complete (juce::var (audioProcessor.getMidiSettingsJson()));
+            })
+            .withNativeFunction ("setMidiChannel", [this] (const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // args[0] = 0 Omni, 1..16
+                if (args.size() >= 1) audioProcessor.setMidiChannelFilter ((int) args[0], true);
+                complete (juce::var (audioProcessor.getMidiSettingsJson()));
+            })
+            .withNativeFunction ("setA4", [this] (const juce::Array<juce::var>& args,
+                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // args[0] = Hz, 415..466
+                if (args.size() >= 1) audioProcessor.setTuningA4 ((float) (double) args[0], true);
+                complete (juce::var (audioProcessor.getMidiSettingsJson()));
+            })
+            .withNativeFunction ("setVoiceCeiling", [this] (const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // args[0] = voices counting unison, 8..96
+                if (args.size() >= 1) audioProcessor.setVoiceCeiling ((int) args[0], true);
+                complete (juce::var (audioProcessor.getMidiSettingsJson()));
+            })
             // setVelCurve: the velocity curve (Settings → Controllers). args[0] = c in [-1,1], or 999 = FIXED.
             .withNativeFunction("setVelCurve", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -7163,6 +7197,7 @@ void TerrainUiCore::timerCallback()
     js << "window.__mvWheel=" << SF (audioProcessor.modVizWheel(), 3)
        << ";window.__mvAT=" << SF (audioProcessor.modVizAftertouch(), 3)
        << ";window.__mvBend=" << SF (audioProcessor.modVizBend(), 3)
+       << ";window.__mvSlide=" << SF (audioProcessor.modVizSlide(), 3)   // tp103 — CC 74 / MPE slide
        << ";if(window.__mvP2Tick)window.__mvP2Tick();";
     // fb189 — the living underline: all env slots + the LFO bank, one compact call.
     if (! uiQuiet)
