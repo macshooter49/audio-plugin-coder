@@ -152,6 +152,14 @@ const realErrs = errs => errs.filter(e => !/formatOutput/.test(e));   // formatO
              fam: window.__orgView('a').fam, reSets: window.__orgMock.sets.length - n0, wrote: window.__params['SYN_OSC_A_ENGINE'] }; });
   ok(back.away && back.name === 'Violin Section' && back.fam === 'violin' && back.reSets === 0 && Math.abs(back.wrote - 7 / 11) < 1e-6,
      '[8] switching the engine away (Modal) and back keeps the instrument — no re-set, written as 7/11 (the backend cardinality)', JSON.stringify(back));
+  // [9] a modulated Organics knob carries the house mod marks (the ring + the underline), like every other engine's
+  const mod = await p.evaluate(async () => { const sleep = ms => new Promise(r => setTimeout(r, ms)); const out = []; window.__mvMacro = [0.95, 0.05, 0.9, 0.1, 0.8, 0.2, 0.7, 0.3, 0.6]; window.__selMod = { mac: 1 };   // a macro with a value (the _mod_ring_gate recipe)
+    for (const k of ['TONE', 'BODY']) { const id = 'SYN_OSC_A_ORG_' + k, dest = window.__knobDest(id); const el = document.querySelector('.knob[data-syn="' + id + '"]');
+      const t = window.__tiAddSrc({ mac: 1 }, dest); if (t != null && window.__tiSetDepth) window.__tiSetDepth(t, dest, 0.6); await sleep(80); window.__ulTick(); window.__ulTick();
+      const r = el.getBoundingClientRect(); const ul = [...document.querySelectorAll('.sm-ul')].some(u => { if (u.style.display === 'none') return false; const q = u.getBoundingClientRect(); return q.left >= r.left - 2 && q.right <= r.right + 2 && q.top >= r.top - 2 && q.top <= r.bottom + 8; });
+      out.push({ id, dest, rings: [...el.querySelectorAll('circle.sm-ring')].filter(c => getComputedStyle(c).display !== 'none').length, ul, name: window.__destShortName ? window.__destShortName(dest) : '' }); }
+    return out; });
+  ok(mod.every(m => m.rings === 1 && m.ul), '[9] a modulated Organics knob shows the house mod ring and underline (routes to dest 5273 / 5274)', JSON.stringify(mod));
   ok(realErrs(errs).length === 0, '[—] run 1: no page errors', realErrs(errs).join(' | '));
   await b.close();
 
