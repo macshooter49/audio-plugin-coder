@@ -10154,6 +10154,10 @@ static bool modCfgEq (const wc::ModConfig& a, const wc::ModConfig& b) noexcept
                                      // fold and a curve edit... it's not doing anything." Only the global pass and the rack,
                                      // which read the route list each block, ever heard a curve drawn on an existing route.
             return false;
+        // tp101 — the tp96 Pro columns (Pol / aux Inv / aux Crv) are per-voice route fields too: flipping ONLY one of
+        // them compared equal here, so setModConfig never ran and the voices kept the old polarity / aux law.
+        if (x.pol != y.pol || x.auxInv != y.auxInv || x.auxCrv != y.auxCrv)
+            return false;
     }
     for (int i = 0; i < 8; ++i)
         if (a.driftLanes[i] != b.driftLanes[i]) return false;
