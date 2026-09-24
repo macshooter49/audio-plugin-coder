@@ -1,0 +1,14 @@
+[
+ {
+  "id": "test.sine",
+  "name": "Test Sine",
+  "family": "grand",
+  "category": "Keys",
+  "tags": [
+   "test"
+  ],
+  "sizeMB": 0.1,
+  "licence": "CC0",
+  "credit": "Terrain test fixture"
+ }
+]

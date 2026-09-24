@@ -1,0 +1,300 @@
+{
+ "torg": 1,
+ "id": "test.sine",
+ "name": "Test Sine",
+ "family": "grand",
+ "category": "Keys",
+ "credit": "Terrain test fixture (generated)",
+ "polyMax": 32,
+ "hasNoise": false,
+ "hasRelease": true,
+ "artics": [
+  "Sustain"
+ ],
+ "samples": [
+  "0001.flac",
+  "0002.flac",
+  "0003.flac",
+  "0004.flac",
+  "0005.flac"
+ ],
+ "markers": {
+  "lo": 3,
+  "hi": 5,
+  "rrA": 7,
+  "rrB": 9,
+  "rel": 11
+ },
+ "regions": [
+  {
+   "a": 0,
+   "kind": "attack",
+   "smp": 0,
+   "lk": 0,
+   "hk": 59,
+   "lv": 1,
+   "hv": 63,
+   "xfLo": 1,
+   "xfHi": 63,
+   "root": 48,
+   "cents": 0.0,
+   "gainDb": 0.0,
+   "gainNorm": 1.0,
+   "pan": 0,
+   "start": 0,
+   "end": 48000,
+   "onset": 48,
+   "loop": "sustain",
+   "ls": 12000,
+   "le": 35851,
+   "xf": 480,
+   "tailLs": 12000,
+   "tailLe": 35851,
+   "rr": [
+    0,
+    1
+   ],
+   "rand": [
+    0,
+    1
+   ],
+   "grp": 0,
+   "offBy": 0,
+   "offMode": "normal",
+   "env": {
+    "a": 0.002,
+    "h": 0,
+    "d": 0,
+    "s": 1,
+    "r": 0.25
+   },
+   "rtDecay": 0,
+   "velCurve": [
+    [
+     0,
+     0
+    ],
+    [
+     127,
+     1
+    ]
+   ]
+  },
+  {
+   "a": 0,
+   "kind": "attack",
+   "smp": 1,
+   "lk": 0,
+   "hk": 59,
+   "lv": 64,
+   "hv": 127,
+   "xfLo": 64,
+   "xfHi": 127,
+   "root": 48,
+   "cents": 0.0,
+   "gainDb": 0.0,
+   "gainNorm": 1.0,
+   "pan": 0,
+   "start": 0,
+   "end": 48000,
+   "onset": 48,
+   "loop": "sustain",
+   "ls": 12000,
+   "le": 35851,
+   "xf": 480,
+   "tailLs": 12000,
+   "tailLe": 35851,
+   "rr": [
+    0,
+    1
+   ],
+   "rand": [
+    0,
+    1
+   ],
+   "grp": 0,
+   "offBy": 0,
+   "offMode": "normal",
+   "env": {
+    "a": 0.002,
+    "h": 0,
+    "d": 0,
+    "s": 1,
+    "r": 0.25
+   },
+   "rtDecay": 0,
+   "velCurve": [
+    [
+     0,
+     0
+    ],
+    [
+     127,
+     1
+    ]
+   ]
+  },
+  {
+   "a": 0,
+   "kind": "attack",
+   "smp": 2,
+   "lk": 60,
+   "hk": 127,
+   "lv": 1,
+   "hv": 127,
+   "xfLo": 1,
+   "xfHi": 127,
+   "root": 72,
+   "cents": 0.0,
+   "gainDb": 0.0,
+   "gainNorm": 1.0,
+   "pan": 0,
+   "start": 0,
+   "end": 48000,
+   "onset": 48,
+   "loop": "sustain",
+   "ls": 12000,
+   "le": 36034,
+   "xf": 480,
+   "tailLs": 12000,
+   "tailLe": 36034,
+   "rr": [
+    0,
+    2
+   ],
+   "rand": [
+    0,
+    1
+   ],
+   "grp": 0,
+   "offBy": 0,
+   "offMode": "normal",
+   "env": {
+    "a": 0.002,
+    "h": 0,
+    "d": 0,
+    "s": 1,
+    "r": 0.25
+   },
+   "rtDecay": 0,
+   "velCurve": [
+    [
+     0,
+     0
+    ],
+    [
+     127,
+     1
+    ]
+   ]
+  },
+  {
+   "a": 0,
+   "kind": "attack",
+   "smp": 3,
+   "lk": 60,
+   "hk": 127,
+   "lv": 1,
+   "hv": 127,
+   "xfLo": 1,
+   "xfHi": 127,
+   "root": 72,
+   "cents": 0.0,
+   "gainDb": 0.0,
+   "gainNorm": 1.0,
+   "pan": 0,
+   "start": 0,
+   "end": 48000,
+   "onset": 48,
+   "loop": "sustain",
+   "ls": 12000,
+   "le": 36034,
+   "xf": 480,
+   "tailLs": 12000,
+   "tailLe": 36034,
+   "rr": [
+    1,
+    2
+   ],
+   "rand": [
+    0,
+    1
+   ],
+   "grp": 0,
+   "offBy": 0,
+   "offMode": "normal",
+   "env": {
+    "a": 0.002,
+    "h": 0,
+    "d": 0,
+    "s": 1,
+    "r": 0.25
+   },
+   "rtDecay": 0,
+   "velCurve": [
+    [
+     0,
+     0
+    ],
+    [
+     127,
+     1
+    ]
+   ]
+  },
+  {
+   "a": 0,
+   "kind": "release",
+   "smp": 4,
+   "lk": 0,
+   "hk": 127,
+   "lv": 1,
+   "hv": 127,
+   "xfLo": 1,
+   "xfHi": 127,
+   "root": 60,
+   "cents": 0.0,
+   "gainDb": 0.0,
+   "gainNorm": 1.0,
+   "pan": 0,
+   "start": 0,
+   "end": 19200,
+   "onset": 48,
+   "loop": "no_loop",
+   "ls": 0,
+   "le": 0,
+   "xf": 0,
+   "tailLs": 0,
+   "tailLe": 0,
+   "rr": [
+    0,
+    1
+   ],
+   "rand": [
+    0,
+    1
+   ],
+   "grp": 0,
+   "offBy": 0,
+   "offMode": "normal",
+   "env": {
+    "a": 0.002,
+    "h": 0,
+    "d": 0,
+    "s": 1,
+    "r": 0.25
+   },
+   "rtDecay": 0,
+   "velCurve": [
+    [
+     0,
+     0
+    ],
+    [
+     127,
+     1
+    ]
+   ]
+  }
+ ]
+}
