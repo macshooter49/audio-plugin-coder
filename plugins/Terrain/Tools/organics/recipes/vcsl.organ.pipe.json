@@ -1,0 +1,30 @@
+{
+ "id": "vcsl.organ.pipe",
+ "name": "Pipe Organ",
+ "family": "organ",
+ "category": "Organs",
+ "tags": [
+  "organ",
+  "church",
+  "pipe"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Loud",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Pipe Organ - Keyswitch.sfz",
+   "sw": "100",
+   "sustaining": true
+  },
+  {
+   "name": "Quiet",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Pipe Organ - Keyswitch.sfz",
+   "sw": "101",
+   "sustaining": true
+  }
+ ]
+}

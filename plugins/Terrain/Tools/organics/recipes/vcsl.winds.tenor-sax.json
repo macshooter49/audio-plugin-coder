@@ -1,0 +1,35 @@
+{
+ "id": "vcsl.winds.tenor-sax",
+ "name": "Tenor Sax (VCSL)",
+ "family": "sax",
+ "category": "Winds",
+ "tags": [
+  "sax",
+  "tenor",
+  "reed"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Vibrato",
+   "sfz": "VCSL/Aerophones/Reed Aerophones/Tenor Saxophone - Keyswitch.sfz",
+   "sw": "36",
+   "sustaining": true
+  },
+  {
+   "name": "Non-Vibrato",
+   "sfz": "VCSL/Aerophones/Reed Aerophones/Tenor Saxophone - Keyswitch.sfz",
+   "sw": "37",
+   "sustaining": true
+  },
+  {
+   "name": "Staccato",
+   "sfz": "VCSL/Aerophones/Reed Aerophones/Tenor Saxophone - Keyswitch.sfz",
+   "sw": "38"
+  }
+ ]
+}

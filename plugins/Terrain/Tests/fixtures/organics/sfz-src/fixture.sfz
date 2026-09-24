@@ -1,0 +1,25 @@
+// Organics compiler round-trip fixture (tp104). Two articulations by keyswitch, velocity layers with
+// an authored loop, sequential round robin, a release trigger, #define/#include, default_path, note names.
+#include "inc/defs.sfzh"
+<control>
+default_path=smp/
+set_cc64=0
+
+<global>
+sw_lokey=c1 sw_hikey=c#1 sw_default=c1
+ampeg_release=0.3
+
+<master>
+sw_last=c1 sw_label=Sustain
+<group> loop_mode=loop_continuous loop_start=$LOOPS loop_end=$LOOPE
+<region> sample=sus_lo.$EXT lokey=48 hikey=71 pitch_keycenter=c4 lovel=1 hivel=63
+<region> sample=sus_hi.$EXT lokey=48 hikey=71 pitch_keycenter=c4 lovel=64 hivel=127 volume=-3
+
+<master>
+sw_last=c#1 sw_label=Staccato
+<group> seq_length=2 amp_velcurve_127=1 amp_velcurve_1=0.2
+<region> seq_position=1 sample=stac_rr1.$EXT lokey=48 hikey=71 pitch_keycenter=60 tune=-10
+<region> seq_position=2 sample=stac_rr2.$EXT lokey=48 hikey=71 pitch_keycenter=60 tune=10
+
+<master>
+#include "inc/release.sfzh"

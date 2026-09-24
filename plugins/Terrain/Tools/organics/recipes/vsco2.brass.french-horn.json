@@ -1,0 +1,33 @@
+{
+ "id": "vsco2.brass.french-horn",
+ "name": "French Horn",
+ "family": "horn",
+ "category": "Brass",
+ "tags": [
+  "brass",
+  "horn",
+  "orchestral",
+  "soft brass"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VSCO-2-CE/FHornSus.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Staccato",
+   "sfz": "VSCO-2-CE/FHornStac.sfz"
+  },
+  {
+   "name": "Muted",
+   "sfz": "VSCO-2-CE/FHornMute.sfz",
+   "sustaining": true
+  }
+ ]
+}

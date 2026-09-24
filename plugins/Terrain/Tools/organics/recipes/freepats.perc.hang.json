@@ -1,0 +1,23 @@
+{
+ "id": "freepats.perc.hang",
+ "name": "Hang Drum",
+ "family": "marimba",
+ "category": "Percussion",
+ "tags": [
+  "hang",
+  "handpan",
+  "d minor",
+  "meditative"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats project (Andrea Biasior / FreePats), CC0",
+ "author": "Andrea Biasior / FreePats",
+ "url": "https://freepats.zenvoid.org/",
+ "licenceDir": "FreePats/Hang-D-minor-SFZ+FLAC-20220330/Hang-D-minor SFZ+FLAC-20220330",
+ "artics": [
+  {
+   "name": "Normal",
+   "sfz": "FreePats/Hang-D-minor-SFZ+FLAC-20220330/Hang-D-minor SFZ+FLAC-20220330/Hang-D-minor 20220330.sfz"
+  }
+ ]
+}

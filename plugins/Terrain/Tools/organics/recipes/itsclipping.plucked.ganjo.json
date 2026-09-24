@@ -1,0 +1,23 @@
+{
+ "id": "itsclipping.plucked.ganjo",
+ "name": "Ganjo",
+ "family": "guitar",
+ "category": "Plucked",
+ "tags": [
+  "banjo",
+  "guitar-banjo",
+  "folk",
+  "twang"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Ganjo by itsclipping, CC0",
+ "author": "itsclipping",
+ "url": "https://github.com/sfzinstruments/ganjo",
+ "licenceDir": "sfzinstruments/ganjo",
+ "artics": [
+  {
+   "name": "Plucked",
+   "sfz": "sfzinstruments/ganjo/ganjo.sfz"
+  }
+ ]
+}

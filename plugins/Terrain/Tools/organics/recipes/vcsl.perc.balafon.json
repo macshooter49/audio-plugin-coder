@@ -1,0 +1,31 @@
+{
+ "id": "vcsl.perc.balafon",
+ "name": "Balafon",
+ "family": "marimba",
+ "category": "Percussion",
+ "tags": [
+  "balafon",
+  "african",
+  "wood",
+  "mallets"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Traditional",
+   "sfz": "VCSL/Idiophones/Struck Idiophones/Balafon - Traditional Mallet.sfz"
+  },
+  {
+   "name": "Hard",
+   "sfz": "VCSL/Idiophones/Struck Idiophones/Balafon - Hard Mallet.sfz"
+  },
+  {
+   "name": "Soft",
+   "sfz": "VCSL/Idiophones/Struck Idiophones/Balafon - Soft Mallet.sfz"
+  }
+ ]
+}

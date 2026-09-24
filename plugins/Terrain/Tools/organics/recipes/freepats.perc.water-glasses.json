@@ -1,0 +1,23 @@
+{
+ "id": "freepats.perc.water-glasses",
+ "name": "Water Glasses",
+ "family": "glock",
+ "category": "Percussion",
+ "tags": [
+  "glass",
+  "tuned percussion",
+  "bells",
+  "delicate"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats project (FreePats), CC0",
+ "author": "FreePats",
+ "url": "https://freepats.zenvoid.org/",
+ "licenceDir": "FreePats/Glass-SFZ+FLAC-20191227/Glass-SFZ+FLAC-20191227",
+ "artics": [
+  {
+   "name": "Struck",
+   "sfz": "FreePats/Glass-SFZ+FLAC-20191227/Glass-SFZ+FLAC-20191227/Glass-20191227.sfz"
+  }
+ ]
+}

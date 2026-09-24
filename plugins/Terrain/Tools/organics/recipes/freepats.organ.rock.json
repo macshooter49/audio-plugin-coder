@@ -1,0 +1,24 @@
+{
+ "id": "freepats.organ.rock",
+ "name": "Rock Organ",
+ "family": "tonewheel",
+ "category": "Organs",
+ "tags": [
+  "organ",
+  "rock",
+  "tonewheel",
+  "percussive"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats project (setBfree render), CC0",
+ "author": "setBfree render",
+ "url": "https://freepats.zenvoid.org/",
+ "licenceDir": "FreePats/RockOrganEmulation-SFZ-20190715/RockOrganEmulation-SFZ-20190715",
+ "artics": [
+  {
+   "name": "Rock",
+   "sfz": "FreePats/RockOrganEmulation-SFZ-20190715/RockOrganEmulation-SFZ-20190715/RockOrganEmulation-20190715.sfz",
+   "sustaining": true
+  }
+ ]
+}

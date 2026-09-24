@@ -1,0 +1,2 @@
+<group> trigger=release rt_decay=6 volume=-6
+<region> sample=rel.$EXT lokey=c3 hikey=b4 pitch_keycenter=c4

@@ -1,0 +1,23 @@
+{
+ "id": "vcsl.bells.hand-chimes",
+ "name": "Hand Chimes",
+ "family": "glock",
+ "category": "Mallets & Bells",
+ "tags": [
+  "bells",
+  "chimes",
+  "celesta-like",
+  "soft"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Normal",
+   "sfz": "VCSL/Idiophones/Struck Idiophones/Hand Chimes.sfz"
+  }
+ ]
+}

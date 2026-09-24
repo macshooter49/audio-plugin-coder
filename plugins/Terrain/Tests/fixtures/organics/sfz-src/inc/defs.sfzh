@@ -1,0 +1,4 @@
+// shared definitions (exercises #include + #define)
+#define $LOOPS 9261
+#define $LOOPE 26116
+#define $EXT flac

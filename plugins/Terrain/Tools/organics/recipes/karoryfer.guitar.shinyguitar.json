@@ -1,0 +1,84 @@
+{
+ "id": "karoryfer.guitar.shinyguitar",
+ "name": "Archtop Guitar",
+ "family": "guitar",
+ "category": "Plucked",
+ "tags": [
+  "guitar",
+  "archtop",
+  "jazz",
+  "acoustic",
+  "deep rr"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Shinyguitar, CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.shinyguitar",
+ "licenceDir": "sfzinstruments/karoryfer.shinyguitar",
+ "defines": {
+  "$sample_dir": "../Samples"
+ },
+ "noise": [
+  "_release_"
+ ],
+ "artics": [
+  {
+   "name": "Acoustic",
+   "sfz": [
+    "sfzinstruments/karoryfer.shinyguitar/Programs/acoustic_one.sfz",
+    "sfzinstruments/karoryfer.shinyguitar/Programs/acoustic_release.sfz"
+   ],
+   "cc": {
+    "100": 127,
+    "106": 64,
+    "107": 0
+   }
+  }
+ ],
+ "defaultPath": "../Samples/",
+ "minLayers": 4,
+ "minRR": 2,
+ "budgetSteps": [
+  [
+   "cap",
+   8
+  ],
+  [
+   "cap",
+   6
+  ],
+  [
+   "rr",
+   3
+  ],
+  [
+   "cap",
+   5
+  ],
+  [
+   "rr",
+   2
+  ],
+  [
+   "cap",
+   4.5
+  ],
+  [
+   "cap",
+   4
+  ],
+  [
+   "cap",
+   3.5
+  ],
+  [
+   "cap",
+   3
+  ],
+  [
+   "cap",
+   2.5
+  ]
+ ],
+ "velPowerMin": 0.9
+}

@@ -1,0 +1,23 @@
+{
+ "id": "versilian.harp.etherealwinds",
+ "name": "Celtic Harp",
+ "family": "harp",
+ "category": "Plucked",
+ "tags": [
+  "harp",
+  "lever harp",
+  "celtic",
+  "chromatic"
+ ],
+ "licence": "CC-BY-4.0",
+ "credit": "Etherealwinds Harp II: CE by Versilian Studios LLC, CC BY 4.0, modified by Waves Crate",
+ "author": "Versilian Studios LLC",
+ "url": "https://versilian-studios.com/etherealwinds-harp/",
+ "licenceDir": "Versilian-EtherealwindsHarpIICE",
+ "artics": [
+  {
+   "name": "Normal",
+   "sfz": "Versilian-EtherealwindsHarpIICE/Harp_Normal.sfz"
+  }
+ ]
+}

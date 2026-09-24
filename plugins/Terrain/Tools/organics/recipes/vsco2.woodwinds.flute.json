@@ -1,0 +1,42 @@
+{
+ "id": "vsco2.woodwinds.flute",
+ "name": "Flute",
+ "family": "flute",
+ "category": "Winds",
+ "tags": [
+  "woodwind",
+  "orchestral",
+  "solo",
+  "breath"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Vibrato",
+   "sfz": "VSCO-2-CE/Flute-KS.sfz",
+   "sw": "c#2",
+   "sustaining": true
+  },
+  {
+   "name": "Non-Vibrato",
+   "sfz": "VSCO-2-CE/Flute-KS.sfz",
+   "sw": "c2",
+   "sustaining": true
+  },
+  {
+   "name": "Expressive",
+   "sfz": "VSCO-2-CE/Flute-KS.sfz",
+   "sw": "d2",
+   "sustaining": true
+  },
+  {
+   "name": "Staccato",
+   "sfz": "VSCO-2-CE/Flute-KS.sfz",
+   "sw": "d#2"
+  }
+ ]
+}

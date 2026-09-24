@@ -1,0 +1,24 @@
+{
+ "id": "freepats.voice.synth-choir",
+ "name": "Synth Choir",
+ "family": "choir",
+ "category": "Choir & Voice",
+ "tags": [
+  "choir",
+  "pad",
+  "synthetic",
+  "vintage gm"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats project (ZynAddSubFX render), CC0",
+ "author": "ZynAddSubFX render",
+ "url": "https://freepats.zenvoid.org/",
+ "licenceDir": "FreePats/SynthPadChoir-SFZ+FLAC-20200516/SynthPadChoir SFZ+FLAC-20200516",
+ "artics": [
+  {
+   "name": "Choir",
+   "sfz": "FreePats/SynthPadChoir-SFZ+FLAC-20200516/SynthPadChoir SFZ+FLAC-20200516/SynthPadChoir 20200516.sfz",
+   "sustaining": true
+  }
+ ]
+}

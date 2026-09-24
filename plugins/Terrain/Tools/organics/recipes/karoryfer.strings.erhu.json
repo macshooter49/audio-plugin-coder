@@ -1,0 +1,37 @@
+{
+ "id": "karoryfer.strings.erhu",
+ "name": "Erhu",
+ "family": "violin",
+ "category": "Strings",
+ "tags": [
+  "erhu",
+  "chinese",
+  "world",
+  "bowed"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer aliexpress erhu, CC0",
+ "url": "https://github.com/sfzinstruments/aliexpress-erhu",
+ "licenceDir": "sfzinstruments/aliexpress-erhu",
+ "artics": [
+  {
+   "name": "Long",
+   "sfz": "sfzinstruments/aliexpress-erhu/Programs/02-erhu_long.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Short",
+   "sfz": "sfzinstruments/aliexpress-erhu/Programs/03-erhu_short.sfz"
+  },
+  {
+   "name": "Sul Tasto",
+   "sfz": "sfzinstruments/aliexpress-erhu/Programs/05-erhu_sul_tasto.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Marcato",
+   "sfz": "sfzinstruments/aliexpress-erhu/Programs/04-erhu_marcato.sfz"
+  }
+ ]
+}

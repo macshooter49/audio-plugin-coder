@@ -1,0 +1,38 @@
+{
+ "id": "vsco2.strings.contrabass",
+ "name": "Contrabass",
+ "family": "bass",
+ "category": "Strings",
+ "tags": [
+  "strings",
+  "solo",
+  "double bass",
+  "low"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Vibrato",
+   "sfz": "VSCO-2-CE/ContrabassSusVB.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Non-Vibrato",
+   "sfz": "VSCO-2-CE/ContrabassSusNV.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Tremolo",
+   "sfz": "VSCO-2-CE/ContrabassTrem.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Pizzicato",
+   "sfz": "VSCO-2-CE/ContrabassPizz.sfz"
+  }
+ ]
+}

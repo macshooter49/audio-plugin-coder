@@ -1,0 +1,33 @@
+{
+ "id": "karoryfer.strings.meatbass",
+ "name": "Upright Bass",
+ "family": "bass",
+ "category": "Strings",
+ "tags": [
+  "double bass",
+  "upright",
+  "jazz",
+  "arco",
+  "pizzicato"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Meatbass (1958 Otto Rubner double bass), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.meatbass",
+ "licenceDir": "sfzinstruments/karoryfer.meatbass",
+ "defines": {
+  "$sample_dir": "../Samples"
+ },
+ "artics": [
+  {
+   "name": "Pizzicato",
+   "sfz": "sfzinstruments/karoryfer.meatbass/Programs/04_pizz.sfz"
+  },
+  {
+   "name": "Arco",
+   "sfz": "sfzinstruments/karoryfer.meatbass/Programs/02_arco_3vel.sfz",
+   "sustaining": true
+  }
+ ],
+ "velPowerMin": 0.6
+}

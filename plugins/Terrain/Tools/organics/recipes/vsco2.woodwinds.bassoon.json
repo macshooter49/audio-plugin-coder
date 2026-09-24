@@ -1,0 +1,33 @@
+{
+ "id": "vsco2.woodwinds.bassoon",
+ "name": "Bassoon",
+ "family": "clarinet",
+ "category": "Winds",
+ "tags": [
+  "woodwind",
+  "double reed",
+  "low",
+  "orchestral"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Studios VSCO 2 Community Edition, CC0",
+ "author": "Versilian Studios LLC (Sam Gossner)",
+ "url": "https://github.com/sgossner/VSCO-2-CE",
+ "licenceDir": "VSCO-2-CE",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VSCO-2-CE/BassoonSus.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Vibrato",
+   "sfz": "VSCO-2-CE/BassoonVib.sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Staccato",
+   "sfz": "VSCO-2-CE/BassoonStac.sfz"
+  }
+ ]
+}

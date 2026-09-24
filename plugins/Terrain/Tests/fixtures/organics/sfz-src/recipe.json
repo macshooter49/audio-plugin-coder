@@ -1,0 +1,16 @@
+{
+ "id": "test.sfzsrc",
+ "name": "SFZ Fixture",
+ "family": "grand",
+ "category": "Keys",
+ "tags": ["test"],
+ "licence": "CC0-1.0",
+ "credit": "Terrain compiler fixture (generated)",
+ "author": "Terrain",
+ "url": "generated",
+ "licenceDir": ".",
+ "artics": [
+  {"name": "Sustain", "sfz": "fixture.sfz", "sw": "c1", "sustaining": true},
+  {"name": "Staccato", "sfz": "fixture.sfz", "sw": "c#1"}
+ ]
+}

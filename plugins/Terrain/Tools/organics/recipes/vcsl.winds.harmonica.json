@@ -1,0 +1,37 @@
+{
+ "id": "vcsl.winds.harmonica",
+ "name": "Harmonica",
+ "family": "clarinet",
+ "category": "Winds",
+ "tags": [
+  "harmonica",
+  "blues",
+  "folk",
+  "reed"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Normal",
+   "sfz": "VCSL/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C - Keyswitch.sfz",
+   "sw": "48",
+   "sustaining": true
+  },
+  {
+   "name": "Vibrato",
+   "sfz": "VCSL/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C - Keyswitch.sfz",
+   "sw": "49",
+   "sustaining": true
+  },
+  {
+   "name": "Soft",
+   "sfz": "VCSL/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C - Keyswitch.sfz",
+   "sw": "50",
+   "sustaining": true
+  }
+ ]
+}

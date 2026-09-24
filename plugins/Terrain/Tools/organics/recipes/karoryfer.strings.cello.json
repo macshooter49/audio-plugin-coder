@@ -1,0 +1,32 @@
+{
+ "id": "karoryfer.strings.cello",
+ "name": "Solo Cello",
+ "family": "cello",
+ "category": "Strings",
+ "tags": [
+  "strings",
+  "solo",
+  "cello",
+  "bowed",
+  "deep rr"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer x bigcat cello (played by Kamila Borowiak), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer-bigcat.cello",
+ "licenceDir": "sfzinstruments/karoryfer-bigcat.cello",
+ "artics": [
+  {
+   "name": "Arco",
+   "sfz": "sfzinstruments/karoryfer-bigcat.cello/Programs/01- Bowed (velocity layer).sfz",
+   "sustaining": true
+  },
+  {
+   "name": "Pizzicato",
+   "sfz": "sfzinstruments/karoryfer-bigcat.cello/Programs/03- Plucked.sfz"
+  }
+ ],
+ "dropMatch": [
+  "/noises/"
+ ]
+}

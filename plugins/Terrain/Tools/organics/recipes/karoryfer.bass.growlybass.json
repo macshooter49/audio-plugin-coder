@@ -1,0 +1,28 @@
+{
+ "id": "karoryfer.bass.growlybass",
+ "name": "Jazz Bass",
+ "family": "guitar",
+ "category": "Plucked",
+ "tags": [
+  "bass",
+  "electric bass",
+  "fingerstyle"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Growlybass, CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.growlybass",
+ "licenceDir": "sfzinstruments/karoryfer.growlybass",
+ "noise": [
+  "noise",
+  "scrape",
+  "release"
+ ],
+ "artics": [
+  {
+   "name": "Clean",
+   "sfz": "sfzinstruments/karoryfer.growlybass/growlybass_clean.sfz"
+  }
+ ],
+ "velPowerMin": 0.4
+}

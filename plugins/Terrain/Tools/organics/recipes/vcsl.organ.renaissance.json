@@ -1,0 +1,43 @@
+{
+ "id": "vcsl.organ.renaissance",
+ "name": "Chamber Organ",
+ "family": "organ",
+ "category": "Organs",
+ "tags": [
+  "organ",
+  "renaissance",
+  "chamber",
+  "flue"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "8'",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Renaissance Organ - Keyswitch.sfz",
+   "sw": "94",
+   "sustaining": true
+  },
+  {
+   "name": "4'+8'",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Renaissance Organ - Keyswitch.sfz",
+   "sw": "96",
+   "sustaining": true
+  },
+  {
+   "name": "4'",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Renaissance Organ - Keyswitch.sfz",
+   "sw": "93",
+   "sustaining": true
+  },
+  {
+   "name": "Full",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Renaissance Organ - Keyswitch.sfz",
+   "sw": "95",
+   "sustaining": true
+  }
+ ]
+}

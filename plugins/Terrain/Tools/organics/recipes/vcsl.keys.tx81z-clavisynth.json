@@ -1,0 +1,24 @@
+{
+ "id": "vcsl.keys.tx81z-clavisynth",
+ "name": "Clavisynth",
+ "family": "clav",
+ "category": "Keys",
+ "tags": [
+  "clav",
+  "fm",
+  "funk"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "extendTail": 3,
+ "artics": [
+  {
+   "name": "Clavisynth",
+   "sfz": "VCSL/Electrophones/TX81Z - Keyswitch.sfz",
+   "sw": "114"
+  }
+ ]
+}

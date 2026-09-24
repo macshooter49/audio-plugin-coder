@@ -1,0 +1,30 @@
+{
+ "id": "mtg.sax.tenor",
+ "name": "Tenor Sax",
+ "family": "sax",
+ "category": "Winds",
+ "tags": [
+  "sax",
+  "reed",
+  "jazz",
+  "tenor"
+ ],
+ "licence": "CC-BY-4.0",
+ "author": "Music Technology Group, Universitat Pompeu Fabra (freesound.org/people/MTG); SFZ by kinwie",
+ "url": "https://github.com/sfzinstruments/MTG.SoloSax",
+ "licenceDir": "sfzinstruments/MTG.SoloSax",
+ "credit": "MTG Solo Saxophones (Tenor Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate",
+ "noise": [
+  "breath",
+  "key",
+  "click",
+  "noise"
+ ],
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "sfzinstruments/MTG.SoloSax/MTG Solo Saxophones/MTG Tenor Sax.sfz",
+   "sustaining": true
+  }
+ ]
+}

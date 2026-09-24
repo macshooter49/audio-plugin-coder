@@ -1,0 +1,55 @@
+{
+ "id": "karoryfer.sax.bear",
+ "name": "Vintage Bari Sax",
+ "family": "sax",
+ "category": "Winds",
+ "tags": [
+  "sax",
+  "baritone",
+  "vintage",
+  "1926 conn",
+  "deep rr"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Bear Sax (1926 Conn baritone), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.bear-sax",
+ "licenceDir": "sfzinstruments/karoryfer.bear-sax",
+ "dynCC": 1,
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "sfzinstruments/karoryfer.bear-sax/Programs/2-solo-poly.sfz",
+   "sw": "24",
+   "sustaining": true,
+   "includeUnswitched": false
+  },
+  {
+   "name": "Marcato",
+   "sfz": "sfzinstruments/karoryfer.bear-sax/Programs/2-solo-poly.sfz",
+   "sw": "25",
+   "includeUnswitched": false
+  },
+  {
+   "name": "Staccato",
+   "sfz": "sfzinstruments/karoryfer.bear-sax/Programs/2-solo-poly.sfz",
+   "sw": "26",
+   "includeUnswitched": false
+  },
+  {
+   "name": "Growl",
+   "sfz": "sfzinstruments/karoryfer.bear-sax/Programs/2-solo-poly.sfz",
+   "sw": "27",
+   "sustaining": true,
+   "includeUnswitched": false
+  },
+  {
+   "name": "Subtone",
+   "sfz": "sfzinstruments/karoryfer.bear-sax/Programs/2-solo-poly.sfz",
+   "sw": "28",
+   "sustaining": true,
+   "includeUnswitched": false
+  }
+ ],
+ "velPowerMin": 0.8
+}

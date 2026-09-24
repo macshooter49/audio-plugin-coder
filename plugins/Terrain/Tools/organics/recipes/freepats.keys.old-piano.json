@@ -1,0 +1,26 @@
+{
+ "id": "freepats.keys.old-piano",
+ "name": "Old Upright",
+ "family": "upright",
+ "category": "Keys",
+ "tags": [
+  "piano",
+  "honky-tonk",
+  "player piano",
+  "character"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "FreePats Old Piano FB (Piotr Barcz), CC0",
+ "author": "Piotr Barcz / FreePats project",
+ "url": "https://freepats.zenvoid.org/Piano/",
+ "licenceDir": "FreePats/PianoFB-SFZ+FLAC-20200401/PianoFB SFZ+FLAC-20200401",
+ "piano": true,
+ "budgetMB": 64,
+ "capScale": true,
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "FreePats/PianoFB-SFZ+FLAC-20200401/PianoFB SFZ+FLAC-20200401/PianoFB 20200401.sfz"
+  }
+ ]
+}

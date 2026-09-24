@@ -1,0 +1,36 @@
+{
+ "id": "vcsl.winds.alto-recorder",
+ "name": "Alto Recorder",
+ "family": "flute",
+ "category": "Winds",
+ "tags": [
+  "recorder",
+  "baroque",
+  "breathy",
+  "flute"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Baroque Alto Recorder - Keyswitch.sfz",
+   "sw": "48",
+   "sustaining": true
+  },
+  {
+   "name": "Vibrato",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Baroque Alto Recorder - Keyswitch.sfz",
+   "sw": "49",
+   "sustaining": true
+  },
+  {
+   "name": "Staccato",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Baroque Alto Recorder - Keyswitch.sfz",
+   "sw": "50"
+  }
+ ]
+}

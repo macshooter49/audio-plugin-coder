@@ -1,0 +1,23 @@
+{
+ "id": "vcsl.mallets.kalimba",
+ "name": "Kalimba",
+ "family": "kalimba",
+ "category": "Mallets & Bells",
+ "tags": [
+  "kalimba",
+  "thumb piano",
+  "african",
+  "tine"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Kenya",
+   "sfz": "VCSL/Idiophones/Plucked Idiophones/Kalimba, Kenya.sfz"
+  }
+ ]
+}

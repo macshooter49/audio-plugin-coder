@@ -1,0 +1,26 @@
+{
+ "id": "vcsl.keys.upright-yamaha",
+ "name": "Upright Piano",
+ "family": "upright",
+ "category": "Keys",
+ "tags": [
+  "piano",
+  "upright",
+  "felt",
+  "lo-fi"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "piano": true,
+ "budgetMB": 64,
+ "capScale": true,
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VCSL/Chordophones/Zithers/Upright Piano, Yamaha.sfz"
+  }
+ ]
+}
