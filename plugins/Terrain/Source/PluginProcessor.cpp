@@ -10528,6 +10528,24 @@ void TerrainAudioProcessor::renderTestTone (juce::AudioBuffer<float>& b) noexcep
 void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+    // fb488 — DSP load meter (see PluginProcessor.h). Scope guard so every return path counts.
+    // tp-cpu — FIRST statement of processBlock, so the header CPU meter (Settings → Performance) times
+    // the WHOLE block: the tail flush, the import fence, the test-tone mix and every early return
+    // included. It used to start after the flush/viz checks. Its destructor runs last (declared first).
+    struct DspClock
+    {
+        TerrainAudioProcessor& p; int n; long long t0;
+        DspClock (TerrainAudioProcessor& pp, int nn)
+            : p (pp), n (nn), t0 ((long long) juce::Time::getHighResolutionTicks())
+        { p.dspT0_ = t0; p.dspTA_ = t0;
+          if (nn > 0) { p.dspLastBlk_.store (nn, std::memory_order_relaxed);
+                        p.dspBlocks_.fetch_add (1, std::memory_order_relaxed); } }   // fb492
+        ~DspClock()
+        {
+            p.dspTicks_.fetch_add ((long long) juce::Time::getHighResolutionTicks() - t0, std::memory_order_relaxed);
+            p.dspSamples_.fetch_add (n, std::memory_order_relaxed);
+        }
+    } dspClock_ { *this, buffer.getNumSamples() };
     // fb636 M2 — the import tables' grace fence (importGraceOver): odd while this block runs. Before
     // any return, so every block that can load an import table is counted. Two atomic increments.
     struct AudioSeqScope
@@ -10546,21 +10564,6 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const auto numChannels = buffer.getNumChannels();
 
     if (numSamples == 0) return;
-
-    // fb488 — DSP load meter (see PluginProcessor.h). Scope guard so every return path counts.
-    struct DspClock
-    {
-        TerrainAudioProcessor& p; int n; long long t0;
-        DspClock (TerrainAudioProcessor& pp, int nn)
-            : p (pp), n (nn), t0 ((long long) juce::Time::getHighResolutionTicks())
-        { p.dspT0_ = t0; p.dspTA_ = t0; p.dspLastBlk_.store (nn, std::memory_order_relaxed);
-          p.dspBlocks_.fetch_add (1, std::memory_order_relaxed); }   // fb492
-        ~DspClock()
-        {
-            p.dspTicks_.fetch_add ((long long) juce::Time::getHighResolutionTicks() - t0, std::memory_order_relaxed);
-            p.dspSamples_.fetch_add (n, std::memory_order_relaxed);
-        }
-    } dspClock_ { *this, numSamples };
 
     // tp100 — Settings → Audio & MIDI → Test audio. A scope guard (like dspClock_): its destructor runs on
     // EVERY return path, after the buffer is final, and mixes the chime on top. Idle = one atomic load.
