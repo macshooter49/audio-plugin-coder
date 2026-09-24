@@ -10,11 +10,11 @@
   "baritone",
   "low"
  ],
- "licence": "CC-BY-4.0",
- "author": "Music Technology Group, Universitat Pompeu Fabra (freesound.org/people/MTG); SFZ by kinwie",
+ "licence": "CC-BY-3.0",
+ "author": "Music Technology Group, Universitat Pompeu Fabra (good-sounds.org; uploaded by freesound.org/people/MTG, CC BY 3.0 on every sound); trimmed/looped SFZ by kinwie (sfzinstruments, CC BY 4.0)",
  "url": "https://github.com/sfzinstruments/MTG.SoloSax",
  "licenceDir": "sfzinstruments/MTG.SoloSax",
- "credit": "MTG Solo Saxophones (Baritone Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate",
+ "credit": "MTG Solo Saxophones (Baritone Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate",
  "noise": [
   "breath",
   "key",
@@ -27,5 +27,9 @@
    "sfz": "sfzinstruments/MTG.SoloSax/MTG Solo Saxophones/MTG Baritone Sax.sfz",
    "sustaining": true
   }
+ ],
+ "provenanceMap": "provenance/mtg-solosax-freesound.csv",
+ "dropMatch": [
+  "/(alt|ten|sop|bar)_[bk]_\\d+\\."
  ]
 }

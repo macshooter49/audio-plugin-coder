@@ -30,22 +30,6 @@
   "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate"
  },
  {
-  "id": "gsullivan.ep.cp80",
-  "name": "Electric Grand CP",
-  "family": "rhodes",
-  "category": "Keys",
-  "tags": [
-   "electric grand",
-   "cp80",
-   "vintage",
-   "80s"
-  ],
-  "sizeMB": 40.5,
-  "licence": "CC-BY-3.0",
-  "credit": "Yamaha CP80 samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
-  "licenceRisk": "R4 \u2014 author statement pending"
- },
- {
   "id": "vcsl.keys.tx81z-fm-piano",
   "name": "FM Electric Piano",
   "family": "rhodes",
@@ -88,38 +72,6 @@
   "sizeMB": 58.7,
   "licence": "CC0-1.0",
   "credit": "FreePats Old Piano FB (Piotr Barcz), CC0"
- },
- {
-  "id": "gsullivan.ep.pianet-t",
-  "name": "Pianet",
-  "family": "rhodes",
-  "category": "Keys",
-  "tags": [
-   "electric piano",
-   "pianet",
-   "vintage",
-   "reed"
-  ],
-  "sizeMB": 31.8,
-  "licence": "CC-BY-3.0",
-  "credit": "Hohner Pianet T samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
-  "licenceRisk": "R4 \u2014 author statement pending"
- },
- {
-  "id": "gsullivan.ep.wurlitzer-ep200",
-  "name": "Reed EP 200",
-  "family": "rhodes",
-  "category": "Keys",
-  "tags": [
-   "electric piano",
-   "wurlitzer",
-   "reed",
-   "vintage"
-  ],
-  "sizeMB": 24.1,
-  "licence": "CC-BY-3.0",
-  "credit": "Wurlitzer EP200 samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
-  "licenceRisk": "R4 \u2014 author statement pending"
  },
  {
   "id": "vcsl.keys.steinway-b",
@@ -510,8 +462,24 @@
    "alto"
   ],
   "sizeMB": 9.9,
-  "licence": "CC-BY-4.0",
-  "credit": "MTG Solo Saxophones (Alto Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+  "licence": "CC-BY-3.0",
+  "credit": "MTG Solo Saxophones (Alto Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
+ },
+ {
+  "id": "karoryfer.sax.weresax-alto",
+  "name": "Alto Sax (Weresax)",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "alto",
+   "reed",
+   "jazz",
+   "cc0"
+  ],
+  "sizeMB": 29.7,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Weresax (alto saxophone), CC0"
  },
  {
   "id": "mtg.sax.baritone",
@@ -526,8 +494,8 @@
    "low"
   ],
   "sizeMB": 12.7,
-  "licence": "CC-BY-4.0",
-  "credit": "MTG Solo Saxophones (Baritone Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+  "licence": "CC-BY-3.0",
+  "credit": "MTG Solo Saxophones (Baritone Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
  {
   "id": "vsco2.woodwinds.bassoon",
@@ -614,8 +582,8 @@
    "soprano"
   ],
   "sizeMB": 9.4,
-  "licence": "CC-BY-4.0",
-  "credit": "MTG Solo Saxophones (Soprano Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+  "licence": "CC-BY-3.0",
+  "credit": "MTG Solo Saxophones (Soprano Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
  {
   "id": "mtg.sax.tenor",
@@ -629,8 +597,8 @@
    "tenor"
   ],
   "sizeMB": 8.7,
-  "licence": "CC-BY-4.0",
-  "credit": "MTG Solo Saxophones (Tenor Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate"
+  "licence": "CC-BY-3.0",
+  "credit": "MTG Solo Saxophones (Tenor Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
  {
   "id": "vcsl.winds.tenor-sax",

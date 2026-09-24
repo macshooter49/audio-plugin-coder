@@ -9,14 +9,11 @@ Terrain includes sampled instruments from the following open libraries:
 ## Required (CC BY)
 
 - Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`salamander.grand.v3`)
-- Yamaha CP80 samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`gsullivan.ep.cp80`) **Licence risk: R4 — author statement pending.**
-- Hohner Pianet T samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`gsullivan.ep.pianet-t`) **Licence risk: R4 — author statement pending.**
-- Wurlitzer EP200 samples by Greg Sullivan (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`gsullivan.ep.wurlitzer-ep200`) **Licence risk: R4 — author statement pending.**
 - Etherealwinds Harp II: CE by Versilian Studios LLC, CC BY 4.0, modified by Waves Crate. Licensed under CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ (`versilian.harp.etherealwinds`)
-- MTG Solo Saxophones (Alto Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate. Licensed under CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ (`mtg.sax.alto`)
-- MTG Solo Saxophones (Baritone Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate. Licensed under CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ (`mtg.sax.baritone`)
-- MTG Solo Saxophones (Soprano Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate. Licensed under CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ (`mtg.sax.soprano`)
-- MTG Solo Saxophones (Tenor Sax): Music Technology Group, UPF (freesound.org/people/MTG), SFZ by kinwie, CC BY 4.0, modified by Waves Crate. Licensed under CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ (`mtg.sax.tenor`)
+- MTG Solo Saxophones (Alto Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`mtg.sax.alto`)
+- MTG Solo Saxophones (Baritone Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`mtg.sax.baritone`)
+- MTG Solo Saxophones (Soprano Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`mtg.sax.soprano`)
+- MTG Solo Saxophones (Tenor Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ (`mtg.sax.tenor`)
 
 ## With thanks (CC0 / public domain / Unlicense — credit not required)
 
@@ -34,6 +31,7 @@ Terrain includes sampled instruments from the following open libraries:
 - Karoryfer Hungarian zither, CC0 (`karoryfer.plucked.hungarian-zither`)
 - Karoryfer Growlybass, CC0 (`karoryfer.bass.growlybass`)
 - FreePats Spanish Classical Guitar, CC0 (`freepats.guitar.nylon`)
+- Karoryfer Weresax (alto saxophone), CC0 (`karoryfer.sax.weresax-alto`)
 - Karoryfer Bear Sax (1926 Conn baritone), CC0 (`karoryfer.sax.bear`)
 - Karoryfer War Tuba (played by Jakub Lewicki), CC0 (`karoryfer.brass.war-tuba`)
 - Karoryfer legato vocal tutorial (Hadzi-Fia subset, CC0) (`karoryfer.voice.male-aah`)

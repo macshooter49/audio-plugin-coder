@@ -8,9 +8,6 @@
 | freepats.perc.hang | Percussion | marimba | 21.1 | 4.7 | 1/18 | 1 | CC0-1.0 | -25.8/-13.8/-6.7 | 12.0/7.0 | 12.0 | -67.5 | 63 | 51:1.404 | 63 clipped source samples |
 | freepats.perc.water-glasses | Percussion | glock | 21.8 | 5.3 | 1/27 | 1 | CC0-1.0 | -21.1/-9.0/-2.0 | 12.0/7.0 | 12.0 | -84.1 | 153 | 152:1.446 | 153 clipped source samples |
 | freepats.voice.synth-choir | Choir & Voice | choir | 13.7 | 6.7 | 1/1 | 1 | CC0-1.0 | -23.1/-11.0/-4.0 | 12.0/7.0 | 12.0 | -20.8 | 26 | 12:1.425 | 26 clipped source samples |
-| gsullivan.ep.cp80 | Keys | rhodes | 40.5 | 9.6 | 4/1 | 1 | CC-BY-3.0 | -26.8/-15.8/-7.2 | 13.3/6.1 | 12.5 | -39.6 | 26 | 81:1.426 | recording never quieter than -39.6 dB rel. peak (hiss, or cut short); 26 clipped source samples |
-| gsullivan.ep.pianet-t | Keys | rhodes | 31.8 | 7.2 | 2/1 | 1 | CC-BY-3.0 | -27.0/-17.1/-7.4 | 8.2/10.6 | 12.1 | -87.8 | 0 | 33:1.167 |  |
-| gsullivan.ep.wurlitzer-ep200 | Keys | rhodes | 24.1 | 5.0 | 4/1 | 1 | CC-BY-3.0 | -24.1/-14.5/-7.3 | 9.7/7.2 | 12.3 | -56.5 | 343 | 41:1.315 | 343 clipped source samples |
 | itsclipping.plucked.ganjo | Plucked | guitar | 7.8 | 2.6 | 1/12 | 1 | CC0-1.0 | -21.1/-9.0/-2.0 | 12.0/7.0 | 12.0 | -29.4 | 37 | 42:1.422 | recording never quieter than -29.4 dB rel. peak (hiss, or cut short); 37 clipped source samples |
 | jlearman.perc.steel-pan | Percussion | marimba | 28.5 | 9.2 | 5/1 | 1 | Unlicense | -22.4/-11.4/-2.1 | 11.4/6.0 | 13.1 | -60.1 | 112 | 98:1.445 | 112 clipped source samples |
 | karoryfer.bass.growlybass | Plucked | guitar | 42.4 | 13.8 | 4/2 | 1 | CC0-1.0 | -20.0/-11.4/-2.3 | 6.7/2.8 | 8.4 | -58.3 | 843 | 111:1.401 | 843 clipped source samples; 1 decaying regions ≥ 1 s without a tail loop |
@@ -19,14 +16,15 @@
 | karoryfer.guitar.shinyguitar | Plucked | guitar | 43.9 | 15.6 | 4/2 | 1 | CC0-1.0 | -16.7/-9.7/-2.4 | 4.7/3.3 | 11.4 | -73.2 | 42 | 135:1.443 | 42 clipped source samples; 1 decaying regions ≥ 1 s without a tail loop |
 | karoryfer.plucked.hungarian-zither | Plucked | koto | 38.6 | 10.3 | 1/2 | 1 | CC0-1.0 | -21.1/-9.0/-2.0 | 12.0/7.0 | 12.0 | -109.4 | 0 | 60:1.447 |  |
 | karoryfer.sax.bear | Winds | sax | 41.7 | 22.2 | 6/1 | 5 | CC0-1.0 | -11.2/-4.9/-3.2 | 6.8/2.7 | 4.8 | -16.3 | 0 | 92:1.437 |  |
+| karoryfer.sax.weresax-alto | Winds | sax | 29.7 | 19.8 | 2/1 | 1 | CC0-1.0 | -14.9/-13.1/-6.3 | -0.1/5.4 | 3.0 | -12.6 | 0 | 64:1.449 |  |
 | karoryfer.strings.cello | Strings | cello | 43.2 | 25.6 | 3/2 | 2 | CC0-1.0 | -17.6/-9.4/-6.4 | 9.8/6.5 | 9.8 | -11.4 | 0 | 128:1.445 |  |
 | karoryfer.strings.erhu | Strings | violin | 32.3 | 17.2 | 1/5 | 4 | CC0-1.0 | -3.7/-3.7/-3.7 | 0.0/0.0 | 0.0 | -63.2 | 0 | 138:1.442 |  |
 | karoryfer.strings.meatbass | Strings | bass | 32.3 | 13.6 | 3/1 | 2 | CC0-1.0 | -16.2/-5.9/-2.3 | 7.7/2.2 | 9.6 | -65.9 | 72 | 101:1.44 | 72 clipped source samples |
 | karoryfer.voice.male-aah | Choir & Voice | choir | 17.4 | 10.8 | 1/1 | 1 | CC0-1.0 | -8.3/-8.3/-8.3 | 0.0/0.0 | 0.0 | -19.1 | 0 | 23:1.444 |  |
-| mtg.sax.alto | Winds | sax | 9.9 | 5.5 | 2/3 | 1 | CC-BY-4.0 | -25.1/-14.1/-4.0 | 11.4/7.6 | 12.2 | -57.5 | 0 | 66:1.373 |  |
-| mtg.sax.baritone | Winds | sax | 12.7 | 6.8 | 3/3 | 1 | CC-BY-4.0 | -25.3/-10.2/-2.2 | 13.0/7.3 | 12.4 | -53.3 | 0 | 100:1.449 |  |
-| mtg.sax.soprano | Winds | sax | 9.4 | 5.1 | 2/3 | 1 | CC-BY-4.0 | -24.1/-14.0/-2.0 | 12.1/7.6 | 12.4 | -65.4 | 0 | 66:1.447 |  |
-| mtg.sax.tenor | Winds | sax | 8.7 | 4.8 | 2/3 | 1 | CC-BY-4.0 | -25.7/-12.3/-7.2 | 14.4/4.6 | 12.2 | -62.8 | 0 | 66:1.444 |  |
+| mtg.sax.alto | Winds | sax | 9.9 | 5.6 | 2/3 | 1 | CC-BY-3.0 | -25.1/-14.1/-4.0 | 11.4/7.6 | 12.2 | -57.5 | 0 | 66:1.373 |  |
+| mtg.sax.baritone | Winds | sax | 12.7 | 6.9 | 3/3 | 1 | CC-BY-3.0 | -25.3/-10.2/-2.2 | 13.0/7.3 | 12.4 | -53.3 | 0 | 100:1.449 |  |
+| mtg.sax.soprano | Winds | sax | 9.4 | 5.3 | 2/3 | 1 | CC-BY-3.0 | -24.1/-14.0/-2.0 | 12.1/7.6 | 12.4 | -65.4 | 0 | 66:1.447 |  |
+| mtg.sax.tenor | Winds | sax | 8.7 | 4.9 | 2/3 | 1 | CC-BY-3.0 | -25.7/-12.3/-7.2 | 14.4/4.6 | 12.2 | -62.8 | 0 | 66:1.444 |  |
 | salamander.grand.v3 | Keys | grand | 156.6 | 117.0 | 6/1 | 2 | CC-BY-3.0 | -21.7/-10.7/-3.5 | 10.9/6.1 | 5.6 | -75.9 | 17 | 180:1.442 | 17 clipped source samples |
 | vcsl.bells.hand-chimes | Mallets & Bells | glock | 23.3 | 4.8 | 1/1 | 1 | CC0-1.0 | -24.3/-12.3/-5.2 | 12.0/7.0 | 12.0 | -38.4 | 0 | 19:1.135 | recording never quieter than -38.4 dB rel. peak (hiss, or cut short) |
 | vcsl.bells.tubular | Mallets & Bells | glock | 41.6 | 16.6 | 2/1 | 1 | CC0-1.0 | -23.1/-11.1/-2.0 | 9.6/9.6 | 12.2 | -43.5 | 0 | 18:1.427 | recording never quieter than -43.5 dB rel. peak (hiss, or cut short) |
@@ -63,4 +61,4 @@
 | vsco2.woodwinds.flute | Winds | flute | 31.4 | 16.3 | 4/2 | 4 | CC0-1.0 | -21.8/-9.3/-2.0 | 12.5/7.3 | 12.5 | -66.7 | 0 | 65:1.438 |  |
 | vsco2.woodwinds.oboe | Winds | clarinet | 27.8 | 15.0 | 3/2 | 3 | CC0-1.0 | -18.0/-8.8/-2.9 | 10.4/6.9 | 12.2 | -66.4 | 0 | 77:1.438 |  |
 
-62 instruments · 1999.8 MB RAM (int16) · 0.90 GB on disk
+60 instruments · 1933.1 MB RAM (int16) · 0.90 GB on disk
