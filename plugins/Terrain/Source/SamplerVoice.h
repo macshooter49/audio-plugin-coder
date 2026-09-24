@@ -109,7 +109,12 @@ namespace tw
         {
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
             sampleRateForEnv = sr > 0.0 ? sr : 48000.0;
+            warp.setHighOverlap (true);   // CHOP-STRETCH — 5× STFT overlap: no hop-rate tick on Tones/Texture
             warp.prepare (sampleRateForEnv, 2, 512);
+            // CHOP-STRETCH — the house declick lengths (SampleEngine: 3 ms note-on micro fade-in,
+            // ~3 ms terminal fade). Both are equal-power sin ramps.
+            onsetFadeLen_   = 0.003 * sampleRateForEnv;
+            srcEdgeFadeLen_ = 0.003 * sampleRateForEnv;
             // ~64 ms cross-block tail fade — generous enough for Signalsmith's
             // STFT pipeline to fully drain at extreme stretch ratios.
             warpTailFadeTotal = juce::jmax (1024, (int) (sampleRateForEnv * 0.064));
@@ -267,6 +272,10 @@ namespace tw
             warp.setPitchSemitones (activeConfig.pitchSemitones);
             warp.noteOnReset();
             outputSamplesSinceTrigger = 0;
+            onsetFadePos_    = 0.0;     // CHOP-STRETCH — arm the note-on micro fade-in (every path)
+            loopWrapped_     = false;   // CHOP-STRETCH — chop fade-in belongs to the FIRST pass only
+            srcPulledSinceOn_ = 0;      // CHOP-STRETCH — warp-feed source fade-in counter
+            warpLoopXfadeLen_ = -1.0;   // CHOP-STRETCH — latched per note on the first looping pull
             warpNeedsPrime = (activeConfig.warpMode != WarpMode::None);
             warpTailFadeRemaining = 0;
             warpTailFadeStarted   = false;
@@ -593,18 +602,19 @@ namespace tw
                         // → next iteration's atForwardEnd / atReverseEnd both
                         // true → back-to-back flips produced a 1-sample
                         // oscillation → audible click on every ping-pong turn).
+                        // 🔇 CHOP-STRETCH — REFLECT and RENDER THIS SAMPLE. The old flip clamped to the
+                        // edge, stepped once, then `continue`d — which skipped this iteration's OUTPUT
+                        // WRITE: one sample of silence on every turnaround (a hard click at Chop Fade 0,
+                        // D2 + HF in Source/ChopStretch_test.cpp; at Chop Fade > 0 the edge gain hid it).
+                        // Reflecting about the edge the playhead crossed (SampleEngine's ping-pong law)
+                        // keeps the position continuous and lands strictly inside the window, so the
+                        // next boundary check (now the OPPOSITE edge) cannot re-fire.
+                        const double edge = reversePlay ? effSliceStart : effSliceEnd;   // the edge crossed
                         reversePlay     = ! reversePlay;
                         turnaroundFadeT = 1.0;
-                        playhead        = reversePlay ? effSliceEnd : effSliceStart;
-                        // Step one sample into the new direction so the next
-                        // boundary check starts strictly inside the window.
-                        // Use same pitch-decoupled formula as the main advance.
-                        const double scanAdvancePost = scanRateLive >= 1.0f ? 1.0 : (double) scanRateLive;
-                        playhead += (reversePlay ? -pitchInc : pitchInc) * scanAdvancePost;
-                        continue;  // skip wrap/stop logic for scan voices
+                        playhead        = juce::jlimit (effSliceStart, effSliceEnd, 2.0 * edge - playhead);
                     }
-
-                    if (loopMode == 1)
+                    else if (loopMode == 1)
                     {
                         if (sliceLen <= 0.0) { envStage = EnvStage::Off; envLevel = 0.0f; clearCurrentNote(); isActive = false; return; }
                         // Wrap and skip past the crossfade region so the next
@@ -620,6 +630,7 @@ namespace tw
                             playhead = endIdx - xfadeLen
                                        - std::fmod (startIdx - playhead, sliceLen);
                         }
+                        loopWrapped_ = true;   // CHOP-STRETCH — the seam is the crossfade's job from here on
                     }
                     else
                     {
@@ -671,12 +682,22 @@ namespace tw
                         return;
                 }
 
-                // ── Linear interpolation read ───────────────────────────────
+                // ── Interpolated read — CHOP-STRETCH: 4-point cubic Hermite, the Sample oscillator's
+                // reader (SampleEngine::readHermite), reused. The old 2-point linear read put image
+                // energy on every transient whenever the chop was pitched off its root (a varispeed
+                // read at a fractional rate): on a drum chop at −7 st the harness counted it as a
+                // −45 dB HF burst on every hit, every loop pass. At an integer position (the unpitched
+                // chop) Hermite returns the sample itself — bit-identical to before.
                 const auto i0 = static_cast<int> (playhead);
-                const int  i1 = juce::jmin (bufLen - 1, i0 + 1);
                 const auto frac = static_cast<float> (playhead - (double) i0);
-                auto sampleL = inL[i0] + frac * (inL[i1] - inL[i0]);
-                auto sampleR = inR[i0] + frac * (inR[i1] - inR[i0]);
+                float sampleL, sampleR;
+                if (frac == 0.0f) { sampleL = inL[i0]; sampleR = inR[i0]; }
+                else
+                {
+                    const int im1 = juce::jmax (0, i0 - 1), i1 = juce::jmin (bufLen - 1, i0 + 1), i2 = juce::jmin (bufLen - 1, i0 + 2);
+                    sampleL = hermite4 (inL[im1], inL[i0], inL[i1], inL[i2], frac);
+                    sampleR = hermite4 (inR[im1], inR[i0], inR[i1], inR[i2], frac);
+                }
 
                 // ── Scan turnaround crossfade (28ms Hann-window) ─────────────
                 // At each direction flip we briefly blend two reads: the "old
@@ -698,6 +719,21 @@ namespace tw
                 // turnaroundFadeT is armed to 1.0 at the flip and decrements to 0.
                 //   t=0 → 100% old direction (first sample after flip)
                 //   t=1 → 100% new direction (fully transitioned)
+                //
+                // 🔇 CHOP-STRETCH — that "old direction" read, reflected, is pinned to the edge (old =
+                // playhead + distance-travelled = the turn point), so the blend above is a DC hold: the
+                // value is continuous but the SLOPE still snaps (+s → 0) — a corner click at every
+                // turn at Chop Fade 0 (−36 dB HF in Source/ChopStretch_test.cpp). Where the slice has
+                // material beyond the scan window, use SampleEngine's ping-pong MIRROR crossfade
+                // instead (house law, reused): blend f(p) with f(2·edge − p), 50/50 at the turn → the
+                // mirrored slopes cancel and the corner is rounded away; equal-GAIN smoothstep (the two
+                // reads are correlated) back to 100 % actual over ±6 ms. It never reads outside the
+                // slice (room = slice edge − window edge); with no room (Window 100 %, Rate ≤ 1) the
+                // legacy blend below still runs.
+                if (scanActive)
+                    scanMirrorTurn (inL, inR, bufLen, playhead, effSliceStart, effSliceEnd, startIdx, endIdx,
+                                    pitchInc * ((scanRateLive >= 1.0f) ? 1.0 : (double) scanRateLive),
+                                    sampleL, sampleR);
                 if (turnaroundFadeT > 0.0)
                 {
                     // Bug A fix: scale turnaround window by 1/pitchInc so the
@@ -815,13 +851,26 @@ namespace tw
                     {
                         const double distFromStart = playhead - effSliceStart;
                         const double distFromEnd   = effSliceEnd - playhead;
-                        const double fadeIn  = juce::jlimit (0.0, 1.0, distFromStart / chopFadeSamples);
-                        const double fadeOut = juce::jlimit (0.0, 1.0, distFromEnd   / chopFadeSamples);
+                        double fadeIn  = juce::jlimit (0.0, 1.0, distFromStart / chopFadeSamples);
+                        double fadeOut = juce::jlimit (0.0, 1.0, distFromEnd   / chopFadeSamples);
+                        // 🔇 CHOP-STRETCH — LOOP MODE: the seam belongs to the equal-power loop
+                        // crossfade above. The old fade faded OUT into the seam (gain → 0) and then,
+                        // one sample after the wrap, read the fade-IN at playhead = start + xfadeLen —
+                        // i.e. already at full level: a 0 → 1 gain STEP on every loop wrap (every wrap
+                        // of every looped chop at the default 5 ms Chop Fade). In loop mode the chop
+                        // fade is the NOTE-START fade only: the edge the note leaves from, first pass.
+                        if (loopMode == 1 && ! scanActive)
+                        {
+                            const double fromEdge = reversePlay ? fadeOut : fadeIn;
+                            fadeIn  = loopWrapped_ ? 1.0 : fromEdge;
+                            fadeOut = 1.0;
+                        }
                         chopFade = (float) juce::jmin (fadeIn, fadeOut);
                     }
                 }
 
-                const auto gain = currentVelocity * envLevel * tailFade * chopFade * voiceGain;
+                const auto gain = currentVelocity * envLevel * tailFade * chopFade * voiceGain
+                                * nextOnsetGain();   // CHOP-STRETCH — house 3 ms note-on micro fade-in
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
@@ -854,6 +903,61 @@ namespace tw
 
     private:
         enum class EnvStage { Off, Attack, Decay, Sustaining, Release };
+
+        /** CHOP-STRETCH — the house note-on micro fade-in (SampleEngine::onsetLen_, 3 ms equal-power
+         *  sin ramp), shared by every render path. Advances only when a sample is actually produced,
+         *  so a Scan cache-miss block (silence) doesn't use it up: the first AUDIBLE sample gets it.
+         *  A slice starting mid-waveform with Attack 0 otherwise opens on a hard step. */
+        float nextOnsetGain() noexcept
+        {
+            if (onsetFadePos_ >= onsetFadeLen_) return 1.0f;
+            const float g = std::sin ((float) (onsetFadePos_ / onsetFadeLen_) * juce::MathConstants<float>::halfPi);
+            onsetFadePos_ += 1.0;
+            return g;
+        }
+
+        /** CHOP-STRETCH — Scan ping-pong corner rounding, SampleEngine's MIRROR crossfade reused.
+         *  Within W of the nearer window edge, blend the read f(p) with its mirror f(2·edge − p):
+         *  50/50 at the turn (mirrored slopes cancel → no corner), equal-GAIN smoothstep to 100 %
+         *  actual at W (correlated reads — equal-power would swell +3 dB). W = 6 ms of travel, limited
+         *  to the ROOM between the window edge and the slice edge so the mirror never leaves the
+         *  slice. When it owns the turn it disarms the legacy DC-hold blend (turnaroundFadeT = 0);
+         *  with < 16 samples of room it does nothing and the legacy blend runs as before. */
+        void scanMirrorTurn (const float* L, const float* R, int len, double p,
+                             double effStart, double effEnd, double hardStart, double hardEnd,
+                             double travelPerSample, float& sL, float& sR) noexcept
+        {
+            const double dE = effEnd - p, dS = p - effStart;
+            const bool   nearEnd = (dE <= dS);
+            const double d    = nearEnd ? dE : dS;
+            const double room = nearEnd ? (hardEnd - effEnd) : (effStart - hardStart);
+            if (room < 16.0) return;
+            const double W = juce::jmin (room, 0.006 * sampleRateForEnv * juce::jmax (0.05, travelPerSample));
+            if (W <= 1.0) return;
+            turnaroundFadeT = 0.0;
+            if (d < 0.0 || d >= W) return;
+            const double m  = juce::jlimit (0.0, (double) (len - 1), nearEnd ? (effEnd + d) : (effStart - d));
+            const int    m0 = juce::jlimit (0, len - 1, (int) m);
+            const int    m1 = juce::jmin (len - 1, m0 + 1);
+            const float  mf = (float) (m - (double) m0);
+            const float  mL = L[m0] + mf * (L[m1] - L[m0]);
+            const float  mR = R[m0] + mf * (R[m1] - R[m0]);
+            const double t  = d / W;
+            const float  gM = (float) (0.5 * (1.0 - t * t * (3.0 - 2.0 * t)));
+            sL = sL * (1.0f - gM) + mL * gM;
+            sR = sR * (1.0f - gM) + mR * gM;
+        }
+
+        /** 4-point cubic Hermite (Catmull-Rom) — verbatim SampleEngine::hermite (the Sample oscillator). */
+        static inline float hermite4 (float xm1, float x0, float x1, float x2, float t) noexcept
+        {
+            const float c  = (x1 - xm1) * 0.5f;
+            const float v  = x0 - x1;
+            const float w  = c + v;
+            const float a  = w + v + (x2 - x0) * 0.5f;
+            const float bn = w + a;
+            return ((((a * t) - bn) * t + c) * t + x0);
+        }
 
         void updatePitchRatio()
         {
@@ -935,22 +1039,27 @@ namespace tw
             // rate / sliceLen. Block rate ≈ sampleRate / latestBlockSize
             // (cached at top of renderNextBlock so the gate is host-
             // independent across block sizes).
-            const double srcPerSec = (latestBlockSize > 0)
-                ? (double) count * sampleRateForEnv / (double) latestBlockSize
-                : 0.0;
-            const double sourceWrapsPerSec = (looping && sliceLen > 0.0)
-                ? srcPerSec / sliceLen
-                : 0.0;
+            // 🔇 CHOP-STRETCH — the wrap rate now comes from the engine's EXACT source rate
+            // (WarpProcessor::sourceRatePerOutput) and the length is LATCHED for the note. The old proxy
+            // (count × SR / blockSize) used the per-block ROUNDED feed, which jitters ±1 sample block to
+            // block, so a crossfade straddling two blocks changed length mid-fade (a gain wobble), and
+            // the wrap's `+ xfadeLen` skip could disagree with the fade that led into it.
             double xfadeLen = 0.0;
             if (looping && sliceLen > 8.0)
             {
-                double xfadeTarget = 0.020 * sampleRateForEnv;
-                if (sourceWrapsPerSec > 5.0)
+                if (warpLoopXfadeLen_ < 0.0)
                 {
-                    const double periodSamples = sampleRateForEnv / sourceWrapsPerSec;
-                    xfadeTarget = juce::jmin (xfadeTarget, periodSamples * 0.10);
+                    const double srcPerSec = warp.sourceRatePerOutput() * sampleRateForEnv;
+                    const double sourceWrapsPerSec = srcPerSec / sliceLen;
+                    double xfadeTarget = 0.020 * sampleRateForEnv;
+                    if (sourceWrapsPerSec > 5.0)
+                    {
+                        const double periodSamples = sampleRateForEnv / sourceWrapsPerSec;
+                        xfadeTarget = juce::jmin (xfadeTarget, periodSamples * 0.10);
+                    }
+                    warpLoopXfadeLen_ = juce::jmin (sliceLen * 0.25, xfadeTarget);
                 }
-                xfadeLen = juce::jmin (sliceLen * 0.25, xfadeTarget);
+                xfadeLen = warpLoopXfadeLen_;
             }
 
             for (int i = 0; i < count; ++i)
@@ -1006,6 +1115,28 @@ namespace tw
                         s_R = s_R * mainGain + leadR * leadGain;
                     }
                 }
+
+                // 🔇 CHOP-STRETCH — SOURCE-LEVEL EDGE FADES (equal-power, 3 ms). The engines were fed a
+                // hard step at both ends of a one-shot chop: the slice opens mid-waveform (the prime /
+                // first pull) and, at exhaustion, the feed dropped to zeros. A stretcher smears a step
+                // over its whole analysis window — Tones/Texture turned it into a burst of broadband
+                // spray, Beats replayed it at every grain wrap of the first beat. Fade the stream
+                // itself so the engine never sees a step. Fade-in: first pass only. Fade-out: only
+                // when the feed genuinely ends (non-looping); a loop's seam is the crossfade above.
+                if (srcEdgeFadeLen_ > 1.0)
+                {
+                    float eg = 1.0f;
+                    if ((double) srcPulledSinceOn_ < srcEdgeFadeLen_)
+                        eg = std::sin ((float) ((double) srcPulledSinceOn_ / srcEdgeFadeLen_) * juce::MathConstants<float>::halfPi);
+                    if (! looping)
+                    {
+                        const double toEnd = reversePlay ? (playhead - startIdx) : (endIdx - playhead);
+                        if (toEnd < srcEdgeFadeLen_)
+                            eg *= std::sin ((float) juce::jmax (0.0, toEnd / srcEdgeFadeLen_) * juce::MathConstants<float>::halfPi);
+                    }
+                    s_L *= eg; s_R *= eg;
+                }
+                ++srcPulledSinceOn_;
 
                 dstL[i] = s_L;
                 dstR[i] = s_R;
@@ -1127,6 +1258,10 @@ namespace tw
                 // reflect + extend + Hann taper (same three improvements as
                 // the NONE path — see that comment block for full rationale).
                 // In cache coords: effSliceStart/End = 0+margin / cacheLen-1-margin.
+                // CHOP-STRETCH — mirror turnaround first (see the NONE path); legacy blend if no room.
+                scanMirrorTurn (cL, cR, cacheLen, playhead, effSliceStart, effSliceEnd, startIdx, endIdx,
+                                pitchRatio * ((scanRateLive >= 1.0f) ? 1.0 : (double) scanRateLive),
+                                sampleL, sampleR);
                 if (turnaroundFadeT > 0.0)
                 {
                     const double rateMul    = (scanRateLive >= 1.0f) ? 1.0 : static_cast<double> (scanRateLive);
@@ -1174,7 +1309,7 @@ namespace tw
                     }
                 }
 
-                const float gain = currentVelocity * envLevel * chopFade * voiceGain;
+                const float gain = currentVelocity * envLevel * chopFade * voiceGain * nextOnsetGain();   // CHOP-STRETCH: first audible sample after a cache miss opens with the 3 ms fade
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
@@ -1390,7 +1525,7 @@ namespace tw
                     --warpTailFadeRemaining;
                 }
 
-                const float gain = currentVelocity * envLevel * tailFade * voiceGain;
+                const float gain = currentVelocity * envLevel * tailFade * voiceGain * nextOnsetGain();   // CHOP-STRETCH: house onset
                 outL[i] += scratchOutL[i] * gain;
                 outR[i] += scratchOutR[i] * gain;
             }
@@ -1531,6 +1666,14 @@ namespace tw
         int      warpTailFadeTotal     = 3072;  // ~64 ms @ 48 k — set in prepare
         int      warpTailFadeRemaining = 0;
         bool     warpTailFadeStarted   = false;
+
+        // ── CHOP-STRETCH declick state (Source/ChopStretch_test.cpp measures all of it) ──────
+        double      onsetFadeLen_      = 144.0;   // 3 ms house note-on micro fade-in (samples)
+        double      onsetFadePos_      = 1.0e18;  // >= len = done
+        double      srcEdgeFadeLen_    = 144.0;   // 3 ms warp-feed source edge fade (samples)
+        juce::int64 srcPulledSinceOn_  = 0;       // source samples fed to the warp engine since note-on
+        double      warpLoopXfadeLen_  = -1.0;    // warp-feed loop crossfade, latched per note (-1 = unset)
+        bool        loopWrapped_       = false;   // NONE loop: has the playhead wrapped once yet?
     };
 
     struct SamplerSound : public juce::SynthesiserSound

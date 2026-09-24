@@ -48,6 +48,28 @@ namespace tw
                 textureEngine->prepare (sampleRate, channels, blockMax);
         }
 
+        /** CHOP-STRETCH — the chop voice (SamplerVoice) asks for 5× STFT overlap on the Signalsmith-backed
+         *  engines (Tones, Texture): presetCheaper's 2.5× leaves a hop-rate tick at every ratio ≠ 1. Call
+         *  BEFORE prepare(); engines already allocated are re-prepared by that prepare(). Default false —
+         *  the synth's Sample-oscillator voices are untouched. */
+        void setHighOverlap (bool b) noexcept
+        {
+            highOverlap = b;
+            if (signalsmithEngine) signalsmithEngine->setHighOverlap (b);
+            if (textureEngine)     textureEngine    ->setHighOverlap (b);
+        }
+
+        /** Source samples the active engine consumes per OUTPUT sample, unrounded (the per-block
+         *  sourceSamplesPerBlock() rounds, which jitters ±1 block to block). Lets the caller size a
+         *  source-level loop crossfade from a rate that holds still for the whole note. */
+        double sourceRatePerOutput() const noexcept
+        {
+            const double sr = juce::jmax (0.0001, (double) stretchRatio);
+            if (mode == WarpMode::Beats)
+                return std::pow (2.0, juce::jlimit (-24.0, 24.0, (double) pitchSemitones) / 12.0) / sr;
+            return 1.0 / sr;
+        }
+
         void setMode (WarpMode m)
         {
             if (m == mode) return;
@@ -58,6 +80,7 @@ namespace tw
                 if (! signalsmithEngine)
                 {
                     signalsmithEngine = std::make_unique<SignalsmithEngine>();
+                    signalsmithEngine->setHighOverlap (highOverlap);
                     if (prepared)
                         signalsmithEngine->prepare (sampleRate, channels, blockMax);
                 }
@@ -86,6 +109,7 @@ namespace tw
                 if (! textureEngine)
                 {
                     textureEngine = std::make_unique<TextureEngine>();
+                    textureEngine->setHighOverlap (highOverlap);
                     if (prepared)
                         textureEngine->prepare (sampleRate, channels, blockMax);
                 }
@@ -218,6 +242,15 @@ namespace tw
             {
                 if (beatsEngine) beatsEngine->seek (primeL, primeR, numSamples);
             }
+        }
+
+        /** CHOP-STRETCH — the active engine's OUTPUT latency (samples between an input position and
+         *  the output that carries it). Signalsmith-backed modes only; Beats reads its history directly. */
+        int outputLatencySamples() const noexcept
+        {
+            if (mode == WarpMode::Tones)   return signalsmithEngine ? signalsmithEngine->outputLatency() : 0;
+            if (mode == WarpMode::Texture) return textureEngine ? textureEngine->outputLatency() : 0;
+            return 0;
         }
 
         bool hasEngineAllocated() const noexcept
@@ -358,47 +391,90 @@ namespace tw
 
             // Use a temp WarpProcessor configured for this slice. Static method →
             // doesn't depend on any per-voice state of the caller.
+            // Worker thread: no processBlock ScopedNoDenormals up the stack here.
+            juce::ScopedNoDenormals noDenormals;
+
             WarpProcessor tempWarp;
+            tempWarp.setHighOverlap (true);                // CHOP-STRETCH — the cache is the chop's (Scan)
             tempWarp.prepare (sampleRate, /*channels*/ 2, /*blockSize*/ 512);
             tempWarp.setMode (mode);
-            tempWarp.setStretchRatio (cacheStretchRatio);  // Bug B: use clamped ratio
+            // CHOP-STRETCH — SET, do not glide (tp58): this is the only ratio call the render makes, and
+            // the glide setter froze 35 % of the way from 1.0 — the cache came out at the wrong stretch
+            // and its source ran out early, so the tail was a held DC of the last sample.
+            tempWarp.setStretchRatioNow (cacheStretchRatio);  // Bug B: use clamped ratio
             tempWarp.setPitchSemitones (0.0f);
             const int outputLen = (int) std::ceil ((double) sliceLen * (double) cacheStretchRatio);
             juce::AudioBuffer<float> out (2, outputLen);
             out.clear();
 
-            // Prime by seeking the engine — feeds inputLatency() samples of warm-up.
-            const int primeLen = juce::jmin (sliceLen, tempWarp.inputLatency());
-            if (primeLen > 0)
-                tempWarp.seek (sourceL, sourceR, primeLen);
-
             // Render block-by-block. Pull source forward sequentially.
             constexpr int blockSize = 512;
-            juce::AudioBuffer<float> scratchIn (2, blockSize);
-            int sourcePos = 0;
+            // CHOP-STRETCH — at a ratio < 1 a block consumes MORE than 512 source samples; the old
+            // 512-sample scratch capped the feed (the render silently ran at ratio 1). Size for the max.
+            const int maxIn = juce::jmax (blockSize, tempWarp.sourceSamplesPerBlock (blockSize) + 2);
+            juce::AudioBuffer<float> scratchIn (2, maxIn);
+            // CHOP-STRETCH — equal-power fade on the SOURCE at both slice edges (~3 ms, the house onset /
+            // terminal length) so the engine never sees a step: the old feed started at a mid-waveform
+            // sample and ended by CLAMPING to the last sample (a held DC step into the stretcher).
+            const int edgeFade = juce::jmax (1, juce::jmin (sliceLen / 4, (int) std::round (sampleRate * 0.003)));
+            auto edgeGain = [&] (int idx) -> float
+            {
+                if (idx < 0 || idx >= sliceLen) return 0.0f;
+                const int d = juce::jmin (idx, sliceLen - 1 - idx);
+                return d >= edgeFade ? 1.0f
+                                     : std::sin ((float) d / (float) edgeFade * juce::MathConstants<float>::halfPi);
+            };
+
+            // Prime (edge-faded too) with a history seek of inputLatency() samples, then CONTINUE the
+            // feed from there (CHOP-STRETCH — it used to restart at 0, so the engine heard the slice's
+            // opening twice with a hard seam between the copies: a step early in every Tones/Texture
+            // cache, replayed by Texture's scatter at random times; a Beats cache whose second grain
+            // jumped back). The phase vocoder's OUTPUT latency is then rendered and DISCARDED, so cache
+            // sample 0 is slice sample 0 (the old cache carried that latency as silence at its head and
+            // lost the same length off its tail — a scan ping-ponged into a dead zone). NOT fb642's
+            // outputSeek: measured here, Signalsmith's outputSeek pre-roll leaves a one-sample spike at
+            // the pre-roll seam whenever the rate ≠ 1 (d2 up to 1.06 at ratio 0.5) — see the report.
+            const int primeLen = juce::jmin (sliceLen, tempWarp.inputLatency());
+            if (primeLen > 0)
+            {
+                juce::AudioBuffer<float> prime (2, primeLen);
+                for (int i = 0; i < primeLen; ++i)
+                {
+                    const float g = edgeGain (i);
+                    prime.setSample (0, i, sourceL[i] * g);
+                    prime.setSample (1, i, sourceR[i] * g);
+                }
+                tempWarp.seek (prime.getReadPointer (0), prime.getReadPointer (1), primeLen);
+            }
+            int discard = tempWarp.outputLatencySamples();
+
+            int sourcePos = juce::jmax (0, primeLen);
             int outputPos = 0;
+            juce::AudioBuffer<float> blockOut (2, blockSize);
 
             while (outputPos < outputLen)
             {
-                const int outThisBlock = juce::jmin (blockSize, outputLen - outputPos);
-                const int inThisBlock  = juce::jmax (1, tempWarp.sourceSamplesPerBlock (outThisBlock));
-                const int safeIn       = juce::jmin (inThisBlock, blockSize);
+                const int want         = discard > 0 ? juce::jmin (blockSize, discard) : juce::jmin (blockSize, outputLen - outputPos);
+                const int inThisBlock  = juce::jmax (1, tempWarp.sourceSamplesPerBlock (want));
+                const int safeIn       = juce::jmin (inThisBlock, maxIn);
 
-                // Fill scratchIn from source, clamping to last sample at slice end.
+                // Fill scratchIn from source; past the slice end the faded source is simply silence.
                 for (int i = 0; i < safeIn; ++i)
                 {
-                    const int srcIdx = juce::jlimit (0, sliceLen - 1, sourcePos + i);
-                    scratchIn.setSample (0, i, sourceL[srcIdx]);
-                    scratchIn.setSample (1, i, sourceR[srcIdx]);
+                    const int idx    = sourcePos + i;
+                    const int srcIdx = juce::jlimit (0, sliceLen - 1, idx);
+                    const float g    = edgeGain (idx);
+                    scratchIn.setSample (0, i, sourceL[srcIdx] * g);
+                    scratchIn.setSample (1, i, sourceR[srcIdx] * g);
                 }
                 sourcePos += safeIn;
 
-                tempWarp.process (scratchIn.getReadPointer (0),
-                                  scratchIn.getReadPointer (1),
-                                  out.getWritePointer (0) + outputPos,
-                                  out.getWritePointer (1) + outputPos,
-                                  outThisBlock);
-                outputPos += outThisBlock;
+                tempWarp.process (scratchIn.getReadPointer (0), scratchIn.getReadPointer (1),
+                                  blockOut.getWritePointer (0), blockOut.getWritePointer (1), want);
+                if (discard > 0) { discard -= want; continue; }   // the latency: rendered, not kept
+                out.copyFrom (0, outputPos, blockOut, 0, 0, want);
+                out.copyFrom (1, outputPos, blockOut, 1, 0, want);
+                outputPos += want;
             }
 
             return out;
@@ -416,6 +492,7 @@ namespace tw
         int    channels   = 2;
         int    blockMax   = 512;
         bool   prepared   = false;
+        bool   highOverlap = false;   // CHOP-STRETCH — 5× STFT overlap (chop voices only)
 
         std::unique_ptr<SignalsmithEngine> signalsmithEngine;
         std::unique_ptr<BeatsEngine>       beatsEngine;

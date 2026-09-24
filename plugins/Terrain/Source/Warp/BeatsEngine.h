@@ -1,4 +1,13 @@
-// BeatsEngine.h — v11 (skip-aware boundary fade; replaces v7 rate-gate)
+// BeatsEngine.h — v12 (CHOP-STRETCH: beat boundary = measured-skip CROSSFADE; activation fade)
+//
+// v12 (2026-09-23): the beat boundary no longer dips to zero — the old grain plays on through the
+// boundary while the new beat fades in (equal-gain for a small/correlated skip, equal-power for a
+// real jump), and the skip that decides it is measured off the read heads instead of predicted
+// (v11's prediction called a real 2-sample jump "continuous"). A short slice whose first grain
+// starts after silent pending blocks now fades in. Measured in Source/ChopStretch_test.cpp. The
+// v11 notes below describe the retired dip.
+//
+// v11 (skip-aware boundary fade; replaced v7 rate-gate)
 //
 // v11 (2026-05-22): the v7 binary rate-gate ("disable boundary fade above
 // 20 Hz beat rate") was correct for the C4–C7 ring-mod scenario at
@@ -126,6 +135,7 @@ namespace tw
             //   innerFadeLen    = 1 ms → softens start-head transient at source[0]
             boundaryFadeLen = juce::jmax (16, (int) (sampleRate * 0.002));
             innerFadeLen    = juce::jmax (8,  (int) (sampleRate * 0.001));
+            startFadeLen    = juce::jmax (16, (int) (sampleRate * 0.003));   // CHOP-STRETCH house onset
 
             ready = true;
             reset();
@@ -139,6 +149,11 @@ namespace tw
             cyclePos           = 0.0;
             firstBlockPending  = true;
             beatCount          = 0;
+            bxRemain           = 0;
+            mainXf             = false;
+            xfLatched          = false;
+            silentBlocksOut    = false;
+            startFadePos       = 1 << 30;
         }
 
         bool isReady()      const noexcept { return ready; }
@@ -194,11 +209,16 @@ namespace tw
                     cyclePos = 0.0;
                     firstBlockPending = false;
                     beatCount = 0;
+                    // CHOP-STRETCH — if silent blocks went out while the history filled (a slice
+                    // shorter than one grain primes less than a grain), the first grain would START
+                    // at full level mid-waveform: fade it in (equal-power, ~3 ms house onset).
+                    if (silentBlocksOut) startFadePos = 0;
                 }
                 else
                 {
                     std::memset (outL, 0, sizeof (float) * (size_t) numSamples);
                     std::memset (outR, 0, sizeof (float) * (size_t) numSamples);
+                    silentBlocksOut = true;
                     return;
                 }
             }
@@ -208,151 +228,193 @@ namespace tw
             const double effLoopLen     = (double) (targetGrainSize - crossfadeLen);
             const double crossfadeBegin = (double) (targetGrainSize - crossfadeLen);
 
-            // v11 boundary-fade decision — skip-aware + v10 constant-depth scaling.
+            // v11 boundary-fade decision (analytic skip + rate-gate) — RETIRED in v12, see below.
             //
-            // The v7 rate gate ("disable above 20 Hz beat rate") fixed the C4–C7
-            // ring-mod (fade AM at audible beat rate when the boundary itself
-            // was CONTINUOUS at stretchRatio=1 with NO skip to mask). But it
-            // left bare-step clicks at stretchRatio < 1, where each beat
-            // boundary jumps forward `grainSize - cyclePos_last - pitchRatio`
-            // source samples (3360 at stretchRatio=0.30). User: "at 0.30 it's
-            // damn near unusable... it's still clicking."
-            //
-            // Compute the analytical cyclePos at the final sample of each beat:
-            //   - If `(outputsPerLoop-1) × pitchRatio < grainSize` → no wraps,
-            //     cyclePos_last = that linear advance.
-            //   - Else → cyclePos_last = (finalAdvance - k × effLoopLen) for
-            //     the wrap count k that places cyclePos in [crossfadeLen, grainSize).
-            //
-            // Then boundarySkip = grainSize - cyclePos_last - pitchRatio. Skip ≈ 0
-            // means the boundary is naturally continuous (stretchRatio=1, integer
-            // multiples) — no fade needed, the v7 "no AM at clean boundary"
-            // intent is preserved. Skip > pitchRatio×2 means there's a real
-            // discontinuity to mask — apply a v10-style constant-depth fade
-            // (period × 0.10 capped at boundaryFadeLen) so AM sidebands stay
-            // around −16 dB regardless of how fast the beat rate climbs. At
-            // high beat rates the fade gets short (sub-millisecond) but stays
-            // alive; at sub-audio rates it tops out at the configured 2 ms.
-            const double finalAdvance =
-                (double) (outputsPerLoop - 1) * pitchRatio;
-            double cyclePosLast;
-            if (finalAdvance < (double) targetGrainSize)
-            {
-                cyclePosLast = finalAdvance;
-            }
-            else
-            {
-                const double afterFirstWrap = finalAdvance - (double) targetGrainSize;
-                const double wrapsAfterFirst = std::floor (afterFirstWrap / effLoopLen) + 1.0;
-                cyclePosLast = finalAdvance - wrapsAfterFirst * effLoopLen;
-            }
-            const double boundarySkipSamples =
-                (double) targetGrainSize - cyclePosLast - pitchRatio;
-            const bool boundaryContinuous = boundarySkipSamples < pitchRatio * 2.0 + 1.0;
-
-            int beatFadeLen = 0;
-            if (! boundaryContinuous)
+            // CHOP-STRETCH (v12) — the boundary is now a CROSSFADE, not a dip, and the skip is MEASURED.
+            //  (1) v6–v11 faded the old beat OUT to zero and the new one IN from zero (≤ 2 ms each side):
+            //      no step, but a gated notch at the beat rate — on sustained material a tick every beat
+            //      (Source/ChopStretch_test.cpp counts it as a dropout: one per beat on a stretched pad).
+            //      Now the OLD grain keeps playing past the boundary (the history holds it — it is simply
+            //      the source continuing) while the new beat fades in over it.
+            //  (2) v11 predicted the skip analytically and called anything under 2·pitch+1 samples
+            //      "continuous" (no fade at all). But crossfadeLen is clamped to grain/2 − 1, so at 2×
+            //      stretch every beat really jumped 2 samples — a bare step at the beat rate (−30 dB HF
+            //      click every 200 ms on a pad). The skip is now read off the heads themselves at the
+            //      boundary: skip = (new read) − (where the old read goes next). Only |skip| < ¼ sample
+            //      (truly continuous) goes without a fade.
+            //  GAIN LAW (house, SampleEngine): a SMALL skip means the two reads are the same audio a hair
+            //  apart — CORRELATED — so equal-GAIN smoothstep (equal-power would swell +3 dB); a large skip
+            //  means different audio — equal-POWER sin/cos. Split at 0.5 ms. Length = the old fade-out +
+            //  fade-in (≤ 4 ms, ≤ 20 % of a fast beat) so a new beat's transient is no softer than before.
+            int xfLen = 0;
             {
                 double fadeTarget = (double) boundaryFadeLen;  // ≤ 2 ms baseline cap
                 const double beatPeriod = (double) outputsPerLoop;
                 if (beatPeriod < sampleRate / 5.0)            // > 5 Hz beat rate
                     fadeTarget = juce::jmin (fadeTarget, beatPeriod * 0.10);
-                beatFadeLen = juce::jmax (1, (int) std::round (
-                    juce::jmin (fadeTarget, (double) outputsPerLoop / 4.0)));
+                xfLen = 2 * juce::jmax (1, (int) std::round (juce::jmin (fadeTarget, (double) outputsPerLoop / 4.0)));
             }
+            const double correlatedSkip = 0.0005 * sampleRate;
+
+            // One READ HEAD = (anchor, cyclePos, in-grain crossfade latched?). The main head is the one
+            // being played; the boundary crossfade runs a COPY of the old one — its main read AND its
+            // in-grain crossfade, exactly as it would have continued — under the new beat's fade-in.
+            auto readHead = [&] (int anchor, double pos, bool xf, float& oL, float& oR)
+            {
+                // Never read at/after the write head (belt-and-braces for a starved feed).
+                const double pMax = (double) (historyWriteIdx - 3 - anchor);
+                const double pc   = pos > pMax ? pMax : pos;
+                const int    p0   = (int) std::floor (pc);
+                const float  fr   = (float) (pc - (double) p0);
+                readHermite (anchor + p0, fr, oL, oR);
+                if (xf && pos >= crossfadeBegin)
+                {
+                    // Start head (reading the grain's [0..crossfadeLen) so the wrap is continuous).
+                    const double startCyclePos = pos - crossfadeBegin;
+                    const int    sPos0 = (int) startCyclePos;
+                    const float  sFrac = (float) (startCyclePos - sPos0);
+                    float startL, startR;
+                    readHermite (anchor + sPos0, sFrac, startL, startR);
+                    // v6 start-head transient softener (1 ms fade-in on the start head only).
+                    if (startCyclePos < (double) innerFadeLen)
+                    {
+                        const float gateGain = std::sin ((float) (startCyclePos / (double) innerFadeLen) * juce::MathConstants<float>::halfPi);
+                        startL *= gateGain;
+                        startR *= gateGain;
+                    }
+                    const float t  = juce::jlimit (0.0f, 1.0f, (float) ((pos - crossfadeBegin) / (double) crossfadeLen));
+                    const float ga = std::cos (t * juce::MathConstants<float>::halfPi);
+                    const float gb = std::sin (t * juce::MathConstants<float>::halfPi);
+                    oL = oL * ga + startL * gb;
+                    oR = oR * ga + startR * gb;
+                }
+            };
 
             for (int i = 0; i < numSamples; i++)
             {
                 if (outputsThisLoop >= outputsPerLoop)
                 {
+                    // Hand the OLD grain to the boundary crossfade, exactly where it would go next.
+                    // Contiguous only if it is a plain read landing on the new beat's first sample.
+                    const double skip = mainXf ? 1.0e9 : ((double) targetGrainSize - cyclePos);
+                    if (xfLen > 1 && bxRemain == 0 && std::abs (skip) > 0.25)
+                    {
+                        bxAnchor     = loopAnchor;
+                        bxPos        = cyclePos;
+                        bxXf         = mainXf;
+                        bxRemain     = xfLen;
+                        bxLen        = xfLen;
+                        bxCorrelated = ! mainXf && std::abs (skip) < correlatedSkip;
+                    }
                     loopAnchor += targetGrainSize;
                     outputsThisLoop = 0;
                     cyclePos = 0.0;
+                    mainXf = false;
+                    xfLatched = false;
                     beatCount++;
                 }
 
-                // Crossfade detector (v5 — broadened gate, full crossfadeLen tail).
-                const double remGrain = (double) targetGrainSize - cyclePos;
-                const int samplesToWrap    = (int) std::ceil (remGrain / pitchRatio);
-                const int samplesToBeatEnd = outputsPerLoop - outputsThisLoop;
-                const bool wrapWithinBeat  = samplesToWrap < samplesToBeatEnd;
-                const bool inCrossfadeRegion = cyclePos >= crossfadeBegin;
-                const bool doCrossfade     = wrapWithinBeat && inCrossfadeRegion;
-
-                // Main read.
-                const int pos0 = (int) cyclePos;
-                int pos1;
-                if (doCrossfade && pos0 + 1 >= targetGrainSize)
-                    pos1 = 0;
-                else
-                    pos1 = pos0 + 1;
-                const float frac = (float) (cyclePos - pos0);
-                const int idx0 = (loopAnchor + pos0) & historyMask;
-                const int idx1 = (loopAnchor + pos1) & historyMask;
-                float sL = historyL[idx0] + frac * (historyL[idx1] - historyL[idx0]);
-                float sR = historyR[idx0] + frac * (historyR[idx1] - historyR[idx0]);
-
-                if (doCrossfade)
+                // In-grain crossfade gate (v5 — full crossfadeLen tail), now LATCHED once per grain
+                // cycle at the moment the read enters the crossfade region. With a steady pitch the
+                // prediction is invariant across the region, so this matches v5's per-sample test;
+                // with VIBRATO (a per-block pitch step) the per-sample test FLIPPED mid-region — the
+                // crossfade switched on/off half-way through: a gain step (the harness measured hard
+                // discontinuities on every vibrato'd Beats chop).
+                if (! xfLatched && cyclePos >= crossfadeBegin)
                 {
-                    // Start head (reading current grain's [0..crossfadeLen) so the
-                    // wrap is continuous at the algorithm boundary).
-                    const double startCyclePos = cyclePos - crossfadeBegin;
-                    const int    sPos0 = (int) startCyclePos;
-                    const int    sPos1 = sPos0 + 1;  // < crossfadeLen < grainSize/2 — always in grain
-                    const float  sFrac = (float) (startCyclePos - sPos0);
-                    const int    sIdx0 = (loopAnchor + sPos0) & historyMask;
-                    const int    sIdx1 = (loopAnchor + sPos1) & historyMask;
-                    float startL = historyL[sIdx0] + sFrac * (historyL[sIdx1] - historyL[sIdx0]);
-                    float startR = historyR[sIdx0] + sFrac * (historyR[sIdx1] - historyR[sIdx0]);
-
-                    // v6 start-head transient softener: apply a 1 ms fade-in to
-                    // the start head's read at source[0..innerFadeLen]. Suppresses
-                    // sharp source[0] transients (kick/snare attack) from re-firing
-                    // at every grain wrap. Doesn't affect the main head, so cycle
-                    // 1's plain opening is untouched.
-                    if (startCyclePos < (double) innerFadeLen)
-                    {
-                        const float ts = (float) (startCyclePos / (double) innerFadeLen);
-                        const float gateGain = std::sin (ts * juce::MathConstants<float>::halfPi);
-                        startL *= gateGain;
-                        startR *= gateGain;
-                    }
-
-                    const float t = juce::jlimit (0.0f, 1.0f,
-                        (float) ((cyclePos - crossfadeBegin) / (double) crossfadeLen));
-                    const float a = std::cos (t * juce::MathConstants<float>::halfPi);
-                    const float b = std::sin (t * juce::MathConstants<float>::halfPi);
-                    sL = sL * a + startL * b;
-                    sR = sR * a + startR * b;
+                    const double remGrain = (double) targetGrainSize - cyclePos;
+                    const int samplesToWrap    = (int) std::ceil (remGrain / pitchRatio);
+                    const int samplesToBeatEnd = outputsPerLoop - outputsThisLoop;
+                    mainXf    = samplesToWrap < samplesToBeatEnd;
+                    xfLatched = true;
                 }
 
-                // v6 beat-boundary fade. Fade-in only applies for beats AFTER the
-                // first (beatCount > 0) so the chop's note-on attack stays sharp.
-                float beatFade = 1.0f;
-                if (beatCount > 0 && outputsThisLoop < beatFadeLen)
+                float sL, sR;
+                readHead (loopAnchor, cyclePos, mainXf, sL, sR);
+
+                // v12 beat-boundary CROSSFADE (see above): old grain continues, new beat fades in.
+                if (bxRemain > 0)
                 {
-                    const float tin = (float) outputsThisLoop / (float) beatFadeLen;
-                    beatFade *= std::sin (tin * juce::MathConstants<float>::halfPi);
-                }
-                const int samplesUntilBeatEnd = outputsPerLoop - outputsThisLoop - 1;
-                if (samplesUntilBeatEnd < beatFadeLen)
-                {
-                    const float tout = (float) samplesUntilBeatEnd / (float) beatFadeLen;
-                    beatFade *= std::sin (tout * juce::MathConstants<float>::halfPi);
+                    float oL, oR;
+                    readHead (bxAnchor, bxPos, bxXf, oL, oR);
+                    const float  t  = 1.0f - (float) bxRemain / (float) bxLen;     // 0 → 1
+                    float gN, gO;
+                    if (bxCorrelated) { gN = t * t * (3.0f - 2.0f * t); gO = 1.0f - gN; }   // equal-gain smoothstep
+                    else { gN = std::sin (t * juce::MathConstants<float>::halfPi);          // equal-power
+                           gO = std::cos (t * juce::MathConstants<float>::halfPi); }
+                    sL = sL * gN + oL * gO;
+                    sR = sR * gN + oR * gO;
+                    bxPos += pitchRatio;
+                    if (bxXf && bxPos >= targetGrainSize) { bxPos -= effLoopLen; bxXf = false; }
+                    --bxRemain;
                 }
 
-                outL[i] = sL * beatFade;
-                outR[i] = sR * beatFade;
+                // Activation fade-in (only after silent pending blocks — see above).
+                if (startFadePos < startFadeLen)
+                {
+                    const float g = std::sin ((float) startFadePos / (float) startFadeLen * juce::MathConstants<float>::halfPi);
+                    sL *= g; sR *= g; ++startFadePos;
+                }
+
+                outL[i] = sL;
+                outR[i] = sR;
 
                 cyclePos += pitchRatio;
                 if (cyclePos >= targetGrainSize)
-                    cyclePos -= effLoopLen;
+                {
+                    if (mainXf)
+                    {
+                        // Crossfaded wrap: the start head has fully taken over — seamless.
+                        cyclePos -= effLoopLen;
+                        mainXf = false;
+                        xfLatched = false;
+                    }
+                    else if (outputsThisLoop + 1 + xfLen < outputsPerLoop)
+                    {
+                        // An UNPLANNED wrap mid-beat (vibrato moved the beat end after the gate was
+                        // latched): a bare grain restart would jump — crossfade it like a boundary.
+                        // Only when the beat has more than one crossfade left to run: closer to the
+                        // end the read just carries on past the grain (the history holds the source
+                        // continuing) and the boundary's crossfade takes it — two crossfades must
+                        // never overlap (the second would have to cut the first).
+                        if (xfLen > 1 && bxRemain == 0)
+                        {
+                            bxAnchor = loopAnchor; bxPos = cyclePos; bxXf = false;
+                            bxRemain = xfLen; bxLen = xfLen; bxCorrelated = false;
+                        }
+                        cyclePos -= effLoopLen;
+                        xfLatched = false;
+                    }
+                    // else: the beat ends on the next sample — the boundary takes it from here.
+                }
 
                 outputsThisLoop++;
             }
         }
 
     private:
+        /** CHOP-STRETCH — 4-point cubic Hermite read of the history (SampleEngine's reader, reused).
+         *  The 2-point linear read imaged every transient whenever the chop was pitched off its root
+         *  (−45 dB HF bursts per hit at −7 st in Source/ChopStretch_test.cpp). frac == 0 (unpitched)
+         *  returns the sample itself — bit-identical to the linear read there. */
+        void readHermite (int absIdx, float frac, float& l, float& r) const noexcept
+        {
+            const int i0 = absIdx & historyMask;
+            if (frac == 0.0f) { l = historyL[i0]; r = historyR[i0]; return; }
+            const int im1 = (absIdx - 1) & historyMask, i1 = (absIdx + 1) & historyMask, i2 = (absIdx + 2) & historyMask;
+            l = hermite4 (historyL[im1], historyL[i0], historyL[i1], historyL[i2], frac);
+            r = hermite4 (historyR[im1], historyR[i0], historyR[i1], historyR[i2], frac);
+        }
+        static inline float hermite4 (float xm1, float x0, float x1, float x2, float t) noexcept
+        {
+            const float c  = (x1 - xm1) * 0.5f;
+            const float v  = x0 - x1;
+            const float w  = c + v;
+            const float a  = w + v + (x2 - x0) * 0.5f;
+            const float bn = w + a;
+            return ((((a * t) - bn) * t + c) * t + x0);
+        }
+
         juce::HeapBlock<float> historyL, historyR;
         int historyMask        = 0;
         int historyWriteIdx    = 0;
@@ -365,6 +427,17 @@ namespace tw
         double cyclePos        = 0.0;
         bool firstBlockPending = true;
         int  beatCount         = 0;      // 0 during first beat; >0 after first boundary
+        // v12 boundary crossfade — the old grain's continuing read head
+        int    bxAnchor = 0, bxRemain = 0, bxLen = 1;
+        double bxPos    = 0.0;
+        bool   bxCorrelated = false;
+        bool   bxXf         = false;     // the old head's in-grain crossfade state
+        bool   mainXf       = false;     // main head: in-grain crossfade latched ON for this cycle
+        bool   xfLatched    = false;     // main head: gate decided for this cycle
+        // activation fade after silent pending blocks (short slices)
+        bool   silentBlocksOut = false;
+        int    startFadeLen    = 144;    // ~3 ms @ 48k — set in prepare
+        int    startFadePos    = 1 << 30;
 
         double sampleRate     = 48000.0;
         int    channels       = 2;
