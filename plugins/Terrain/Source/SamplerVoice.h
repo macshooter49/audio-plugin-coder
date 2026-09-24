@@ -140,7 +140,28 @@ namespace tw
             // consumer (updatePitchRatio + the warp engine's setPitchSemitones) snap
             // uniformly, while the slice→key mapping (midi−rootMidiNote) is untouched.
             // 0 when un-pitched → bit-identical to the old behaviour. Cheap atomic read.
-            activeConfig.pitchSemitones += sample.keyOffset();
+            //
+            // 🎯 SAMPLE-RATE MATCH (why the snap missed C in the real plugin) — the
+            // detector measures the fundamental in the sample's NATIVE rate, and the
+            // synth's Sample/Granular oscillators fold the SAME snap in AFTER a
+            // native/output resample ratio (SynthVoice.h — pitchRatio = nativeOverOut ·
+            // 2^(noteSemis/12)), so their auto-keyed sample lands on C. The chop instead
+            // reads at NATIVE SPEED (pitchInc = pitchRatio, NO SR ratio — deliberate so a
+            // beat-sliced loop keeps its feel), so a sample whose native rate ≠ the host
+            // rate already sounds 12·log2(host/native) semitones off, and the raw
+            // native-domain snap misses the oscillator C by exactly that much — the
+            // "consistently out of key, needs pitching down" report (a 44.1k pad on a
+            // 48k host plays ~1.5 st sharp; a 32k pad ~7 st). For a PITCHED (detected)
+            // sample, add 12·log2(native/host) so the snapped pad lands on the SAME C as
+            // the oscillators. It is exactly 0 when the rates match (the common case →
+            // bit-identical to before) and only rides on a voiced sample, so un-pitched
+            // beat material keeps its native-speed playback. Applied through
+            // pitchSemitones so the NONE read AND the warp engine reference one pitch.
+            const auto keyInfo_ = sample.getKeyInfo();
+            activeConfig.pitchSemitones += keyInfo_.offsetSemis;
+            if (keyInfo_.detected && sample.getSampleRate() > 0.0 && sampleRateForEnv > 0.0)
+                activeConfig.pitchSemitones +=
+                    (float) (12.0 * std::log2 (sample.getSampleRate() / sampleRateForEnv));
 
             updatePitchRatio();
 
@@ -172,7 +193,12 @@ namespace tw
             // Decay covers the descent from peak (1.0) to sustainLevel over
             // decayMs. When decayMs is 0 or sustainLevel >= 1.0 the decay
             // phase is skipped — current behavior preserved for legacy slices.
-            sustainTarget = juce::jlimit (0.0f, 1.0f, activeConfig.sustainLevel);
+            // Defensive: a NEGATIVE sustain/volume is the pitch-mode "inherit" sentinel
+            // and is normally resolved to a concrete baseline by TerrainSynth::noteOn before
+            // it reaches the voice. Guard here too so a sentinel that ever slips through a
+            // trigger path can NEVER silence a chop (jlimit(0,1,-1) would be 0 = dead).
+            sustainTarget = activeConfig.sustainLevel < 0.0f
+                              ? 1.0f : juce::jlimit (0.0f, 1.0f, activeConfig.sustainLevel);
             const float decaySec = decMs * 0.001f;
             const float decayDistance = juce::jmax (0.0f, 1.0f - sustainTarget);
             decayDec = (decaySec > 0.0f && decayDistance > 0.0f)
@@ -181,7 +207,8 @@ namespace tw
 
             // Linear per-chop volume multiplier — applied at gain stage so all
             // env phases (attack, sustain, release) inherit it.
-            voiceGain = juce::jlimit (0.0f, 2.0f, activeConfig.volume);
+            voiceGain = activeConfig.volume < 0.0f
+                          ? 1.0f : juce::jlimit (0.0f, 2.0f, activeConfig.volume);
 
             envLevel = 0.0f;
             envStage = (attackInc >= 1.0f) ? EnvStage::Sustaining : EnvStage::Attack;
