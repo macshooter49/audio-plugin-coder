@@ -1850,9 +1850,17 @@ void TerrainAudioProcessor::refreshModCurveAudio() noexcept
     const wc::ModCurveSet* pub = modCurves_.load (std::memory_order_acquire);
     const int pv = modPtVersion_.load (std::memory_order_acquire);
     if (pub == modCurvesPubSeen_ && pv == modPtSeen_) return;
-    if (pub != nullptr) modCurveAudio_ = *pub;
     const int hf = modPtPubIdx_;
-    std::memcpy (modPtAudio_,   modPtShared_[hf],   sizeof (modPtAudio_));
+    // tp101 — the set holds kMaxModCurves (256) slots; copy only the ones in use. Routes index [0, n) only, and a
+    //  slot left over from a bigger previous set is un-set so nothing can read a stale shape through it.
+    const int nC = juce::jlimit (0, wc::kMaxModCurves, modCurveCountShared_[hf]);
+    if (pub != nullptr)
+    {
+        for (int k = 0; k < nC; ++k) modCurveAudio_.c[k] = pub->c[k];
+        for (int k = nC; k < modCurveCountAudio_; ++k) modCurveAudio_.c[k].set = false;
+        modCurveCountAudio_ = nC;
+    }
+    std::memcpy (modPtAudio_,   modPtShared_[hf],   sizeof (modPtAudio_[0]) * (size_t) nC);
     std::memcpy (modPtNpAudio_, modPtNpShared_[hf], sizeof (modPtNpAudio_));
     modPtHasModAudio_ = modPtHasModShared_[hf];
     modPtDirty_ = true; modPtSeen_ = pv; modCurvesPubSeen_ = pub;
@@ -1868,7 +1876,7 @@ void TerrainAudioProcessor::rebakeModCurveAudio() noexcept
     float sv[wc::NUM_LFOS];
     for (int mS = 0; mS < wc::NUM_LFOS; ++mS) sv[mS] = flowLfo_[mS].peek();
     bool need = modPtDirty_;
-    for (int k = 0; k < wc::kMaxModCurves && ! need; ++k)
+    for (int k = 0; k < modCurveCountAudio_ && ! need; ++k)   // tp101 — the used slots only (np is 0 past them anyway)
         for (int i2 = 0; i2 < modPtNpAudio_[k] && ! need; ++i2)
         {
             const auto& q = modPtAudio_[k][i2];
@@ -1878,7 +1886,7 @@ void TerrainAudioProcessor::rebakeModCurveAudio() noexcept
     if (! need) return;
     modPtDirty_ = false;
     for (int mS = 0; mS < wc::NUM_LFOS; ++mS) modPtSrcLast_[mS] = sv[mS];
-    for (int k = 0; k < wc::kMaxModCurves; ++k)
+    for (int k = 0; k < modCurveCountAudio_; ++k)
     {
         const int np2 = modPtNpAudio_[k];
         if (np2 < 2) continue;
@@ -12256,7 +12264,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         if (isB)   // tp20 — bank 1's per-voice matrix: mirror dests rebased to the legacy ints, A–D's own dests dropped, globals kept
         {
-            synModCfgB_ = synModCfg; int nb = 0;
+            wc::copyModConfig (synModCfgB_, synModCfg); int nb = 0;   // tp101 — the live prefix, not all MAX_ASSIGNMENTS slots
             for (int a = 0; a < synModCfg.numAssignments; ++a)
             {
                 const int dT = wc::destForBank (1, (int) synModCfg.assignments[a].dest);
@@ -12278,7 +12286,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const bool synCfgChanged = ! BG.synCfgPushed
                                    || synModBpm != BG.lastSynModBpm
                                    || ! modCfgEq (cfgRef, BG.lastSynModCfg);
-        if (synCfgChanged) { BG.lastSynModCfg = cfgRef; BG.lastSynModBpm = synModBpm; BG.synCfgPushed = true; }
+        if (synCfgChanged) { wc::copyModConfig (BG.lastSynModCfg, cfgRef); BG.lastSynModBpm = synModBpm; BG.synCfgPushed = true; }
         const bool engChanged = ! BG.engParamsPushed
                                 || ! (spA == BG.spA) || ! (spB == BG.spB) || ! (spC == BG.spC) || ! (spD == BG.spD)
                                 || ! (gpA == BG.gpA) || ! (gpB == BG.gpB) || ! (gpC == BG.gpC) || ! (gpD == BG.gpD);
@@ -17106,6 +17114,7 @@ void TerrainAudioProcessor::setSynthModMatrix (const juce::String& json)
 {
     synModVersion_.fetch_add (1, std::memory_order_acq_rel);   // fb570 — every page re-reads (the editor's relay)
     std::vector<SynModRoute> parsed;
+    parsed.reserve ((size_t) wc::MAX_ASSIGNMENTS);   // tp101 — message thread; one allocation, never a regrow mid-parse
     // fb554 — fill the SPARE curve set as the routes are parsed, then publish it whole (below).
     auto& spare = modCurveSet_[modCurveSpare_];
     for (auto& mc : spare.c) mc.set = false;
@@ -17207,7 +17216,7 @@ void TerrainAudioProcessor::setSynthModMatrix (const juce::String& json)
     //  under this same lock, right before it reads the routes, so the two can never disagree by a block (the
     //  review's finding: the old block-head copy could pair NEW routes with a STALE set for one buffer).
     const juce::ScopedLock sl (synModLock);
-    modPtHasModShared_[sp] = hasPtMod; modPtPubIdx_ = sp;
+    modPtHasModShared_[sp] = hasPtMod; modCurveCountShared_[sp] = nCurves; modPtPubIdx_ = sp;
     modPtVersion_.fetch_add (1, std::memory_order_release);
     modCurves_.store (&spare, std::memory_order_release);
     modCurveSpare_ ^= 1;

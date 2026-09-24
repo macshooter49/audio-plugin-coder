@@ -1145,13 +1145,22 @@ struct Assignment
 //  exactly like that one: the message thread fills the spare and stores it, the audio thread loads
 //  it once and can never see a half-redrawn shape.
 static constexpr int kModCurvePts  = 129;
-static constexpr int kMaxModCurves = 32;   // per patch. A patch with 32 DRAWN connections is not a patch.
+// tp101 — one curve slot per ROUTE, so a curve can never be the thing that runs out first. Max: "there is no
+//  max". 32 was a guess about taste ("a patch with 32 drawn connections is not a patch") and it meant the 33rd
+//  drawn connection silently played STRAIGHT. The slots are preallocated members (never the audio thread's
+//  allocation) and only the used prefix is copied on a publish (refreshModCurveAudio).
+static constexpr int kMaxModCurves = 256;
 struct ModCurve    { float pts[kModCurvePts] = {}; bool set = false; };
 struct ModCurveSet { ModCurve c[kMaxModCurves]; };
 
 
 
-static constexpr int MAX_ASSIGNMENTS = 128;   // fb178 — envelopes joined the matrix (was 32)
+// tp101 — THE ROUTE BOUND. NOT A PRODUCT LIMIT: Max builds past 32 and the page shows no maximum. 256 is the
+//  real-time-safe preallocation (every ModConfig is a fixed array — no allocation on the audio thread), sized so
+//  nobody meets it: one route per (source, destination) pair on the page, and a dense patch is ~60. Was 32, then
+//  128 (fb178). The page's twin is MOD_ROUTE_CAP (index.html) — keep them equal, or the page offers a route the
+//  engine drops. Copies of a ModConfig move only the live prefix (copyModConfig), so a bigger bound costs nothing.
+static constexpr int MAX_ASSIGNMENTS = 256;
 
 // The whole modulation table. Published to the audio thread as an immutable copy.
 struct ModConfig
@@ -1161,6 +1170,19 @@ struct ModConfig
     int         numAssignments = 0;
     float       driftLanes[8] = { 0 };   // FLOW·DRIFT block-rate lane values (sources Drift1..Drift8)
 };
+
+/** tp101 — copy a ModConfig's LIVE part: the LFOs, the drift lanes and assignments [0, numAssignments). Every
+    reader walks `a < numAssignments`, so the tail is never read; a whole-struct copy would move all
+    MAX_ASSIGNMENTS slots, and it runs per voice on every config change (up to 96 voices × a block). */
+inline void copyModConfig (ModConfig& dst, const ModConfig& src) noexcept
+{
+    if (&dst == &src) return;
+    for (int i = 0; i < NUM_LFOS; ++i) dst.lfos[i] = src.lfos[i];
+    for (int i = 0; i < 8; ++i) dst.driftLanes[i] = src.driftLanes[i];
+    const int n = src.numAssignments < 0 ? 0 : (src.numAssignments > MAX_ASSIGNMENTS ? MAX_ASSIGNMENTS : src.numAssignments);
+    for (int a = 0; a < n; ++a) dst.assignments[a] = src.assignments[a];
+    dst.numAssignments = n;
+}
 
 // fb178 — envelope sources (Row 3 S2). Blob src encoding: 100 + (envNum-1), Env 1..32.
 static constexpr int kEnvSrcBase = 100;

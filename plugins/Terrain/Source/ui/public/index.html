@@ -35232,6 +35232,10 @@ restoreThemeFromBackend();
   var FSLOT_BACK ={ 'Mix':[62,63], 'Drive':[60,61], 'Env':[56,57], 'Vel':[340,341], 'Track':[342,343] };   // fb78 — the WHOLE back row routes now; front RES/DRV/ENV target the runtime .fk-em emblems
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
+  /* tp101 — THERE IS NO ROUTE MAX. The MOD page's count label printed a ceiling of thirty-two; Max builds past it. This is only the engine's
+     preallocated real-time bound (== wc::MAX_ASSIGNMENTS in SynthModConfig.h; keep them equal or the page offers a
+     route the engine drops). It is never shown: every adder (drag, Modulate ›, the MOD page's Add route) reads it. */
+  var MOD_ROUTE_CAP=256; window.__MOD_ROUTE_CAP=MOD_ROUTE_CAP;
   /* ═══ fb563 — ONE WIRE CODEC ═══════════════════════════════════════════════════════════════
      The wire code (the `s` field of the matrix JSON, == the C++ constants in SynthModConfig.h)
      was hand-decoded in THREE places — push(), restore() and the popped card's receiver — and
@@ -35263,7 +35267,7 @@ restoreThemeFromBackend();
   function srcDefaultDepth(S){ return S.lfo?0.5:1.0; }   /* the DROP defaults: an LFO lands at half, everything else at full (fb178/fb263/fb552) */
   function isMagnitudeSrc(a){ return !!(a.env||a.fol||a.note); }   /* the shape sources — the C++ takes |depth|; every other family carries a SIGNED depth */
   function findRoute(S,dest){ var k=srcKey(S); for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcKey(a)===k) return a; } return null; }
-  function addP2Assign(S,dest,el){ if(findRoute(S,dest)) return; if(assigns.length>=128) return;
+  function addP2Assign(S,dest,el){ if(findRoute(S,dest)) return; if(assigns.length>=MOD_ROUTE_CAP) return;
     if(S.mac&&dest===(window.__MACRO_DEST||1878)+S.mac-1) return;   /* fb565 — a macro never modulates itself */   /* fb563 Phase 2 — macros · wheel · aftertouch · bend · random · alt: one generic adder */
     var a=srcOf(S); a.dest=dest; a.depth=srcDefaultDepth(S); a.el=el; assigns.push(a); markTargets(); push(); }
   function addRoute(S,dest,el){ if(S.lfo) addAssign(S.lfo,dest,el); else if(S.env) addEnvAssign(S.env,dest,el); else if(S.vel) addVelAssign(dest,el);
@@ -35385,19 +35389,19 @@ restoreThemeFromBackend();
      vertical drag = depth meter (the badge's old job, transplanted in the ul creation). */
   function removeAssign(a){ var i=assigns.indexOf(a); if(i<0)return; assigns.splice(i,1); markTargets(); push(); }
   function addAssign(lfo,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].lfo===lfo&&assigns[i].dest===dest) return; // dedupe
-    if(assigns.length>=128)return; var a={lfo:lfo,dest:dest,depth:0.5,el:el}; assigns.push(a); markTargets(); push(); }
+    if(assigns.length>=MOD_ROUTE_CAP)return; var a={lfo:lfo,dest:dest,depth:0.5,el:el}; assigns.push(a); markTargets(); push(); }
   /* fb178 — envelope routes: depth lands at FULL (+100%) per the drop-is-all-envelope decision. */
   function addEnvAssign(env,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].env===env&&assigns[i].dest===dest) return;
-    if(assigns.length>=128)return; var a={env:env,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
+    if(assigns.length>=MOD_ROUTE_CAP)return; var a={env:env,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function addVelAssign(dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].vel&&assigns[i].dest===dest) return;   /* fb260 — velocity source route (dedupe by dest) */
-    if(assigns.length>=128)return; var a={vel:1,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }   /* fb263 — velocity routes land at full depth (like env) so 100% velocity = full effect; attenuate via the ring */
+    if(assigns.length>=MOD_ROUTE_CAP)return; var a={vel:1,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }   /* fb263 — velocity routes land at full depth (like env) so 100% velocity = full effect; attenuate via the ring */
   /* fb552 — AUDIO AS A MODULATION SOURCE. k = 1..4 (Osc A-D) or 5 (Noise). Depth lands at 1.0
      like an env/velocity route, because the C++ law is the same one: at full depth the destination
      follows the source's SHAPE (ownership), so anything less has to be a deliberate attenuation. */
   function addNoteAssign(dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].note&&assigns[i].dest===dest) return;   /* fb555 */
-    if(assigns.length>=128)return; var a={note:1,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
+    if(assigns.length>=MOD_ROUTE_CAP)return; var a={note:1,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function addFollowAssign(k,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].fol===k&&assigns[i].dest===dest) return;
-    if(assigns.length>=128)return; var a={fol:k,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
+    if(assigns.length>=MOD_ROUTE_CAP)return; var a={fol:k,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function markTargets(){ if(__tiBatchDepth){ __tiMarkDirty=true; return; }   /* tp19 */
     document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); });
     /* tp96 — the MOD page mirrors this list; every change anywhere (a knob drop, a restore, the dice) reaches it through ONE event */
@@ -47225,11 +47229,11 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function select(a){ selA=a; list().forEach(function(q){ if(q.__mm) q.__mm.row.classList.toggle('sel',q===selA); }); if(MM&&MM.classList.contains('routes')) rvSel(); }
   function rebuild(){ ROWS.innerHTML=''; built=list().slice(); built.forEach(function(a){ a.__mm=null; ROWS.appendChild(build(a)); }); ROWS.appendChild(ADDR); after(); }
   function order(){ list().forEach(function(a){ if(a.__mm) ROWS.appendChild(a.__mm.row); }); ROWS.appendChild(ADDR); built=list().slice(); }
-  function after(){ var L=list(); document.getElementById('mm-empty').style.display=L.length?'none':'block'; ADDR.style.display=L.length<32?'flex':'none';
-    document.getElementById('mm-count').innerHTML='<b>'+L.length+'</b> routes · 32 max';
+  function after(){ var L=list(); document.getElementById('mm-empty').style.display=L.length?'none':'block'; ADDR.style.display=L.length<(window.__MOD_ROUTE_CAP||256)?'flex':'none';   /* tp101 — no max: Add route stays (the engine's 256 is never met) */
+    document.getElementById('mm-count').innerHTML='<b>'+L.length+'</b> '+(L.length===1?'route':'routes');
     var mb=document.getElementById('mod-btn'); if(mb) mb.classList.toggle('has-routes',L.some(function(a){ return !a.byp; }));
     search(); if(MM.classList.contains('routes')) rvBuild(); }
-  function add(S,dest,extra){ var L=list(); if(L.length>=32) return null; var a=API().add(S,dest); if(!a) return null;
+  function add(S,dest,extra){ var L=list(); if(L.length>=(window.__MOD_ROUTE_CAP||256)) return null; var a=API().add(S,dest); if(!a) return null;
     if(extra) for(var k in extra) a[k]=extra[k]; commit(); sync(); select(a); return a; }
   function remove(a){ API().remove(a); if(selA===a) selA=null; sync(); }
   function rowMenu(a,r){ select(a); openMenu([
@@ -47247,6 +47251,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var locked=false; try{ locked=localStorage.getItem('mmLock')==='1'; }catch(e){}
   window.__mmLocked=function(){ return locked; };
   function freeLfo(){ var used={}; list().forEach(function(a){ if(a.lfo) used[a.lfo]=1; if(a.aux&&a.aux.lfo) used[a.aux.lfo]=1; }); for(var k=1;k<=10;k++) if(!used[k]) return k; return 10; }
+  /* tp101 — ADD ROUTE NEVER GOES DEAD. It always proposed {free LFO → Filter 1 Cutoff}; once all ten LFOs were in use,
+     freeLfo() answers 10, and after LFO 10 → Cutoff existed every later click hit the adders' (source, dest) dedupe and
+     did nothing — a hidden cap (measured: pressing it 60 times from empty stopped at 10 routes). Keep the old proposal while it is free; otherwise the first (LFO, dest)
+     pair not yet routed, walking the catalogue in its own order. The row is a placeholder the user retargets. */
+  function freeRoute(){ var L=list(), has={}; L.forEach(function(a){ if(a.lfo) has[a.lfo+'_'+a.dest]=1; });
+    var k0=freeLfo(); if(!has[k0+'_0']) return {lfo:k0,dest:0};
+    var seen={0:1}, ids=[0]; DCATS.forEach(function(c){ c.items.forEach(function(it){ var id=it.d.id; if(!seen[id]){ seen[id]=1; ids.push(id); } }); });
+    for(var i=0;i<ids.length;i++) for(var k=1;k<=10;k++) if(!has[k+'_'+ids[i]]) return {lfo:k,dest:ids[i]};
+    return null; }
   function headerMenu(btn){ var r=btn.getBoundingClientRect(); openMenu([
     {sec:'Sort'},{label:'Sort by Source',cur:sortKey==='src',onPick:function(){ doSort('src'); }},{label:'Sort by Destination',cur:sortKey==='dst',onPick:function(){ doSort('dst'); }},
     {sec:'Matrix'},{label:'Lock Matrix',cur:locked,ct:'keep on preset change',onPick:function(){ locked=!locked; try{ localStorage.setItem('mmLock',locked?'1':'0'); }catch(e){} document.getElementById('mm-lock').textContent=locked?'Locked':''; }},
@@ -47368,8 +47381,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       +'<div id="mm-rv"><div class="rv-in"><svg></svg></div></div></div></div>');
     host.insertBefore(MM,host.firstChild);
     ROWS=document.getElementById('mm-rows');
-    ADDR=el('<div class="tp-row addr">＋ Add route</div>'); ADDR.addEventListener('click',function(){ add({lfo:freeLfo()},0,{depth:.3}); });
-    document.getElementById('mm-add').addEventListener('click',function(){ add({lfo:freeLfo()},0,{depth:.3}); });
+    ADDR=el('<div class="tp-row addr">＋ Add route</div>'); ADDR.addEventListener('click',function(){ var fr=freeRoute(); if(fr) add({lfo:fr.lfo},fr.dest,{depth:.3}); });   /* tp101 */
+    document.getElementById('mm-add').addEventListener('click',function(){ var fr=freeRoute(); if(fr) add({lfo:fr.lfo},fr.dest,{depth:.3}); });   /* tp101 — the header + too */
     document.getElementById('mm-menu').addEventListener('click',function(e){ headerMenu(e.currentTarget); });
     document.getElementById('mm-lock').textContent=locked?'Locked':'';
     var se=document.getElementById('mm-search'); se.addEventListener('input',search); se.addEventListener('keydown',function(e){ e.stopPropagation(); });

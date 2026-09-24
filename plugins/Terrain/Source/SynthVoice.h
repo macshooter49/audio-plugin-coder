@@ -838,7 +838,7 @@ class SynthVoice : public juce::SynthesiserVoice
 
         void setModConfig (const wc::ModConfig& cfg, float bpm) noexcept
         {
-            modConfig_ = cfg;
+            wc::copyModConfig (modConfig_, cfg);   // tp101 — the live prefix only (MAX_ASSIGNMENTS is 256; a patch uses a few)
             for (int i = 0; i < wc::NUM_LFOS; ++i)
             {
                 synthLfo_[i].setSettings (cfg.lfos[i]);
@@ -6515,6 +6515,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 unsigned lfoTickMask = 1u;   // L1 always (viz dot)
                 bool anyCutRoute = false, anyAmtRoute = false;
                 int  cutRouteIdx[wc::MAX_ASSIGNMENTS]; int nCutRoutes = 0;   // fb636 — enabled Cut1/Cut2 routes, in order
+                int  amtRouteIdx[wc::MAX_ASSIGNMENTS]; int nAmtRoutes = 0;   // tp101 — enabled LFO/env -> LfoAmt routes, in order (the per-sample amt walk)
                 for (int a = 0; a < modConfig_.numAssignments; ++a)
                 {
                     const auto& as = modConfig_.assignments[a];
@@ -6525,8 +6526,11 @@ class SynthVoice : public juce::SynthesiserVoice
                     //  arms the cut gather too; only an LFO source needs its per-sample tick.
                     if (as.dest == wc::ModDest::Cut1 || as.dest == wc::ModDest::Cut2)
                     { if (sIsLfo) lfoTickMask |= (1u << sI); anyCutRoute = true; cutRouteIdx[nCutRoutes++] = a; }   // fb636 — the list the per-sample gather walks
-                    else if (sIsLfo && dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
-                    { lfoTickMask |= (1u << sI) | (1u << (dI - (int) wc::ModDest::LfoAmt1)); anyAmtRoute = true; }
+                    else if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
+                    {
+                        if (sIsLfo) { lfoTickMask |= (1u << sI) | (1u << (dI - (int) wc::ModDest::LfoAmt1)); anyAmtRoute = true; }
+                        if (sIsLfo || wc::isEnvModSource (sI)) amtRouteIdx[nAmtRoutes++] = a;   // tp101 — exactly the routes the per-sample amt sum reads
+                    }
                 }
                 bool laneGlideSettled = false;   // fb636 — see SETTLED GLIDES above the first loop
                 for (int i = 0; i < numSamples; ++i)
@@ -6571,10 +6575,9 @@ class SynthVoice : public juce::SynthesiserVoice
                     if (anyAmtRoute)
                     {
                         float amt[wc::NUM_LFOS] = { 0.0f };
-                        for (int a = 0; a < modConfig_.numAssignments; ++a)
+                        for (int aq = 0; aq < nAmtRoutes; ++aq)   // tp101 — only the LfoAmt routes (was: every route, every sample)
                         {
-                            const auto& as = modConfig_.assignments[a];
-                            if (! as.enabled) continue;
+                            const auto& as = modConfig_.assignments[amtRouteIdx[aq]];
                             const int sI = (int) as.source, dI = (int) as.dest;
                             float sv3;
                             if      (sI >= 0 && sI < wc::NUM_LFOS) sv3 = lfoOut_[sI];
