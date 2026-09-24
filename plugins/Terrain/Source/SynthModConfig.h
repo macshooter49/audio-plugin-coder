@@ -17,6 +17,7 @@
 // =============================================================================
 
 #include "SynthLFO.h"
+#include "TerrainTuning.h"   // tp103 — A4
 #include <cmath>
 #include <algorithm>
 #include <array>
@@ -54,6 +55,9 @@ enum class ModSource : int
     Macro1, Macro2, Macro3, Macro4, Macro5, Macro6, Macro7, Macro8, Macro9,   // fb565 — NINE (Max's 3×3); contiguous: macroIndexOf() subtracts Macro1
     Wheel, Aftertouch, Bend,
     Rand1, Rand2, Rand3, Rand4, Alt,
+    // tp103 — MPE SLIDE (CC 74), appended. Unipolar 0..1, additive with a signed depth (the Aftertouch law).
+    //  In MPE each note reads its OWN channel's CC 74; otherwise it is the one global CC 74.
+    Slide,
     NumSources
 };
 static constexpr int NUM_LFOS = 10;
@@ -1207,6 +1211,7 @@ static constexpr int kAftertouchSrc = 231;                                      
 static constexpr int kBendSrc       = 232;                                          // pitch wheel, −1..+1
 static constexpr int kRandSrcBase   = 240;  static constexpr int kNumRands  = 4;    // 240..243 = Random 1..4 per note-on
 static constexpr int kAltSrc        = 244;                                          // 0/1, flips every note-on
+static constexpr int kSlideSrc      = 245;                                          // tp103 — CC 74 / MPE slide, 0..1 (per note in MPE)
 inline int macroIndexOf (int sI) noexcept { const int k = sI - (int) ModSource::Macro1; return (k >= 0 && k < kNumMacros) ? k : -1; }
 inline int randIndexOf  (int sI) noexcept { const int k = sI - (int) ModSource::Rand1;  return (k >= 0 && k < kNumRands)  ? k : -1; }
 inline bool isMacroModSource (int sI) noexcept { return macroIndexOf (sI) >= 0; }
@@ -1230,8 +1235,13 @@ static constexpr int kRandAuxDestBias = 65536;   // fb572 — a "Scale by Random
 inline bool isUniAdditiveSource (int sI) noexcept
 {
     return sI == (int) ModSource::Velocity || isMacroModSource (sI) || sI == (int) ModSource::Wheel
-        || sI == (int) ModSource::Aftertouch || isRandModSource (sI) || sI == (int) ModSource::Alt;
+        || sI == (int) ModSource::Aftertouch || isRandModSource (sI) || sI == (int) ModSource::Alt
+        || sI == (int) ModSource::Slide;   // tp103
 }
+/** tp103 — the sources a NOTE can own (per-note in MPE / poly pressure): the voice reads its own value, the
+    processor's global pass reads the whole-instrument view. Level routes carry the difference per voice. */
+inline bool isNoteExpressionSource (int sI) noexcept
+{ return sI == (int) ModSource::Aftertouch || sI == (int) ModSource::Bend || sI == (int) ModSource::Slide; }
 /** block-constant for a whole buffer (no per-sample path): joins the block-constant cutoff sum. */
 inline bool isBlockConstantSource (int sI) noexcept
 { return isUniAdditiveSource (sI) || sI == (int) ModSource::Bend; }
@@ -1243,6 +1253,7 @@ inline int phase2SourceForWire (int wire) noexcept
     if (wire == kBendSrc)       return (int) ModSource::Bend;
     if (wire >= kRandSrcBase && wire < kRandSrcBase + kNumRands)   return (int) ModSource::Rand1 + (wire - kRandSrcBase);
     if (wire == kAltSrc)        return (int) ModSource::Alt;
+    if (wire == kSlideSrc)      return (int) ModSource::Slide;   // tp103
     return -1;
 }
 /** fb563 — the GLOBAL sources, owned by the processor, read by every voice and by the block loop
@@ -1255,7 +1266,23 @@ struct GlobalModSources
     std::atomic<float> bend { 0.0f };            // −1..+1
     std::atomic<float> bendRangeSemis { 2.0f };
     std::atomic<uint32_t> altCounter { 0 };      // every note-on takes a number; its low bit is that note's Alt
+
+    // ══ tp103 — EXPRESSION (Settings → MIDI & Controllers → Expression). Appended; the fields above keep their
+    //  meaning for every reader that already had them: `aftertouch` / `bend` are the WHOLE-INSTRUMENT view the
+    //  processor's global pass and the rack read. A voice reads its OWN note through these:
+    std::atomic<float> atChan { 0.0f };                // channel pressure only (non-MPE / the MPE master channel)
+    std::atomic<float> slide  { 0.0f };                // CC 74, whole-instrument view (0..1)
+    std::atomic<float> slideMaster { 0.0f };           // CC 74 on a non-member channel (0..1)
+    std::atomic<float> polyAt[128] {};                 // POLY key pressure per NOTE number, smoothed (0..1)
+    std::atomic<int>   polyAtLive { 0 };               // 1 while any polyAt[] is non-zero (a voice skips the read otherwise)
+    std::atomic<float> chBend[17] {}, chPress[17] {}, chSlide[17] {};   // MPE member channels, index = MIDI channel 1..16
+    std::atomic<float> mpeBendRangeSemis { 48.0f };    // per-note bend range (the member channels)
+    std::atomic<uint32_t> mpeMemberMask { 0 };         // bit c set = channel c is an MPE MEMBER. 0 = MPE off.
+    bool isMpeMember (int ch) const noexcept
+    { return ch >= 1 && ch <= 16 && ((mpeMemberMask.load (std::memory_order_relaxed) >> ch) & 1u) != 0; }
 };
+
+
 inline ModSource envSourceFor (int envNum) noexcept   // envNum 1..32
 {
     switch (envNum)

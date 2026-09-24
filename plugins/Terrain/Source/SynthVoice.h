@@ -543,12 +543,49 @@ class SynthVoice : public juce::SynthesiserVoice
             else if (sI == (int) wc::ModSource::Velocity) return std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped
             else if (wc::isMacroModSource (sI))            return (gsrc_ != nullptr) ? gsrc_->macro[wc::macroIndexOf (sI)].load (std::memory_order_relaxed) : 0.0f;   // fb563 Phase 2
             else if (sI == (int) wc::ModSource::Wheel)      return (gsrc_ != nullptr) ? gsrc_->wheel.load (std::memory_order_relaxed) : 0.0f;
-            else if (sI == (int) wc::ModSource::Aftertouch) return (gsrc_ != nullptr) ? gsrc_->aftertouch.load (std::memory_order_relaxed) : 0.0f;
-            else if (sI == (int) wc::ModSource::Bend)       return (gsrc_ != nullptr) ? gsrc_->bend.load (std::memory_order_relaxed) : 0.0f;   // −1..+1
+            else if (sI == (int) wc::ModSource::Aftertouch) return noteAftertouch();   // tp103 — THIS note's pressure (poly AT / MPE member), never another key's
+            else if (sI == (int) wc::ModSource::Bend)       return noteBend();         // −1..+1 · tp103 — master + this note's MPE bend
+            else if (sI == (int) wc::ModSource::Slide)      return noteSlide();        // tp103 — CC 74 (this note's channel in MPE)
             else if (wc::isRandModSource (sI))             return wc::randForRoute (noteSeed_, dest, wc::randIndexOf (sI));   // fb572 — one Random, independent per route
             else if (sI == (int) wc::ModSource::Alt)        return alt_;
             ok = false; return 0.0f;
         }
+        /* ══ tp103 — PER-NOTE EXPRESSION. Non-MPE: the channel pressure every note shares, raised to THIS key's poly
+           pressure (Arturia PolyBrute Poly / FullTouch send 0xA0 per key) — never another key's. MPE member channel:
+           the master's pressure raised to this channel's. With no poly pressure and MPE off these return exactly the
+           value every voice read before (atChan == aftertouch, polyAtLive == 0). */
+        bool noteIsMpeMember() const noexcept { return gsrc_ != nullptr && gsrc_->isMpeMember (noteCh_); }
+        float noteAftertouch() const noexcept
+        {
+            if (gsrc_ == nullptr) return 0.0f;
+            const float a = gsrc_->atChan.load (std::memory_order_relaxed);
+            if (noteIsMpeMember()) return juce::jmax (a, gsrc_->chPress[noteCh_].load (std::memory_order_relaxed));
+            if (gsrc_->polyAtLive.load (std::memory_order_relaxed) != 0 && currentMidiNote_ >= 0 && currentMidiNote_ < 128)
+                return juce::jmax (a, gsrc_->polyAt[currentMidiNote_].load (std::memory_order_relaxed));
+            return a;
+        }
+        float noteBend() const noexcept
+        {
+            if (gsrc_ == nullptr) return 0.0f;
+            const float b = gsrc_->bend.load (std::memory_order_relaxed);
+            if (! noteIsMpeMember()) return b;
+            return juce::jlimit (-1.0f, 1.0f, b + gsrc_->chBend[noteCh_].load (std::memory_order_relaxed));
+        }
+        float noteSlide() const noexcept
+        {
+            if (gsrc_ == nullptr) return 0.0f;
+            return noteIsMpeMember() ? gsrc_->chSlide[noteCh_].load (std::memory_order_relaxed)
+                                     : gsrc_->slideMaster.load (std::memory_order_relaxed);
+        }
+        /** the global pass's (whole-instrument) view of the same source — what it already added to Level A-D. */
+        float globalExpressionValue (int sI) const noexcept
+        {
+            if (gsrc_ == nullptr) return 0.0f;
+            if (sI == (int) wc::ModSource::Aftertouch) return gsrc_->aftertouch.load (std::memory_order_relaxed);
+            if (sI == (int) wc::ModSource::Bend)       return gsrc_->bend.load (std::memory_order_relaxed);
+            return gsrc_->slide.load (std::memory_order_relaxed);
+        }
+        int getNoteChannel() const noexcept { return noteCh_; }
         uint32_t getNoteSeed() const noexcept { return noteSeed_; }   // fb572 — this note's seed; the global half hashes it per route (randForRoute)
         float getAlt01() const noexcept { return alt_; }                                          // fb563 — this note's alternator
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
@@ -660,7 +697,7 @@ class SynthVoice : public juce::SynthesiserVoice
         float getFundamentalHz() const noexcept
         {
             const double n = (glideProgress_ < 1.0) ? glideNote_ : (double) currentMidiNote_;
-            return (float) (440.0 * std::pow (2.0, (n - 69.0) / 12.0));
+            return (float) (wc::tuningA4HzD() * std::pow (2.0, (n - 69.0) / 12.0));   // tp103 — follows A4
         }
 
         void setFltEnvDAHDSR (float dl,float a,float h,float d,float s,float r,
@@ -2962,6 +2999,10 @@ class SynthVoice : public juce::SynthesiserVoice
             // thread-safe even though startNote runs under the Synthesiser lock.
             static std::atomic<juce::uint32> globalNoteCounter { 1 };
             noteStartStamp_ = globalNoteCounter.fetch_add (1, std::memory_order_relaxed);
+            // tp103 — the note's channel. juce::Synthesiser::startVoice records it before calling here and only
+            //  exposes it through isPlayingChannel(); an MPE voice reads its OWN channel's bend/pressure/slide.
+            noteCh_ = 1;
+            for (int c = 1; c <= 16; ++c) if (isPlayingChannel (c)) { noteCh_ = c; break; }
             // fb631 — an idle voice is no longer pushed routes every block (that push, × 96 voices × 93
             // sends, was the preset-change spike); it takes the current snapshot the moment it is needed.
             if (routeSnap_ != nullptr && routesSeen_ != routeSnap_->version.load (std::memory_order_acquire)) pullRoutes (*routeSnap_);
@@ -3639,6 +3680,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                 }
                 envLvlOwn_[0] = envLvlOwn_[1] = envLvlOwn_[2] = envLvlOwn_[3] = 0.0f;
+                noteLvlMod_[0] = noteLvlMod_[1] = noteLvlMod_[2] = noteLvlMod_[3] = 0.0f;   // tp103
                 envLvlDrive_[0] = envLvlDrive_[1] = envLvlDrive_[2] = envLvlDrive_[3] = 0.0f;
                 float vOwnW[12] = { 0 }, vOwnV[12] = { 0 };   // fb188 — ownership claims [Fr,Wp,Fd]×[A..D]: knob-0 + atten-100 follows the shape (Max's iffy warp)
                 float mFrA = 0.0f, mWpA = 0.0f, mFdA = 0.0f, mFrB = 0.0f, mWpB = 0.0f, mFdB = 0.0f;
@@ -3707,6 +3749,24 @@ class SynthVoice : public juce::SynthesiserVoice
                             continue;
                         }
                     }
+                    // tp103 — PER-NOTE EXPRESSION ON A LEVEL. Level A-D is applied by the processor's GLOBAL pass (one
+                    //  value for every voice), which reads the whole-instrument aftertouch / bend / slide. A note that
+                    //  owns its own value (poly pressure, an MPE member) adds the DIFFERENCE here, so its level follows
+                    //  its own finger and nobody else's. Equal values (no poly AT, MPE off) → exactly 0 → untouched.
+                    if (wc::isNoteExpressionSource (sI)
+                        && (int) as.dest >= (int) wc::ModDest::LevelA && (int) as.dest <= (int) wc::ModDest::LevelD)
+                    {
+                        float gV = globalExpressionValue (sI);
+                        if (as.curve >= 0)
+                            gV = wc::applyModCurve (modCurves_ != nullptr ? modCurves_->load (std::memory_order_acquire) : nullptr, as.curve, sI, gV);
+                        bool slG = true; gV = wc::applyPolarity (sI, as.pol, gV, slG);
+                        if (srcV != gV)
+                        {
+                            const auto& diL = wc::kDestInfo[(int) as.dest];
+                            noteLvlMod_[(int) as.dest - (int) wc::ModDest::LevelA] += wc::routeContribution (diL, srcV, asDepth) - wc::routeContribution (diL, gV, asDepth);
+                        }
+                        continue;
+                    }
                     const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, asDepth);
                     // fb178 — env→cutoff joins the filter's semitone sum as a block constant
                     // (LFO→cutoff stays per-sample below; envs advance per block anyway).
@@ -3749,7 +3809,15 @@ class SynthVoice : public juce::SynthesiserVoice
                 //  semitones, riding the per-block COARSE lane the matrix already uses (glided downstream).
                 if (gsrc_ != nullptr)
                 {
-                    const float bendSemi = gsrc_->bend.load (std::memory_order_relaxed) * gsrc_->bendRangeSemis.load (std::memory_order_relaxed);
+                    float bendSemi = gsrc_->bend.load (std::memory_order_relaxed) * gsrc_->bendRangeSemis.load (std::memory_order_relaxed);
+                    // tp103 — MPE: the master bend (above) PLUS this note's own member-channel bend at the MPE range
+                    //  (spec §2.4: combined separately for each sounding note). Not a member → nothing added.
+                    if (noteIsMpeMember())
+                        bendSemi += gsrc_->chBend[noteCh_].load (std::memory_order_relaxed) * gsrc_->mpeBendRangeSemis.load (std::memory_order_relaxed);
+                    // tp103 — CONCERT PITCH. Every engine in the voice (WT, sample, granular, FM, harmonic, modal,
+                    //  resynth, the sub) reads this coarse lane, so A4 retunes them all in one place. 440 → skipped.
+                    const float a4Semi = wc::tuningA4Semis();
+                    if (a4Semi != 0.0f) bendSemi += a4Semi;
                     for (int o = 0; o < 4; ++o) mCrs[o] += bendSemi;
                 }
                 coarseModA_ = mCrs[0]; coarseModB_ = mCrs[1]; coarseModC_ = mCrs[2]; coarseModD_ = mCrs[3];
@@ -6191,10 +6259,10 @@ class SynthVoice : public juce::SynthesiserVoice
                     // fb183 — OWNERSHIP CROSSFADE: eff = (1−Σd)·knob + Σ(d·env), per voice.
                     const float _loA = juce::jmin (1.0f, envLvlOwn_[0]), _loB = juce::jmin (1.0f, envLvlOwn_[1]);
                     const float _loC = juce::jmin (1.0f, envLvlOwn_[2]), _loD = juce::jmin (1.0f, envLvlOwn_[3]);
-                    lvlSmA_ += (juce::jlimit (0.0f, 1.0f, level_  * (1.0f - _loA) + envLvlDrive_[0]) - lvlSmA_) * lvlSmCoef_;
-                    lvlSmB_ += (juce::jlimit (0.0f, 1.0f, levelB_ * (1.0f - _loB) + envLvlDrive_[1]) - lvlSmB_) * lvlSmCoef_;
-                    lvlSmC_ += (juce::jlimit (0.0f, 1.0f, levelC_ * (1.0f - _loC) + envLvlDrive_[2]) - lvlSmC_) * lvlSmCoef_;
-                    lvlSmD_ += (juce::jlimit (0.0f, 1.0f, levelD_ * (1.0f - _loD) + envLvlDrive_[3]) - lvlSmD_) * lvlSmCoef_;
+                    lvlSmA_ += (juce::jlimit (0.0f, 1.0f, level_  * (1.0f - _loA) + envLvlDrive_[0] + noteLvlMod_[0]) - lvlSmA_) * lvlSmCoef_;   // tp103 — + this note's own expression (0 unless it owns one)
+                    lvlSmB_ += (juce::jlimit (0.0f, 1.0f, levelB_ * (1.0f - _loB) + envLvlDrive_[1] + noteLvlMod_[1]) - lvlSmB_) * lvlSmCoef_;
+                    lvlSmC_ += (juce::jlimit (0.0f, 1.0f, levelC_ * (1.0f - _loC) + envLvlDrive_[2] + noteLvlMod_[2]) - lvlSmC_) * lvlSmCoef_;
+                    lvlSmD_ += (juce::jlimit (0.0f, 1.0f, levelD_ * (1.0f - _loD) + envLvlDrive_[3] + noteLvlMod_[3]) - lvlSmD_) * lvlSmCoef_;
 
                     // fb202 — PAN GLIDE (Max: "no static"): the pan gains were still stepping at
                     // block rate while the levels beside them glided (fb180) — an LFO/env on any
@@ -7258,6 +7326,8 @@ class SynthVoice : public juce::SynthesiserVoice
         double sampleRate_      = 48000.0;
         float  invSampleRate_   = 1.0f / 48000.0f;   // fb523 — set in setCurrentPlaybackSampleRate; the FM Hz→cycles/sample scale
         int    currentMidiNote_ = 60;
+        int    noteCh_ = 1;                          // tp103 — the MIDI channel this note arrived on (MPE: its own bend/pressure/slide)
+        float  noteLvlMod_[4] = { 0.f, 0.f, 0.f, 0.f };   // tp103 — per-note expression on Level A-D: this voice's value minus the global pass's
         float  currentVelocity_ = 1.0f;
         float  velDepth_ = 0.5f;   // fb262 — velocity CURVE amount (0..1, repurposed from depth): 0.5=linear, >0.5 lifts soft hits, <0.5 hardens. NO LONGER touches amp.
         wc::GlobalModSources* gsrc_ = nullptr;        // fb563 — the processor's macros · wheel · aftertouch · bend (+ the alt counter)

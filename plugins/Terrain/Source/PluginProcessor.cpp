@@ -430,6 +430,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     for (int cc = 0; cc < 128; ++cc)   // fb563 (4) — the CC map starts empty (atomic arrays do not value-initialise themselves)
     { midiCcParam_[cc].store (-1, std::memory_order_relaxed); midiCcPending_[cc].store (0.0f, std::memory_order_relaxed); midiCcDirty_[cc].store (0, std::memory_order_relaxed); }
     synthEngine.addSound (new tw::SynthSound());
+    synthEngine.setGlobalSources (&globalSrc_);   // tp103 — the MPE zone for the master-channel fan-out
     for (int i = 0; i < kSynthVoiceCount; ++i)
     {
         auto* v = new tw::SynthVoice();
@@ -668,6 +669,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
    #endif
 
     loadImportsRegistry();   // IMPORTS (fb60) — restore referenced files/folders from the app-data JSON
+    loadMidiPrefs();         // tp103 — A4 + the voice ceiling (every instance) and the new-instance MPE / channel defaults
 
     // fb623 — WHAT A BRAND-NEW INSTANCE IS. Taken here, at the end of construction, before any host
     // blob or preset can touch anything: this IS Init, and initPatch() replays it. Storing the
@@ -3174,6 +3176,7 @@ void TerrainAudioProcessor::ensureBankB()
     if (synthEngineB_ != nullptr) return;
     auto eng = std::make_unique<UnisonSynth>();
     eng->addSound (new tw::SynthSound());
+    eng->setGlobalSources (&globalSrc_);   // tp103
     for (int i = 0; i < kSynthVoiceCount; ++i)
     {
         auto* v = new tw::SynthVoice();
@@ -9690,6 +9693,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     if (wrapperType == wrapperType_Standalone && getPlayHead() == nullptr)
         setPlayHead (&standaloneHead_);
     armedMidi_.ensureSize (8192);   // tp49 — the armed-chop MIDI filter never allocates on the audio thread
+    midiFiltScratch_.ensureSize (8192);   // tp103 — nor does the MIDI channel filter
     crossBus_.prepare (samplesPerBlock);   // tp53 — the cross-bank modulator board: the ONLY place it allocates
     {   // fb575 — the macro base's smoother starts where the knob stands (no glide on transport start), and the
         //  macro parameters' indices are known before the first CC can arrive
@@ -10585,6 +10589,30 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         ~TestToneScope() { if (p.testToneArmed_.load (std::memory_order_acquire)) p.renderTestTone (b); }
     } testToneScope_ { *this, buffer };
 
+    // tp103 — MIDI CHANNEL (Settings → MIDI & Controllers → MIDI channel). Omni (0) passes everything; a channel
+    //  keeps only that channel's messages (and channel-less ones — sysex, clock), BEFORE anything reads the buffer,
+    //  so the synth, the sampler layers, the arp and MIDI learn all hear the same thing. MPE owns every channel, so
+    //  the filter stands aside while MPE is on. Runs before the QWERTY drain: the computer keyboard always plays.
+    {
+        const int chF = midiChannelFilter_.load (std::memory_order_relaxed);
+        if (chF >= 1 && chF <= 16 && mpeMemberMaskFor() == 0 && ! midiMessages.isEmpty())
+        {
+            bool drop = false;
+            for (const auto meta : midiMessages)
+            {   const int c = meta.getMessage().getChannel(); if (c != 0 && c != chF) { drop = true; break; } }
+            if (drop)
+            {
+                midiFiltScratch_.clear();
+                for (const auto meta : midiMessages)
+                {
+                    const int c = meta.getMessage().getChannel();
+                    if (c == 0 || c == chF) midiFiltScratch_.addEvent (meta.data, meta.numBytes, meta.samplePosition);
+                }
+                midiMessages.swapWith (midiFiltScratch_);
+            }
+        }
+    }
+
     // fb484 — standalone QWERTY-to-MIDI: drain the key-note ring into the normal MIDI stream.
     if (wrapperType == wrapperType_Standalone)
     {
@@ -10606,25 +10634,120 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //  rate so a 7-bit wheel step lands as a slope and not a stair; the macros are the plain
     //  APVTS knobs, read here so both halves of the matrix see one number per block.
     {
+        // tp103 — the walk is CHANNEL-AWARE. MPE member channels (mpeMemberMaskFor) carry their own bend / pressure /
+        //  slide; every other channel is the whole instrument's, exactly as before. Poly key pressure is kept per NOTE
+        //  (a PolyBrute's Poly / FullTouch aftertouch reaches only the key it came from) and no longer overwrites the
+        //  channel pressure. RPN 6 (the MPE Configuration Message) and RPN 0 on a member are honoured.
+        if (mpeDisarmReq_.exchange (false, std::memory_order_acq_rel)) { mcmSeen_ = false; mcmLower_ = mcmUpper_ = 0; mpeArmedByHost_.store (0, std::memory_order_relaxed); }
+        uint32_t mpeMask = mpeMemberMaskFor();
+        bool snapCh[17] = {};
         for (const auto meta : midiMessages)
         {
             const auto m = meta.getMessage();
+            const int ch = m.getChannel();
+            const bool member = mpeMask != 0 && ch >= 1 && ch <= 16 && ((mpeMask >> ch) & 1u) != 0;
             if (m.isController())
             {
                 const int cc = m.getControllerNumber(), cv = m.getControllerValue();
                 if (cc == 1) midiWheelT_ = (float) cv / 127.0f;
-                midiCcSeen (cc, cv);   // fb563 (4) — MIDI Learn + the CC map (the audio-thread half: store only)
+                if (cc == 74) { if (member) chSlideT_[ch] = (float) cv / 127.0f; else midiSlideT_ = (float) cv / 127.0f; }
+                if (ch >= 1 && ch <= 16)
+                {   // RPN select / data entry (CC 101 / 100 / 6)
+                    if (cc == 101) rpnMsb_[ch] = cv;
+                    else if (cc == 100) rpnLsb_[ch] = cv;
+                    else if (cc == 6 && rpnMsb_[ch] == 0 && rpnLsb_[ch] == 6 && (ch == 1 || ch == 16))
+                    {   // MCM: cv member channels for the zone whose master this is (0 = zone off)
+                        (ch == 1 ? mcmLower_ : mcmUpper_) = juce::jlimit (0, 15, cv);
+                        mcmSeen_ = (mcmLower_ + mcmUpper_) > 0;
+                        mpeRangeRt_ = mpeBendSetting_.load (std::memory_order_relaxed);   // spec §2.4: a new zone resets the member range
+                        mpeArmedByHost_.store (mcmSeen_ ? 1 : 0, std::memory_order_relaxed);
+                        mpeMask = mpeMemberMaskFor();
+                    }
+                    else if (cc == 6 && rpnMsb_[ch] == 0 && rpnLsb_[ch] == 0 && member)
+                        mpeRangeRt_ = (float) juce::jlimit (1, 96, cv);                   // RPN 0 on a member: every member's range
+                }
+                if (! member) midiCcSeen (cc, cv);   // fb563 (4) — MIDI Learn + the CC map · tp103 — a member's CC 74 stream never drives a learned knob
             }
-            else if (m.isChannelPressure())                        midiAtT_    = (float) m.getChannelPressureValue() / 127.0f;
-            else if (m.isAftertouch())                             midiAtT_    = (float) m.getAfterTouchValue() / 127.0f;
-            else if (m.isPitchWheel())                             midiBendT_  = (float) (m.getPitchWheelValue() - 8192) / 8192.0f;
+            else if (m.isChannelPressure())
+            {
+                const float v = (float) m.getChannelPressureValue() / 127.0f;
+                if (member) chPressT_[ch] = v; else midiAtT_ = v;
+            }
+            else if (m.isAftertouch())
+            {   // poly key pressure -> THIS key only
+                const int n = m.getNoteNumber();
+                if (n >= 0 && n < 128) { polyAtT_[n] = (float) m.getAfterTouchValue() / 127.0f; polyAtAny_ = true; }
+            }
+            else if (m.isPitchWheel())
+            {
+                const float v = (float) (m.getPitchWheelValue() - 8192) / 8192.0f;
+                if (member) chBendT_[ch] = v; else midiBendT_ = v;
+            }
+            else if (m.isNoteOn())
+            {
+                const int n = m.getNoteNumber();
+                if (polyAtAny_ && n >= 0 && n < 128) { polyAtT_[n] = 0.0f; polyAtSm_[n] = 0.0f; }   // a new strike starts unpressed
+                if (member) { snapCh[ch] = true; lastMpeCh_ = ch; }   // its own values from its first block, no glide from the last note
+            }
         }
         const float kSm = 1.0f - std::exp (-(float) numSamples / ((float) juce::jmax (1.0, getSampleRate()) * 0.010f));
         midiWheelSm_ += (midiWheelT_ - midiWheelSm_) * kSm;
         midiAtSm_    += (midiAtT_    - midiAtSm_)    * kSm;
         midiBendSm_  += (midiBendT_  - midiBendSm_)  * kSm;
+        midiSlideSm_ += (midiSlideT_ - midiSlideSm_) * kSm;
+        float atView = midiAtSm_;   // the whole-instrument aftertouch (the global pass, the rack, the comet)
+        if (polyAtAny_)
+        {
+            bool live = false; float mx = 0.0f;
+            for (int n = 0; n < 128; ++n)
+            {
+                float& sm = polyAtSm_[n]; const float t = polyAtT_[n];
+                sm += (t - sm) * kSm; if (std::abs (t - sm) < 1.0e-5f) sm = t;
+                if (sm != 0.0f || t != 0.0f) live = true;
+                mx = juce::jmax (mx, sm);
+                globalSrc_.polyAt[n].store (sm, std::memory_order_relaxed);
+            }
+            polyAtAny_ = live;
+            globalSrc_.polyAtLive.store (live ? 1 : 0, std::memory_order_relaxed);
+            atView = juce::jmax (atView, mx);
+        }
+        float slideView = midiSlideSm_;
+        if (mpeMask != 0)
+        {
+            if (mpeRangeSeen_ != mpeBendSetting_.load (std::memory_order_relaxed))
+            { mpeRangeSeen_ = mpeBendSetting_.load (std::memory_order_relaxed); mpeRangeRt_ = mpeRangeSeen_; }
+            for (int c = 1; c <= 16; ++c)
+            {
+                if (snapCh[c]) { chBendSm_[c] = chBendT_[c]; chPressSm_[c] = chPressT_[c]; chSlideSm_[c] = chSlideT_[c]; }
+                else
+                {
+                    chBendSm_[c]  += (chBendT_[c]  - chBendSm_[c])  * kSm;
+                    chPressSm_[c] += (chPressT_[c] - chPressSm_[c]) * kSm;
+                    chSlideSm_[c] += (chSlideT_[c] - chSlideSm_[c]) * kSm;
+                }
+                globalSrc_.chBend[c].store (chBendSm_[c], std::memory_order_relaxed);
+                globalSrc_.chPress[c].store (chPressSm_[c], std::memory_order_relaxed);
+                globalSrc_.chSlide[c].store (chSlideSm_[c], std::memory_order_relaxed);
+                if ((mpeMask >> c) & 1u) atView = juce::jmax (atView, chPressSm_[c]);
+            }
+            if (lastMpeCh_ >= 1 && lastMpeCh_ <= 16 && ((mpeMask >> lastMpeCh_) & 1u)) slideView = chSlideSm_[lastMpeCh_];
+            globalSrc_.mpeBendRangeSemis.store (mpeRangeRt_, std::memory_order_relaxed);
+        }
+        else if (mpeMaskLast_ != 0)
+        {   // MPE just went off: forget every member value so a later MPE session starts clean
+            for (int c = 0; c <= 16; ++c)
+            {
+                chBendT_[c] = chPressT_[c] = chSlideT_[c] = chBendSm_[c] = chPressSm_[c] = chSlideSm_[c] = 0.0f;
+                globalSrc_.chBend[c].store (0.0f, std::memory_order_relaxed); globalSrc_.chPress[c].store (0.0f, std::memory_order_relaxed); globalSrc_.chSlide[c].store (0.0f, std::memory_order_relaxed);
+            }
+        }
+        mpeMaskLast_ = mpeMask;
+        globalSrc_.mpeMemberMask.store (mpeMask, std::memory_order_relaxed);
         globalSrc_.wheel.store (midiWheelSm_, std::memory_order_relaxed);
-        globalSrc_.aftertouch.store (midiAtSm_, std::memory_order_relaxed);
+        globalSrc_.atChan.store (midiAtSm_, std::memory_order_relaxed);
+        globalSrc_.aftertouch.store (atView, std::memory_order_relaxed);
+        globalSrc_.slideMaster.store (midiSlideSm_, std::memory_order_relaxed);
+        globalSrc_.slide.store (slideView, std::memory_order_relaxed);
         globalSrc_.bend.store (juce::jlimit (-1.0f, 1.0f, midiBendSm_), std::memory_order_relaxed);
         globalSrc_.bendRangeSemis.store (*rawParam (ParameterIDs::SYN_BEND_RANGE), std::memory_order_relaxed);
         static const char* const kMacroIds[wc::kNumMacros] = { ParameterIDs::SYN_MACRO_1, ParameterIDs::SYN_MACRO_2, ParameterIDs::SYN_MACRO_3, ParameterIDs::SYN_MACRO_4,
@@ -11171,6 +11294,29 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //    its own per-osc stores (OB = 4), and no noise / Robin / global taps (those are bank 0's).
     UnisonSynth* const bankBp = bankB_.load (std::memory_order_acquire);
     const int nBanks = bankBp != nullptr ? 2 : 1;
+    // tp103 — THE VOICE CEILING (Settings → Performance): the most voices that sound at once COUNTING UNISON, for
+    //  every instance. A note costs the widest unison among its bank's switched-on oscillators, in each bank it
+    //  sounds in (E–H are a second voice bank on the same notes). The Voices knob stays the cap below the
+    //  ceiling; past it the oldest note is let go through the 30 ms steal fade (UnisonSynth::noteOn and
+    //  enforceVoiceCap). While Voices × unison fits under the ceiling, the cap is the knob, exactly as before.
+    int ceilNotes = 96;
+    {
+        static const char* const kUni[ParameterIDs::kOscCount] = {
+            ParameterIDs::SYN_OSC_A_UNISON, ParameterIDs::SYN_OSC_B_UNISON, ParameterIDs::SYN_OSC_C_UNISON, ParameterIDs::SYN_OSC_D_UNISON,
+            ParameterIDs::SYN_OSC_E_UNISON, ParameterIDs::SYN_OSC_F_UNISON, ParameterIDs::SYN_OSC_G_UNISON, ParameterIDs::SYN_OSC_H_UNISON };
+        int weight = 0;
+        for (int b = 0; b < nBanks; ++b)
+        {
+            int w = 0;
+            for (int o = 0; o < ParameterIDs::kOscPerBank; ++o)
+            {
+                const int k = b * ParameterIDs::kOscPerBank + o;
+                if (*rawParam (ParameterIDs::kOsc_ENABLE[k]) > 0.5f) w = juce::jmax (w, (int) *rawParam (kUni[k]));
+            }
+            weight += (b == 0) ? juce::jmax (1, w) : w;
+        }
+        ceilNotes = juce::jmax (1, getVoiceCeiling() / juce::jmax (1, weight));
+    }
     for (int bank = 0; bank < nBanks; ++bank)
     {
         const bool   isB = bank == 1;
@@ -11408,6 +11554,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     else if (p2 == (int) wc::ModSource::Wheel)         v = globalSrc_.wheel.load (std::memory_order_relaxed);
                     else if (p2 == (int) wc::ModSource::Aftertouch)    v = globalSrc_.aftertouch.load (std::memory_order_relaxed);
                     else if (p2 == (int) wc::ModSource::Bend)          v = globalSrc_.bend.load (std::memory_order_relaxed);
+                    else if (p2 == (int) wc::ModSource::Slide)         v = globalSrc_.slide.load (std::memory_order_relaxed);   // tp103
                     else if (wc::isRandModSource (p2))                 v = randSeedLive_.load (std::memory_order_relaxed) ? wc::randForRoute (randSeedVis_.load (std::memory_order_relaxed), r.dest, wc::randIndexOf (p2)) : 0.0f;   // fb572 — this route's own draw from the most-active note
                     else if (p2 == (int) wc::ModSource::Alt)           v = altVis_.load (std::memory_order_relaxed);
                     bool sl; mSum[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyPolarity (p2, r.pol, wc::applyModCurve (mcSet, r.curve, p2, v), sl), r.depth);   // tp96
@@ -12640,7 +12787,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
-        const int voiceCap = (int) *rpar (ParameterIDs::SYN_VOICES);
+        const int voiceCap = juce::jmin ((int) *rpar (ParameterIDs::SYN_VOICES), ceilNotes);   // tp103 — never past the ceiling
         eng.setVoiceCap (voiceCap);
 
         // VOICING — MONO/LEGATO voice modes (last-note priority + legato retarget).
@@ -14759,7 +14906,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             distortionEngine.setQuality   ((int) *rawParam (ParameterIDs::SYN_DST_QUALITY));
             distortionEngine.setAuto      (rawParam (ParameterIDs::SYN_DST_AUTO)->load()  > 0.5f);
             distortionEngine.setPill2     (rawParam (ParameterIDs::SYN_DST_PILL2)->load() > 0.5f);
-            distortionEngine.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last-played note (the glide tracker; mono law on a post-mix bus)
+            distortionEngine.setKeyHz     (wc::tuningA4Hz().load (std::memory_order_relaxed) * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last-played note (the glide tracker; mono law on a post-mix bus)
             // Drive is dB-linear inside the engine (48·t^0.8) — do NOT pre-scale it here into a
             // linear multiplier, that is the dead-first-third bug this device exists to avoid.
             distortionEngine.setDrive     (M (rawParam (ParameterIDs::SYN_DST_DRIVE)));
@@ -15055,7 +15202,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             eng.setQuality   ((int) R.qual->load());
             eng.setAuto      (R.autoP->load() > 0.5f);
             eng.setPill2     (R.pill2->load() > 0.5f);
-            eng.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last note
+            eng.setKeyHz     (wc::tuningA4Hz().load (std::memory_order_relaxed) * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last note
             eng.setDrive     (M (R.drive));
             eng.setKnee      (M (R.sig));     // "Knee" is the SIG param (the signature knob)
             eng.setTone      (M (R.tone));
@@ -16582,6 +16729,98 @@ void TerrainAudioProcessor::setMotionEnabled (bool on)
     try { if (on) motionOffMarker().deleteFile(); else { motionOffMarker().getParentDirectory().createDirectory(); motionOffMarker().replaceWithText ("1"); } } catch (...) {}
 }
 
+// ══ tp103 — EXPRESSION + MIDI SETTINGS ═════════════════════════════════════════════════════════════════════════
+//  The processor owns every one of these (the page reads them back with getMidiSettings, it never pushes a stale
+//  copy over them). MidiSettings.json beside InstrumentSettings.json holds the per-PROCESS values (A4, the voice
+//  ceiling) and the NEW-INSTANCE defaults for the per-instance ones (MPE, the MPE range, the channel): the last
+//  thing the user chose. A test run (TERRAIN_DETERMINISTIC) never reads it, and a harness never writes it
+//  (persist = false), so the owner's settings can neither leak into a measurement nor be clobbered by one.
+static std::atomic<int>& tiVoiceCeiling() noexcept { static std::atomic<int> v { 96 }; return v; }
+int TerrainAudioProcessor::getVoiceCeiling() noexcept { return tiVoiceCeiling().load (std::memory_order_relaxed); }
+
+uint32_t TerrainAudioProcessor::mpeMemberMaskFor() const noexcept
+{
+    uint32_t m = 0;
+    if (mcmSeen_)
+    {   // the host / controller said which channels (RPN 6): lower zone 2.., upper zone 15 downward
+        for (int c = 2; c <= 1 + mcmLower_ && c <= 15; ++c) m |= 1u << c;
+        for (int c = 15; c >= 16 - mcmUpper_ && c >= 2; --c) m |= 1u << c;
+        return m;
+    }
+    if (mpeSetting_.load (std::memory_order_relaxed))
+        for (int c = 2; c <= 16; ++c) m |= 1u << c;   // the MPE default: Lower Zone, master 1, members 2–16
+    return m;
+}
+
+juce::File TerrainAudioProcessor::midiPrefsFile()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("Waves Crate").getChildFile ("Terrain").getChildFile ("MidiSettings.json");
+}
+
+void TerrainAudioProcessor::loadMidiPrefs()
+{
+    if (tw::deterministic()) return;   // a measurement never depends on the owner's settings
+    const auto f = midiPrefsFile();
+    if (! f.existsAsFile()) return;
+    const auto v = juce::JSON::parse (f.loadFileAsString());
+    auto* o = v.getDynamicObject(); if (o == nullptr) return;
+    if (o->hasProperty ("a4"))      wc::tuningA4Hz().store (juce::jlimit (415.0f, 466.0f, (float) (double) o->getProperty ("a4")), std::memory_order_relaxed);
+    if (o->hasProperty ("voices"))  tiVoiceCeiling().store (juce::jlimit (8, 96, (int) o->getProperty ("voices")), std::memory_order_relaxed);
+    if (o->hasProperty ("mpe"))     mpeSetting_.store ((int) o->getProperty ("mpe") != 0);
+    if (o->hasProperty ("mpeBend")) mpeBendSetting_.store (juce::jlimit (1.0f, 96.0f, (float) (double) o->getProperty ("mpeBend")));
+    if (o->hasProperty ("chan"))    midiChannelFilter_.store (juce::jlimit (0, 16, (int) o->getProperty ("chan")));
+}
+
+void TerrainAudioProcessor::saveMidiPrefs() const
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("a4",      (double) wc::tuningA4Hz().load());
+    o->setProperty ("voices",  getVoiceCeiling());
+    o->setProperty ("mpe",     mpeSetting_.load() ? 1 : 0);
+    o->setProperty ("mpeBend", (double) mpeBendSetting_.load());
+    o->setProperty ("chan",    midiChannelFilter_.load());
+    try { const auto f = midiPrefsFile(); f.getParentDirectory().createDirectory(); f.replaceWithText (juce::JSON::toString (juce::var (o), true)); } catch (...) {}
+}
+
+void TerrainAudioProcessor::setMpeOn (bool on, float bendSemis, bool persist)
+{
+    mpeBendSetting_.store (juce::jlimit (1.0f, 96.0f, std::round (bendSemis)), std::memory_order_relaxed);
+    mpeSetting_.store (on, std::memory_order_relaxed);
+    if (! on) mpeDisarmReq_.store (true, std::memory_order_release);   // Off means off, whatever a host configured
+    if (persist) saveMidiPrefs();
+}
+
+void TerrainAudioProcessor::setMidiChannelFilter (int ch, bool persist)
+{
+    midiChannelFilter_.store (juce::jlimit (0, 16, ch), std::memory_order_relaxed);
+    if (persist) saveMidiPrefs();
+}
+
+void TerrainAudioProcessor::setTuningA4 (float hz, bool persist)
+{
+    wc::tuningA4Hz().store (juce::jlimit (415.0f, 466.0f, hz), std::memory_order_relaxed);
+    if (persist) saveMidiPrefs();
+}
+
+void TerrainAudioProcessor::setVoiceCeiling (int voices, bool persist)
+{
+    tiVoiceCeiling().store (juce::jlimit (8, 96, voices), std::memory_order_relaxed);
+    if (persist) saveMidiPrefs();
+}
+
+juce::String TerrainAudioProcessor::getMidiSettingsJson() const
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("mpe",       mpeSetting_.load() ? 1 : 0);
+    o->setProperty ("mpeBend",   (double) mpeBendSetting_.load());
+    o->setProperty ("mpeArmed",  mpeArmedByHost_.load());   // a host / controller sent the MPE Configuration Message
+    o->setProperty ("chan",      midiChannelFilter_.load());
+    o->setProperty ("a4",        (double) wc::tuningA4Hz().load());
+    o->setProperty ("voices",    getVoiceCeiling());
+    return juce::JSON::toString (juce::var (o), true);
+}
+
 // The static wash. Max: "the reverb will now be like a static purple wash that gets higher by the
 // mix and of course the decay". Mix carries most of it (no wet, no wash); decay lifts it. The delay's
 // echo timeline reads mix × feedback the same way. Scaled to land where a healthy live bloom sits
@@ -16991,7 +17230,8 @@ void TerrainAudioProcessor::initPatch()
     if (virginChunk_.getSize() == 0) return;
     const int w = editorWidth.load(), pg = uiPage.load();
     resetPatchState();
-    setStateInformation (virginChunk_.getData(), (int) virginChunk_.getSize());
+    { const ScopedKeepInstanceMidi keep (*this);   // tp103 — Init is a patch, not the MIDI setup
+      setStateInformation (virginChunk_.getData(), (int) virginChunk_.getSize()); }
     editorWidth.store (w); uiPage.store (pg);
     setPresetMeta ({});                                   // the header goes back to Init
     presetPillsJson_.clear();                             // and so does every card and device pill
@@ -17104,6 +17344,7 @@ float TerrainAudioProcessor::sourceValueOfSrc (int sI, bool& ok, int dest) noexc
     else if (sI == (int) wc::ModSource::Wheel)                 v = globalSrc_.wheel.load (std::memory_order_relaxed);
     else if (sI == (int) wc::ModSource::Aftertouch)            v = globalSrc_.aftertouch.load (std::memory_order_relaxed);
     else if (sI == (int) wc::ModSource::Bend)                  v = globalSrc_.bend.load (std::memory_order_relaxed);
+    else if (sI == (int) wc::ModSource::Slide)                 v = globalSrc_.slide.load (std::memory_order_relaxed);   // tp103
     else if (wc::isRandModSource (sI))                         v = randSeedLive_.load (std::memory_order_relaxed) ? wc::randForRoute (randSeedVis_.load (std::memory_order_relaxed), dest, wc::randIndexOf (sI)) : 0.0f;   // fb572 — per route
     else if (sI == (int) wc::ModSource::Alt)                   v = altVis_.load (std::memory_order_relaxed);
     else ok = false;                                                // drift lanes and anything newer: no processor view — dropped, never invented
@@ -18569,6 +18810,11 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
         state.setProperty("modStateJson", modStateJson, nullptr);
     else state.removeProperty ("modStateJson", nullptr);   // fb618
     { const juce::String mm = getMidiMapJson(); if (mm != "{}") state.setProperty ("midiCcMap", mm, nullptr); else state.removeProperty ("midiCcMap", nullptr); }   // fb563 (4) · fb618
+    // tp103 — the instance's MIDI setup rides the PROJECT (a DAW recall restores it). A preset load / Init keeps
+    //  the instance's own (ScopedKeepInstanceMidi), so these in a preset file are simply ignored.
+    state.setProperty ("mpeOn",       mpeSetting_.load() ? 1 : 0,        nullptr);
+    state.setProperty ("mpeBend",     (double) mpeBendSetting_.load(),   nullptr);
+    state.setProperty ("midiChannel", midiChannelFilter_.load(),         nullptr);
     { const juce::String mn = getMacroNamesJson(); if (mn.isNotEmpty() && mn != "[]") state.setProperty ("macroNames", mn, nullptr); else state.removeProperty ("macroNames", nullptr); }
     // fb623 — the pill names ride with the sound they name
     { const juce::String pp = getPresetPillsJson(); if (pp.isNotEmpty() && pp != "{}") state.setProperty ("presetPills", pp, nullptr); else state.removeProperty ("presetPills", nullptr); }   // fb564 · fb618
@@ -19699,6 +19945,14 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // waterfall mode… please let it load up directly." The view is part of the patch.
             for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
             setMidiMapJson (newState.getProperty ("midiCcMap", "").toString());   // fb563 (4) — empty = no bindings
+            if (keepInstanceMidi_ == 0)   // tp103 — a host recall, not a preset: the instance's MIDI setup comes back
+            {
+                if (newState.hasProperty ("mpeOn") || newState.hasProperty ("mpeBend"))
+                    setMpeOn ((int) newState.getProperty ("mpeOn", mpeSetting_.load() ? 1 : 0) != 0,
+                              (float) (double) newState.getProperty ("mpeBend", (double) mpeBendSetting_.load()), false);
+                if (newState.hasProperty ("midiChannel"))
+                    setMidiChannelFilter ((int) newState.getProperty ("midiChannel", 0), false);
+            }
             setMacroNamesJson (newState.getProperty ("macroNames", "").toString());   // fb564 — empty = the eight defaults
             setPresetPillsJson (newState.getProperty ("presetPills", "").toString());   // fb623 — absent = every pill reads Init
             modStateJson = newState.getProperty("modStateJson", "").toString();
@@ -20808,7 +21062,8 @@ bool TerrainAudioProcessor::loadPatchFromFile (const juce::File& f, juce::String
     juce::String manifest; juce::MemoryBlock chunk;
     if (! unwrapPatchBytes (file, manifest, chunk, error)) return false;
     resetPatchState();
-    setStateInformation (chunk.getData(), (int) chunk.getSize());
+    { const ScopedKeepInstanceMidi keep (*this);   // tp103 — a preset never flips MPE or the MIDI channel
+      setStateInformation (chunk.getData(), (int) chunk.getSize()); }
     if (manifest.isNotEmpty()) { PresetMeta m = getPresetMeta(); m.fromJson (manifest); setPresetMeta (m); }
     return true;
 }

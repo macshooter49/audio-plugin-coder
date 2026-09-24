@@ -44,6 +44,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <string>
+#include "TerrainTuning.h"   // tp103
 
 namespace tw
 {
@@ -201,7 +202,7 @@ namespace tw
             r.frequencyHz = f0;
             r.confidence  = conf;
 
-            const double midf = 69.0 + 12.0 * std::log2 (f0 / 440.0);
+            const double midf = 69.0 + 12.0 * std::log2 (f0 / wc::tuningA4HzD());   // tp103 — the nearest note ON THE A4 GRID (440 → unchanged)
             r.midiNote      = (int) std::lround (midf);
             r.cents         = (midf - (double) r.midiNote) * 100.0;
             r.snapSemitones = snapToNearestC (r.midiNote);
