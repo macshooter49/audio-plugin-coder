@@ -16,7 +16,7 @@ const puppeteer = require('puppeteer-core'); const sleep = ms => new Promise(r =
       const routes = (window.__tiRoutes() || []).map(r => r.s + '>' + r.d);
       return { lvl: l, f1: +P('SYN_FILTER1_TYPE').toFixed(4), f2type: +P('SYN_FILTER2_TYPE').toFixed(4),
         f2mix: O.map(o => +P('SYN_OSC_' + o + '_F2MIX').toFixed(2)).join(','), f1mix: O.map(o => +P('SYN_OSC_' + o + '_F1MIX').toFixed(2)).join(','),
-        eng: O.map(o => Math.round(P('SYN_OSC_' + o + '_ENGINE') * 6)).join(''), en: O.map(o => Math.round(P('SYN_OSC_' + o + '_ENABLE'))).join(''),
+        eng: O.map(o => Math.round(P('SYN_OSC_' + o + '_ENGINE') * 11)).join(''), en: O.map(o => Math.round(P('SYN_OSC_' + o + '_ENABLE'))).join(''),
         nRoutes: routes.length, routes: routes.join(' '), rosterCount: NF };
     }, lvl));
   }

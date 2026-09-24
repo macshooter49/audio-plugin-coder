@@ -95,7 +95,7 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
     try {
       const dev = document.querySelector ('#syn-panel .device.osc');
       if (! dev) { out.err = 'no osc device'; return out; }
-      const ENG = ['engine-sample','engine-granular','engine-geode','engine-harm','engine-modal','engine-fm'];
+      const ENG = ['engine-sample','engine-granular','engine-geode','engine-harm','engine-modal','engine-organic','engine-fm'];
       const clearEng = () => ENG.forEach (c => dev.classList.remove (c));
       const sv   = dev.querySelector ('.sample-view');
       const fo   = dev.querySelector ('.front-only');
@@ -108,7 +108,7 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
 
       // bar 1 — the four sample-family engines on the unison page
       dev.classList.add ('uni-page');
-      ['engine-sample','engine-granular','engine-geode','engine-modal'].forEach (c => {
+      ['engine-sample','engine-granular','engine-geode','engine-modal','engine-organic'].forEach (c => {   // tp104 — Organics keeps its picture too
         clearEng (); dev.classList.add (c);
         const svR = sv.getBoundingClientRect(), foR = fo.getBoundingClientRect();
         out.uni.push ({ eng: c, pic: vis (sv), scope: vis (od),
@@ -127,7 +127,7 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
       const W = window.wtWaterfall;
       out.wf = { has: !!W, canOn: [], drew: [] };
       if (W) {
-        ['engine-sample','engine-granular','engine-geode','engine-modal'].forEach (c => {
+        ['engine-sample','engine-granular','engine-geode','engine-modal','engine-organic'].forEach (c => {
           clearEng (); dev.classList.add (c);
           out.wf.canOn.push ({ eng: c, can: W.canWaterfall ('a') });
           // spy: force the flag on (as an engine switch would leave it) and run one loop tick
@@ -186,7 +186,7 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
   gate (r.wf.has && wfBad.length === 0,
         '[4] THE WATERFALL REFUSES A SAMPLE-FAMILY ENGINE IN THE LOOP, not just the click',
         wfBad.length ? ('leaked: ' + JSON.stringify (wfBad))
-          : 'sample/granular/geode/modal: canWaterfall=false and the loop drew 0 frames with on[a] forced true');
+          : 'sample/granular/geode/modal/organic: canWaterfall=false and the loop drew 0 frames with on[a] forced true');
 
   gate (r.selFound && r.engClass && r.redrawOnGeode.length > 0,
         '[7] SWITCHING TO RESYNTH RE-REQUESTS ITS PAYLOAD',
@@ -204,12 +204,12 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
     try {
       const dev = document.querySelector ('#syn-panel .device.osc');
       const sleep = (ms) => new Promise (r => setTimeout (r, ms));
-      const ENGS = [['wavetable',0],['sample',1],['granular',2],['geode',3],['fm',4],['harm',5],['modal',6]];
+      const ENGS = [['wavetable',0],['sample',1],['granular',2],['geode',3],['fm',4],['harm',5],['modal',6],['organic',7]];   // tp104 — eight engines
       for (const [nm, idx] of ENGS) {
         window.__stateFor ('SYN_OSC_A_ENGINE').setScaledValue (idx);
         await sleep (260);
         for (let k = 0; k < 7 && ! dev.classList.contains ('uni-page'); ++k) {
-          const a = dev.querySelector ('.uni-arrow, .gk-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .geode-arrow, .bl-arrow');
+          const a = dev.querySelector ('.uni-arrow, .gk-arrow, .fm-arrow, .harm-arrow, .modal-arrow, .organic-arrow, .geode-arrow, .bl-arrow');
           if (a) a.dispatchEvent (new MouseEvent ('click', { bubbles: true }));
           await sleep (170);
         }
@@ -232,7 +232,7 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
     const ref = geo.rows.find (r => r.eng === 'wavetable');
     const off = geo.rows.filter (r => ! r.uni || r.picH !== ref.picH || r.rowT !== ref.rowT || r.gap !== ref.gap);
     gate (!! ref && ref.gap === 7 && off.length === 0,
-          '[1b] AND IT LANDS ON THE HOUSE GEOMETRY — all seven engines identical',
+          '[1b] AND IT LANDS ON THE HOUSE GEOMETRY — all eight engines identical',
           off.length ? ('off-spec: ' + JSON.stringify (off) + '  reference(wavetable)=' + JSON.stringify (ref))
             : `every engine: picture h=${ref.picH} at y=81, unison row y=${ref.rowT}, gap ${ref.gap} px`);
   }

@@ -70,8 +70,11 @@ const engineSrc = (() => {
   if (i < 0 || j < 0 || k < 0) throw new Error('engine block anchors not found');
   return SRC.slice(i, k + 1);
 })();
+/* tp104 — the block now reads window.__orgDiceOk (an installed Organics instrument exists for the aim); Node has no window,
+   so the gate hands it one that says yes, and Organics (7) joins the synthesis pool at every reach. */
+globalThis.window = { __orgDiceOk: () => true };
 const chooseEngine = new Function('aim', 'lvl', 'R', 'rnd', 'pick', 'SAMPR',
-  engineSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return { modal:modal, samp:samp, fm:fm, harm:harm, seng:seng, engine: modal?6:samp?seng:harm?5:fm?4:0 };');
+  engineSrc.replace(/\/\*[\s\S]*?\*\//g, '') + '\n return { modal:modal, organic:organic, samp:samp, fm:fm, harm:harm, seng:seng, engine: organic?7:modal?6:samp?seng:harm?5:fm?4:0 };');
 
 const seen = {}; LEVELS.forEach(l => seen[l] = new Set());
 for (const lvl of LEVELS)
@@ -92,6 +95,8 @@ for (const lvl of ['wild', 'crazy']) {
   chk(got.length === 3, `[1] ${lvl}: the WHOLE sample family is on the table (Sample, Granular, Resynth)`,
       `saw ${got.join('/') || 'none'}`);
 }
+chk(['light', 'medium', 'heavy', 'wild', 'crazy'].every(l => seen[l].has(7)),
+    '[1] tp104 — Organics (7) is reachable at every reach when an instrument is installed');
 chk(['light', 'medium', 'heavy', 'wild', 'crazy'].every(l => seen[l].has(6)),
     '[1] Modal stays at every reach (Max keeps it by name)');
 for (const e of [0, 4, 5, 6]) {
@@ -274,7 +279,7 @@ chk(/take\('flow'\)/.test(SRC), '[6] and flow instances are LFO targets — rout
   chk(bare.length === 0, `[10] every bail-out reports it (${bare.length} unreported return; in oneShot)`, bare.join(' | ').slice(0, 200));
   chk(/if\(samp\)\{ rollSample[\s\S]{0,200}oneShot\(o,aim,function\(\)\{/.test(SRC),
       '[10] and the dice passes one when it picks a sampler');
-  chk(/setP\(X\+'ENGINE', choiceNorm\(X\+'ENGINE', 0, 7\)\)/.test(SRC),
+  chk(/setP\(X\+'ENGINE', choiceNorm\(X\+'ENGINE', 0, 12\)\)/.test(SRC),   /* tp104 — the engine choice is 12 wide (Organics + R8–R11) */
       '[10] whose fallback puts the oscillator back on a wavetable');
 }
 

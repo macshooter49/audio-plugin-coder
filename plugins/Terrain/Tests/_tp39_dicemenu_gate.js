@@ -54,7 +54,7 @@ const stub = () => {
   const aims = await p.evaluate(() => window.__tpDiceAims());
   ok(aims.length === 1 && aims[0] === 'drums' && (await p.evaluate(() => window.__tpDiceLevel())) === 'crazy', '[2] the sheet saved Drums + crazy and rolled', JSON.stringify(aims));
   const drum = await p.evaluate(() => { const out = { on: [], loads: window.__loads.slice(), blends: window.__blends.slice(), last: window.__diceLastOneShot || {} };
-    'abcdefgh'.split('').forEach(o => { const X = 'SYN_OSC_' + o.toUpperCase() + '_'; if (window.__P(X + 'ENABLE') > 0.5) out.on.push({ o, eng: Math.round(window.__P(X + 'ENGINE') * 6) }); }); return out; });
+    'abcdefgh'.split('').forEach(o => { const X = 'SYN_OSC_' + o.toUpperCase() + '_'; if (window.__P(X + 'ENABLE') > 0.5) out.on.push({ o, eng: Math.round(window.__P(X + 'ENGINE') * 11) }); }); return out; });
   const sampleOscs = drum.on.filter(x => x.eng === 1 || x.eng === 2 || x.eng === 3);
   ok(drum.on.length >= 2 && sampleOscs.length === drum.on.length, '[2] a drums roll turns on 2-4 oscillators, every one a sample-family engine', JSON.stringify(drum.on));
   ok(sampleOscs.every(x => drum.last[x.o] && /\/(Drums|808)\//.test(drum.last[x.o])), '[2] every one of them was handed a Drums or 808 one-shot', JSON.stringify(drum.last));

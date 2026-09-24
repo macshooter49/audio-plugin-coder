@@ -11,7 +11,7 @@
   function ss(id){ try { return window.Juce.getSliderState(id); } catch (e) { return null; } }
   function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
   function census(label){ var g = NF('getOscSamplePayload'); var oscs = 'abcdefgh'.split('').filter(function(o){ var e = ss('SYN_OSC_' + o.toUpperCase() + '_ENABLE'); return e && e.getNormalisedValue() > 0.5; });
-    return Promise.all(oscs.map(function(o){ var eng = Math.round(ss('SYN_OSC_' + o.toUpperCase() + '_ENGINE').getNormalisedValue() * 6); return Promise.resolve(g ? g(o) : '').then(function(pl){ return { o: o, eng: eng, has: !!(pl && String(pl).length > 2), pick: ((window.__diceLastOneShot || {})[o] || '').split('/').slice(-2).join('/'), blend: ((window.__diceLastBlend || {})[o] || '').split('/').slice(-2).join('/') }; }); }))
+    return Promise.all(oscs.map(function(o){ var eng = Math.round(ss('SYN_OSC_' + o.toUpperCase() + '_ENGINE').getNormalisedValue() * 11); return Promise.resolve(g ? g(o) : '').then(function(pl){ return { o: o, eng: eng, has: !!(pl && String(pl).length > 2), pick: ((window.__diceLastOneShot || {})[o] || '').split('/').slice(-2).join('/'), blend: ((window.__diceLastBlend || {})[o] || '').split('/').slice(-2).join('/') }; }); }))
       .then(function(rows){ R.rolls.push({ label: label, aim: window.__tpDiceLastAim, oscs: rows, est: (window.__tpDiceEstimate() || {}).est }); publish(); }); }
   function series(label, aims, lvl, n){ return function(){ window.__tpDiceCap('off'); window.__tpDiceAims(aims); window.__tpDiceLevelSet(lvl); var seq = Promise.resolve();
     for (var i = 0; i < n; i++) seq = seq.then(function(){ window.__tpDice(); return wait(6500).then(function(){ return census(label); }); });
