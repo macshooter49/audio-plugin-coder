@@ -1437,42 +1437,56 @@ body.ti-syn-open #plugin {
      the header can carry the same paint rather than a copy of it. */
   background: radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main);
 }
-/* AND WHEN THE BROWSER IS UP, the header wears the browser's coat — the same --menu-bg and the same
-   blur(20px) saturate(1.4) that .tp-glass uses, so the bar and the sheet below it are one material.
-   ⚠️ Keyed on tp-glassup, NOT tp-browsing: tp-browsing is also true for the quick menu and the save
-   sheet, and behind those the synth page is still what is showing. Only the browser replaces it. */
-html.tp-glassup #header {
+/* ══ tp101 — ONE GLASS, ONE LAYER, THE WHOLE WINDOW ═══════════════════════════════════════════════
+   Max: the MOD matrix, Settings and the preset browser are ONE dark TRANSPARENT glass — header band,
+   page body and the CAPTURE strip — "the background could be the same purple": the regular synth page
+   stays BEHIND and the glass is FROSTED over it, not a flat dark fill.
+   What was wrong (measured, tp100): header, sheet and strip were all ~rgb(23,22,35) and read FLAT, for
+   two reasons. (1) tp99 pinned #plugin to a flat --bg-main on every glass page (and MOD hid the synth
+   page outright), so the glass had one flat colour to frost. (2) The glass was separate
+   backdrop-filters — header (0→44) and sheet (44→656) — and a backdrop-filter samples only inside its
+   own box: the header's 0→44 held nothing but #plugin's ground, so it could only ever be flat.
+   Now: ONE coat (#plugin::before, inset 0 — the full 0→656 window, header band included) carries the
+   house glass (--menu-bg + blur(20px) saturate(1.4), the .tp-glass/.pmenu coat) over the synth page's
+   own ground and cards, and the header / #tp-b / #st-b / #mm paint NOTHING of their own — they are
+   content standing on the one coat. One filter = no seam, and the blur of the synth page's top rows
+   reaches up under the header, so the header is frosted-over-purple exactly like the body. The native
+   CAPTURE strip gets the same glass composited over the page ground (see the strip-ground poller).
+   Stacking (root context; #plugin is not one):
+     browser / settings — synth page z30 · COAT z1999 · #tp-b 2000 / #st-overlay 2050 · header 2001
+     MOD                — synth page z13 · COAT z14   · #mod-panel 15                   · header 20  */
+html.tp-glassup   #header,
+html.ti-mod-glass #header,
+body.st-open      #header { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.tp-glassup   #plugin::before,
+html.ti-mod-glass #plugin::before,
+body.st-open      #plugin::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
   background: var(--menu-bg);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   backdrop-filter: blur(20px) saturate(1.4);
+  z-index: 14;                                 /* MOD: over the synth page (13), under #mod-panel (15) */
 }
-/* tp98 — THE MOD PAGE IS ONE DARK GLASS, TOP TO BOTTOM. The matrix sheet (#mm) already wears the
-   preset-browser glass (.tp-glass = --menu-bg + blur(20px) saturate(1.4)); when the MOD page is up
-   the header band wears the exact same coat so the bar and the sheet are one material — the seam of
-   #plugin's purple ground showing only in the 0→44 header band is gone. The native CAPTURE strip
-   (bottom) gets the matching alpha-over via setStripGround (see the strip-ground poller). Keyed on
-   ti-mod-glass, set only while the MOD page is the active page, so SYN / Chop / Patcher are untouched. */
-html.ti-mod-glass #header {
-  background: var(--menu-bg);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
-}
-/* tp99 — ONE GLASS, EVERY PAGE. The preset browser, the MOD matrix and Settings must all be the
-   SAME dark glass. That glass is var(--menu-bg) composited over #plugin's ground, so the ground has
-   to be identical on every glass page or the one token reads as a different colour. It was NOT:
-   the browser/settings open over the synth page and stand on --bg-main (#1A1A2E) + a top vignette,
-   while the MOD page drops ti-syn-open and stands on the lighter --bg-surface (#232340) with no
-   vignette — so the matrix glass came out a lighter, purpler shade than the "browse-all" page Max
-   points to, and the vignette tinted the browser's 0→44 header band a hair differently from its body
-   (measured: mod ground rgb(35,35,64) vs browser ground rgb(26,26,46)). Pin every glass page to the
-   browser's own FLAT --bg-main so header + body + the native CAPTURE strip (whose poller reads this
-   exact colour) are one material. Same specificity as body.ti-syn-open #plugin (1 id,1 class,1 type),
-   so it sits AFTER that rule to win when the browser/settings open over the synth page. */
-html.tp-glassup   #plugin,
-html.ti-mod-glass #plugin,
-body.st-open      #plugin {
-  background: var(--bg-main);
-}
+html.tp-glassup   #plugin::before,
+body.st-open      #plugin::before { z-index: 1999; }   /* browser / settings: over the synth page (30), under their sheets */
+html.tp-glassup   #header,
+body.st-open      #header { z-index: 2001; }           /* the header's content stands ON the coat, never under it */
+/* the sheets are content on the one coat — a second glass under the first would double the tint and
+   re-blur the coat. Only while the coat is up; the sheets keep .tp-glass otherwise. (#st-b: see the
+   settings block, which carries its own higher-specificity glass rule.) */
+html.tp-glassup   #tp-b.tp-glass,
+html.ti-mod-glass #mm.tp-glass { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* THE MOD PAGE STANDS ON THE SYNTH PAGE TOO. MOD drops ti-syn-open (the synth page goes display:none and
+   #plugin falls back to the front page's --bg-surface), so behind the matrix there was only the parked
+   hero. Under the glass, show the synth page as the browser/Settings do — same ground (fb630's vignette),
+   same cards — inert (pointer-events:none, under the coat) and below #mod-panel. Its painters still
+   honour .hidden (they skip while it is set), so this costs a still picture, not frames. The front
+   page's hero/controls/footer are covered exactly as ti-syn-open covers them. */
+html.ti-mod-glass #plugin { background: radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main); }
+html.ti-mod-glass #syn-panel.hidden { display: flex; z-index: 13; pointer-events: none; background: transparent; }
+html.ti-mod-glass #plugin > #hero,
+html.ti-mod-glass #plugin > #controls,
+html.ti-mod-glass #plugin > #footer { visibility: hidden; }
 
 .brand-area {
   display: flex;
@@ -7345,6 +7359,23 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     return !r.v;
   };
 })();
+/* tp101 — THE SYNTH PAGE UNDER THE MOD GLASS IS A STILL PICTURE. On the MOD page the synth page is shown
+   (inert, under the window-wide glass coat — see the tp101 CSS) so the glass has the purple page to
+   frost, and the IntersectionObserver above would now call every synth card VISIBLE and let its painter
+   run behind a 72 % dark blur. Nothing under that glass needs a frame: while html.ti-mod-glass is set,
+   any container inside #syn-panel reads as OFF. One classList read per call; the "is it in the synth
+   page" answer is cached per id (the ids never move between pages). */
+(function(){
+  var o=window.__tiOff; if(!o) return; var inSyn={};
+  var w=function(id){
+    if(document.documentElement.classList.contains('ti-mod-glass')){
+      var s=inSyn[id]; if(s===undefined){ var e=document.getElementById(id); s=e?!!(e.closest&&e.closest('#syn-panel')):null; if(s!==null) inSyn[id]=s; }
+      if(s) return true;
+    }
+    return o(id);
+  };
+  window.__tiOff=w;
+})();
 </script>
 
 <div id="plugin">
@@ -7445,7 +7476,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     font-size:10px;line-height:1;letter-spacing:1.2px;font-weight:200;color:var(--ti-num-ink,#fff);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;}
   .brand-cpu i{font-style:normal;font-weight:200;letter-spacing:0;color:var(--text-muted);margin-left:2px;}
   /* the settings TERRAIN header band = the SAME dark-glass as the sheet (don't recolour it differently) */
-  body.st-open #header{background:var(--menu-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);}
+  /* tp101 — it paints nothing now: header and sheet both stand on the ONE window-wide coat (#plugin::before, see the tp101 block by #header) */
 
   /* the private menu — a copy of .pmenu (4033-4053) so the settings never touch the preset browser's */
   .st-menu{position:fixed;z-index:2147483646;min-width:176px;max-width:206px;max-height:340px;overflow-y:auto;
@@ -7468,6 +7499,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     font-family:-apple-system,'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-user-select:none;user-select:none;}
   #st-overlay.on{display:flex;}
   #st-overlay .tp-glass,#st-overlay #st-b{background:var(--menu-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);}
+  /* tp101 — while Settings is up (body.st-open) the ONE window-wide coat (#plugin::before) is the glass; the sheet is content on it */
+  body.st-open #st-overlay #st-b{background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none;}
   #st-overlay #st-b{position:absolute;inset:0;display:flex;flex-direction:column;}
   #st-overlay .tb{height:38px;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--menu-line);flex:none;}
   #st-overlay .sw{position:relative;flex:1;max-width:300px;}
@@ -44155,7 +44188,8 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         const gb = (getComputedStyle (document.getElementById ('plugin')).backgroundColor || '').match (/[\d.]+/g);
         const m = mb && mb.length >= 4 ? mb.map (Number) : [22, 20, 34, 0.72], g = gb && gb.length >= 3 ? gb.map (Number) : [26, 26, 46];
         const a = m[3], mix = i => Math.round (m[i] * a + g[i] * (1 - a)), hx = v => v.toString (16).padStart (2, '0');
-        f (br ? 1 : 0, 'ff' + hx (mix (0)) + hx (mix (1)) + hx (mix (2)));
+        /* tp101 — the coat is saturate()d too: the strip poller's composite (window.__tiGlassOver) is the one truth */
+        f (br ? 1 : 0, window.__tiGlassOver ? window.__tiGlassOver (g) : 'ff' + hx (mix (0)) + hx (mix (1)) + hx (mix (2)));
       }
     } catch (e) {}
     if (on) { try { window.__tiHideModMeter && window.__tiHideModMeter(); } catch (e) {} }
@@ -47040,6 +47074,31 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      Change-gated: a settled page costs one comparison a second and zero calls. */
   (function(){
     var last='', fn=null;
+    /* tp101 — THE STRIP IS THE BOTTOM OF THE ONE COAT. The glass pages are one window-wide coat
+       (#plugin::before: var(--menu-bg) over backdrop blur(20px) saturate(1.4) of the page behind — see the
+       tp101 CSS). At the bottom edge the page behind is its plain ground (#plugin's background-color; the
+       synth page's vignette has faded to nothing there and no card reaches it), and a blur of a flat
+       colour is that colour — so the coat's bottom row is exactly: saturate(ground), then --menu-bg over
+       it. tp99 left the saturate out and sent the strip a greyer (23,22,37) than the page's measured
+       (23,21,40). Both numbers — the tint and the saturate amount — are read LIVE off the coat's own
+       computed style, so nothing here is a copied literal. Returns 'ffRRGGBB' (the natives' format). */
+    function glassOver(g){
+      var hx=function(v){ v=Math.max(0,Math.min(255,Math.round(+v))); return (v<16?'0':'')+v.toString(16); };
+      var de=document.documentElement, pl=document.getElementById('plugin');
+      var mb=(getComputedStyle(de).getPropertyValue('--menu-bg')||'').match(/[\d.]+/g);
+      if(!mb||mb.length<4) return 'ff'+hx(g[0])+hx(g[1])+hx(g[2]);
+      var s=1, bf='';
+      try{ var cs=pl?getComputedStyle(pl,'::before'):null; bf=cs?(cs.backdropFilter||cs.webkitBackdropFilter||''):''; }catch(e){}
+      if(!bf||bf==='none') bf='saturate(1.4)';   /* only if the coat is not up yet (a push racing the class flip): the house .tp-glass value */
+      var sm=/saturate\(\s*([\d.]+)(%?)\s*\)/.exec(bf); if(sm) s=(+sm[1])/(sm[2]?100:1);
+      var R=+g[0],G=+g[1],B=+g[2];   /* the CSS Filter Effects saturate() matrix */
+      var sr=(0.213+0.787*s)*R+(0.715-0.715*s)*G+(0.072-0.072*s)*B,
+          sg=(0.213-0.213*s)*R+(0.715+0.285*s)*G+(0.072-0.072*s)*B,
+          sb=(0.213-0.213*s)*R+(0.715-0.715*s)*G+(0.072+0.928*s)*B;
+      var a=+mb[3], mix=function(t,u){ return (+t)*a + u*(1-a); };
+      return 'ff'+hx(mix(mb[0],sr))+hx(mix(mb[1],sg))+hx(mix(mb[2],sb));
+    }
+    window.__tiGlassOver=glassOver;   /* the browser's setBrowserGlass push uses the same composite */
     function tick(){
       try{
         if(!fn) fn=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setStripGround'):null;
@@ -47049,21 +47108,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         if(!m||m.length<3) return;
         var hx=function(v){ v=Math.round(+v); return (v<16?'0':'')+v.toString(16); };
         var c;
-        /* tp98/tp99 — every GLASS page (MOD matrix, preset browser, Settings) wears the browser's dark
-           glass top-to-bottom: the header (html.ti-mod-glass / tp-glassup / body.st-open) and the body
-           sheet (#mm / #tp-b / #st-b, all .tp-glass) are var(--menu-bg) over #plugin's now-uniform ground.
+        /* tp98/tp99/tp101 — every GLASS page (MOD matrix, preset browser, Settings; html.ti-mod-glass /
+           tp-glassup / body.st-open) is ONE window-wide coat over the synth page (#plugin::before).
            The native strip can't backdrop-blur the WebView, so — exactly as fb630's browser glass does —
-           it stands on the alpha-over the CSS composites: var(--menu-bg) over the page's ground, computed
-           here from the live tokens (C++ holds no copied literal). The browser also pushes this same value
+           it stands on the coat's own bottom row: saturate(the page's ground), then var(--menu-bg) over it,
+           computed by glassOver() from the live tokens (C++ holds no copied literal). The browser also pushes this same value
            through setBrowserGlass (C++ paints that with priority); computing it for tp-glassup here too
            keeps the strip correct if that push is ever missed, and gives Settings — which pushes nothing —
            its matching footer. */
         var _de=document.documentElement;
         var _glass = _de.classList.contains('ti-mod-glass') || _de.classList.contains('tp-glassup') || document.body.classList.contains('st-open');
         if(_glass){
-          var mb=(getComputedStyle(_de).getPropertyValue('--menu-bg')||'').match(/[\d.]+/g);
-          if(mb&&mb.length>=4){ var a=+mb[3], mix=function(i){ return mb[i]*a + (+m[i])*(1-a); }; c='ff'+hx(mix(0))+hx(mix(1))+hx(mix(2)); }
-          else c='ff'+hx(m[0])+hx(m[1])+hx(m[2]);
+          c=glassOver(m);
         } else {
           c='ff'+hx(m[0])+hx(m[1])+hx(m[2]);
         }
