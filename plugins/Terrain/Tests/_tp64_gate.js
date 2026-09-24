@@ -104,11 +104,16 @@ const ok=(c,l,d)=>{ if(c){pass++;console.log('  PASS  '+l+(d?'\n        '+d:''))
     '🚨 [3c] THE FRONT PAGE IS NEVER SHOWN: fourteen pill presses in every order (CHOP → MOD used to leave the hero under MOD) and a saved page 0 lands on SYN', r3c.join(' '));
 
  // ── [4] the Settings ink ──
- const r4=await p.evaluate(()=>{ const b=document.querySelector('#rr-bend-row b'), st=b&&b.nextElementSibling, lab=document.querySelector('#rr-bend-row .settings-label');
+ // tp100 — the gear panel's #rr-bend-row moved into the settings overlay (#st-overlay [data-row="bend"]), and the
+ // number now follows the house ultra-thin law (white SF Pro, weight 200) instead of the label's face.
+ const r4=await p.evaluate(async()=>{ if(!window.__st) return {err:'no overlay'}; window.__st.open(true); window.__st.go('control');
+   await new Promise(r=>setTimeout(r,150));
+   const b=document.querySelector('#st-overlay [data-row="bend"] .num b'), st=b&&b.nextElementSibling;
+   if(!b||!st){ window.__st.open(false); return {err:'no bend row'}; }
    const br=c=>{ const m=/rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c||''); return m?(+m[1]+ +m[2]+ +m[3])/3:-1; };
-   return {two:br(getComputedStyle(b).color), st:br(getComputedStyle(st).color), fontSame:getComputedStyle(b).fontFamily===getComputedStyle(lab).fontFamily && getComputedStyle(b).fontSize===getComputedStyle(lab).fontSize,
-           stText:st.textContent}; });
- ok(r4.two>200 && r4.st>200 && r4.fontSame, '[4] Settings: the bend "2" and its "st" are white in the label\'s own font and size (no black, no other face)', JSON.stringify(r4));
+   const o={two:br(getComputedStyle(b).color), st:br(getComputedStyle(st).color), w:getComputedStyle(b).fontWeight, stText:st.textContent};
+   window.__st.open(false); return o; });
+ ok(!r4.err && r4.two>200 && r4.st>200 && +r4.w<=300 && r4.stText==='ST', '[4] Settings: the bend "2" is ultra-thin white and its unit reads "ST" (white, no black, no heavy face)', JSON.stringify(r4));
 
  // ══ THE CHOP PAGE FOLLOWS THE PRESET ═════════════════════════════════════════════════════════
  const r5=await p.evaluate(async()=>{
