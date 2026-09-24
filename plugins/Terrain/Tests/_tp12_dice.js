@@ -10,7 +10,7 @@ const puppeteer = require('puppeteer-core'); const sleep = ms => new Promise(r =
   const R = { rolls: [] };
   for (let i = 0; i < 8; i++) {
     await p.evaluate(l => { window.__setLog.length = 0; const L = window.__tpLayout(); L.dlevel = l; L.aim = 'anything'; window.__tpGenerate(); }, i % 2 ? 'wild' : 'heavy'); await sleep(2600);
-    R.rolls.push(await p.evaluate(() => { const L = window.__setLog, ids = L.map(x => x[0]); const eng = ids.filter(x => /_ENGINE$/.test(x)).map(x => [x.slice(8, 9), Math.round(L.find(y => y[0] === x)[1] * 6)]);
+    R.rolls.push(await p.evaluate(() => { const L = window.__setLog, ids = L.map(x => x[0]); const eng = ids.filter(x => /_ENGINE$/.test(x)).map(x => [x.slice(8, 9), Math.round(L.find(y => y[0] === x)[1] * 11)]);
       const tapeOn = !document.getElementById('tape-toggle').classList.contains('off');
       return { eng: eng.map(e => e[0] + e[1]).join(' '), sampleKnobs: ids.filter(x => /_SAMPLE_/.test(x)).length, blend: ids.filter(x => /_WSLOT\d_MODE$/.test(x) && L.find(y => y[0] === x)[1] > 0).length, detune: ids.filter(x => /UDETUNE/.test(x)).length, phase: [...new Set(L.filter(x => /_PHASE$|_PHASE_AMT$|_PHASE_MODE$/.test(x[0])).map(x => x[0].slice(8) + '=' + x[1].toFixed(2)))].join(' '),
         tapeOn, tapeKnobs: L.filter(x => /^(WOW_FLUTTER|SATURATION|HISS|STUDIO_|WIRE_)/.test(x[0])).map(x => x[0].slice(0, 6) + ':' + x[1].toFixed(2)).join(' '), cmpRoutes: (window.__tiRoutes() || []).filter(r => { const c = (window.__fxrDevs() || []).find(d => d.core === 'cmp'); if (!c || !window.__fxModDest) return false; for (let k = 0; k < 12; k++) if (window.__fxModDest('cmp', c.inst, k) === r.d) return true; return false; }).length }; }));

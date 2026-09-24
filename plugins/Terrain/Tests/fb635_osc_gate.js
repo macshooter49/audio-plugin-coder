@@ -88,7 +88,7 @@ const STUB = (cfg) => {
     headless: 'new', args: ['--no-sandbox', '--allow-file-access-from-files'] });
   const pg = await b.newPage(); await pg.setViewport({ width: 820, height: 656, deviceScaleFactor: 1 });
   const errs = []; pg.on('pageerror', e => errs.push(String(e).slice(0, 160)));
-  const choice = {}; ['A','B','C','D'].forEach(o => { choice['SYN_OSC_' + o + '_WARP_MODE'] = WARP_N; choice['SYN_OSC_' + o + '_WARP2_MODE'] = WARP_N; choice['SYN_OSC_' + o + '_ENGINE'] = 7; choice['SYN_OSC_' + o + '_SAMPLE_LOOP_MODE'] = 5; });
+  const choice = {}; ['A','B','C','D'].forEach(o => { choice['SYN_OSC_' + o + '_WARP_MODE'] = WARP_N; choice['SYN_OSC_' + o + '_WARP2_MODE'] = WARP_N; choice['SYN_OSC_' + o + '_ENGINE'] = 12; choice['SYN_OSC_' + o + '_SAMPLE_LOOP_MODE'] = 5; });
   await pg.evaluateOnNewDocument(STUB, { choice });
   await pg.goto('file://' + P, { waitUntil: 'load', timeout: 60000 }); await sleep(2400);
   await pg.evaluate(() => { document.documentElement.classList.remove('card-only-late');
@@ -98,7 +98,7 @@ const STUB = (cfg) => {
   await sleep(900);
   // a preset load, as the C++ does it: all four engines to Sample, all four payloads pushed, fronts showing
   const st0 = await pg.evaluate(async () => {
-    ['A','B','C','D'].forEach(o => window.__stubState('SYN_OSC_' + o + '_ENGINE').setNormalisedValue(1 / 6));
+    ['A','B','C','D'].forEach(o => window.__stubState('SYN_OSC_' + o + '_ENGINE').setNormalisedValue(1 / 11));
     await new Promise(r => setTimeout(r, 400));
     const N = 400, mn = [], mx = []; for (let i = 0; i < N; i++) { const e = Math.exp(-i / 90) * (0.55 + 0.4 * Math.sin(i * 0.37)); mn.push(-Math.abs(e)); mx.push(Math.abs(e)); }
     ['a','b','c','d'].forEach(o => window.onOscSampleLoaded(o, { peaksMin: mn, peaksMax: mx, filename: 'Vbo - rhodes ' + o + '.wav', numSamples: 96000, sampleRate: 48000 }));

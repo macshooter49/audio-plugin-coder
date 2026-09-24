@@ -15,7 +15,7 @@
   function summary(w){ var o = { osc: [], f: [], lfo: 0, on: 0 };
     'ABCDEFGH'.split('').forEach(function(x){ var p = 'SYN_OSC_' + x + '_'; if (!(w[p + 'ENABLE'] > 0.5)) return; o.on++;
       var bl = 0; for (var k = 1; k <= 4; k++) if ((w[p + 'BLEND' + k + '_DEPTH'] || 0) > 0.01) bl++;
-      o.osc.push(x + ':e' + Math.round((w[p + 'ENGINE'] || 0) * 6) + ' u' + (1 + Math.round((w[p + 'UNISON'] || 0) * 15)) + ' bl' + bl + ' sub' + ((w[p + 'SUB_MIX'] || 0) > 0.05 ? 1 : 0) + ' fb' + Math.round((w[p + 'FEEDBACK'] || w[p + 'WT_FEEDBACK'] || 0) * 10) + ' fold' + Math.round((w[p + 'FOLD_AMT'] || 0) * 10) + ' warp' + Math.round((w[p + 'WARP_AMOUNT'] || 0) * 10)); });
+      o.osc.push(x + ':e' + Math.round((w[p + 'ENGINE'] || 0) * 11) + ' u' + (1 + Math.round((w[p + 'UNISON'] || 0) * 15)) + ' bl' + bl + ' sub' + ((w[p + 'SUB_MIX'] || 0) > 0.05 ? 1 : 0) + ' fb' + Math.round((w[p + 'FEEDBACK'] || w[p + 'WT_FEEDBACK'] || 0) * 10) + ' fold' + Math.round((w[p + 'FOLD_AMT'] || 0) * 10) + ' warp' + Math.round((w[p + 'WARP_AMOUNT'] || 0) * 10)); });
     ['1', '2'].forEach(function(f){ var p = 'SYN_FILTER' + f + '_'; o.f.push('t' + Math.round((w[p + 'TYPE'] || 0) * 117) + ' d' + (w[p + 'DRV'] || 0).toFixed(2) + ' r' + (w[p + 'RES'] || 0).toFixed(2) + ' pd' + (w[p + 'PDRV'] || 0).toFixed(2)); });
     for (var i = 1; i <= 10; i++) if (w['LFO' + i + '_SHAPE'] != null || w['LFO' + i + '_RATE'] != null) o.lfo++;
     o.nWrites = Object.keys(w).length; o.other = Object.keys(w).filter(function(k){ return /STACK|INTERP|SPEC|GRAIN|HARM_|MODAL|OSAMP|QUAL/.test(k); }).length; return o; }

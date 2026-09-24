@@ -12,7 +12,7 @@
   function set(id, v){ var s = ss(id); if (s) s.setNormalisedValue(v); }
   function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
   wait(2500).then(function(){ R.phase = 'load'; return Promise.resolve(NF('scanSampleFactory')()); }).then(function(j){ var d = JSON.parse(j); var f = d.path + '/Drums/' + d.cats.Drums[0]; R.file = f;
-    ['a', 'e'].forEach(function(o){ set('SYN_OSC_' + o.toUpperCase() + '_ENABLE', 1); set('SYN_OSC_' + o.toUpperCase() + '_ENGINE', 1 / 6); window.__sampLoadPath(o, f); });
+    ['a', 'e'].forEach(function(o){ set('SYN_OSC_' + o.toUpperCase() + '_ENABLE', 1); set('SYN_OSC_' + o.toUpperCase() + '_ENGINE', 1 / 11); window.__sampLoadPath(o, f); });
     return wait(2500); }).then(function(){ var g = NF('getOscSamplePayload'); return Promise.all(['a', 'e'].map(function(o){ return Promise.resolve(g(o)).then(function(p){ return { o: o, len: String(p || '').length }; }); })); })
   .then(function(rows){ R.payload = rows; var f = NF('savePatchFile'); return Promise.resolve(f('/tmp/tp39rolls/bankb.terrain', JSON.stringify({ name: 'bankb', bank: 'tp39', author: 'probe' }))); })
   .then(function(res){ R.saved = String(res).slice(0, 30); R.phase = 'done'; publish(); }, function(e){ R.errs.push(String(e).slice(0, 120)); R.phase = 'failed'; publish(); });
