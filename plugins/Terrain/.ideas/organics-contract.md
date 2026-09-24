@@ -71,3 +71,46 @@ audio thread · the centerline + fixed-position laws for every pixel · dropdown
 the page reads it back · recycle existing UI code (engine view, knob rings, the two-pane browser, `.pmenu`) · measure,
 don't assume · "a filtered build log hides a failed build" · Windows must compile (no big stack arrays, no raw string
 literal > 16 KB).
+
+---
+
+## tp105 AMENDMENT (2026-09-24, Max's review of the first build) — supersedes the above where they differ
+
+**Front panel.** Page 1 = `Dynamics · Tone · Body · Vibrato · Human`. Page 2 = `Release · Noise · Sustain · Velocity · Image`.
+Attack leaves the panel (the amp envelope owns attack). `SYN_OSC_X_ORG_ATTACK` stays declared (saved sessions), hidden,
+default 0.5 = Natural, not a mod dest.
+
+**New params (all A–H, appended LAST in the layout, like the first batch):**
+`_ORG_VIBRATO` float 0..1 default 0 · `_ORG_VIBRATE` float 0..1 default 0.417 (→ 3..9 Hz, 5.5 Hz) ·
+`_ORG_VIBDELAY` float 0..1 default 0.175 (→ 0..2 s, 0.35 s) · `_ORG_VCURVE` int 0..2 default 1 (Soft/Linear/Hard) ·
+`_ORG_TUNING` int 0..1 default 1 (As recorded / Equal).
+
+**Mod dests:** the block is unchanged (5272 + osc·10 + knob) but **knob 3 is now Vibrato** (was Attack).
+Order: Dynamics 0 · Tone 1 · Body 2 · **Vibrato 3** · Human 4 · Release 5 · Noise 6 · Sustain 7 · Velocity 8 · Image 9.
+
+**Release = a real release.** Note-off decay time = max(amp-envelope release, Release-knob time); knob taper 20 ms (0) …
+authored (0.5) … **≥ 10 s at 1.0**; the amp envelope's release ALWAYS lengthens it (piano included). Release-trigger
+sample level still follows the knob. The voice passes `ampAttack` / `ampRelease` in `OrganicParams`.
+
+**Noise = real mechanical noise.** map.json regions of `kind:"noise"` gain `"trig": "on" | "off"` (missing = "off").
+"on" noises (hammer/key-down thump, breath onset, pick/fret, bow scrape) start with the note, "off" noises (damper,
+key-up, pedal release) at note-off. Noise knob: 0 = silent, 0.5 = authored level, 1 = +12 dB. Instruments whose
+recordings have no noise get noise regions from a shared, licence-cleared noise library, mapped by family.
+
+**Tuning.** Regions gain `"tfix"` (cents, measured by the compiler = the sample's deviation from equal temperament at
+its root). `tuning = 1` (Equal) applies it; 0 plays as recorded.
+
+**Back panel (the osc's "+" / flip side) for Organics** replaces the Sample engine's warp modes there:
+Vibrato Rate · Vibrato Delay · Velocity Curve (Soft/Linear/Hard) · Tuning (As recorded/Equal) · Articulation (the
+same list as the header pill).
+
+**Visuals.** No dark display fill/outline — transparent over the panel like the wavetable view. Compact families draw
+TWO different-looking variants side by side (left + right), spaced to fill the display like a wavetable does; long
+families (flute, cello, bass, guitar, piano, organ, harp…) stay single. No sax "sound" arcs. Header centerline law:
+OSC · name · articulation · ‹ instrument › · A · + all on ONE line through the ink centres (±0.5 px), in the REAL WebView.
+Right-click menu on the Organics osc = the same menu every engine has (mute / solo / level / …).
+
+**Owners (tp105):** V = visuals & UI (`index.html`, `Tests/_org_*.js`, real-WebView harnesses) · E = engine + integration
+C++ (`Source/organics/*`, `SynthVoice.h`, `PluginProcessor.*`, `PluginEditor.*`, `ParameterIDs.hpp`, `OscBankIds.h`,
+`SynthModConfig.h`, `CMakeLists.txt`, C++ tests) · L = library (`Tools/organics/**`, `Resources/Organics/**`, the compiled
+library outside git, `Tests/organics_compile_test.py`, new fixtures folders).
