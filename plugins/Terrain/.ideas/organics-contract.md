@@ -25,7 +25,7 @@ visuals from `Design/organics/` (mockup approved in spirit — reuse `organics-i
 The lead deletes the stub after B merges.
 
 ## 3. Library on disk (.torg v1, design §4.1)
-- Root: `<terrainDataDir>/Organics` = `~/Library/Application Support/WavesCrate/Terrain/Organics` (Mac),
+- Root: `<terrainDataDir>/Organics` = `~/Library/WavesCrate/Terrain/Organics` (Mac; JUCE's userApplicationDataDirectory is ~/Library; the legacy `TerrainInstrument` folder wins when only it exists — Max's Mac),
   `%APPDATA%\WavesCrate\Terrain\Organics` (Win). Override: env `TERRAIN_ORGANICS_DIR` (tests point it at
   `Tests/fixtures/organics`).
 - `index.json` (array: id, name, family, category, tags, sizeMB, licence, credit), `ids.json` (append-only

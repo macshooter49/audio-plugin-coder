@@ -6,7 +6,7 @@
 # Default: SYMLINK every compiled instrument folder (and index.json / ids.json) from
 #   ~/Developer/VST-Plugins/organics-library/compiled
 # into
-#   ~/Library/Application Support/WavesCrate/Terrain/Organics
+#   <terrainDataDir>/Organics = ~/Library/WavesCrate/Terrain (or the legacy TerrainInstrument)/Organics
 # --copy copies instead of linking (use it for a machine without the build tree).
 #
 # Safety: this script only creates/replaces entries whose names match a compiled instrument id or
@@ -26,7 +26,14 @@
 set -euo pipefail
 
 SRC="${HOME}/Developer/VST-Plugins/organics-library/compiled"
-DST="${HOME}/Library/Application Support/WavesCrate/Terrain/Organics"
+# tp104 — mirror terrainDataDirP() (PluginProcessor.cpp) exactly: JUCE userApplicationDataDirectory on the
+# Mac is ~/Library (NOT Application Support); the fresh "Terrain" folder wins, else the fb605 legacy
+# "TerrainInstrument" folder if it exists, else a fresh "Terrain".
+ROOT="${HOME}/Library/WavesCrate"
+if   [ -d "${ROOT}/Terrain" ];           then DATA="${ROOT}/Terrain"
+elif [ -d "${ROOT}/TerrainInstrument" ]; then DATA="${ROOT}/TerrainInstrument"
+else                                          DATA="${ROOT}/Terrain"; fi
+DST="${TERRAIN_ORGANICS_DIR:-${DATA}/Organics}"
 MODE="link"
 DRY=0
 while [ $# -gt 0 ]; do
