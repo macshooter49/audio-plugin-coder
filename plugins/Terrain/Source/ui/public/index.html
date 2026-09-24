@@ -43989,6 +43989,9 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     const c = l.querySelector('.cur'); if (c) c.scrollIntoView({ block: 'center' });
   }
   $('tp-q-browse').onclick = () => { toggleQuick(false); openBrowser(); };
+  /* tp100 — the settings overlay's Import / Export / "Open the preset browser" rows call this; it was never
+     defined, so they fell through to a "use the header" toast. One door: the same openBrowser() as the header. */
+  window.__openPresetBrowser = () => { toggleQuick(false); if (!browserOpen()) openBrowser(); };
 
   /* ═══ BROWSER ══════════════════════════════════════════════════════════════════════════════════ */
   function browserOpen() { return $('tp-b').classList.contains('on'); }
