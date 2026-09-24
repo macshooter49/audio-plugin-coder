@@ -1160,6 +1160,12 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 afterPatchLoad();   // the same law as every other load: the C++ pushes, then the page re-seeds
                 complete (juce::var ("ok"));
             })
+            // tp104 — a whole-preset dice roll is a preset arriving: the previous patch's tails go (faded, never cut)
+            .withNativeFunction ("flushTails", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.requestTailFlush();
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("getSynthMod", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

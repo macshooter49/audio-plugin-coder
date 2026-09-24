@@ -46676,6 +46676,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function generate(){ var aim=pickAim(); window.__tpDiceLastAim=aim; window.__diceLastOneShot={}; window.__diceLastBlend={};   /* tp39 — the pick records are THIS roll's (a stale blend from the last roll is not a blend) */ var lvl=layout.dlevel||'medium', R=REACH[lvl]||REACH.medium, big=(lvl==='heavy'||lvl==='wild'||lvl==='crazy');
     var B=Object.assign({osc:0,flt:0,env:0,fx:0,mod:0,flow:0},layout.blocks||{});   /* tp39d — ONLY: ticked = only those blocks are re-rolled (in the aim's style); nothing ticked = the whole preset */
     var whole=!Object.keys(B).some(function(k){ return B[k]; }); if(whole) B={osc:1,flt:1,env:1,fx:1,mod:1,flow:1};
+    if(whole){ try{ var ftN=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('flushTails'):null; if(ftN) ftN(); }catch(e){} }   /* tp104 — a whole new preset: the last one's Delay / reverb tails go (the C++ fades them out, never a cut) */
      /* tp48 — THE FLOW CARDS ARE OUT OF THE GLOBAL DICE, FOR GOOD. Max: "remove the flow cards out of the global randomization... from now
         on let me do the flow cards... just keep it oscillators, effects and modulation". The chain that is there stays, its cards are never
         re-dealt or re-rolled, and no LFO is aimed at a flow-card knob by the roll. Each card's OWN dice (the four modes) is untouched. */

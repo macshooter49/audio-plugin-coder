@@ -738,6 +738,23 @@ public:
     /** Empties every stateful effect in the instrument: flushAudioTails() plus the rack reverbs (instance 1 and
         every built pooled one), the rack Delay and the flow cards' buffers. Audio thread only. */
     void flushRackTails() noexcept;
+    /** Ask the audio thread to empty every tail (flushRackTails) at the top of its next block: at once when the
+        output is already silent, otherwise after a 10 ms fade to zero (the cut-tails fade), stopping every voice at
+        the bottom of it, then fading back in. Any thread. The whole-preset dice roll calls it (flushTails native). */
+    void requestTailFlush() noexcept { tailFlushPending_.store (true, std::memory_order_release); }
+    /** Every PRESET LOAD holds one of these for its whole length (loadPatchFromFile, initPatch, resetPatchState,
+        setStateInformation, loadPreset; nesting is counted, only the outermost acts). If the instrument is
+        sounding, the constructor asks the audio thread to fade the output to zero and waits (a few blocks at
+        most, never forever) until it is there and HOLDING silence, so the new state is applied under the mute —
+        the parameter change itself can no longer step the output. The destructor releases the hold: the audio
+        thread empties every tail, stops every voice and fades back in. Nothing sounding = no fade, no wait: the
+        tails are emptied at the top of the next block, as before. */
+    struct ScopedLoadMute
+    {
+        TerrainAudioProcessor& p;
+        explicit ScopedLoadMute (TerrainAudioProcessor& pp) : p (pp) { p.beginLoadMute(); }
+        ~ScopedLoadMute() { p.endLoadMute(); }
+    };
 
     // ═══ fb621 — THE ENVIRONMENT SEAT ══════════════════════════════════════════════════════════
     //  There is no patcher yet. This is the hole it will drop into: one blob, round-tripped and
@@ -3389,11 +3406,27 @@ private:
     /* tp29 — PRESET BLEED. Max: "every time I switch to a preset that has a delay, I can still hear
        the delay, and it takes a long time for the other preset to go away." A patch load rewrites
        parameters but never emptied a delay line or a reverb tail, so the previous preset kept
-       sounding through the new one. Set on the message thread by resetPatchState(); the AUDIO
-       thread does the clearing at the top of the next block, so no buffer is wiped under a
-       reader. */
+       sounding through the new one. Set by requestTailFlush() (a silent load's ScopedLoadMute,
+       the dice); the AUDIO thread does the clearing at the top of the next block, so no buffer
+       is wiped under a reader. */
     std::atomic<bool> tailFlushPending_ { false };
     void flushAudioTails() noexcept;
+    /* tp104 — THE LOAD FADE. flushAudioTails() never reached the rack Delay or the rack reverbs, so the previous
+       preset's Delay and Hall kept ringing through the next one; and where the new state switched a device off,
+       the output stepped to zero on the load (a click). Now every load empties the whole set (flushRackTails) and,
+       when something is sounding, the state is applied under a 10 ms fade + hold (ScopedLoadMute).
+       loadState_: 0 idle · 1 a load asks for the hold · 2 the audio thread is holding silence · 3 release it. */
+    std::atomic<int>   loadState_ { 0 };
+    std::atomic<int>   loadMuteDepth_ { 0 };     // nesting of ScopedLoadMute (any thread; only the outermost acts)
+    bool               loadMuteHeld_ = false;    // the outermost guard asked for a hold (read by its own end)
+    std::atomic<float> lastOutPeak_ { 0.0f };    // the last finished block's output peak (audio thread writes)
+    std::atomic<juce::Thread::ThreadID> audioThreadId_ { nullptr };   // who ran the last processBlock: a load
+                                                 // called ON that thread must never wait for it (it would stall)
+    bool  loadCutReq_  = false;                  // audio thread: a flush that must fade first (tailStage starts it)
+    int   loadHoldN_   = 0;                      // audio thread: samples spent holding (a 2 s safety release)
+    void  beginLoadMute();
+    void  endLoadMute() noexcept;
+    void  cutEverything() noexcept;              // audio thread: flushRackTails + stop every voice (at gain zero)
 
     // ══ tp103 — Settings → Performance: the audio-thread half (see setSleepWhenSilent above) ═══════════════════
     std::atomic<bool>  sleepEnabled_ { true }, cutTailsOnStop_ { false }, presetsMayQuality_ { true };
@@ -3404,7 +3437,7 @@ private:
     bool  hostWasPlaying_ = false;   // last block's transport, for the play→stop / stop→play edges
     bool  playEdgeStart_  = false;   // this block started the transport (read by the tail stage)
     bool  playEdgeStop_   = false;   // this block stopped it
-    int   cutPhase_ = 0, cutPos_ = 0, cutLen_ = 480;   // 0 idle · 1 fading out · 2 fading back in
+    int   cutPhase_ = 0, cutPos_ = 0, cutLen_ = 480;   // 0 idle · 1 fading out · 2 fading back in · 4 holding silence for a load
     /** Top of processBlock: true = Terrain is asleep and this block was answered with silence. */
     bool  sleepGate (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi) noexcept;
     /** Bottom of processBlock, just above the capture: the cut-tails fade and the silence detector. */

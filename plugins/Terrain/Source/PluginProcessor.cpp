@@ -3503,6 +3503,8 @@ void TerrainAudioProcessor::loadPreset(int index)
 
     currentPresetIndex.store(index);
     const auto& p = presets[static_cast<size_t>(index)];
+    // tp104 — a host program change (setCurrentProgram) lands here: the same load fade + every tail emptied.
+    const ScopedLoadMute loadMute (*this);
 
     auto setParam = [this](const char* id, float value)
     {
@@ -10449,6 +10451,52 @@ void TerrainAudioProcessor::flushRackTails() noexcept
     for (int n = 0; n < wc::kFlowInstances; ++n) { glitches_[n].reset(); chops_[n].reset(); }
 }
 
+//  Audio thread, and only ever at gain zero (the bottom of a fade, or a load's hold): every tail and every voice.
+void TerrainAudioProcessor::cutEverything() noexcept
+{
+    flushRackTails();
+    synthEngine.allNotesOff (0, false);
+    if (auto* b = bankB_.load (std::memory_order_acquire)) b->allNotesOff (0, false);
+    for (auto& L : layers) L.synth.allNotesOff (0, false);
+}
+
+// ══ tp104 — THE LOAD FADE: the message-thread half (see ScopedLoadMute in the header) ═══════════════════════════
+//  The old load set a flag and let the next block empty the FX-mode tails — but the new state had ALREADY gone
+//  in: a device the new patch switches off stepped the output to zero on the spot (a click), and one it keeps
+//  on went on ringing with the old tail. Fading after the fact cannot mend a step that the state change itself
+//  made, so a load that finds the instrument sounding now waits for the audio thread to fade to zero and HOLD
+//  there before it touches anything. The wait is bounded: a few blocks, never more than 250 ms — a host that is
+//  not calling processBlock (or holds it off during a restore) costs that once and the load goes ahead; the
+//  audio thread then fades on its next block instead (loadState_ 1 → 3 is an ordinary flush request).
+void TerrainAudioProcessor::beginLoadMute()
+{
+    if (loadMuteDepth_.fetch_add (1, std::memory_order_acq_rel) != 0) return;   // an outer load holds it already
+    loadMuteHeld_ = false;
+    // Nothing sounding (a session opening, an idle instrument, a sleeping one): no fade, no wait — the flush at the
+    // end runs at the top of the next block, exactly as before. An offline render's loads never wait either: the
+    // host may be driving processBlock from this very thread.
+    if (isNonRealtime() || lastOutPeak_.load (std::memory_order_relaxed) < 1.0e-5f) return;
+    loadMuteHeld_ = true;
+    loadState_.store (1, std::memory_order_release);
+    // Called on the audio thread itself (a host restoring between two callbacks): waiting would only stall it.
+    // The request stands — the next block fades, empties and fades back in — but the state goes in now.
+    if (juce::Thread::getCurrentThreadId() == audioThreadId_.load (std::memory_order_relaxed)) return;
+    const double sr  = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    const double blk = (double) juce::jmax (32, getBlockSize());
+    const double waitMs = juce::jlimit (30.0, 250.0, 3000.0 * blk / sr + 20.0);   // three blocks + the fade
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
+    while (loadState_.load (std::memory_order_acquire) == 1 && juce::Time::getMillisecondCounterHiRes() - t0 < waitMs)
+        juce::Thread::sleep (1);
+}
+
+void TerrainAudioProcessor::endLoadMute() noexcept
+{
+    if (loadMuteDepth_.fetch_sub (1, std::memory_order_acq_rel) != 1) return;   // only the outermost load releases
+    if (loadMuteHeld_) loadState_.store (3, std::memory_order_release);          // release: empty, stop, fade in
+    else               requestTailFlush();                                        // silent load: empty at once
+    loadMuteHeld_ = false;
+}
+
 int TerrainAudioProcessor::effectiveDistQuality (int presetQ) const noexcept
 {
     // A preset's own Distortion Quality knob wins while "Presets can change quality" is on; otherwise the
@@ -10495,6 +10543,7 @@ bool TerrainAudioProcessor::sleepGate (juce::AudioBuffer<float>& buffer, const j
     if (! sleeping_.load (std::memory_order_relaxed)) return false;
     bool wake = ! sleepEnabled_.load (std::memory_order_relaxed) || isNonRealtime() || ! midi.isEmpty() || playEdgeStart_
              || testToneArmed_.load (std::memory_order_acquire) || tailFlushPending_.load (std::memory_order_acquire)
+             || loadState_.load (std::memory_order_acquire) != 0
              || noiseAuditionReq_.load (std::memory_order_relaxed) != noiseAudSeen_
              || wtAuditionReq_.load (std::memory_order_relaxed)    != wtAudSeen_
              || sampAuditionReq_.load (std::memory_order_relaxed)  != sampAudSeen_
@@ -10535,11 +10584,23 @@ void TerrainAudioProcessor::tailStage (juce::AudioBuffer<float>& buffer, int num
 {
     const int nch = juce::jmin (2, buffer.getNumChannels());
     const double sr = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
-    if (playEdgeStop_ && cutTailsOnStop_.load (std::memory_order_relaxed) && cutPhase_ == 0 && ! isNonRealtime())   // a bounce keeps its tail
+    // Two things start the fade: the play→stop edge with Cut tails on (a bounce keeps its tail), and a preset load
+    // that found the instrument sounding (loadCutReq_, set at the top of processBlock — a bounce's load fades too,
+    // since a flush without it would step the output). Already fading out: that fade serves both. Fading back
+    // in: turn round from the SAME gain (the raised cosine is symmetric, so position L−p out = p in).
+    if ((playEdgeStop_ && cutTailsOnStop_.load (std::memory_order_relaxed) && ! isNonRealtime()) || loadCutReq_)
     {
-        cutPhase_ = 1; cutPos_ = 0; cutLen_ = juce::jmax (16, (int) std::lround (0.010 * sr));
+        if (cutPhase_ == 0)      { cutPhase_ = 1; cutPos_ = 0; cutLen_ = juce::jmax (16, (int) std::lround (0.010 * sr)); }
+        else if (cutPhase_ == 2) { cutPhase_ = 1; cutPos_ = juce::jmax (0, cutLen_ - cutPos_); }
     }
-    playEdgeStop_ = false;
+    playEdgeStop_ = false; loadCutReq_ = false;
+    if (cutPhase_ == 4)
+    {
+        // holding silence while a load's state goes in. The release (top of processBlock) ends it; if a load
+        // never releases (it cannot — the guard is RAII — but a host could stall it), two seconds is the limit.
+        loadHoldN_ += numSamples;
+        if ((double) loadHoldN_ > 2.0 * sr) { cutEverything(); cutPhase_ = 3; loadHoldN_ = 0; loadState_.store (0, std::memory_order_release); }
+    }
     if (cutPhase_ != 0)
     {
         for (int i = 0; i < numSamples; ++i)
@@ -10550,16 +10611,24 @@ void TerrainAudioProcessor::tailStage (juce::AudioBuffer<float>& buffer, int num
                 g = 0.5f + 0.5f * std::cos (juce::MathConstants<float>::pi * (float) cutPos_ / (float) cutLen_);
                 if (++cutPos_ >= cutLen_)
                 {
-                    // the fade has landed on zero: empty the tails and stop every voice. The rest of THIS block
-                    // was rendered before the flush, so it stays silent (phase 3); the climb starts next block.
-                    flushRackTails();
-                    synthEngine.allNotesOff (0, false);
-                    if (auto* b = bankB_.load (std::memory_order_acquire)) b->allNotesOff (0, false);
-                    for (auto& L : layers) L.synth.allNotesOff (0, false);
-                    cutPhase_ = 3; g = 0.0f;
+                    g = 0.0f;
+                    int one = 1;
+                    if (loadState_.compare_exchange_strong (one, 2, std::memory_order_acq_rel))
+                    {
+                        // a load is waiting for silence: hold it (phase 4) until its state is in; the release
+                        // empties the tails and stops the voices then, so nothing of the half-loaded patch survives.
+                        cutPhase_ = 4; loadHoldN_ = 0;
+                    }
+                    else
+                    {
+                        // the fade has landed on zero: empty the tails and stop every voice. The rest of THIS block
+                        // was rendered before the flush, so it stays silent (phase 3); the climb starts next block.
+                        cutEverything();
+                        cutPhase_ = 3;
+                    }
                 }
             }
-            else if (cutPhase_ == 3) g = 0.0f;
+            else if (cutPhase_ == 3 || cutPhase_ == 4) g = 0.0f;
             else if (cutPhase_ == 2)
             {
                 g = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * (float) cutPos_ / (float) cutLen_);
@@ -10573,6 +10642,7 @@ void TerrainAudioProcessor::tailStage (juce::AudioBuffer<float>& buffer, int num
     float pk = 0.0f;
     for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, buffer.getMagnitude (c, 0, numSamples));
     if (pk > outPeakHold_.load (std::memory_order_relaxed)) outPeakHold_.store (pk, std::memory_order_relaxed);
+    lastOutPeak_.store (pk, std::memory_order_relaxed);   // tp104 — a load reads it: sounding = fade first, silent = flush at once
 
     if (! sleepEnabled_.load (std::memory_order_relaxed) || isNonRealtime())
     { silentRun_ = 0; sleeping_.store (false, std::memory_order_relaxed); return; }
@@ -10747,7 +10817,35 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     } audioSeqScope (audioSeq_);
     tiProf_.begin();
     // tp29 — a patch load asked for the tails to go. Do it HERE, before anything reads them.
-    if (tailFlushPending_.exchange (false, std::memory_order_acq_rel)) flushAudioTails();
+    // tp104 — ALL of them (flushRackTails: the rack Delay and every rack reverb too), and never as a step: see
+    //   ScopedLoadMute. A load that found the instrument sounding holds the output at zero (phase 4) while its
+    //   state goes in; its release empties the tails and stops the voices under that silence, then fades back in.
+    {
+        audioThreadId_.store (juce::Thread::getCurrentThreadId(), std::memory_order_relaxed);
+        bool flush = tailFlushPending_.exchange (false, std::memory_order_acq_rel);
+        const int ls = loadState_.load (std::memory_order_acquire);
+        if (ls == 1)
+        {
+            if (cutPhase_ == 4) loadState_.store (2, std::memory_order_release);   // already holding (a second load)
+            else loadCutReq_ = true;                                                // tailStage fades, then holds
+        }
+        else if (ls == 3)
+        {
+            int three = 3;
+            if (loadState_.compare_exchange_strong (three, 0, std::memory_order_acq_rel))
+            {
+                if (cutPhase_ == 4) { cutEverything(); cutPhase_ = 2; cutPos_ = 0; loadHoldN_ = 0; flush = false; }
+                else flush = true;   // the hold never began (the wait timed out): an ordinary flush request
+            }
+        }
+        if (flush)
+        {
+            if (cutPhase_ == 4) {}                                        // holding: the release will empty them
+            else if (lastOutPeak_.load (std::memory_order_relaxed) < 1.0e-5f && cutPhase_ != 1)
+                flushRackTails();                                         // nothing sounding: no fade needed
+            else loadCutReq_ = true;                                      // sounding: fade to zero first
+        }
+    }
     ++fxBlockGen_;   // fb636 — keys the rack's once-per-block parameter builds (applyTpe / applyGrn)
     const bool vizLive = vizConsumersLive();   // fb148 — no UI, no viz work (Serum does the same)
 
@@ -17412,6 +17510,7 @@ void TerrainAudioProcessor::initPatch()
 {
     if (virginChunk_.getSize() == 0) return;
     const int w = editorWidth.load(), pg = uiPage.load();
+    const ScopedLoadMute loadMute (*this);   // tp104 — one fade around the reset AND the restore
     resetPatchState();
     { const ScopedKeepInstanceMidi keep (*this);   // tp103 — Init is a patch, not the MIDI setup
       setStateInformation (virginChunk_.getData(), (int) virginChunk_.getSize()); }
@@ -19761,7 +19860,9 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
     // tp29 — ANY state restore empties the tails, not only the in-plugin browser's. The browser goes
     //   through resetPatchState(), but a HOST switching programs or reloading a project lands here
     //   directly, and a reverb still ringing from the last patch is the same complaint either way.
-    tailFlushPending_.store (true, std::memory_order_release);
+    // tp104 — through the load fade: sounding, the state goes in under a held silence and every tail (the rack
+    //   Delay and reverbs included) is emptied on the release; silent (a project opening), no fade, no wait.
+    const ScopedLoadMute loadMute (*this);
     std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
 
     if (xmlState != nullptr)
@@ -21258,6 +21359,7 @@ bool TerrainAudioProcessor::loadPatchFromFile (const juce::File& f, juce::String
     if (! f.loadFileAsData (file)) { error = "could not read " + f.getFileName(); return false; }
     juce::String manifest; juce::MemoryBlock chunk;
     if (! unwrapPatchBytes (file, manifest, chunk, error)) return false;
+    const ScopedLoadMute loadMute (*this);   // tp104 — one fade around the reset AND the restore
     resetPatchState();
     { const ScopedKeepInstanceMidi keep (*this);   // tp103 — a preset never flips MPE or the MIDI channel
       setStateInformation (chunk.getData(), (int) chunk.getSize()); }
@@ -21320,10 +21422,11 @@ void TerrainAudioProcessor::resetPatchState()
 {
     // The .terrain path: the blobs, then every decoded audio slot and the loaders that could still
     // land into one. Message thread — the same thread the restore code documents.
-    clearPatchBlobs();
     // tp29 — and empty everything that HOLDS SOUND. Max: "every time I choose a preset it should
     //   simply reset everything ... there's no bleeding over." The audio thread does the clearing.
-    tailFlushPending_.store (true, std::memory_order_release);
+    // tp104 — through the load fade (the callers hold the outer guard, so this one only counts).
+    const ScopedLoadMute loadMute (*this);
+    clearPatchBlobs();
     for (int ci = 1; ci <= ParameterIDs::kFxInstances; ++ci) clearConvUserIR (ci);
     noiseSampleSelJson_.clear(); noiseLoadedSel_.clear();
     noiseSampleBuffer_.store (nullptr); noiseSampleBuffer_.setSampleRate (0.0);
