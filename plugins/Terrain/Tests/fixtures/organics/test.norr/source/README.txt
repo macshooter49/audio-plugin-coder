@@ -1,0 +1,1 @@
+No round robin (fake-RR target). Stereo. Keys 0-11: white noise (root 6, loop). Zones every 6 st from root 17 to 107 (zone = root-5..root, the last to 127): harmonic series at the root with a FIXED 1.2 kHz formant, side = 0.25 x a phase-scrambled copy (Image). Body borrows a neighbour zone and repitches it -> the formant moves, the pitch does not.

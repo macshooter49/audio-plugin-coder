@@ -1,0 +1,1 @@
+Keys 0-59 (root 48): seq_length 4, positions 0..3 carry markers k3,k5,k7,k9. Keys 60-127 (root 72): random RR, rand [0,.25) [.25,.5) [.5,.75) [.75,1) with markers k3,k5,k7,k9. 0.4 s one-shot tones.
