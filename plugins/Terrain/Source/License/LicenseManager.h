@@ -12,7 +12,7 @@
 //    * `isAudioAllowed()` is the ONLY method the audio thread calls. It reads one
 //      relaxed atomic — no locks, no allocation, no I/O — so processBlock can gate
 //      output cheaply. All the heavy work (verify, disk, server) runs on the
-//      message thread via initialiseAtBoot()/refresh()/register*/applyLicenseFile().
+//      message thread via initialiseAtBoot()/refresh()/activate()/applyLicenseFile().
 //    * Enforcement boundary: the only consequence of "not allowed" is that Terrain
 //      outputs silence and shows the registration gate. Nothing else on the user's
 //      machine is touched.
@@ -24,6 +24,7 @@
 #include "SignatureVerifier.h"
 #include "MachineBinding.h"
 #include "LicenseStore.h"
+#include "LicenseServerClient.h"
 
 #include <atomic>
 #include <memory>
@@ -39,6 +40,7 @@ namespace terrain::license
         std::unique_ptr<ISignatureVerifier> verifier;
         std::unique_ptr<IMachineBinding>    machine;
         std::unique_ptr<ILicenseStore>      store;
+        std::unique_ptr<ILicenseServerClient> server;   // null == DisabledServerClient
         TrialPolicy                         trialPolicy{};
     };
 
@@ -49,6 +51,8 @@ namespace terrain::license
             : verifier_(std::move(deps.verifier)),
               machine_(std::move(deps.machine)),
               store_(std::move(deps.store)),
+              server_(deps.server ? std::move(deps.server)
+                                  : std::make_unique<DisabledServerClient>()),
               trial_(deps.trialPolicy)
         {
         }
@@ -60,6 +64,7 @@ namespace terrain::license
             d.verifier = std::make_unique<StubEd25519Verifier>();
             d.machine  = std::make_unique<StubMachineBinding>();
             d.store    = std::make_unique<InMemoryStore>();
+            d.server   = std::make_unique<DisabledServerClient>();   // no endpoint -> nothing sent
             return std::make_unique<LicenseManager>(std::move(d));
         }
 
@@ -86,28 +91,80 @@ namespace terrain::license
 
         GateDecision currentDecision() const { return decision_; }
 
-        // -------- registration (backs the settings-mockup natives) -----------
-        // registerStart(name, email): ask the server to mail an authorization code.
-        // SKELETON: no network -> not-implemented, fail-closed.
-        RegistrationChallenge beginRegistration(const RegistrationIdentity& id)
+        // -------- activation (backs the settings-UI natives) ----------------
+        // Purchase-verified activation. Every call BLOCKS on the network: the
+        // editor natives run them on a background thread and resolve the JS
+        // promise on the message thread with {status: jsStatus(result), ...}.
+        //
+        //   licenseLookup({email})               -> lookupPurchase(email)
+        //   licenseActivate({name,email,code})   -> activate(identity, now)
+        //   licenseDeactivate({})                -> deactivate(now)
+        //
+        // With no endpoint configured (the default) the server client answers
+        // NotConfigured without touching the network, and nothing is faked.
+        bool isServerConfigured() const noexcept { return server_ && server_->isConfigured(); }
+
+        // Step 2: does a Terrain purchase exist for this (order) email?
+        PurchaseLookupResult lookupPurchase(const std::string& email)
         {
-            pendingIdentity_ = id;
-            RegistrationChallenge c;
-            c.accepted = false;
-            c.userMessage = "Registration server not wired in this build.";
-            return c; // TODO(hook-up): POST /register -> mail TRRN-XXXX-XXXX code.
+            pendingIdentity_.email = email;
+            if (! server_) return {};
+            return server_->lookup(email);
         }
 
-        // registerVerify(code): send the code; on success the server returns a
-        // signed Licence.json which we verify + store. SKELETON: fail-closed.
-        RegisterResult completeRegistration(const std::string& authorizationCode)
+        // Step 3: email + one of its codes -> signed licence bound to this machine.
+        // Success is reported ONLY after the returned licence verifies locally
+        // (signature, product, machine), so a compromised or misconfigured server
+        // can never unlock audio by saying "ok".
+        ActivationResult activate(const RegistrationIdentity& id, UnixTime nowUnix)
         {
-            pendingIdentity_.authorizationCode = authorizationCode;
-            RegisterResult r;
-            r.success = false;
-            r.failure = GateReason::SignatureInvalid;
-            r.userMessage = "Registration server not wired in this build.";
-            return r; // TODO(hook-up): POST /verify -> receive+applyLicenseFile().
+            pendingIdentity_ = id;
+            ActivationResult r;
+            if (! server_ || ! machine_ || ! server_->isConfigured())
+            {
+                r.userMessage = "Activation server not configured yet.";
+                return r;   // ServerOutcome::NotConfigured — nothing sent
+            }
+
+            const MachineFingerprint fp = machine_->currentFingerprint();
+            if (! fp.isValid())
+            {
+                r.outcome = ServerOutcome::ServerError;
+                r.failure = GateReason::MachineMismatch;
+                r.userMessage = "Terrain couldn't identify this computer.";
+                return r;
+            }
+
+            r = server_->activate(id, fp);
+            if (! r.success()) return r;
+
+            const GateDecision d = applyLicenseFile(r.licenseBlob, nowUnix);
+            if (d.status != LicenseStatus::Licensed)
+            {
+                if (store_) store_->clearLicense();   // never keep a licence that failed
+                reevaluate(nowUnix);
+                r.status  = ActivationStatus::LicenseRejected;
+                r.failure = d.reason;
+                r.userMessage = d.userMessage;
+            }
+            r.licenseBlob.clear();
+            return r;
+        }
+
+        // Sign out + free this computer's seat on the server. The local licence is
+        // removed even if the server can't be reached (the customer can free the
+        // seat later from their Waves Crate account).
+        DeactivationResult deactivate(UnixTime nowUnix)
+        {
+            DeactivationResult r;
+            if (server_ && machine_ && store_)
+            {
+                LicenseFile lf;
+                if (auto blob = store_->readLicenseBlob(); blob && parseLicense(*blob, lf))
+                    r = server_->deactivate(lf.licenseId, lf.activationId, machine_->currentFingerprint());
+            }
+            signOut(nowUnix);
+            return r;
         }
 
         // signOut(): remove the licence from THIS machine only. Trial is untouched.
@@ -213,6 +270,7 @@ namespace terrain::license
         std::unique_ptr<ISignatureVerifier> verifier_;
         std::unique_ptr<IMachineBinding>    machine_;
         std::unique_ptr<ILicenseStore>      store_;
+        std::unique_ptr<ILicenseServerClient> server_;
         TrialClock                          trial_;
 
         RegistrationIdentity pendingIdentity_{};
