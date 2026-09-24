@@ -471,8 +471,92 @@ static an::Buf mono (const Rec& r) { an::Buf m (r.L.size()); for (size_t i = 0; 
 static const float kNoDet[16] = {};
 
 //==================================================================================================
+//  tp105 NO-SILENCE sweep (Max: "Xylophone, F4 — every OTHER press is silent… NO SILENCES, ever").
+//  Every installed instrument × every articulation × every key of its range (± margin) × velocities
+//  {20, 64, 100, 127} × 8 repeated presses: each press must reach −60 dBFS within 30 ms + the Human timing
+//  (3 ms at the default 0.25) + the region's own authored onset at the playback ratio (a soft bowed cello
+//  layer speaks 97 ms in — that is the recording, not a silence).
+//==================================================================================================
+static int runSweep (const juce::File& root, int margin)
+{
+    setEnv ("TERRAIN_ORGANICS_DIR", root.getFullPathName().toRawUTF8());
+    juce::MessageManager::getInstance();
+    OrganicsLibrary::get().rescan();
+    const auto idx = OrganicsLibrary::get().index();
+    std::printf ("══ ORGANICS NO-SILENCE SWEEP — %s (margin ±%d keys) ══\n", root.getFullPathName().toRawUTF8(), margin);
+    if (! idx.isArray() || idx.size() == 0) { std::printf ("FAIL  no instruments under the root\n"); return 1; }
+    int64_t totalFail = 0, totalPress = 0; int instFail = 0, insts = 0;
+    const int vels[4] = { 20, 64, 100, 127 };
+    constexpr int kBlk = 256;
+    for (auto& ent : *idx.getArray())
+    {
+        const juce::String id = ent["id"].toString();
+        auto I = load (id);
+        ++insts;
+        if (! I) { std::printf ("FAIL  %-40s does not load\n", id.toRawUTF8()); ++instFail; continue; }
+        int fails = 0, presses = 0; std::string first;
+        for (int a = 0; a < I->numArtics; ++a)
+        {
+            int lo = 128, hi = -1;
+            for (auto& r : I->regions) if (r.artic == a && r.kind == org::Kind::Attack) { lo = std::min (lo, r.lk); hi = std::max (hi, r.hk); }
+            if (hi < 0) continue;
+            lo = std::max (0, lo - margin); hi = std::min (127, hi + margin);
+            OrganicEngine e; e.prepare (kSR, kBlk); e.setInstrument (I);
+            OrganicParams p; p.artic = a;                        // the defaults (Human 0.25): what Max plays
+            std::vector<float> L (kBlk), R (kBlk);
+            for (int key = lo; key <= hi; ++key)
+                for (int v : vels)
+                {
+                    int silent = 0;
+                    for (int press = 0; press < 8; ++press)
+                    {
+                        e.noteOn (key, (float) v / 127.f, 1, kNoDet, 0x1234567u + (uint32_t) (key * 131 + v * 7 + press * 7919));
+                        float pk = 0.f; int64_t t = 0, win = (int64_t) (0.033 * kSR); bool winSet = false;
+                        for (int guard = 0; guard < 400 && t < win; ++guard)
+                        {
+                            std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
+                            e.render (p, 0.f, L.data(), R.data(), kBlk);
+                            for (int i = 0; i < kBlk; ++i) pk = std::max (pk, std::max (std::abs (L[(size_t) i]), std::abs (R[(size_t) i])));
+                            t += kBlk;
+                            if (! winSet)
+                            {
+                                winSet = true;
+                                const int ri = organics_debug::lastNoteRegion();
+                                if (ri >= 0 && ri < (int) I->regions.size())
+                                {
+                                    const auto& rg = I->regions[(size_t) ri];
+                                    const double ratio = std::pow (2.0, (key - rg.root) / 12.0) * I->samples[(size_t) rg.smp].sampleRate / kSR;
+                                    win += (int64_t) ((double) std::max<int64_t> (0, rg.onset - rg.start) / std::max (1.0e-3, ratio));
+                                }
+                            }
+                        }
+                        e.noteOff (false);
+                        for (int b = 0; b < 4; ++b) { std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f); e.render (p, 0.f, L.data(), R.data(), kBlk); }
+                        ++presses;
+                        if (pk < 0.001f) { ++fails; ++silent; }
+                    }
+                    if (silent > 0 && first.size() < 300) first += fmt (" a%d:k%dv%d(%d/8)", a, key, v, silent);
+                }
+            e.kill(); e.setInstrument (nullptr);
+        }
+        totalFail += fails; totalPress += presses;
+        if (fails) { ++instFail; std::printf ("FAIL  %-40s %d/%d silent presses:%s\n", id.toRawUTF8(), fails, presses, first.c_str()); }
+        else std::printf ("PASS  %-40s %d presses, all sound\n", id.toRawUTF8(), presses);
+        std::fflush (stdout);
+        I.reset();
+        org::drainDeferredReleases();
+    }
+    std::printf ("══ %s — %lld silent of %lld presses · %d/%d instruments clean ══\n", totalFail == 0 ? "PASS" : "FAIL",
+                 (long long) totalFail, (long long) totalPress, insts - instFail, insts);
+    return totalFail == 0 && instFail == 0 ? 0 : 1;
+}
+
+//==================================================================================================
 int main (int argc, char** argv)
 {
+    if (argc >= 3 && std::string (argv[1]) == "--sweep")
+        return runSweep (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]), argc >= 4 ? std::atoi (argv[3]) : 12);
+
     if (argc >= 3 && std::string (argv[1]) == "--gen")
     {
         juce::File root (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));

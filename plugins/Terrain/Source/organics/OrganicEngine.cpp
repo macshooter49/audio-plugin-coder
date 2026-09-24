@@ -398,21 +398,42 @@ namespace tw
             return true;
         }
 
-        /** Top (loudest) attack region at key/vel for this note, −1 when none. */
-        int topRegion (const Note& n, int key, float v) const noexcept
+        /** The loudest attack region of one (key, velocity) cell; strict = honour this note's RR / random slot. */
+        int bestIn (const Note& n, int key, int vi, float v, bool strict) const noexcept
         {
             const auto& I = *inst;
-            const auto& sp = I.span (n.artic, org::Kind::Attack, std::clamp (key, 0, 127), std::clamp ((int) std::lround (v), 1, 127));
+            const auto& sp = I.span (n.artic, org::Kind::Attack, key, vi);
             const uint16_t* L = I.list (sp);
             int best = -1; float bg = 0.f;
             for (uint32_t i = 0; i < sp.count; ++i)
             {
                 const auto& r = I.regions[L[i]];
-                if (! rrPass (r, n)) continue;
+                if (strict && ! rrPass (r, n)) continue;
                 const float g = layerGain (r, v);
                 if (g > bg) { bg = g; best = L[i]; }
             }
             return best;
+        }
+
+        /** Top (loudest) attack region at key/vel for this note. tp105 NO-SILENCE law (Max: "it's round-robinning to
+            a silence"): a key outside the authored range plays its nearest mapped key; a slot this note's RR pick does
+            not cover plays another RR of the same cell; a velocity hole plays the nearest layer (lower first).
+            −1 only when the articulation has no attack region at all. */
+        int topRegion (const Note& n, int key, float v) const noexcept
+        {
+            const int k  = inst->mappedKey (n.artic, key);
+            const int vi = std::clamp ((int) std::lround (v), 1, 127);
+            int t = bestIn (n, k, vi, v, true);
+            if (t < 0) t = bestIn (n, k, vi, v, false);
+            for (int d = 1; t < 0 && d < 127; ++d)
+                for (int w : { vi - d, vi + d })
+                {
+                    if (w < 1 || w > 127) continue;
+                    t = bestIn (n, k, w, (float) w, true);
+                    if (t < 0) t = bestIn (n, k, w, (float) w, false);
+                    if (t >= 0) break;
+                }
+            return t;
         }
 
         struct Targets { int idx[kMaxTargets]; float pw[kMaxTargets]; int n = 0;
@@ -432,23 +453,28 @@ namespace tw
             {
                 const int   sh = (int) s0 + si;
                 const float ws = ns == 1 ? 1.f : (si == 0 ? std::cos (1.5707963f * w) : std::sin (1.5707963f * w));
-                int key2 = std::clamp (n.key + sh + n.fake, 0, 127);
-                // Upward repitch clamp (+7 st total): walk the borrowed key back toward the played key.
+                const int anchor = inst->mappedKey (n.artic, n.key);
+                int key2 = inst->mappedKey (n.artic, n.key + sh + n.fake);
+                // Upward repitch clamp (+7 st total): walk the borrowed key back toward the played (mapped) key.
                 for (int guard = 0; guard < 24; ++guard)
                 {
                     const int t = topRegion (n, key2, vEff);
-                    if (t < 0 || key2 == n.key || n.key - I.regions[(size_t) t].root <= 7) break;
-                    key2 += key2 < n.key ? 1 : -1;
+                    if (t < 0 || key2 == anchor || n.key - I.regions[(size_t) t].root <= 7) break;
+                    key2 = inst->mappedKey (n.artic, key2 + (key2 < anchor ? 1 : -1));
                 }
                 const auto& sp = I.span (n.artic, org::Kind::Attack, key2, vi);
                 const uint16_t* L = I.list (sp);
+                bool added = false;
                 for (uint32_t i = 0; i < sp.count; ++i)
                 {
                     const auto& r = I.regions[L[i]];
                     if (! rrPass (r, n)) continue;
                     const float g = layerGain (r, vEff) * ws;
-                    if (g > 1.0e-5f) T.add (L[i], g * g * wPow);
+                    if (g > 1.0e-5f) { T.add (L[i], g * g * wPow); added = true; }
                 }
+                // NO-SILENCE fallback: nothing in this cell for this note's RR pick / velocity → the nearest that is
+                if (! added && ws > 1.0e-5f)
+                    if (const int t = topRegion (n, key2, vEff); t >= 0) T.add (t, ws * ws * wPow);
             }
         }
 
@@ -574,7 +600,7 @@ namespace tw
                 seqBase = inst->rrSeq()[(size_t) artic * 128 + (size_t) key].fetch_add (1, std::memory_order_relaxed);
                 // choke: this note's groups tick ONCE (so a note's own players never choke each other)
                 {
-                    const auto& sp = inst->span (artic, org::Kind::Attack, key, vIdx);
+                    const auto& sp = inst->span (artic, org::Kind::Attack, inst->mappedKey (artic, key), vIdx);
                     const uint16_t* L = inst->list (sp);
                     int done[8]; int nd = 0;
                     for (uint32_t i = 0; i < sp.count; ++i)
@@ -640,7 +666,7 @@ namespace tw
                 }
             }
             // fake RR (the set has no RR at this key): no-repeat choice of {0, −1, +1} → borrow a neighbour zone
-            if (n.human > 0.f && ! I.keyHasRR (n.artic, n.key))
+            if (n.human > 0.f && ! I.keyHasRR (n.artic, I.mappedKey (n.artic, n.key)))
             {
                 auto& last = I.fakeLast()[n.key];
                 const int prev = std::clamp ((int) last.load (std::memory_order_relaxed), -1, 1);
@@ -732,7 +758,9 @@ namespace tw
             const auto& I = *inst;
             for (auto kind : { org::Kind::Release, org::Kind::Noise })
             {
-                const auto& sp = I.span (n.artic, kind, n.key, n.vIdx);
+                const auto* spp = &I.span (n.artic, kind, n.key, n.vIdx);
+                if (spp->count == 0) spp = &I.span (n.artic, kind, I.mappedKey (n.artic, n.key), n.vIdx);   // out of range → the edge zone's
+                const auto& sp = *spp;
                 const uint16_t* L = I.list (sp);
                 for (uint32_t i = 0; i < sp.count; ++i)
                 {

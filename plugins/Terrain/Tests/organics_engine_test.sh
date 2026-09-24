@@ -39,6 +39,14 @@ for s in Source/organics/OrganicsLibrary.cpp Source/organics/OrganicEngine.cpp S
 done
 $CXX "$OUT"/*.o $FW -o "$OUT/organics_engine_test" 2> "$OUT/link.log" || { echo "  LINK FAIL — first error:"; grep -m1 -i 'error\|undefined' "$OUT/link.log"; exit 1; }
 
+# tp105 NO-SILENCE sweep: every installed instrument × artic × key (range ± ORG_SWEEP_MARGIN, default 12) × vel {20,64,100,127}
+#   × 8 presses must sound (−60 dBFS within 30 ms + Human timing + the region's authored onset).
+#   bash Tests/organics_engine_test.sh --sweep [root]   (root default: $TERRAIN_ORGANICS_DIR, else ~/Library/WavesCrate/TerrainInstrument/Organics)
+if [ "${1:-}" = "--sweep" ]; then
+  SR="${2:-${TERRAIN_ORGANICS_DIR:-$HOME/Library/WavesCrate/TerrainInstrument/Organics}}"
+  [ -d "$SR" ] || SR="$HOME/Library/WavesCrate/Terrain/Organics"
+  exec "$OUT/organics_engine_test" --sweep "$SR" "${ORG_SWEEP_MARGIN:-12}"
+fi
 FIX="Tests/fixtures/organics"
 if [ "${ORG_REGEN:-0}" = "1" ]; then "$OUT/organics_engine_test" --gen "$FIX" || exit 1; fi
 # Agent A's compiled library (outside git): the real-data bars run when it is present (ORG_REAL=0 skips them)
