@@ -420,7 +420,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
 
     // Create WebBrowserComponent with all relay options
     webView = std::make_unique<TerrainWebView>(
-        TiSettingsNatives::add (*this, juce::WebBrowserComponent::Options())   // tp103 — Settings: app / library / support natives
+        withOrganics (TiSettingsNatives::add (*this, juce::WebBrowserComponent::Options()))   // tp103 — Settings: app / library / support natives · tp104 — Organics relays + natives
             .withKeepPageLoadedWhenBrowserIsHidden()   // fb148 — FL hides/shows plugin windows; default = navigate to about:blank + goBack (a visible reload risk)
             .withBackend(juce::WebBrowserComponent::Options::Backend::webview2)
             .withWinWebView2Options(
@@ -4874,6 +4874,17 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
         mkAtt(synOscDModalHaloAttachment, ParameterIDs::SYN_OSC_D_MODAL_HALO, synOscDModalHaloRelay);
         mkAtt(synOscDModalAgeAttachment, ParameterIDs::SYN_OSC_D_MODAL_AGE, synOscDModalAgeRelay);
         mkAtt(synOscDModalBodyAttachment, ParameterIDs::SYN_OSC_D_MODAL_BODY, synOscDModalBodyRelay);
+        // tp104 — ORGANICS (A–D): point 3 of the four-point law, for every relay withOrganics() built
+        {
+            const char* const* tbl[kOrgRelayKnobs] = {
+                ParameterIDs::kOsc_ORG_INST, ParameterIDs::kOsc_ORG_ARTIC, ParameterIDs::kOsc_ORG_DYNAMICS, ParameterIDs::kOsc_ORG_TONE,
+                ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
+                ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE };
+            for (int o = 0; o < 4; ++o)
+                for (int k = 0; k < kOrgRelayKnobs; ++k)
+                    if (orgRelay_[o][k] != nullptr)
+                        mkAtt (orgAtt_[o][k], tbl[k][o], *orgRelay_[o][k]);   // the same table withOrganics() built the relay from
+        }
         // UNIVERSAL OSC BOXES — COARSE + SUB (full 6-link chain, 2026-07-09)
         mkAtt(synOscACoarseAttachment, ParameterIDs::SYN_OSC_A_COARSE, synOscACoarseRelay);
         mkAtt(synOscBCoarseAttachment, ParameterIDs::SYN_OSC_B_COARSE, synOscBCoarseRelay);
@@ -6662,6 +6673,23 @@ void TerrainUiCore::timerCallback()
     // relaxed-cost atomic compare per tick; a parked core catches up on its first tick after attach().
     if (pageReady && audioProcessor.stateLoadGen_.load (std::memory_order_acquire) != announcedLoadGen_)
         afterPatchLoad (true);
+
+    // tp104 — THE organicViz FEED (contract §6): {osc, notes:[{n,lvl}], pedal}, at most 15 Hz, and only while an Organics
+    //  oscillator sounds or within 300 ms after (takeOrganicViz decides; it reads the audio thread's seqlock snapshot, so
+    //  this is the message thread end of a lock-free handoff). An instance with no Organics osc returns at one load.
+    if (pageReady)
+    {
+        const juce::uint32 nowMs = juce::Time::getMillisecondCounter();
+        if (nowMs - orgVizEmitMs_ >= 66)
+        {
+            juce::Array<juce::var> ev;
+            if (audioProcessor.takeOrganicViz (ev))
+            {
+                orgVizEmitMs_ = nowMs;
+                for (const auto& e : ev) webView->emitEventIfBrowserIsVisible (juce::Identifier ("organicViz"), e);
+            }
+        }
+    }
 
     // fb501 — THE MESSAGE-THREAD METER. Measured on Windows with one WT osc, no notes, idle:
     // opening the editor costs the process +17.5 points of CPU, and the biggest single share is
@@ -17199,4 +17227,36 @@ void TerrainAudioProcessorEditor::tickSizeHeal()
         if (std::abs (getWidth() - intendedW_) > 4)
             setSize (intendedW_, juce::roundToInt (intendedW_ * 672.0 / 820.0));
     }
+}
+
+
+// ══ tp104 — THE ORGANICS ENGINE'S EDITOR SEAM (contract §4, §6) ══════════════════════════════════════════════════════
+//  The relays for osc A–D's twelve (E–H use the pool slider state) and the four natives. Called once, from the
+//  constructor, while the Options chain is being assembled (before the WebView exists).
+juce::WebBrowserComponent::Options TerrainUiCore::withOrganics (juce::WebBrowserComponent::Options o)
+{
+    const char* const* tbl[kOrgRelayKnobs] = {
+        ParameterIDs::kOsc_ORG_INST, ParameterIDs::kOsc_ORG_ARTIC, ParameterIDs::kOsc_ORG_DYNAMICS, ParameterIDs::kOsc_ORG_TONE,
+        ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
+        ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE };
+    for (int osc = 0; osc < 4; ++osc)
+        for (int k = 0; k < kOrgRelayKnobs; ++k)
+        {
+            orgRelay_[osc][k] = std::make_unique<juce::WebSliderRelay> (tbl[k][osc]);
+            o = o.withOptionsFrom (*orgRelay_[osc][k]);
+        }
+    auto oscArg = [] (const juce::Array<juce::var>& a) { return a.size() > 0 ? juce::jlimit (0, ParameterIDs::kOscCount - 1, (int) a[0]) : 0; };
+    return o
+        // organicsIndex() → index.json as a JSON string, each entry + "installed": the instrument's folder is on disk
+        .withNativeFunction ("organicsIndex", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        { complete (juce::var (audioProcessor.organicsIndexJson())); })
+        // organicsSetInstrument(osc 0..7, id) → {ok,id,name,family,category,artics,hasNoise,hasRelease,status}; also ORG_INST
+        .withNativeFunction ("organicsSetInstrument", [this, oscArg] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        { complete (juce::var (audioProcessor.organicsSetInstrument (oscArg (a), a.size() > 1 ? a[1].toString() : juce::String()))); })
+        // organicsGetState(osc) → the same JSON for the osc's current instrument (the page reads back on open)
+        .withNativeFunction ("organicsGetState", [this, oscArg] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        { complete (juce::var (audioProcessor.organicsStateJson (oscArg (a)))); })
+        // organicsPreview(id) → preview.flac through the browser-preview player (no synth voice); "" stops
+        .withNativeFunction ("organicsPreview", [this] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        { audioProcessor.organicsPreview (a.size() > 0 ? a[0].toString() : juce::String()); complete (juce::var ("ok")); });
 }

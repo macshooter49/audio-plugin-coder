@@ -94,7 +94,9 @@ namespace tw::carries
 // The engines. PluginProcessor.cpp static_asserts these against SynthVoice::Engine, so a renumbered
 // enum cannot move a gate silently.
 inline constexpr int kEngWavetable = 0, kEngSample = 1, kEngGranular = 2, kEngResynth = 3,
-                     kEngFM = 4, kEngHarmonic = 5, kEngModal = 6;
+                     kEngFM = 4, kEngHarmonic = 5, kEngModal = 6,
+                     kEngOrganic = 7;   // tp104 — NOT a sample-slot engine: its instrument travels as <ORGANICS><OSC id/>, never oscSamplePath/oscAsset
+inline constexpr int kEngineChoices = 12;   // tp104 — "WT".."MODAL","ORGANIC","R8".."R11" (8..11 reserved, hidden)
 inline constexpr int kEngineDefault = kEngWavetable;   // the layout's default (WT) — what an absent PARAM means
 inline constexpr int kModalSrcAuto = 0, kModalSrcSample = 3;   // SYN_OSC_x_MODAL_SOURCE: Auto · Noise · Click · Sample
 inline constexpr int kLfoCustom = 7, kLfoPath = 8;             // wc::LFOShape — asserted in PluginProcessor.cpp

@@ -89,7 +89,7 @@ int main()
     double last = base;
     double lastLive = liveMB();
     auto step = [&] (const std::string& what) { const double m = footMB(), lv = liveMB(); printf ("  %-44s %7.0f MB   %+6.0f   (malloc in use %6.0f MB %+6.0f)\n", what.c_str(), m, m - last, lv, lv - lastLive); last = m; lastLive = lv; };
-    const float nEng = a.maxOf ("Synth OSC A Engine");
+    const float nEng = std::min (7.0f, a.maxOf ("Synth OSC A Engine"));   // tp104 — 0..7 live; 8..11 are reserved (they play WT)
     printf ("  (OSC A Engine has %d choices)\n", (int) nEng + 1);
     for (int e = 0; e <= (int) nEng; ++e) { a.setRaw ("Synth OSC A Engine", (float) e); settle(); step ("OSC A engine = " + std::to_string (e)); }
     a.setRaw ("Synth OSC A Engine", 0); settle(); step ("OSC A engine back to 0");

@@ -200,7 +200,7 @@ static std::vector<Preset> loadAll (const char* dir, const char* sub)
 }
 static std::string userBank() { if (const char* b = getenv ("TP_BANK")) return b;   /* tp36 — any folder of .terrain files (the dice rolls the probe saved) */
     return std::string (getenv ("HOME")) + "/Library/WavesCrate/TerrainInstrument/Banks/User"; }
-static int juce_jlimit0 (int v) { return v < 0 ? 0 : (v > 6 ? 6 : v); }
+static int juce_jlimit0 (int v) { return v < 0 ? 0 : (v > 7 ? 7 : v); }   // tp104 — 0..7 live (8..11 reserved)
 static double cpu (double us) { return us / budgetUs() * 100.0; }
 
 int main (int argc, char** argv)
@@ -273,7 +273,7 @@ int main (int argc, char** argv)
     {
         auto ps = loadAll (userBank().c_str(), argc > 2 ? argv[2] : ""); if (ps.empty()) { printf ("no preset matches\n"); return 1; }
         static const int NOTES[3] = { 48, 55, 60 }; static const double EXP[2] = { 7.0 / 12.0, 5.0 / 12.0 };
-        static const char* EN[] = { "WT", "Sample", "Granular", "Resynth", "FM", "Additive", "Modal" };
+        static const char* EN[] = { "WT", "Sample", "Granular", "Resynth", "FM", "Additive", "Modal", "Organic" };   // tp104 — 7 = Organics
         auto f0of = [] (const std::vector<float>& x, double& quality) -> double
         {
             const int N = (int) x.size(); quality = 0; if (N < 8192) return 0;
@@ -313,7 +313,7 @@ int main (int argc, char** argv)
                     std::vector<float> mono; a.capture (56, mono); a.allOff(); a.render (6, nullptr); a.close();
                     f0[ni] = f0of (mono, q[ni]);
                 }
-                const int ei = (int) std::lround (eng[o - 'A']); const char* en_ = (ei >= 0 && ei < 7) ? EN[ei] : "?";
+                const int ei = (int) std::lround (eng[o - 'A']); const char* en_ = (ei >= 0 && ei < 8) ? EN[ei] : "?";   // tp104 — 8 live engines
                 std::string extra; if (ei == 6) { Au ax; if (ax.open() && ax.loadChunk (p.chunk)) { ax.pump (0.5); const std::string b = std::string ("Synth OSC ") + o + " Modal "; static const char* FAM[] = { "Grand", "Pluck", "Bow", "Flute", "Reed", "Brass", "Bars", "Bells", "Skin" }; const int fam = (int) std::lround (ax.get (b + "Family")); extra = std::string ("  [") + (fam >= 0 && fam < 9 ? FAM[fam] : "?") + " form " + std::to_string ((int) std::lround (ax.get (b + "Form"))) + " src " + std::to_string ((int) std::lround (ax.get (b + "Source"))) + " stretch " + std::to_string (ax.get (b + "Stretch")).substr (0, 4) + "]"; ax.close(); } }
                 const bool silent = f0[0] <= 0 || f0[1] <= 0 || f0[2] <= 0, noisy = q[0] < 0.3 || q[1] < 0.3 || q[2] < 0.3;
                 float lvl = 1.f; { Au al; if (al.open() && al.loadChunk (p.chunk)) { al.pump (0.4); lvl = al.get (std::string ("Synth OSC ") + o + " Level"); al.close(); } }   // a Level-0 oscillator is off by design: its residual is not a pitch
@@ -413,7 +413,7 @@ int main (int argc, char** argv)
                 Au a; if (! a.open() || ! a.loadChunk (p.chunk)) continue; a.pump (0.8); a.render (20, nullptr); a.pump (0.6);
                 for (char q = 'A'; q <= 'H'; ++q) if (q != o) a.setRaw (std::string ("Osc ") + q + " Enable", 0.0f);
                 a.render (20, nullptr); for (int n : CHORD8) a.note (n, 100); a.render (12, nullptr); std::vector<double> t; float pk = 0; a.render (40, &t, &pk); a.allOff();
-                static const char* EN[] = { "WT", "Sample", "Granular", "Resynth", "FM", "Additive", "Modal" };
+                static const char* EN[] = { "WT", "Sample", "Granular", "Resynth", "FM", "Additive", "Modal", "Organic" };   // tp104 — 7 = Organics
                 const int ei = (int) std::lround (eng[o - 'A']);   // the AU hands back the choice index itself (0..6)
                 printf ("  osc %c  %-9s  peak %7.1f dBFS  %s\n", o, EN[juce_jlimit0 (ei)], pk > 1e-9f ? 20.0 * std::log10 (pk) : -240.0, (pk < 1e-4f && ei >= 1 && ei <= 3) ? "<-- EMPTY sample engine" : "");
                 a.close();

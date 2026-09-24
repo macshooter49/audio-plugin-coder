@@ -3090,6 +3090,7 @@ void TerrainAudioProcessor::timerCallback()
     prepareModalEnginesIfNeeded();   // fb498 — arm MODAL's waveguide lines the first time an osc asks for them
     prepareHarmonicEnginesIfNeeded();   // fb517 — same, for HARM's partial banks
     releaseIdleEnginesIfUnused();       // tp63 — and give them back when no oscillator has wanted them for a while
+    organicsTick();                     // tp104 — Organics: arm, instrument requests + delivery, ORG_INST follow, the way back
     releaseIdleWavetables();            // tp63 — and the wavetables the dice visited and left behind
     releaseIdleBankBIfUnused();         // tp64 — and the second oscillator bank, when no E–H oscillator is on
     for (int i = 0; i < wc::kFlowInstances; ++i)   // tp71 — the Shaper's ring (Time / Repeat) is armed here, on the message thread, when a lane asks
@@ -3298,6 +3299,410 @@ void TerrainAudioProcessor::releaseIdleEnginesIfUnused()
     forEachVoiceAllBanks ([&] (tw::SynthVoice* v, int) { modalArmed = modalArmed || v->modalArmed(); harmArmed = harmArmed || v->harmArmed(); });
     step (wantModal, modalUnusedSinceMs_, modalDisarmSeq_, modalArmed || modalDisarmSeq_ != 0, &tw::SynthVoice::disarmModalEngines,    &tw::SynthVoice::releaseModalEngines);
     step (wantHarm,  harmUnusedSinceMs_,  harmDisarmSeq_,  harmArmed  || harmDisarmSeq_  != 0, &tw::SynthVoice::disarmHarmonicEngines, &tw::SynthVoice::releaseHarmonicEngines);
+}
+
+// ══ tp104 — THE ORGANICS ENGINE: the processor's half (contract §2, §6, §7; design §5.2, §7.2, §7.3) ═══════════════
+//  THE UNUSED LAW. Everything below starts from organicsInUse(): four (eight) parameter reads. While no oscillator of
+//  either bank selects engine 7, nothing here calls OrganicsLibrary::get() (no index read, no loader thread), no voice
+//  allocates an engine, and processBlock's only extra work is eight relaxed loads of an empty mailbox — the render is
+//  bit-identical (Tests/organics_null.sh: the frozen 52-preset bank + the init patch, 0 differing samples).
+//  THE INSTRUMENT'S JOURNEY. The message thread asks the library (request → callback on the message thread), keeps
+//  the shared_ptr in OrgSlot, and posts it through a one-slot mailbox per oscillator. processBlock MOVES it out into
+//  orgAudioInst_ and bumps the generation; each voice re-hands it to its engine the next time it renders that osc.
+//  Nothing on the audio thread can drop the last reference: the message thread holds the previous instrument until
+//  the mailbox is empty again, and the engines' own swaps go through the library's deferred-release queue (the API).
+bool TerrainAudioProcessor::organicsInUse() const noexcept
+{
+    const bool bb = bankB_.load (std::memory_order_acquire) != nullptr;
+    for (int o = 0; o < (bb ? ParameterIDs::kOscCount : ParameterIDs::kOscPerBank); ++o)
+        if ((int) *rawParam (ParameterIDs::kOsc_ENGINE[o]) == tw::organics::kEngineIndex) return true;   // the choice INDEX (CLAUDE.md §4)
+    return false;
+}
+
+int TerrainAudioProcessor::organicsArmedVoiceCount() const
+{
+    int n = 0;
+    for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoices_[(size_t) i]) n += v->organicArmed() ? 1 : 0;
+    if (bankB_.load (std::memory_order_acquire) != nullptr)
+        for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoicesB_[(size_t) i]) n += v->organicArmed() ? 1 : 0;
+    return n;
+}
+int TerrainAudioProcessor::organicsAllocatedVoiceCount() const
+{
+    int n = 0;
+    for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoices_[(size_t) i]) n += v->organicAllocated() ? 1 : 0;
+    if (bankB_.load (std::memory_order_acquire) != nullptr)
+        for (int i = 0; i < kSynthVoiceCount; ++i) if (auto* v = synthVoicesB_[(size_t) i]) n += v->organicAllocated() ? 1 : 0;
+    return n;
+}
+
+void TerrainAudioProcessor::prepareOrganicEnginesIfNeeded()
+{
+    if (! organicsInUse()) return;
+    forEachVoiceAllBanks ([] (tw::SynthVoice* v, int) { v->prepareOrganicEngines(); });
+    orgArmedAny_.store (true, std::memory_order_release);
+}
+
+// Reads the instrument's header fields (artics / hasNoise / hasRelease) from map.json WITHOUT parsing the region list:
+// the compiler writes them before "regions" (design §4.1), so the first 64 KB closed at that key is a complete object.
+static juce::var tiOrganicMapHeader (const juce::File& mapFile)
+{
+    juce::FileInputStream in (mapFile);
+    if (! in.openedOk()) return {};
+    juce::MemoryBlock mb; in.readIntoMemoryBlock (mb, 65536);
+    juce::String head = mb.toString();
+    const int r = head.indexOf ("\"regions\"");
+    if (r > 0) { head = head.substring (0, r).trimEnd(); while (head.endsWithChar (',')) head = head.dropLastCharacters (1).trimEnd(); head << "}"; }
+    else if ((juce::int64) mb.getSize() >= 65536) head = mapFile.loadFileAsString();
+    return juce::JSON::parse (head);
+}
+
+void TerrainAudioProcessor::organicsFillMeta (OrgSlot& s, const juce::String& id)
+{
+    s.name = {}; s.family = {}; s.category = {}; s.artics = juce::var (juce::Array<juce::var>()); s.hasNoise = s.hasRelease = false;
+    if (id.isEmpty()) return;
+    auto& lib = tw::OrganicsLibrary::get(); orgTouchedLibrary_ = true;
+    const juce::var idx = lib.index();
+    if (auto* arr = idx.getArray())
+        for (const auto& e : *arr)
+            if (e.getProperty ("id", {}).toString() == id)
+            { s.name = e.getProperty ("name", {}).toString(); s.family = e.getProperty ("family", {}).toString();
+              s.category = e.getProperty ("category", {}).toString(); break; }
+    const juce::var h = tiOrganicMapHeader (lib.root().getChildFile (id).getChildFile ("map.json"));
+    if (h.isObject())
+    {
+        if (s.name.isEmpty())     s.name     = h.getProperty ("name", {}).toString();
+        if (s.family.isEmpty())   s.family   = h.getProperty ("family", {}).toString();
+        if (s.category.isEmpty()) s.category = h.getProperty ("category", {}).toString();
+        if (h.getProperty ("artics", {}).isArray()) s.artics = h.getProperty ("artics", {});
+        s.hasNoise   = (bool) h.getProperty ("hasNoise", false);
+        s.hasRelease = (bool) h.getProperty ("hasRelease", false);
+    }
+    if (s.name.isEmpty()) s.name = id;
+}
+
+// Post an instrument to the audio thread. The mailbox holds ONE, and the NEWEST wins: a delivery the audio thread has
+// not taken yet (no block ran — a paused host, an offline render with a frozen message loop, a cached instrument that
+// answered within a block) is TAKEN BACK and replaced, so a quick answer never waits behind the nullptr the request
+// posted first. States: 0 empty · 1 full · 2 busy (whoever holds it). The audio thread's take is one CAS; if it is
+// mid-take (2) the message thread retries on the next tick (publishPending). Never blocks, never frees on the audio side.
+void TerrainAudioProcessor::organicsPublish (int o)
+{
+    auto& s = orgSlot_[o];
+    int st = orgMailState_[o].load (std::memory_order_acquire);
+    if (st == 2 || ! orgMailState_[o].compare_exchange_strong (st, 2, std::memory_order_acq_rel)) { s.publishPending = true; return; }
+    if (st == 0) s.prev = s.published;       // the audio thread holds `published`: keep it alive until it has taken the new
+    // st == 1: the audio thread never saw `published` — it still holds `prev`, which stays held
+    s.published = s.inst;
+    orgMail_[o] = s.inst;                    // a taken-back value is dropped HERE, on the message thread
+    orgMailState_[o].store (1, std::memory_order_release);
+    s.publishPending = false;
+}
+
+void TerrainAudioProcessor::organicsRequest (int o, const juce::String& id, bool fromState)
+{
+    auto& s = orgSlot_[o];
+    const juce::uint32 gen = ++s.reqGen;
+    const juce::String keepName = s.name, keepFamily = s.family;   // a SAVED name/family, for an id this machine lacks
+    s.id = id;
+    s.inst = nullptr;                         // silent until it lands (never the previous instrument under a new name)
+    s.fromState = fromState;
+    organicsFillMeta (s, id);
+    if (fromState)
+    {
+        if (s.name == id && keepName.isNotEmpty()) s.name = keepName;
+        if (s.family.isEmpty()) s.family = keepFamily;
+    }
+    if (id.isEmpty()) { s.status = {}; organicsPublish (o); return; }
+    s.status = "loading";
+    organicsPublish (o);
+    if (std::getenv ("TERRAIN_ORGANICS_DEBUG") != nullptr)
+        std::fprintf (stderr, "[organics] osc %d requesting '%s' from %s (fromState %d)\n", o, id.toRawUTF8(),
+                      tw::OrganicsLibrary::get().root().getFullPathName().toRawUTF8(), fromState ? 1 : 0);
+    if (orgAlive_ == nullptr) orgAlive_ = std::make_shared<int> (0);   // the callback's liveness token (first use only)
+    std::weak_ptr<int> alive = orgAlive_;
+    TerrainAudioProcessor* selfP = this;
+    tw::OrganicsLibrary::get().request (id, [alive, selfP, o, gen, id, fromState] (std::shared_ptr<const tw::OrganicInstrument> inst)
+    {
+        if (alive.expired()) return;         // the instance is gone
+        auto* self = selfP;
+        auto& sl = self->orgSlot_[o];
+        static const bool dbg = std::getenv ("TERRAIN_ORGANICS_DEBUG") != nullptr;   // a harness's eyes (off in every session)
+        if (dbg) std::fprintf (stderr, "[organics] osc %d request '%s' -> %s (gen %u, current %u)\n", o, id.toRawUTF8(),
+                               inst != nullptr ? "loaded" : "nullptr", (unsigned) gen, (unsigned) sl.reqGen);
+        if (sl.reqGen != gen) return;                                   // superseded by a newer pick
+        if (inst != nullptr)
+        {
+            sl.inst = std::move (inst); sl.status = "ok";
+            self->organicsPublish (o);
+            return;
+        }
+        // Not installed / unreadable. A SAVED id falls back to the first installed instrument of its family (design
+        // §7.3), and says so (wantedId / wantedName); nothing matches → the osc stays silent and the page shows
+        // "Instrument not installed: <name>". Never a crash, never a wrong instrument without saying so.
+        if (fromState && sl.wantedId.isEmpty())
+        {
+            const juce::String fam = sl.family;
+            const juce::var idxAll = tw::OrganicsLibrary::get().index();
+            if (fam.isNotEmpty())
+                if (auto* arr = idxAll.getArray())
+                    for (const auto& e : *arr)
+                    {
+                        const juce::String cid = e.getProperty ("id", {}).toString();
+                        if (cid == id || e.getProperty ("family", {}).toString() != fam) continue;
+                        if (! tw::OrganicsLibrary::get().root().getChildFile (cid).getChildFile ("map.json").existsAsFile()) continue;
+                        sl.wantedId = id; sl.wantedName = sl.name;
+                        self->organicsRequest (o, cid, false);
+                        return;
+                    }
+        }
+        if (sl.wantedId.isEmpty()) { sl.wantedId = id; sl.wantedName = sl.name; }
+        sl.status = "missing"; sl.inst = nullptr;
+        self->organicsPublish (o);
+    });
+}
+
+void TerrainAudioProcessor::organicsTick()
+{
+    const bool inUse = organicsInUse();
+    // (1) the mailbox came back empty: the audio thread took the last delivery, so the outgoing instrument can go.
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+    {
+        auto& s = orgSlot_[o];
+        if (orgMailState_[o].load (std::memory_order_acquire) == 0) s.prev = nullptr;
+        if (s.publishPending) organicsPublish (o);
+    }
+    const juce::uint32 now = juce::Time::getMillisecondCounter();
+    const juce::uint64 seq = audioSeq_.load (std::memory_order_seq_cst);
+    if (inUse)
+    {
+        orgUnusedSinceMs_ = 0; orgDisarmSeq_ = 0;
+        prepareOrganicEnginesIfNeeded();
+        const bool bb = bankB_.load (std::memory_order_acquire) != nullptr;
+        for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+        {
+            auto& s = orgSlot_[o];
+            const bool on = (o < ParameterIDs::kOscPerBank || bb)
+                         && (int) *rawParam (ParameterIDs::kOsc_ENGINE[o]) == tw::organics::kEngineIndex;
+            // ORG_INST follows host automation / a preset that carries only the int (the string, when it exists, wins).
+            const int instParam = (int) *rawParam (ParameterIDs::kOsc_ORG_INST[o]);
+            if (on)
+            {
+                if (s.lastInstParam != instParam && s.lastInstParam >= 0 && instParam > 0)
+                {
+                    const juce::String nid = tw::OrganicsLibrary::get().indexToId (instParam);
+                    if (nid.isNotEmpty() && nid != s.id) { s.wantedId = {}; s.wantedName = {}; organicsRequest (o, nid, false); }
+                }
+                s.lastInstParam = instParam;
+                // a slot that holds an id but no instrument (engine just switched here, or the state named it): ask once
+                if (s.id.isNotEmpty() && s.inst == nullptr && s.status != "loading" && s.status != "missing")
+                    organicsRequest (o, s.id, s.fromState);
+            }
+            else if (s.inst != nullptr || s.published != nullptr)
+            {
+                // this osc left the engine: let go of the instrument (the id stays — switch back and it returns)
+                s.inst = nullptr; s.status = {};
+                organicsPublish (o);
+            }
+        }
+        return;
+    }
+    // (2) THE WAY BACK (tp63's shape, a short fence): no oscillator on engine 7 → drop every slot's instrument, disarm
+    //     the voices, wait until the audio thread has left any block that could be inside renderOrganicBlocks, free.
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+        if (orgSlot_[o].inst != nullptr || orgSlot_[o].published != nullptr)
+        { orgSlot_[o].inst = nullptr; if (orgSlot_[o].status == "ok" || orgSlot_[o].status == "loading") orgSlot_[o].status = {}; organicsPublish (o); }
+    if (! orgArmedAny_.load (std::memory_order_acquire) && orgDisarmSeq_ == 0) { orgUnusedSinceMs_ = 0; return; }
+    if (orgUnusedSinceMs_ == 0) { orgUnusedSinceMs_ = now; return; }
+    if (now - orgUnusedSinceMs_ < kOrganicIdleMs) return;
+    if (orgDisarmSeq_ == 0)
+    {
+        forEachVoiceAllBanks ([] (tw::SynthVoice* v, int) { v->disarmOrganicEngines(); });
+        orgArmedAny_.store (false, std::memory_order_release);
+        orgDisarmSeq_ = juce::jmax<juce::uint64> (1, seq);
+        return;
+    }
+    if (seq < orgDisarmSeq_ + 3) return;   // +1 entry / +1 exit per block: the block in flight at the store has exited
+    forEachVoiceAllBanks ([] (tw::SynthVoice* v, int) { v->releaseOrganicEngines(); });
+    orgUnusedSinceMs_ = 0; orgDisarmSeq_ = 0;
+}
+
+juce::String TerrainAudioProcessor::organicsJsonOf (int o) const
+{
+    const auto& s = orgSlot_[juce::jlimit (0, ParameterIDs::kOscCount - 1, o)];
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty ("ok", s.status == "ok" || s.status == "loading" || s.id.isEmpty());
+    obj->setProperty ("osc", o);
+    obj->setProperty ("id", s.id);
+    obj->setProperty ("name", s.name);
+    obj->setProperty ("family", s.family);
+    obj->setProperty ("category", s.category);
+    obj->setProperty ("artics", s.artics.isArray() ? s.artics : juce::var (juce::Array<juce::var>()));
+    obj->setProperty ("hasNoise", s.hasNoise);
+    obj->setProperty ("hasRelease", s.hasRelease);
+    obj->setProperty ("status", s.status.isEmpty() ? juce::String (s.id.isEmpty() ? "" : "ok") : s.status);
+    obj->setProperty ("rev", s.rev);
+    obj->setProperty ("artic", (int) *rawParam (ParameterIDs::kOsc_ORG_ARTIC[juce::jlimit (0, ParameterIDs::kOscCount - 1, o)]));   // the page's articulation select
+    if (s.wantedId.isNotEmpty()) { obj->setProperty ("wantedId", s.wantedId); obj->setProperty ("wantedName", s.wantedName); }
+    return juce::JSON::toString (juce::var (obj), true);
+}
+
+juce::String TerrainAudioProcessor::organicsIndexJson()
+{
+    auto& lib = tw::OrganicsLibrary::get(); orgTouchedLibrary_ = true;
+    const juce::var idx = lib.index();
+    juce::Array<juce::var> out;
+    if (auto* arr = idx.getArray())
+        for (const auto& e : *arr)
+        {
+            auto* o = new juce::DynamicObject();
+            if (auto* src = e.getDynamicObject())
+                for (const auto& kv : src->getProperties()) o->setProperty (kv.name, kv.value);
+            const juce::String id = e.getProperty ("id", {}).toString();
+            o->setProperty ("installed", id.isNotEmpty() && lib.root().getChildFile (id).getChildFile ("map.json").existsAsFile());
+            out.add (juce::var (o));
+        }
+    return juce::JSON::toString (juce::var (out), true);
+}
+
+juce::String TerrainAudioProcessor::organicsSetInstrument (int o, const juce::String& id)
+{
+    o = juce::jlimit (0, ParameterIDs::kOscCount - 1, o);
+    auto& s = orgSlot_[o];
+    s.wantedId = {}; s.wantedName = {}; s.fromState = false; s.rev = 1;
+    // ORG_INST = the append-only index (0 = none). Set BEFORE the request so the follow in organicsTick sees no change.
+    const int ix = id.isEmpty() ? 0 : juce::jmax (0, tw::OrganicsLibrary::get().idToIndex (id));
+    orgTouchedLibrary_ = true;
+    if (auto* prm = apvts.getParameter (ParameterIDs::kOsc_ORG_INST[o]))
+        prm->setValueNotifyingHost (prm->convertTo0to1 ((float) ix));
+    s.lastInstParam = ix;
+    const bool on = (int) *rawParam (ParameterIDs::kOsc_ENGINE[o]) == tw::organics::kEngineIndex;
+    if (on) organicsRequest (o, id, false);
+    else { s.id = id; s.inst = nullptr; organicsFillMeta (s, id); s.status = id.isEmpty() ? juce::String() : juce::String ("ok"); }
+    return organicsJsonOf (o);
+}
+
+juce::String TerrainAudioProcessor::organicsStateJson (int o) { return organicsJsonOf (o); }
+
+void TerrainAudioProcessor::organicsPreview (const juce::String& id)
+{
+    if (id.isEmpty()) { stopPreview(); return; }
+    auto& lib = tw::OrganicsLibrary::get(); orgTouchedLibrary_ = true;
+    const juce::File f = lib.root().getChildFile (id).getChildFile ("preview.flac");
+    if (! f.existsAsFile()) return;
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (f));
+    if (r == nullptr || r->lengthInSamples < 2) return;
+    const int n = (int) juce::jmin<juce::int64> (r->lengthInSamples, (juce::int64) (r->sampleRate * 3.5));
+    auto buf = std::make_shared<juce::AudioBuffer<float>> (2, n);
+    r->read (buf.get(), 0, n, 0, true, true);
+    orgPrevKeep_ = buf;                                 // the message thread's reference (the audio thread never frees it)
+    orgPrevBuf_.setSampleRate (r->sampleRate);
+    orgPrevBuf_.store (buf);
+    orgPrevReq_.fetch_add (1, std::memory_order_release);
+}
+
+bool TerrainAudioProcessor::takeOrganicViz (juce::Array<juce::var>& out)
+{
+    if (! orgArmedAny_.load (std::memory_order_acquire) && ! orgVizAny_.load (std::memory_order_acquire)) return false;
+    OrgViz snap {};
+    for (int tries = 0; tries < 4; ++tries)
+    {
+        const std::uint32_t a = orgVizSeq_.load (std::memory_order_acquire);
+        if (a & 1u) continue;
+        std::memcpy (&snap, &orgViz_, sizeof snap);
+        std::atomic_thread_fence (std::memory_order_acquire);
+        if (orgVizSeq_.load (std::memory_order_relaxed) == a) break;
+    }
+    const juce::uint32 now = juce::Time::getMillisecondCounter();
+    bool any = false;
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+    {
+        const bool sounding = snap.count[o] > 0;
+        if (sounding) orgVizLastSoundMs_[o] = now;
+        else if (orgVizLastSoundMs_[o] == 0) continue;                                       // quiet, and already said so
+        else if (now - orgVizLastSoundMs_[o] > 300) { orgVizLastSoundMs_[o] = 0; continue; } // 300 ms after the last sound: stop
+        juce::Array<juce::var> notes;
+        for (int k = 0; k < snap.count[o] && k < 16; ++k)
+        {
+            auto* nv = new juce::DynamicObject();
+            nv->setProperty ("n", (int) snap.notes[o][k].n);
+            nv->setProperty ("lvl", juce::jlimit (0.0, 1.0, (double) snap.notes[o][k].lvl));
+            notes.add (juce::var (nv));
+        }
+        auto* ev = new juce::DynamicObject();
+        ev->setProperty ("osc", o);
+        ev->setProperty ("notes", notes);
+        ev->setProperty ("pedal", snap.pedal);
+        out.add (juce::var (ev));
+        any = true;
+    }
+    return any;
+}
+
+// <ORGANICS><OSC slot="0..7" id="…" rev="1"/></ORGANICS> (contract §7). name/family ride along so a missing
+// instrument can still be NAMED and its family default found on a machine that does not have it.
+void TerrainAudioProcessor::organicsSaveState (juce::ValueTree& state) const
+{
+    for (auto old = state.getChildWithName ("ORGANICS"); old.isValid(); old = state.getChildWithName ("ORGANICS"))
+        state.removeChild (old, nullptr);   // copyState() carries the one the last load brought in
+    juce::ValueTree org ("ORGANICS");
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+    {
+        const auto& s = orgSlot_[o];
+        const juce::String id = s.wantedId.isNotEmpty() ? s.wantedId : s.id;   // the user's pick survives a machine that lacks it
+        if (id.isEmpty()) continue;
+        juce::ValueTree c ("OSC");
+        c.setProperty ("slot", o, nullptr);
+        c.setProperty ("id", id, nullptr);
+        c.setProperty ("rev", s.rev, nullptr);
+        const juce::String nm = s.wantedName.isNotEmpty() ? s.wantedName : s.name;
+        if (nm.isNotEmpty()) c.setProperty ("name", nm, nullptr);
+        if (s.family.isNotEmpty()) c.setProperty ("family", s.family, nullptr);
+        org.appendChild (c, nullptr);
+    }
+    if (org.getNumChildren() > 0) state.appendChild (org, nullptr);   // an Organics-free patch gains not one byte
+}
+
+void TerrainAudioProcessor::organicsLoadState (const juce::ValueTree& loaded)
+{
+    // absent means clear (fb618): every slot empties, then the carried ones fill
+    const bool had = [this] { for (auto& s : orgSlot_) if (s.id.isNotEmpty() || s.published != nullptr) return true; return false; }();
+    const auto org = loaded.getChildWithName ("ORGANICS");
+    if (! had && ! org.isValid()) return;   // an Organics-free load on an Organics-free instance touches nothing
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+    {
+        auto& s = orgSlot_[o];
+        ++s.reqGen;   // any request in flight belongs to the previous patch
+        s.id = {}; s.name = {}; s.family = {}; s.category = {}; s.status = {}; s.wantedId = {}; s.wantedName = {};
+        s.rev = 1; s.inst = nullptr; s.fromState = false; s.lastInstParam = -1;
+        s.artics = juce::var (juce::Array<juce::var>()); s.hasNoise = s.hasRelease = false;
+        if (s.published != nullptr) organicsPublish (o);
+    }
+    if (! org.isValid()) return;
+    for (int i = 0; i < org.getNumChildren(); ++i)
+    {
+        const auto c = org.getChild (i);
+        const int o = (int) c.getProperty ("slot", -1);
+        if (o < 0 || o >= ParameterIDs::kOscCount) continue;
+        auto& s = orgSlot_[o];
+        s.id = c.getProperty ("id", {}).toString();
+        s.rev = (int) c.getProperty ("rev", 1);
+        s.name = c.getProperty ("name", {}).toString();
+        s.family = c.getProperty ("family", {}).toString();
+        s.fromState = true;
+        if (s.id.isEmpty()) continue;
+        // the STRING wins: ORG_INST is re-derived from ids.json (a renumbered or foreign int never picks the instrument)
+        const bool on = (int) *rawParam (ParameterIDs::kOsc_ENGINE[o]) == tw::organics::kEngineIndex;
+        if (on)
+        {
+            const int ix = tw::OrganicsLibrary::get().idToIndex (s.id); orgTouchedLibrary_ = true;
+            if (ix > 0) if (auto* prm = apvts.getParameter (ParameterIDs::kOsc_ORG_INST[o])) prm->setValueNotifyingHost (prm->convertTo0to1 ((float) ix));
+            s.lastInstParam = (int) *rawParam (ParameterIDs::kOsc_ORG_INST[o]);
+            organicsRequest (o, s.id, true);          // async: silent until it lands, never blocking the audio thread
+        }
+    }
+    prepareOrganicEnginesIfNeeded();
 }
 
 // tp64 — THE PLATEAU. Bank B (oscillators E–H) is a whole second synthesiser: +298 MB the first time any E–H
@@ -4174,7 +4579,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_ENGINE, 1 },
         "Synth OSC A Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL", "ORGANIC", "R8", "R9", "R10", "R11" },   // tp104 — 7 = Organics; 8..11 reserved + hidden (the automation lanes shift ONCE)
         0));
 
     layout.add (std::make_unique<juce::AudioParameterInt> (
@@ -4844,7 +5249,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_ENGINE, 1 },
         "Synth OSC B Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL", "ORGANIC", "R8", "R9", "R10", "R11" },   // tp104 — 7 = Organics; 8..11 reserved + hidden (the automation lanes shift ONCE)
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_OCT, 1 },
@@ -5040,7 +5445,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_ENGINE, 1 },
         "Synth OSC C Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL", "ORGANIC", "R8", "R9", "R10", "R11" },   // tp104 — 7 = Organics; 8..11 reserved + hidden (the automation lanes shift ONCE)
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_OCT, 1 },
@@ -5236,7 +5641,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_ENGINE, 1 },
         "Synth OSC D Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL", "ORGANIC", "R8", "R9", "R10", "R11" },   // tp104 — 7 = Organics; 8..11 reserved + hidden (the automation lanes shift ONCE)
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_OCT, 1 },
@@ -7791,6 +8196,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             CH ("FLOW_GLI"  + nn, "Flow Glitch"  + (i == 0 ? juce::String() : " " + juce::String (i + 1)));
         }
     }
+
+    // ══ tp104 — THE ORGANICS ENGINE'S TWELVE PER OSCILLATOR (contract §4, design §2.3/2.4/7.2) ═══════════════════════
+    //  Declared LAST, after tp56's block, for the same reason: every parameter that exists keeps its index, so a host
+    //  project automating one by index still points at the same control. A..H are all written out here (not cloned
+    //  from B by the pool tap, which has already run): the E–H ids are hand-appended in ParameterIDs.hpp and
+    //  OscBankIds.h (regenerated) maps A..D → E..H for the bank-1 gather.
+    //  INST and ARTIC are INTS, not choices: a choice's cardinality is frozen at birth and the library grows (fb342).
+    {
+        const int nOsc = ParameterIDs::kOscCount;
+        static const char* const kNm[10]  = { "Dynamics", "Tone", "Body", "Attack", "Human", "Release", "Noise", "Sustain", "Velocity", "Image" };
+        static const float       kDef[10] = { 0.5f, 0.5f, 0.5f, 0.5f, 0.25f, 0.5f, 0.5f, 0.0f, 0.75f, 0.667f };
+        for (int o = 0; o < nOsc; ++o)
+        {
+            const juce::String L = juce::String::charToString ((juce::juce_wchar) ('A' + o));
+            layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { ParameterIDs::kOsc_ORG_INST[o], 1 },
+                                                                       "Synth OSC " + L + " Organic Instrument", 0, 4095, 0));
+            layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { ParameterIDs::kOsc_ORG_ARTIC[o], 1 },
+                                                                       "Synth OSC " + L + " Organic Articulation", 0, 7, 0));
+            const char* const ids[10] = { ParameterIDs::kOsc_ORG_DYNAMICS[o], ParameterIDs::kOsc_ORG_TONE[o], ParameterIDs::kOsc_ORG_BODY[o],
+                                          ParameterIDs::kOsc_ORG_ATTACK[o], ParameterIDs::kOsc_ORG_HUMAN[o], ParameterIDs::kOsc_ORG_RELEASE[o],
+                                          ParameterIDs::kOsc_ORG_NOISE[o], ParameterIDs::kOsc_ORG_SUSTAIN[o], ParameterIDs::kOsc_ORG_VELOCITY[o],
+                                          ParameterIDs::kOsc_ORG_IMAGE[o] };
+            for (int k = 0; k < 10; ++k)
+                layoutReal.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ids[k], 1 },
+                                                                             "Synth OSC " + L + " Organic " + kNm[k],
+                                                                             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), kDef[k]));
+        }
+    }
     return layoutReal;
 }
 
@@ -9781,6 +10214,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     // ever waits ~16.7 ms is the user switching an osc TO Modal while playing.
     prepareModalEnginesIfNeeded();
     prepareHarmonicEnginesIfNeeded();   // fb517 — a saved patch already on HARM must not wait a tick
+    prepareOrganicEnginesIfNeeded();    // tp104 — same, for a saved patch already on ORGANIC
 
     grainEngineL.prepare(sampleRate, samplesPerBlock);
     grainEngineR.prepare(sampleRate, samplesPerBlock);
@@ -10547,6 +10981,7 @@ bool TerrainAudioProcessor::sleepGate (juce::AudioBuffer<float>& buffer, const j
              || noiseAuditionReq_.load (std::memory_order_relaxed) != noiseAudSeen_
              || wtAuditionReq_.load (std::memory_order_relaxed)    != wtAudSeen_
              || sampAuditionReq_.load (std::memory_order_relaxed)  != sampAudSeen_
+             || orgPrevReq_.load (std::memory_order_relaxed)       != orgPrevSeen_   // tp104 — the Organics preview wakes it too
              || tapeLoopPlaying.load (std::memory_order_relaxed) > 0.5f || tapeLoopRecording.load (std::memory_order_relaxed) > 0.5f;
     if (! wake)
     {
@@ -10853,6 +11288,24 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const auto numChannels = buffer.getNumChannels();
 
     if (numSamples == 0) return;
+
+    // tp104 — the Organics mailbox (message → audio): TAKE a delivered instrument by move and bump its generation; the
+    //  voices re-hand it to their engines on their next render. The message thread still holds the outgoing one, so the
+    //  reference this drops is never the last (no free on the audio thread). Idle: eight relaxed-acquire loads.
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+        if (int full = 1; orgMailState_[o].load (std::memory_order_relaxed) == 1
+                          && orgMailState_[o].compare_exchange_strong (full, 2, std::memory_order_acq_rel))
+        {
+            orgAudioInst_[o] = std::move (orgMail_[o]);
+            ++orgInstGen_[o];
+            orgMailState_[o].store (0, std::memory_order_release);
+            // every voice of that bank, sounding or not (an idle engine must not pin the outgoing instrument)
+            const bool isB = o >= ParameterIDs::kOscPerBank;
+            if (! isB || bankB_.load (std::memory_order_acquire) != nullptr)
+                for (int i = 0; i < kSynthVoiceCount; ++i)
+                    if (auto* v = (isB ? synthVoicesB_ : synthVoices_)[(size_t) i])
+                        v->syncOrganicInstrument (o % ParameterIDs::kOscPerBank, orgAudioInst_[o], orgInstGen_[o]);
+        }
 
     // tp100 — Settings → Audio & MIDI → Test audio. A scope guard (like dspClock_): its destructor runs on
     // EVERY return path, after the buffer is final, and mixes the chime on top. Idle = one atomic load.
@@ -12538,6 +12991,31 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             m.loopEnd   = *rpar (MODAL_LOOPEND_IDS[o]);        // purple-box end
             modalP[o] = m;
         }
+        // ── tp104 — ORGANICS engine: gather the twelve per OSC (ORGANICS-ENGINE-GATHER). Only when this bank has an osc on
+        //    engine 7 (the unused law: an Organics-free block reads nothing new). APVTS 0..1 → OrganicParams' DSP units
+        //    (contract §4): the bipolar four 2v−1, Image 1.5v, the rest as-is. Mod: dest OrganicBase + o·10 + k — for bank 1
+        //    too (destForBank rebased E–H's explicit ints onto this bank's A–D slots, so `o` is 0..3 in both).
+        tw::OrganicParams orgP[4];
+        const bool orgBank = engineIdx == tw::organics::kEngineIndex || engineIdxB == tw::organics::kEngineIndex
+                          || engineIdxC == tw::organics::kEngineIndex || engineIdxD == tw::organics::kEngineIndex;
+        if (orgBank)
+            for (int o = 0; o < 4; ++o)
+            {
+                auto kn = [&] (const char* const* tbl, int k) { return ownM (*rpar (tbl[o]), wc::organicDest (o, k), 0.0f, 1.0f); };
+                tw::OrganicParams q;
+                q.dyn     = 2.0f * kn (ParameterIDs::kOsc_ORG_DYNAMICS, 0) - 1.0f;
+                q.tone    = 2.0f * kn (ParameterIDs::kOsc_ORG_TONE,     1) - 1.0f;
+                q.body    = 2.0f * kn (ParameterIDs::kOsc_ORG_BODY,     2) - 1.0f;
+                q.attack  = 2.0f * kn (ParameterIDs::kOsc_ORG_ATTACK,   3) - 1.0f;
+                q.human   =        kn (ParameterIDs::kOsc_ORG_HUMAN,    4);
+                q.release =        kn (ParameterIDs::kOsc_ORG_RELEASE,  5);
+                q.noise   =        kn (ParameterIDs::kOsc_ORG_NOISE,    6);
+                q.sustain =        kn (ParameterIDs::kOsc_ORG_SUSTAIN,  7);
+                q.velo    =        kn (ParameterIDs::kOsc_ORG_VELOCITY, 8);
+                q.image   = 1.5f * kn (ParameterIDs::kOsc_ORG_IMAGE,    9);
+                q.artic   = juce::jlimit (0, 7, (int) *rpar (ParameterIDs::kOsc_ORG_ARTIC[o]));
+                orgP[o] = q;
+            }
         // ── BLEND MODES: gather the 4 warp slots × 4 oscs once (cross-osc FM/PD/AM/RM) ──
         static const char* const WSLOT_IDS[4][12] = {
             { ParameterIDs::SYN_OSC_A_WSLOT1_MODE, ParameterIDs::SYN_OSC_A_WSLOT1_SRC, ParameterIDs::SYN_OSC_A_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT2_MODE, ParameterIDs::SYN_OSC_A_WSLOT2_SRC, ParameterIDs::SYN_OSC_A_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT3_MODE, ParameterIDs::SYN_OSC_A_WSLOT3_SRC, ParameterIDs::SYN_OSC_A_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT4_MODE, ParameterIDs::SYN_OSC_A_WSLOT4_SRC, ParameterIDs::SYN_OSC_A_WSLOT4_DEPTH },
@@ -12932,6 +13410,12 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setHarmParamsC (harmP[2]);   sv->setHarmParamsD (harmP[3]);
                 sv->setModalParamsA (modalP[0]); sv->setModalParamsB (modalP[1]); // MODAL-ENGINE-PUSH
                 sv->setModalParamsC (modalP[2]); sv->setModalParamsD (modalP[3]);
+                if (orgBank)                                                       // tp104 — ORGANICS-ENGINE-PUSH
+                {
+                    for (int o = 0; o < 4; ++o) sv->setOrganicParams (o, orgP[o]);
+                    sv->setOrganicInstrumentSource (&orgAudioInst_[OB], &orgInstGen_[OB]);
+                    sv->setOrganicNonRealtime (isNonRealtime());                   // offline bounce: 8-tap sinc
+                }
                 tiProf_.acc (5, "geo/harm/modal");
                 for (int bo = 0; bo < 4; ++bo)                                     // BLEND-MODES-PUSH (cross-osc warp slots)
                     for (int bs = 0; bs < 4; ++bs)
@@ -14383,6 +14867,35 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         crossBus_.startBlock (numSamples);
         synthEngine.renderNextBlock (synthScratch, toSynth, 0, numSamples);
         if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->renderNextBlock (synthScratch, toSynth, 0, numSamples);   // tp20 — bank 1, same MIDI, same scratch
+        // tp104 — the organicViz snapshot (seqlock; the editor's timer reads it at ≤ 15 Hz). Only while a page is
+        //  watching AND an Organics engine is armed somewhere: an Organics-free block never enters.
+        if (vizLive && orgArmedAny_.load (std::memory_order_acquire))
+        {
+            const std::uint32_t s0 = orgVizSeq_.load (std::memory_order_relaxed);
+            orgVizSeq_.store (s0 + 1u, std::memory_order_relaxed);
+            std::atomic_thread_fence (std::memory_order_release);
+            bool pedal = false, any = false;
+            for (auto& c : orgViz_.count) c = 0;
+            UnisonSynth* const bbv = bankB_.load (std::memory_order_acquire);
+            for (int bk = 0; bk < (bbv != nullptr ? 2 : 1); ++bk)
+                for (int i = 0; i < kSynthVoiceCount; ++i)
+                    if (auto* v = (bk == 0 ? synthVoices_ : synthVoicesB_)[(size_t) i])
+                    {
+                        if (! v->isVoiceActive()) continue;
+                        pedal = pedal || v->isSustainPedalDown();
+                        for (int o = 0; o < 4; ++o)
+                        {
+                            int n = 0; float lv = 0.0f;
+                            if (! v->organicVizOf (o, n, lv)) continue;
+                            auto& cnt = orgViz_.count[bk * 4 + o];
+                            if (cnt < 16) { orgViz_.notes[bk * 4 + o][cnt] = { (std::int16_t) n, lv }; ++cnt; any = true; }
+                        }
+                    }
+            orgViz_.pedal = pedal;
+            std::atomic_thread_fence (std::memory_order_release);
+            orgVizSeq_.store (s0 + 2u, std::memory_order_release);
+            if (any) orgVizAny_.store (true, std::memory_order_relaxed);
+        }
     }
 
     TI_PROF ("flow");
@@ -16621,6 +17134,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (noiseAudCtr_ > 0 && noiseAudFade_ <= 0) { noiseAudFadeLen_ = fl; noiseAudFade_ = fl; }
         if (wtAudCtr_    > 0 && wtAudFade_    <= 0) { wtAudFadeLen_    = fl; wtAudFade_    = fl; }
         if (sampAudCtr_  > 0 && sampAudFade_  <= 0) { sampAudFadeLen_  = fl; sampAudFade_  = fl; }   // fb74 — sample preview too
+        if (orgPrevCtr_  > 0 && orgPrevFade_  <= 0) { orgPrevFadeLen_  = fl; orgPrevFade_  = fl; }   // tp104 — the Organics preview
+        orgPrevStopReq_ = false;
         noiseAudCtr_ = 0; wtAudCtr_ = 0; sampAudCtr_ = 0;
         noiseAudPending_ = false; wtAudPending_ = false; sampAudPending_ = false;
     }
@@ -16711,6 +17226,57 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             }
             if (noiseAudFade_ <= 0 && noiseAudPending_) { noiseAudPending_ = false; startNoisePreview(); }   // fade done → start the queued one (next block)
         }
+    }
+
+    // ── tp104 — ORGANICS PREVIEW (the browser's ▶): preview.flac once, start to end (the compiler rendered it at middle C,
+    //    vel 90, ≤ 3 s). The noise audition's shape: 12 ms in, 130 ms out, an 8 ms fade on a re-trigger or a stop.
+    {
+        const double sr = getSampleRate();
+        auto startOrgPreview = [this, sr]()
+        {
+            orgPrevHeld_  = orgPrevBuf_.load();   // a copy of the message thread's buffer: it keeps its own ref (orgPrevKeep_)
+            orgPrevPos_   = 0.0; orgPrevFade_ = 0;
+            orgPrevRatio_ = (orgPrevBuf_.getSampleRate() > 0.0) ? orgPrevBuf_.getSampleRate() / sr : 1.0;
+            const int len = orgPrevHeld_ != nullptr ? orgPrevHeld_->getNumSamples() : 0;
+            orgPrevCtr_   = len > 1 ? (int) juce::jmin (sr * 3.5, (double) len / juce::jmax (1.0e-6, orgPrevRatio_)) : 0;
+            orgPrevTotal_ = juce::jmax (1, orgPrevCtr_);
+        };
+        const int req = orgPrevReq_.load (std::memory_order_acquire);
+        if (req != orgPrevSeen_)
+        {
+            orgPrevSeen_ = req;
+            if (orgPrevCtr_ > 0)   // already sounding → fade the current one OUT (8 ms, declick), then start the new
+            {
+                orgPrevFadeLen_ = juce::jmax (1, (int) (sr * 0.008));
+                if (orgPrevFade_ <= 0) orgPrevFade_ = orgPrevFadeLen_;
+                orgPrevStopReq_ = true;   // = a queued start
+            }
+            else startOrgPreview();
+        }
+        if (orgPrevCtr_ > 0 && orgPrevHeld_ != nullptr && buffer.getNumChannels() >= 1)
+        {
+            float* oL = buffer.getWritePointer (0);
+            float* oR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : oL;
+            const int    nlen = orgPrevHeld_->getNumSamples();
+            const float* nL   = orgPrevHeld_->getReadPointer (0);
+            const float* nR   = orgPrevHeld_->getNumChannels() > 1 ? orgPrevHeld_->getReadPointer (1) : nL;
+            const float atk = (float) (sr * 0.012), rel = (float) (sr * 0.13);
+            for (int i = 0; i < numSamples && orgPrevCtr_ > 0; ++i)
+            {
+                const int i0 = (int) orgPrevPos_;
+                if (i0 >= nlen - 1) { orgPrevCtr_ = 0; break; }
+                const float fr = (float) (orgPrevPos_ - (double) i0);
+                const float sL = nL[i0] + (nL[i0 + 1] - nL[i0]) * fr, sR = nR[i0] + (nR[i0 + 1] - nR[i0]) * fr;
+                orgPrevPos_ += orgPrevRatio_;
+                const float elapsed = (float) (orgPrevTotal_ - orgPrevCtr_);
+                float env = elapsed < atk ? elapsed / atk : 1.0f;
+                if ((float) orgPrevCtr_ < rel) env = juce::jmin (env, (float) orgPrevCtr_ / rel);
+                if (orgPrevFade_ > 0) { env *= (float) orgPrevFade_ / (float) orgPrevFadeLen_; if (--orgPrevFade_ == 0) orgPrevCtr_ = 1; }
+                oL[i] += sL * 0.7f * env; oR[i] += sR * 0.7f * env;
+                --orgPrevCtr_;
+            }
+        }
+        if (orgPrevCtr_ <= 0 && orgPrevStopReq_) { orgPrevStopReq_ = false; startOrgPreview(); }   // the fade is done → the queued one (next block)
     }
 
     // ── WAVETABLE AUDITION (browser headphone preview) — ONE-SHOT plucked note of the osc's CURRENT table at a
@@ -19043,6 +19609,15 @@ static_assert ((int) tw::SynthVoice::Engine::SAMP == tw::carries::kEngSample
             && (int) tw::SynthVoice::Engine::MODAL == tw::carries::kEngModal
             && (int) tw::SynthVoice::Engine::WT   == tw::carries::kEngineDefault,
                "fb632 — the carries gate names the engines that play a sample slot; SynthVoice::Engine moved");
+// tp104 — ORGANIC is engine 7 everywhere: the voice enum, the carries constant, the frozen API, and the 12-entry choice.
+static_assert ((int) tw::SynthVoice::Engine::ORGANIC == tw::carries::kEngOrganic
+            && tw::carries::kEngOrganic == tw::organics::kEngineIndex
+            && tw::carries::kEngineChoices == tw::organics::kEngineChoices
+            && (int) tw::SynthVoice::Engine::ORGANIC == tw::SynthVoice::kEngineMax,
+               "tp104 — Engine::ORGANIC must be 7 (OrganicsApi.h organics::kEngineIndex) and the last live engine; the choice has 12 entries");
+static_assert (tw::carries::kEngOrganic != tw::carries::kEngSample && tw::carries::kEngOrganic != tw::carries::kEngGranular
+            && tw::carries::kEngOrganic != tw::carries::kEngResynth && tw::carries::kEngOrganic != tw::carries::kEngModal,
+               "tp104 — an Organics oscillator never carries oscSamplePath/oscAsset (its instrument is <ORGANICS><OSC id/>)");
 // fb635 — the carries rules also name the engines that READ an imported table, the two LFO shapes that
 // read a drawn table, and the LFO count: a renumbered enum cannot move a gate silently.
 static_assert ((int) tw::SynthVoice::Engine::FM == tw::carries::kEngFM
@@ -19506,6 +20081,7 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
             state.setProperty ("warpDraw" + juce::String (i), getWarpDrawCurveCsv (i / 2, i % 2), nullptr);
         else state.removeProperty ("warpDraw" + juce::String (i), nullptr);   // fb618
     for (int o = 0; o < 4; ++o) state.setProperty ("wt3dView" + juce::String (o), wt3dView_[o], nullptr);
+    organicsSaveState (state);   // tp104 — <ORGANICS><OSC slot id rev/></ORGANICS> (absent when no osc names an instrument)
 
     // fb618 — the <preset> child. Remove every existing one first (copyState() carries the one the
     // last load brought in — the fb617 law), then add the live metadata at index 0, so it is the
@@ -20335,6 +20911,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             apvts.replaceState (newState);
             { const std::lock_guard<std::mutex> g (prepLock_);
               juce::uint64 m0 = 0, m1 = 0; wantedPoolMaskLive (m0, m1); dropSendsAwaitingEngine (m0, m1); buildPoolPairsLocked (m0, m1); }
+            organicsLoadState (newState);   // tp104 — the string ids win; instruments load async (silent until they land)
             // fb618 — moved from the blob section above: with no import live it bakes from the osc's
             // WT_PRESET, which before replaceState was the PREVIOUS patch's table.
             setDistortionTableSrc ((int) newState.getProperty ("dstTableSrc", -1));   // fb339 — re-reads the osc's CURRENT table

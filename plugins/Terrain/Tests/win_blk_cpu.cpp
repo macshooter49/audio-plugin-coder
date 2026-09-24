@@ -201,7 +201,7 @@ static int modalMode (Host& host)
     std::printf ("    engine param: \"%s\"  steps=%d  default=%.4f\n",
                  eng->getName (64).toRawUTF8(), eng->getNumSteps(), eng->getValue());
 
-    eng->setValueNotifyingHost (1.0f);        // 7 choices, MODAL = index 6 -> normalised 6/6 = 1.0
+    eng->setValueNotifyingHost (6.0f / (float) juce::jmax (1, eng->getNumSteps() - 1));   // MODAL = index 6. tp104: 12 choices now (7 = Organics, 8..11 reserved) -> 6/11, not 1.0
     std::printf ("    set to %.4f -> \"%s\"\n", eng->getValue(), eng->getCurrentValueAsText().toRawUTF8());
 
     inst->enableAllBuses();
@@ -322,7 +322,7 @@ static int modalLiveMode (Host& host)
     // note and not the previous engine's ringing tail — the first draft of this gate measured that
     // tail and reported 0.218 for an engine that had not been armed at all.
     settle();
-    eng->setValueNotifyingHost (1.0f);
+    eng->setValueNotifyingHost (6.0f / (float) juce::jmax (1, eng->getNumSteps() - 1));   // MODAL (index 6 of 12 — tp104)
     std::printf ("    switched live to               \"%s\"\n", eng->getCurrentValueAsText().toRawUTF8());
     settle();
 

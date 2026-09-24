@@ -3059,6 +3059,79 @@ private:
     juce::uint32 modalUnusedSinceMs_ = 0, harmUnusedSinceMs_ = 0;   // 0 = wanted (or never measured)
     juce::uint64 modalDisarmSeq_ = 0, harmDisarmSeq_ = 0;           // audioSeq_ when the voices were disarmed; 0 = armed
     static constexpr juce::uint32 kEngineIdleMs = 3000;             // unused this long, with no voice sounding → give it back
+
+    // ══ tp104 — THE ORGANICS ENGINE (Engine::ORGANIC = 7), the integration half ═══════════════════════════════════════
+    //  Contract: .ideas/organics-contract.md; the only engine header is organics/OrganicsApi.h. Law: while NO oscillator
+    //  selects engine 7 nothing here allocates, nothing touches OrganicsLibrary (no thread, no index read) and the
+    //  render is bit-identical (Tests/organics_null.sh). Message thread owns OrgSlot; the audio thread owns orgAudioInst_.
+public:
+    struct OrgSlot
+    {
+        juce::String id, name, family, category, status;   // status "" (none) | "ok" | "loading" | "missing"
+        juce::String wantedId, wantedName;                   // a saved id that is not installed (substituted or silent)
+        int rev = 1;
+        juce::var artics;                                     // the instrument's articulation names (from its map/index)
+        bool hasNoise = false, hasRelease = false;
+        std::shared_ptr<const tw::OrganicInstrument> inst;    // what this osc plays (null while loading / missing / unused)
+        std::shared_ptr<const tw::OrganicInstrument> prev;    // held until the audio thread took the new one (never freed there)
+        std::shared_ptr<const tw::OrganicInstrument> published;   // what the mailbox last delivered
+        juce::uint32 reqGen = 0;                              // a stale request's callback is ignored
+        bool publishPending = false;
+        bool fromState = false;                               // the id came from a saved state (family fallback applies)
+        int  lastInstParam = -1;                              // ORG_INST as last seen/written (the follow reacts to a CHANGE)
+    };
+    /** Natives (message thread). JSON per contract §6. */
+    juce::String organicsIndexJson();
+    juce::String organicsSetInstrument (int osc, const juce::String& id);
+    juce::String organicsStateJson (int osc);
+    void         organicsPreview (const juce::String& id);
+    /** The organicViz feed: true + fills `out` when something sounded within the last 300 ms (≤ 15 Hz is the caller's
+        job). Reads the audio thread's seqlock snapshot. */
+    bool         takeOrganicViz (juce::Array<juce::var>& out);
+    const OrgSlot& organicSlot (int osc) const noexcept { return orgSlot_[juce::jlimit (0, ParameterIDs::kOscCount - 1, osc)]; }
+    bool         organicsInUse() const noexcept;               // any oscillator (either bank) on engine 7
+private:
+    void prepareOrganicEnginesIfNeeded();                     // message thread: arm the voices' engines when wanted
+    void organicsTick();                                      // message thread (timer): requests, publish, ORG_INST follow, release
+    void organicsRequest (int osc, const juce::String& id, bool fromState);
+    void organicsFillMeta (OrgSlot& s, const juce::String& id);
+    void organicsPublish (int osc);
+    juce::String organicsJsonOf (int osc) const;
+    void organicsSaveState (juce::ValueTree& state) const;
+    void organicsLoadState (const juce::ValueTree& loaded);
+    OrgSlot orgSlot_[ParameterIDs::kOscCount];
+    // the mailbox (message → audio), one per osc: the audio thread MOVES the shared_ptr out, the message thread refills
+    std::shared_ptr<const tw::OrganicInstrument> orgMail_[ParameterIDs::kOscCount];
+    std::atomic<int>  orgMailState_[ParameterIDs::kOscCount] {};   // 0 empty · 1 full · 2 busy (see organicsPublish)
+    std::shared_ptr<const tw::OrganicInstrument> orgAudioInst_[ParameterIDs::kOscCount];   // AUDIO THREAD — the voices copy from here
+    std::uint32_t orgInstGen_[ParameterIDs::kOscCount] {};                                // AUDIO THREAD — bumped per delivery
+    juce::uint32 orgUnusedSinceMs_ = 0; juce::uint64 orgDisarmSeq_ = 0;
+    static constexpr juce::uint32 kOrganicIdleMs = 250;   // no osc on engine 7 this long → disarm, +3 audioSeq → free (the library's own 5 s runs after)
+    bool orgTouchedLibrary_ = false;                       // a latch for the diagnostics only
+    std::atomic<bool> orgArmedAny_ { false };              // some voice may hold armed engines (the audio-side viz gate)
+    std::shared_ptr<int> orgAlive_;                        // the library callbacks' liveness token (made on first request)
+    // the viz snapshot (audio writes a seqlock; the editor timer reads)
+    struct OrgVizNote { std::int16_t n; float lvl; };
+    struct OrgViz { OrgVizNote notes[ParameterIDs::kOscCount][16]; std::uint8_t count[ParameterIDs::kOscCount]; bool pedal; };
+    OrgViz orgViz_ {};
+    std::atomic<std::uint32_t> orgVizSeq_ { 0 };
+    juce::uint32 orgVizLastSoundMs_[ParameterIDs::kOscCount] {};
+    std::atomic<bool> orgVizAny_ { false };
+    // the browser preview (organicsPreview): preview.flac decoded on the message thread, one-shot through the noise
+    // audition's fade/stop shape (stopPreview silences it too)
+    tw::SampleBuffer orgPrevBuf_;
+    tw::SampleBuffer::BufferPtr orgPrevKeep_;              // message thread's ref, so the audio thread never frees it
+    tw::SampleBuffer::BufferPtr orgPrevHeld_;
+    std::atomic<int> orgPrevReq_ { 0 };
+    int orgPrevSeen_ = 0, orgPrevCtr_ = 0, orgPrevFade_ = 0, orgPrevFadeLen_ = 1, orgPrevTotal_ = 1;
+    double orgPrevPos_ = 0.0, orgPrevRatio_ = 1.0;
+    bool orgPrevStopReq_ = false;
+public:
+    // diagnostics for the harnesses
+    int  organicsArmedVoiceCount() const;
+    int  organicsAllocatedVoiceCount() const;
+    bool organicsTouchedLibrary() const noexcept { return orgTouchedLibrary_; }
+private:
     // ══ fb528 — THE PREPARE LOCK ═══════════════════════════════════════════════════════════
     //  prepareToPlay IS NOT A MESSAGE-THREAD CALLBACK. JUCE's AU wrapper runs it on whatever
     //  thread calls AudioUnitInitialize/AudioUnitReset (juce_audio_plugin_client_AU_1.mm:274) —

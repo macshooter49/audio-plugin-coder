@@ -56,6 +56,35 @@ target_sources(Terrain
         Source/Wavetable_test.cpp
 )
 
+# ══ tp104 — THE ORGANICS ENGINE's runtime (contract §2). The runtime agent's two files when they exist; until then
+#  the integration's silent stub (every OrganicsApi.h symbol, empty library, engines that render nothing), so the merge
+#  of the real files needs NO edit here. The lead deletes the stub after that merge.
+set(TERRAIN_ORG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/organics")
+if (EXISTS "${TERRAIN_ORG_DIR}/OrganicEngine.cpp" AND EXISTS "${TERRAIN_ORG_DIR}/OrganicsLibrary.cpp")
+    target_sources(Terrain PRIVATE Source/organics/OrganicEngine.cpp Source/organics/OrganicsLibrary.cpp)
+    message(STATUS "Terrain: Organics runtime found — OrganicEngine.cpp + OrganicsLibrary.cpp")
+else()
+    target_sources(Terrain PRIVATE Source/organics/OrganicsStub.cpp)
+    message(STATUS "Terrain: Organics runtime absent — building the silent OrganicsStub.cpp")
+endif()
+#  The runtime's own test binary (design §8, and the Windows CI job builds it), only when its source exists. Not part
+#  of `all`: build it by name (cmake --build build --target organics_engine_test).
+if (EXISTS "${TERRAIN_ORG_DIR}/OrganicEngine_test.cpp" AND EXISTS "${TERRAIN_ORG_DIR}/OrganicEngine.cpp" AND EXISTS "${TERRAIN_ORG_DIR}/OrganicsLibrary.cpp")
+    juce_add_console_app(organics_engine_test PRODUCT_NAME "organics_engine_test")
+    target_sources(organics_engine_test PRIVATE
+        Source/organics/OrganicEngine_test.cpp Source/organics/OrganicEngine.cpp Source/organics/OrganicsLibrary.cpp)
+    target_include_directories(organics_engine_test PRIVATE Source Source/organics)
+    target_compile_definitions(organics_engine_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 _USE_MATH_DEFINES JUCE_MODAL_LOOPS_PERMITTED=1
+        TERRAIN_ORGANICS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/Tests/fixtures/organics")
+    if (MSVC)
+        target_compile_options(organics_engine_test PRIVATE /bigobj /utf-8)
+    endif()
+    target_link_libraries(organics_engine_test PRIVATE juce::juce_core juce::juce_events juce::juce_audio_basics juce::juce_audio_formats
+        PUBLIC juce::juce_recommended_config_flags)
+    set_target_properties(organics_engine_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    message(STATUS "Terrain: + organics_engine_test (the Organics runtime's own test binary)")
+endif()
+
 # ══ tp103 — THE BUILD ID a bug report quotes (Settings → Report a bug). The commit at CONFIGURE time, set on the one
 #  TU that reads it so a new commit recompiles one file, not the whole plugin. No git (a zip of the tree) = "dev".
 execute_process(COMMAND git rev-parse --short HEAD

@@ -29,6 +29,10 @@ if 'constexpr char SYN_OSC_E_ENGINE[]' not in src:
     idx = src.rstrip().rfind('\n}')
     src = src[:idx] + '\n' + '\n'.join(blk) + '\n' + src[idx:]
     open(pids, 'w').write(src); print('ParameterIDs.hpp: appended the E-H block')
+# tp104 — SYN_OSC_x_OUT (tp30) is declared for A–D only and was never in the remap: the bank-1 gather keeps reading
+#   bank 0's constant for it, exactly as since tp30. Kept out here so a regeneration cannot change what bank 1 reads.
+A_ONLY = ['OUT']
+names = [n for n in names if n not in A_ONLY]
 missingE = [n for n in names if f'SYN_OSC_E_{n}[]' not in src]
 if missingE: sys.exit(f'the E block exists but lacks {missingE}: append them by hand (append-only) or regenerate')
 hdr = ['#pragma once',
@@ -49,7 +53,9 @@ TABLES = ['ENGINE','ENABLE','WT_PRESET','WT_FRAME','HARM_TABLE','HARM_MODE','SPE
           'WARP_AMOUNT','WARP2_MODE','WARP2_AMT','FOLD_AMT','FRAME_SPREAD','PHASE_MODE','PAN','OCT','SEMI','CENT',
           # tp20b — the three the display path needs and the first pass missed. Their absence is what
           # left wtDispEffective/getWarpCurveJson indexing hand-written [4] tables with an index up to 7.
-          'FOLD_SHAPE','WVAR','W2VAR']
+          'FOLD_SHAPE','WVAR','W2VAR',
+          # tp104 — the Organics engine's twelve (the message-thread lazy arm / instrument requests index them by oscillator)
+          'ORG_INST','ORG_ARTIC','ORG_DYNAMICS','ORG_TONE','ORG_BODY','ORG_ATTACK','ORG_HUMAN','ORG_RELEASE','ORG_NOISE','ORG_SUSTAIN','ORG_VELOCITY','ORG_IMAGE']
 for n in TABLES:
     if n in names:
         hdr.append(f'inline constexpr const char* const kOsc_{n}[kOscCount] = {{ ' + ', '.join(f'SYN_OSC_{L}_{n}' for L in 'ABCDEFGH') + ' };')
@@ -57,6 +63,9 @@ hdr.append("inline constexpr char kOscLetter[kOscCount] = { 'A','B','C','D','E',
 # tp20 — the FLOW cards' instance-1 ids (constants), so the processor can remap FLOW_ARP_X -> FLOW_ARP2_X by POINTER
 flow = []
 for m in re.finditer(r'constexpr char (FLOW_(?:ARP|SEQ|CHOP|GLI)_[A-Z0-9_]+)\[\]', src):
+    # tp104 — the tp30 route pills (FLOW_CHOP_SRC_x / FLOW_GLI_SRC_x) were declared after tp20 generated this list and
+    #   never joined it; adding them now would re-point what instances 2..4 read. Kept out: a regeneration is a no-op for flow.
+    if re.match(r'FLOW_(?:CHOP|GLI)_SRC_[A-Z]+$', m.group(1)): continue
     if m.group(1) not in flow: flow.append(m.group(1))
 hdr.append(f'inline constexpr int kFlowIdCount = {len(flow)};   // the Flow cards\' instance-1 constants (Arp / Seq=Chop macros / Chop / Glitch)')
 hdr.append('inline constexpr const char* const kFlowIds[kFlowIdCount] = {')
