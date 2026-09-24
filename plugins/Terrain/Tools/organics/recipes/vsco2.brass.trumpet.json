@@ -39,5 +39,15 @@
    "sfz": "VSCO-2-CE/TrumpetStraightMuteSus.sfz",
    "sustaining": true
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "breath-puff",
+   "trig": "on",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.8
+  }
  ]
 }

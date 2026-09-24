@@ -24,5 +24,23 @@
    "sfz": "sfzinstruments/karoryfer.growlybass/growlybass_clean.sfz"
   }
  ],
- "velPowerMin": 0.4
+ "velPowerMin": 0.4,
+ "noiseMap": [
+  {
+   "set": "guitar-pick",
+   "trig": "on",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 4,
+   "velPow": 1.3
+  },
+  {
+   "set": "guitar-fret",
+   "trig": "off",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.4
+  }
+ ]
 }

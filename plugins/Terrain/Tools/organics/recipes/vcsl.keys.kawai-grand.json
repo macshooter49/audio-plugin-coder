@@ -1,0 +1,44 @@
+{
+ "id": "vcsl.keys.kawai-grand",
+ "name": "Kawai Grand",
+ "family": "grand",
+ "category": "Keys",
+ "tags": [
+  "piano",
+  "grand",
+  "acoustic",
+  "kawai",
+  "bright"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "piano": true,
+ "budgetMB": 120,
+ "capScale": true,
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VCSL/Chordophones/Zithers/Grand Piano, Kawai.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "piano-keydown",
+   "trig": "on",
+   "relDb": -32,
+   "zone": "key",
+   "velPow": 1.2
+  },
+  {
+   "set": "piano-keyup",
+   "trig": "off",
+   "relDb": -30,
+   "zone": "key",
+   "keyStep": 2,
+   "velPow": 0.5
+  }
+ ]
+}

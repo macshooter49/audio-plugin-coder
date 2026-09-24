@@ -35,5 +35,15 @@
    "sw": "24",
    "includeUnswitched": false
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "breath-puff",
+   "trig": "on",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.8
+  }
  ]
 }

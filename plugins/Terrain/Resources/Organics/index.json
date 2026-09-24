@@ -1,5 +1,21 @@
 [
  {
+  "id": "terrain.ep.clav",
+  "name": "Clav",
+  "family": "clav",
+  "category": "Keys",
+  "tags": [
+   "clavinet-style",
+   "funk",
+   "tangent",
+   "electric",
+   "physical model"
+  ],
+  "sizeMB": 46.7,
+  "licence": "Proprietary-WavesCrate",
+  "credit": "Waves Crate physical model"
+ },
+ {
   "id": "vcsl.keys.tx81z-clavisynth",
   "name": "Clavisynth",
   "family": "clav",
@@ -25,7 +41,7 @@
    "yamaha c5",
    "flagship"
   ],
-  "sizeMB": 156.6,
+  "sizeMB": 156.9,
   "licence": "CC-BY-3.0",
   "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate"
  },
@@ -59,6 +75,50 @@
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
  {
+  "id": "vcsl.keys.kawai-grand",
+  "name": "Kawai Grand",
+  "family": "grand",
+  "category": "Keys",
+  "tags": [
+   "piano",
+   "grand",
+   "acoustic",
+   "kawai",
+   "bright"
+  ],
+  "sizeMB": 101.6,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0; mechanical noises: Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "extraLicences": [
+   {
+    "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+    "licence": "CC-BY-3.0"
+   }
+  ]
+ },
+ {
+  "id": "vcsl.keys.upright-knight",
+  "name": "Knight Upright",
+  "family": "upright",
+  "category": "Keys",
+  "tags": [
+   "piano",
+   "upright",
+   "acoustic",
+   "warm",
+   "home"
+  ],
+  "sizeMB": 80.4,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0; mechanical noises: Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "extraLicences": [
+   {
+    "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+    "licence": "CC-BY-3.0"
+   }
+  ]
+ },
+ {
   "id": "freepats.keys.old-piano",
   "name": "Old Upright",
   "family": "upright",
@@ -69,9 +129,69 @@
    "player piano",
    "character"
   ],
-  "sizeMB": 58.7,
+  "sizeMB": 60.8,
   "licence": "CC0-1.0",
-  "credit": "FreePats Old Piano FB (Piotr Barcz), CC0"
+  "credit": "FreePats Old Piano FB (Piotr Barcz), CC0; mechanical noises: Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "extraLicences": [
+   {
+    "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+    "licence": "CC-BY-3.0"
+   }
+  ]
+ },
+ {
+  "id": "osiris.keys.piano",
+  "name": "Osiris Piano",
+  "family": "grand",
+  "category": "Keys",
+  "tags": [
+   "piano",
+   "felt",
+   "quiet",
+   "intimate",
+   "mechanical"
+  ],
+  "sizeMB": 108.3,
+  "licence": "CC0-1.0",
+  "credit": "Osiris Piano by Versilian Studios and Karoryfer Samples, CC0; mechanical noises: Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "extraLicences": [
+   {
+    "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+    "licence": "CC-BY-3.0"
+   }
+  ]
+ },
+ {
+  "id": "terrain.ep.pianet",
+  "name": "Pad Reed EP",
+  "family": "rhodes",
+  "category": "Keys",
+  "tags": [
+   "electric piano",
+   "reed",
+   "pianet-style",
+   "mellow",
+   "physical model"
+  ],
+  "sizeMB": 59.8,
+  "licence": "Proprietary-WavesCrate",
+  "credit": "Waves Crate physical model"
+ },
+ {
+  "id": "terrain.ep.wurli",
+  "name": "Reed EP",
+  "family": "rhodes",
+  "category": "Keys",
+  "tags": [
+   "electric piano",
+   "reed",
+   "wurlitzer-style",
+   "bark",
+   "physical model"
+  ],
+  "sizeMB": 57.3,
+  "licence": "Proprietary-WavesCrate",
+  "credit": "Waves Crate physical model"
  },
  {
   "id": "vcsl.keys.steinway-b",
@@ -84,9 +204,31 @@
    "acoustic",
    "steinway"
   ],
-  "sizeMB": 75.0,
+  "sizeMB": 77.1,
   "licence": "CC0-1.0",
-  "credit": "Versilian Community Sample Library (VCSL), CC0"
+  "credit": "Versilian Community Sample Library (VCSL), CC0; mechanical noises: Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "extraLicences": [
+   {
+    "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+    "licence": "CC-BY-3.0"
+   }
+  ]
+ },
+ {
+  "id": "terrain.ep.rhodes",
+  "name": "Tine EP",
+  "family": "rhodes",
+  "category": "Keys",
+  "tags": [
+   "electric piano",
+   "tine",
+   "rhodes-style",
+   "vintage",
+   "physical model"
+  ],
+  "sizeMB": 60.9,
+  "licence": "Proprietary-WavesCrate",
+  "credit": "Waves Crate physical model"
  },
  {
   "id": "vcsl.keys.upright-yamaha",
@@ -99,9 +241,15 @@
    "felt",
    "lo-fi"
   ],
-  "sizeMB": 56.6,
+  "sizeMB": 58.5,
   "licence": "CC0-1.0",
-  "credit": "Versilian Community Sample Library (VCSL), CC0"
+  "credit": "Versilian Community Sample Library (VCSL), CC0; mechanical noises: Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+  "extraLicences": [
+   {
+    "credit": "Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie), CC BY 3.0, modified by Waves Crate",
+    "licence": "CC-BY-3.0"
+   }
+  ]
  },
  {
   "id": "freepats.organ.accordion",
@@ -178,6 +326,22 @@
   "credit": "FreePats project (setBfree render), CC0"
  },
  {
+  "id": "karoryfer.strings.cyborg-zinc",
+  "name": "Bowed Bass Pad",
+  "family": "bass",
+  "category": "Strings",
+  "tags": [
+   "bowed",
+   "double bass",
+   "pad",
+   "looped",
+   "drone"
+  ],
+  "sizeMB": 12.4,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer String Cyborgs (Zinc: bowed double bass), CC0"
+ },
+ {
   "id": "vsco2.strings.cello-section",
   "name": "Cello Section",
   "family": "cello",
@@ -189,7 +353,7 @@
    "orchestral",
    "bowed"
   ],
-  "sizeMB": 34.3,
+  "sizeMB": 34.4,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -204,7 +368,7 @@
    "double bass",
    "low"
   ],
-  "sizeMB": 45.7,
+  "sizeMB": 45.8,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -219,9 +383,25 @@
    "world",
    "bowed"
   ],
-  "sizeMB": 32.3,
+  "sizeMB": 32.4,
   "licence": "CC0-1.0",
   "credit": "Karoryfer aliexpress erhu, CC0"
+ },
+ {
+  "id": "karoryfer.bass.sneaky",
+  "name": "Jazz Pizz Bass",
+  "family": "bass",
+  "category": "Strings",
+  "tags": [
+   "double bass",
+   "upright",
+   "jazz",
+   "pizzicato",
+   "late night"
+  ],
+  "sizeMB": 28.9,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Sneakybass (1958 Otto Rubner double bass, played by D. Smolken), CC0"
  },
  {
   "id": "karoryfer.strings.cello",
@@ -235,7 +415,7 @@
    "bowed",
    "deep rr"
   ],
-  "sizeMB": 43.2,
+  "sizeMB": 43.4,
   "licence": "CC0-1.0",
   "credit": "Karoryfer x bigcat cello (played by Kamila Borowiak), CC0"
  },
@@ -250,7 +430,7 @@
    "violin",
    "bowed"
   ],
-  "sizeMB": 47.4,
+  "sizeMB": 47.5,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -266,7 +446,7 @@
    "arco",
    "pizzicato"
   ],
-  "sizeMB": 32.3,
+  "sizeMB": 32.4,
   "licence": "CC0-1.0",
   "credit": "Karoryfer Meatbass (1958 Otto Rubner double bass), CC0"
  },
@@ -282,7 +462,7 @@
    "orchestral",
    "bowed"
   ],
-  "sizeMB": 43.2,
+  "sizeMB": 43.4,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -297,7 +477,7 @@
    "orchestral",
    "bowed"
   ],
-  "sizeMB": 41.4,
+  "sizeMB": 41.5,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -313,7 +493,7 @@
    "acoustic",
    "deep rr"
   ],
-  "sizeMB": 43.9,
+  "sizeMB": 44.1,
   "licence": "CC0-1.0",
   "credit": "Karoryfer Shinyguitar, CC0"
  },
@@ -328,7 +508,7 @@
    "celtic",
    "chromatic"
   ],
-  "sizeMB": 45.1,
+  "sizeMB": 45.3,
   "licence": "CC-BY-4.0",
   "credit": "Etherealwinds Harp II: CE by Versilian Studios LLC, CC BY 4.0, modified by Waves Crate"
  },
@@ -344,7 +524,7 @@
    "di",
    "flatwound"
   ],
-  "sizeMB": 41.5,
+  "sizeMB": 41.7,
   "licence": "CC0-1.0",
   "credit": "Karoryfer Emilyguitar, CC0"
  },
@@ -358,7 +538,7 @@
    "orchestral",
    "pedal harp"
   ],
-  "sizeMB": 40.5,
+  "sizeMB": 40.7,
   "licence": "CC0-1.0",
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
@@ -373,7 +553,7 @@
    "world",
    "koto-like"
   ],
-  "sizeMB": 46.6,
+  "sizeMB": 46.8,
   "licence": "CC0-1.0",
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
@@ -388,9 +568,26 @@
    "folk",
    "twang"
   ],
-  "sizeMB": 7.8,
+  "sizeMB": 8.0,
   "licence": "CC0-1.0",
   "credit": "Ganjo by itsclipping, CC0"
+ },
+ {
+  "id": "karoryfer.guitar.black-and-green",
+  "name": "Hollowbody Guitars",
+  "family": "guitar",
+  "category": "Plucked",
+  "tags": [
+   "guitar",
+   "electric",
+   "hollowbody",
+   "gretsch",
+   "hofner",
+   "twang"
+  ],
+  "sizeMB": 45.8,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Black And Green Guitars (recorded by Brian Wood), CC0"
  },
  {
   "id": "karoryfer.plucked.hungarian-zither",
@@ -402,7 +599,7 @@
    "folk",
    "world"
   ],
-  "sizeMB": 38.6,
+  "sizeMB": 38.7,
   "licence": "CC0-1.0",
   "credit": "Karoryfer Hungarian zither, CC0"
  },
@@ -416,9 +613,25 @@
    "electric bass",
    "fingerstyle"
   ],
-  "sizeMB": 42.4,
+  "sizeMB": 42.6,
   "licence": "CC0-1.0",
   "credit": "Karoryfer Growlybass, CC0"
+ },
+ {
+  "id": "karoryfer.plucked.cithara",
+  "name": "Medieval Lyre",
+  "family": "harp",
+  "category": "Plucked",
+  "tags": [
+   "lyre",
+   "medieval",
+   "cithara",
+   "early music",
+   "folk"
+  ],
+  "sizeMB": 43.4,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Cithara Barbarica (10-string medieval lyre), CC0"
  },
  {
   "id": "freepats.guitar.nylon",
@@ -431,7 +644,7 @@
    "classical",
    "acoustic"
   ],
-  "sizeMB": 18.0,
+  "sizeMB": 18.3,
   "licence": "CC0-1.0",
   "credit": "FreePats Spanish Classical Guitar, CC0"
  },
@@ -446,7 +659,7 @@
    "breathy",
    "flute"
   ],
-  "sizeMB": 16.6,
+  "sizeMB": 16.8,
   "licence": "CC0-1.0",
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
@@ -461,7 +674,7 @@
    "jazz",
    "alto"
   ],
-  "sizeMB": 9.9,
+  "sizeMB": 12.5,
   "licence": "CC-BY-3.0",
   "credit": "MTG Solo Saxophones (Alto Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
@@ -477,7 +690,7 @@
    "jazz",
    "cc0"
   ],
-  "sizeMB": 29.7,
+  "sizeMB": 31.0,
   "licence": "CC0-1.0",
   "credit": "Karoryfer Weresax (alto saxophone), CC0"
  },
@@ -493,7 +706,7 @@
    "baritone",
    "low"
   ],
-  "sizeMB": 12.7,
+  "sizeMB": 15.3,
   "licence": "CC-BY-3.0",
   "credit": "MTG Solo Saxophones (Baritone Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
@@ -508,7 +721,7 @@
    "low",
    "orchestral"
   ],
-  "sizeMB": 30.0,
+  "sizeMB": 32.6,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -522,7 +735,7 @@
    "single reed",
    "orchestral"
   ],
-  "sizeMB": 26.2,
+  "sizeMB": 28.8,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -537,7 +750,7 @@
    "solo",
    "breath"
   ],
-  "sizeMB": 31.4,
+  "sizeMB": 34.0,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -566,9 +779,24 @@
    "double reed",
    "orchestral"
   ],
-  "sizeMB": 27.8,
+  "sizeMB": 30.4,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
+ },
+ {
+  "id": "vcsl.winds.ocarina",
+  "name": "Ocarina",
+  "family": "flute",
+  "category": "Winds",
+  "tags": [
+   "ocarina",
+   "vessel flute",
+   "breathy",
+   "folk"
+  ],
+  "sizeMB": 14.3,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
  {
   "id": "mtg.sax.soprano",
@@ -581,7 +809,7 @@
    "jazz",
    "soprano"
   ],
-  "sizeMB": 9.4,
+  "sizeMB": 12.0,
   "licence": "CC-BY-3.0",
   "credit": "MTG Solo Saxophones (Soprano Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
@@ -596,7 +824,7 @@
    "jazz",
    "tenor"
   ],
-  "sizeMB": 8.7,
+  "sizeMB": 11.3,
   "licence": "CC-BY-3.0",
   "credit": "MTG Solo Saxophones (Tenor Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
@@ -610,7 +838,7 @@
    "tenor",
    "reed"
   ],
-  "sizeMB": 42.2,
+  "sizeMB": 44.8,
   "licence": "CC0-1.0",
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
@@ -626,7 +854,7 @@
    "1926 conn",
    "deep rr"
   ],
-  "sizeMB": 41.7,
+  "sizeMB": 43.0,
   "licence": "CC0-1.0",
   "credit": "Karoryfer Bear Sax (1926 Conn baritone), CC0"
  },
@@ -642,7 +870,7 @@
    "deep rr",
    "oompah"
   ],
-  "sizeMB": 38.7,
+  "sizeMB": 38.9,
   "licence": "CC0-1.0",
   "credit": "Karoryfer War Tuba (played by Jakub Lewicki), CC0"
  },
@@ -657,7 +885,7 @@
    "orchestral",
    "soft brass"
   ],
-  "sizeMB": 37.0,
+  "sizeMB": 37.2,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -672,7 +900,7 @@
    "orchestral",
    "low"
   ],
-  "sizeMB": 34.5,
+  "sizeMB": 34.7,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -687,7 +915,7 @@
    "orchestral",
    "mute"
   ],
-  "sizeMB": 46.3,
+  "sizeMB": 46.4,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -702,7 +930,7 @@
    "orchestral",
    "low"
   ],
-  "sizeMB": 19.3,
+  "sizeMB": 19.5,
   "licence": "CC0-1.0",
   "credit": "Versilian Studios VSCO 2 Community Edition, CC0"
  },
@@ -761,7 +989,23 @@
    "marimba",
    "wood"
   ],
-  "sizeMB": 13.1,
+  "sizeMB": 13.2,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
+ },
+ {
+  "id": "vcsl.mallets.mbira",
+  "name": "Mbira",
+  "family": "kalimba",
+  "category": "Mallets & Bells",
+  "tags": [
+   "mbira",
+   "thumb piano",
+   "zimbabwe",
+   "african",
+   "buzz"
+  ],
+  "sizeMB": 11.1,
   "licence": "CC0-1.0",
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
@@ -806,7 +1050,7 @@
    "bright",
    "wood"
   ],
-  "sizeMB": 8.9,
+  "sizeMB": 9.0,
   "licence": "CC0-1.0",
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
@@ -822,7 +1066,7 @@
    "solo",
    "choir pad"
   ],
-  "sizeMB": 17.4,
+  "sizeMB": 17.5,
   "licence": "CC0-1.0",
   "credit": "Karoryfer legato vocal tutorial (Hadzi-Fia subset, CC0)"
  },
@@ -852,7 +1096,7 @@
    "wood",
    "mallets"
   ],
-  "sizeMB": 6.6,
+  "sizeMB": 6.7,
   "licence": "CC0-1.0",
   "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
@@ -885,6 +1129,21 @@
   "sizeMB": 28.5,
   "licence": "Unlicense",
   "credit": "jSteelDrum by Jeff Learman (Unlicense)"
+ },
+ {
+  "id": "vcsl.perc.timpani",
+  "name": "Timpani",
+  "family": "marimba",
+  "category": "Percussion",
+  "tags": [
+   "timpani",
+   "orchestral",
+   "drum",
+   "pitched"
+  ],
+  "sizeMB": 41.8,
+  "licence": "CC0-1.0",
+  "credit": "Versilian Community Sample Library (VCSL), CC0"
  },
  {
   "id": "freepats.perc.water-glasses",

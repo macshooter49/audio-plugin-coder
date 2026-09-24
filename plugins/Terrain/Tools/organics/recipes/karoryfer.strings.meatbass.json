@@ -29,5 +29,16 @@
    "sustaining": true
   }
  ],
- "velPowerMin": 0.6
+ "velPowerMin": 0.6,
+ "noiseMap": [
+  {
+   "set": "bow-start",
+   "trig": "on",
+   "relDb": -30,
+   "zone": 12,
+   "maxFiles": 4,
+   "velPow": 1.0,
+   "exclude": "pizz|pizzicato|harmonic"
+  }
+ ]
 }

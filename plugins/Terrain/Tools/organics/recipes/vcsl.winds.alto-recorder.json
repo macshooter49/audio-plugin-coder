@@ -32,5 +32,15 @@
    "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Baroque Alto Recorder - Keyswitch.sfz",
    "sw": "50"
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "breath-puff",
+   "trig": "on",
+   "relDb": -30,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.8
+  }
  ]
 }

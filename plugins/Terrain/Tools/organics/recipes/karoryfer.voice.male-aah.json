@@ -21,5 +21,15 @@
    "sfz": "sfzinstruments/legato_vocal_tutorial/Programs/01-no_legato_polyphonic_only_no_vibrato_a.sfz",
    "sustaining": true
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "breath-puff",
+   "trig": "on",
+   "relDb": -36,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.6
+  }
  ]
 }

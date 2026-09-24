@@ -1,0 +1,56 @@
+{
+ "id": "karoryfer.guitar.black-and-green",
+ "name": "Hollowbody Guitars",
+ "family": "guitar",
+ "category": "Plucked",
+ "tags": [
+  "guitar",
+  "electric",
+  "hollowbody",
+  "gretsch",
+  "hofner",
+  "twang"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Black And Green Guitars (recorded by Brian Wood), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.black-and-green-guitars",
+ "licenceDir": "sfzinstruments/karoryfer.black-and-green-guitars",
+ "velPowerMin": 0.6,
+ "artics": [
+  {
+   "name": "Green Twang",
+   "sfz": "sfzinstruments/karoryfer.black-and-green-guitars/Programs/04-green_twang.sfz"
+  },
+  {
+   "name": "Green Staccato",
+   "sfz": "sfzinstruments/karoryfer.black-and-green-guitars/Programs/05-green_staccato.sfz"
+  },
+  {
+   "name": "Black Twang",
+   "sfz": "sfzinstruments/karoryfer.black-and-green-guitars/Programs/07-black_twang.sfz"
+  },
+  {
+   "name": "Black Staccato",
+   "sfz": "sfzinstruments/karoryfer.black-and-green-guitars/Programs/08-black_staccato.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "guitar-pick",
+   "trig": "on",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 4,
+   "velPow": 1.3
+  },
+  {
+   "set": "guitar-fret",
+   "trig": "off",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.4
+  }
+ ]
+}

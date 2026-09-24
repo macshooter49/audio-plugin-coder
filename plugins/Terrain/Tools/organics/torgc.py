@@ -78,7 +78,10 @@ CAT_DEFAULT_FAM = {"Keys": "grand", "Organs": "organ", "Strings": "violin", "Plu
                    "Brass": "trumpet", "Mallets & Bells": "glock", "Choir & Voice": "choir", "Percussion": "marimba"}
 BUDGET_TYPICAL_MB = 48.0
 BUDGET_PIANO_MB = 160.0
-CALIB_RMS_DB = -18.0
+CALIB_RMS_DB = -18.0          # (legacy, pre tp105) 0.5 s plain RMS target
+CALIB_LUFS = -24.0            # tp105: K-weighted loudness of the first 1 s, centre key, velocity 100, Velocity 0.75
+PEAK_CEIL_DB = -1.0           # velocity 127 peak ceiling at the same (centre) key
+VELO_DEFAULT = 0.75           # the runtime's Velocity knob default (velAmp = 1 − velo·(1 − curve))
 PEAK_TARGET = 10 ** (-0.3 / 20)
 TODAY = "2026-09-24"
 
@@ -125,6 +128,8 @@ class Reg:
     fb: float = 127.0
     sustaining: bool = False
     tag: str = ""
+    trig: str = "off"                      # noise regions: "on" (starts with the note) | "off" (at note-off)
+    nz: Optional[dict] = None            # injected shared-library noise: {set, relDb, origin, credit, licence}
 
 
 def _f(r: dict, k: str, default: float) -> float:
@@ -260,6 +265,7 @@ class Interpreter:
             d["trigger_" + trig] += 1
             return []
         kind = "attack" if trig == "attack" else "release"
+        noise_trig = "on" if trig == "attack" else "off"
         tag_texts = (smp, r.get("group_label", ""), r.get("master_label", ""), r.get("region_label", ""))
         for pat in self.recipe.get("noise", []) + self.artic.get("noise", []):
             if any(re.search(pat, t) for t in tag_texts):
@@ -383,7 +389,7 @@ class Interpreter:
                    loop_mode=lm, ls=ls_i, le=le_i, xf_s=xf_s, rr=rr, rand=(round(rand[0], 4), round(rand[1], 4)),
                    grp=int(_f(r, "group", 0)), off_by=int(_f(r, "off_by", 0)), off_mode=off_mode, env=env,
                    rt_decay=_f(r, "rt_decay", 0.0), curve=curve, fa=fa, fb=fb, sustaining=sustaining,
-                   tag=r.get("group_label", ""))
+                   tag=r.get("group_label", ""), trig=noise_trig if kind == "noise" else "off")
         # pitch_keytrack ≠ 100: expand per key (noise/percussive regions)
         kt = _f(r, "pitch_keytrack", 100.0)
         if abs(kt - 100.0) > 1e-6:
@@ -570,6 +576,134 @@ def fill_vel_holes(regs: List[Reg]) -> List[Reg]:
     return regs
 
 
+def load_noise_set(raw: str, name: str) -> dict:
+    p = os.path.join(raw, "TerrainNoise", name, "manifest.json")
+    if not os.path.exists(p):
+        raise RuntimeError(f"noise set '{name}' not built (run Tools/organics/noiselib.py): {p}")
+    with open(p) as f:
+        m = json.load(f)
+    m["_dir"] = os.path.dirname(p)
+    return m
+
+
+def inject_noise(recipe: dict, raw: str, regs: List[Reg], n_artics: int) -> List[Reg]:
+    """Recipe "noiseMap" → kind:"noise" regions from the shared noise library (noiselib.py).
+
+    Entry: {"set": name, "trig": "on"|"off", "relDb": level of the noise's loudest 100 ms (K-weighted) relative to
+    the instrument's calibrated note loudness at velocity 100, "zone": "key" (use the files' own keys) | N (chunks
+    of N keys, every file a random round robin), "keyMap": "nearest"|"stretch" (key sets: map the instrument's
+    range onto the set's range linearly), "keyStep": use every n-th file key, "maxFiles": cap the round robins,
+    "velPow": velocity curve exponent (level ∝ (v/127)^p), "artics": [indexes] (default all), "keys": [lo, hi]}.
+    Roots sit at the zone centres, so a noise is re-pitched by at most half a zone (register-dependent colour,
+    like the real mechanism). Levels are set after calibration (Compiler.calibrate_and_preview)."""
+    out = []
+    for e in recipe.get("noiseMap", []):
+        ns = load_noise_set(raw, e["set"])
+        files = ns["files"]
+        trig = e.get("trig", "off")
+        p = float(e.get("velPow", 1.0 if trig == "on" else 0.5))
+        curve = [(v / 127.0) ** p for v in range(128)]
+        arts = e.get("artics", list(range(n_artics)))
+        names = [x["name"] for x in recipe["artics"]]
+        if e.get("exclude"):                         # regex on the articulation name (e.g. no bow noise on pizz.)
+            arts = [a for a in arts if not re.search(e["exclude"], names[a], re.I)]
+        if e.get("only"):
+            arts = [a for a in arts if re.search(e["only"], names[a], re.I)]
+        for a in arts:
+            att = [r for r in regs if r.a == a and r.kind == "attack"]
+            if not att:
+                continue
+            klo, khi = (e["keys"] if e.get("keys") else (min(r.lk for r in att), max(r.hk for r in att)))
+            zones = []                                   # (lk, hk, root, [file entries])
+            if e.get("zone", 12) == "key":
+                by_key = defaultdict(list)
+                for fe in files:
+                    by_key[int(fe["key"])].append(fe)
+                ks = sorted(by_key)[:: int(e.get("keyStep", 1))]
+                if not ks:
+                    continue
+                target = {}
+                for k in range(klo, khi + 1):
+                    if e.get("keyMap", "nearest") == "stretch" and khi > klo:
+                        kk = ks[0] + (k - klo) * (ks[-1] - ks[0]) / (khi - klo)
+                    else:
+                        kk = k
+                    target[k] = min(ks, key=lambda x: (abs(x - kk), x))
+                k = klo
+                while k <= khi:
+                    t = target[k]
+                    j = k
+                    while j + 1 <= khi and target[j + 1] == t:
+                        j += 1
+                    root = t if e.get("keyMap", "nearest") == "nearest" and k <= t <= j else (k + j) // 2
+                    zones.append((k, j, root, by_key[t]))
+                    k = j + 1
+            else:
+                n = int(e.get("zone", 12))
+                for k in range(klo, khi + 1, n):
+                    j = min(khi, k + n - 1)
+                    zones.append((k, j, (k + j) // 2, files))
+            mx = int(e.get("maxFiles", 99))
+            for zi, (lk, hk, root, fes) in enumerate(zones):
+                fes = fes[:mx] if e.get("zone", 12) == "key" else [fes[(zi + i) % len(fes)] for i in range(min(mx, len(fes)))]
+                nf = len(fes)
+                for i, fe in enumerate(fes):
+                    rand = (round(i / nf, 4), round((i + 1) / nf, 4)) if nf > 1 else (0.0, 1.0)
+                    out.append(Reg(a=a, kind="noise", src=os.path.join(ns["_dir"], fe["file"]), lk=lk, hk=hk, lv=1,
+                                   hv=127, root=int(root), cents=0.0, gain_db=0.0, pan=0.0, offset=0, end=None,
+                                   loop_mode="one_shot", ls=None, le=None, xf_s=0.0, rr=(0, 1), rand=rand, grp=0,
+                                   off_by=0, off_mode="normal",
+                                   env={"a": 0.0, "h": 0.0, "d": 0.0, "s": 1.0, "r": float(e.get("release", 0.25))},
+                                   rt_decay=float(e.get("rtDecay", 1.0 if trig == "off" else 0.0)), curve=curve,
+                                   trig=trig, tag="noise:" + e["set"],
+                                   nz={"set": e["set"], "relDb": float(e.get("relDb", -30.0)), "origin": fe["origin"],
+                                       "credit": ns["credit"], "licence": fe["origin"]["licence"], "velPow": p}))
+    return out
+
+
+def repair_rr(recs: List[dict]) -> dict:
+    """Make every round-robin set complete per (artic, kind, key zone, velocity band): sequential positions 0..L-1
+    all present (a missing position is cloned from an existing one — never a silent step), random slots covering
+    [0, 1) without gaps (neighbours widened). Returns counts for the build report."""
+    fixed = {"seqCloned": 0, "randWidened": 0}
+    groups = defaultdict(list)
+    for r in recs:
+        groups[(r["a"], r["kind"], r["lk"], r["hk"], r["lv"], r["hv"])].append(r)
+    add = []
+    for key, g in groups.items():
+        by_len = defaultdict(list)
+        for r in g:
+            by_len[r["rr"][1]].append(r)
+        for L, rs in by_len.items():
+            if L <= 1:
+                continue
+            have = {r["rr"][0]: r for r in rs}
+            for pos in range(L):
+                if pos not in have:
+                    src = have[sorted(have)[pos % len(have)]]
+                    c = dict(src)
+                    c["rr"] = [pos, L]
+                    add.append(c)
+                    fixed["seqCloned"] += 1
+        slots = sorted({tuple(r["rand"]) for r in g})
+        if len(slots) > 1 or (slots and slots[0] != (0.0, 1.0)):
+            # widen: first slot starts at 0, each slot ends where the next begins, last ends at 1
+            remap = {}
+            prev_hi = 0.0
+            for i, (lo, hi) in enumerate(slots):
+                nlo = 0.0 if i == 0 else min(lo, prev_hi)
+                nhi = 1.0 if i == len(slots) - 1 else max(hi, slots[i + 1][0])
+                remap[(lo, hi)] = (round(nlo, 4), round(nhi, 4))
+                prev_hi = nhi
+            for r in g:
+                t = tuple(r["rand"])
+                if remap[t] != t:
+                    fixed["randWidened"] += 1
+                    r["rand"] = [remap[t][0], remap[t][1]]
+    recs.extend(add)
+    return fixed
+
+
 def effective_cap(recipe: dict, rs: List["Reg"], cap: Optional[float]) -> Optional[float]:
     """Tail cap (s) for one source file: attack tails scale with register when capScale is on (bass notes ring
     longer), release/noise samples use releaseCap."""
@@ -705,6 +839,17 @@ def job_render_sample(job: dict) -> dict:
     if tail:
         tail = _verify(tail)
     sf.write(job["out"], y.astype(np.float64), sr, subtype="PCM_24" if bits == 24 else "PCM_16", format="FLAC")
+    # pitch of the sustained part (tfix) — measured on the source, from the first region's onset
+    if job.get("f_expect"):
+        res["f0"] = an.measure_f0(an.to_mono(x), sr, onset0, min(end, len(x)), float(job["f_expect"]))
+    # shared-library noise: the K-weighted loudness of its loudest 100 ms (for the authored relative level)
+    if job.get("noise"):
+        ym = y if y.ndim == 2 else y[:, None]
+        w = max(1, int(0.1 * sr))
+        best = -200.0
+        for a0 in range(0, max(1, len(ym) - w + 1), max(1, w // 4)):
+            best = max(best, an.loudness_k(ym[a0:a0 + w], sr))
+        res["nzK"] = best
     res["frames"] = len(y)
     res["comp_db"] = comp_db
     res["cut"] = end < natural_end
@@ -719,7 +864,8 @@ def job_render_sample(job: dict) -> dict:
         ons = an.find_onset(mono, s, end)
         seg = mono[ons: ons + int(0.5 * sr)]
         rms = float(np.sqrt(np.mean(seg ** 2))) if len(seg) else 0.0
-        per[str(s)] = {"onset": ons - start0, "rms": rms}
+        pk_seg = float(np.abs(mono[s:end]).max()) if end > s else 0.0
+        per[str(s)] = {"onset": ons - start0, "rms": rms, "pkDb": round(an.db(pk_seg * scale), 2)}
     res["per_start"] = per
     # noise floor: quietest 50 ms window of the kept audio, relative to its peak
     env = an.envelope_db(mono, sr, 0.05)
@@ -888,6 +1034,11 @@ class Compiler:
         if not regs:
             raise RuntimeError("no regions survived interpretation: " + json.dumps(self.report["dropped"]))
         regs = layerize(regs)
+        inj = inject_noise(R, self.raw, regs, len(R["artics"]))
+        if inj:
+            regs += inj
+            self.report["noiseInjected"] = {s_: sum(1 for r in inj if r.nz["set"] == s_) for s_ in
+                                            sorted({r.nz["set"] for r in inj})}
         srcs = sorted({r.src for r in regs})
         log(f"   {len(regs)} regions over {len(srcs)} source files; analysing")
         with ProcessPoolExecutor(self.jobs) as ex:
@@ -930,6 +1081,10 @@ class Compiler:
                        "sus_len_s": self.sus_len(),
                        "end_opcode": max((r.end for r in rs if r.end), default=None),
                        "want_tail": any(r.kind == "attack" for r in rs),
+                       "f_expect": (an.midi_hz(next(r.root for r in sorted(rs, key=lambda r: r.kind != "attack")))
+                                    if any(r.kind in ("attack", "release") for r in rs)
+                                    and not R.get("unpitched") else None),
+                       "noise": all(r.kind == "noise" for r in rs),
                        "extend_s": R.get("extendTail") if any(r.kind == "attack" for r in rs) else None}
                 if loops:
                     job.update(ls=loops[0].ls, le=loops[0].le, xf_s=loops[0].xf_s, loop_mode=loops[0].loop_mode)
@@ -943,8 +1098,9 @@ class Compiler:
             self.tighten += 1
             log(f"   measured {self.report['sizeMB']} MB > budget: retry {self.tighten} with a tighter plan")
         self.report.pop("overBudget", None) if self.report["sizeMB"] <= self.budget_mb() else None
-        self.write_source(src_index, meta, results)
+        self._regs_final = regs
         self.calibrate_and_preview()
+        self.write_source(src_index, meta, results)
         self.report["seconds"] = round(time.time() - t0, 1)
         with open(os.path.join(self.dir, "build-report.json"), "w") as f:
             json.dump(self.report, f, indent=1)
@@ -997,9 +1153,15 @@ class Compiler:
                 ("rr", [int(r.rr[0]), int(r.rr[1])]), ("rand", [float(r.rand[0]), float(r.rand[1])]),
                 ("grp", int(r.grp)), ("offBy", int(r.off_by)), ("offMode", r.off_mode), ("env", r.env),
                 ("rtDecay", float(r.rt_decay)), ("velCurve", None)])
+            rec["tfix"] = 0.0
+            if r.kind == "noise":
+                rec["trig"] = r.trig
             rec["_gain_db"] = gain_db
             rec["_curve"] = r.curve
             rec["_rms"] = rms_src
+            rec["_f0"] = res.get("f0")
+            rec["_pk"] = ps.get("pkDb", 0.0)
+            rec["_nz"] = dict(r.nz, nzK=res.get("nzK", -200.0)) if r.nz else None
             out_regions.append(rec)
             if r.kind == "attack":
                 per_note_rms[(r.a, r.root, r.lk)].append(rec)
@@ -1044,6 +1206,20 @@ class Compiler:
             x["velCurve"] = cv
             x["gainDb"] = round(x.pop("_gain_db"), 3)
             x.pop("_rms")
+        # ---- audibility: a region whose own segment never rises above −50 dBFS is a silent RR step: drop it
+        quiet = [x for x in out_regions if x["kind"] != "noise" and x.pop("_pk", 0.0) < -50.0]
+        for x in out_regions:
+            x.pop("_pk", None)
+        silent = [x for x in quiet if x["rr"][1] > 1 or x["rand"] != [0.0, 1.0]]
+        self.report["silentRegionsKept"] = len(quiet) - len(silent)
+        if silent:
+            out_regions[:] = [x for x in out_regions if x not in silent]
+        self.report["silentRegionsDropped"] = len(silent)
+        self.report["rrRepair"] = repair_rr(out_regions)
+        # ---- tfix (cents that bring each pitched region to equal temperament at its root)
+        self.report["tfix"] = self.compute_tfix(out_regions)
+        out_regions.sort(key=lambda x: (x["a"], ["attack", "release", "noise"].index(x["kind"]), x["lk"], x["lv"],
+                                        x["rr"], x["rand"]))
         samples = [f"{i + 1:04d}.flac" for i in range(len(src_index))]
         self.floor_by_smp = {src_index[s_]: res["floor_rel_db"] for s_, res in results.items()}
         R_has_noise = any(x["kind"] == "noise" for x in out_regions)
@@ -1087,6 +1263,97 @@ class Compiler:
         if ram > self.budget_mb() * 1.001:
             self.report["overBudget"] = True
             log(f"   !! over budget: {ram:.1f} MB > {self.budget_mb()} MB")
+
+    def compute_tfix(self, recs: List[dict]) -> dict:
+        """tfix = −(measured deviation of the sample from ET at its root + the fractional part of the authored cents),
+        so root-relative pitch + cents + tfix = equal temperament. Transposes (whole-semitone cents) are intentional
+        and never corrected. Unreliable measurements (no periodicity, confidence < 0.6, |correction| > 60 ¢, or an
+        IQR over 25 ¢ from vibrato/beating) get 0. Recipe "tfixMode": {artic name: "stretch"} keeps a deliberate
+        stretch tuning: a smooth cubic of the measured pitch over the key is fitted per articulation and only the
+        per-note deviation from that curve is corrected. Release regions reuse the median tfix of the attack regions
+        with the same root (they are the same string/reed). Noise regions: 0."""
+        R = self.recipe
+        modes = R.get("tfixMode", {})
+        stats = OrderedDict()
+        meas = {}
+        root_fixes = []
+        allow_root_fix = R.get("rootFix", R["category"] not in ("Mallets & Bells", "Percussion"))
+        for i, x in enumerate(recs):
+            f0 = x.pop("_f0", None)
+            if x["kind"] != "attack" or R.get("unpitched") or not f0 or f0.get("hz", 0) <= 0:
+                continue
+            dev = 1200.0 * math.log2(f0["hz"] / an.midi_hz(x["root"]))
+            # the authored fine tune (SFZ tune, |tune| < 100) is a pitch correction and counts; whole-semitone
+            # transposes (transpose × 100) are intentional and never corrected
+            cf = x["cents"] - 100.0 * math.trunc(x["cents"] / 100.0)
+            tot = dev + cf
+            # a sample a whole semitone off its declared root (mislabelled file): move the root, then tune
+            n = int(round(tot / 100.0))
+            if (n != 0 and abs(n) == 1 and allow_root_fix and f0.get("conf", 0) >= 0.8 and f0.get("spread", 99) <= 10.0
+                    and abs(tot - 100.0 * n) <= 25.0):
+                root_fixes.append({"lk": x["lk"], "hk": x["hk"], "root": x["root"], "newRoot": x["root"] + n,
+                                   "measuredCents": round(tot, 1), "artic": self.artic_names[x["a"]]})
+                x["root"] += n
+                tot -= 100.0 * n
+            ok = (f0.get("conf", 0) >= 0.6 and abs(tot) <= 60.0 and f0.get("spread", 99) <= 12.0
+                  and f0.get("agree", 0.0) <= 10.0 and f0.get("frames", 0) >= 3)
+            # a big correction needs a long, steady measurement (short staccato/pizz takes start sharp)
+            if ok and abs(tot) > 30.0 and (f0.get("frames", 0) < 5 or f0.get("spread", 99) > 6.0):
+                ok = False
+            meas[i] = (tot, ok)
+        for x in recs:
+            x.pop("_f0", None)
+        for a, name in enumerate(self.artic_names):
+            idx = [i for i in meas if recs[i]["a"] == a]
+            good = [i for i in idx if meas[i][1]]
+            fit = None
+            if modes.get(name) == "stretch" and len(good) >= 8:
+                ks = np.array([recs[i]["root"] for i in good], float)
+                ts = np.array([meas[i][0] for i in good], float)
+                c = np.polyfit(ks, ts, 3)
+                for _ in range(2):                           # robust re-fits without outliers
+                    resid = ts - np.polyval(c, ks)
+                    keep = np.abs(resid) <= max(3.0, 2.5 * np.median(np.abs(resid)))
+                    if keep.sum() >= 8:
+                        c = np.polyfit(ks[keep], ts[keep], 3)
+                fit = c
+            # one correction per NOTE and round-robin slot (artic, root, rr, rand): the median over its velocity
+            # layers, so the natural velocity-dependent pitch (a hard-struck string starts sharp) is kept and only
+            # the note centre moves; separate RR recordings (a player's intonation per take) are corrected per take
+            def _nk(x):
+                return (x["root"], tuple(x["rr"]), tuple(x["rand"]))
+            per_note = defaultdict(list)
+            for i in good:
+                tot = meas[i][0]
+                per_note[_nk(recs[i])].append(-(tot - (float(np.polyval(fit, recs[i]["root"])) if fit is not None else 0.0)))
+            vals = []
+            for i in idx + [j for j, x in enumerate(recs) if x["a"] == a and x["kind"] == "attack" and j not in meas]:
+                v = per_note.get(_nk(recs[i]))
+                recs[i]["tfix"] = round(max(-60.0, min(60.0, float(np.median(v)))), 1) if v else 0.0
+            for rt, v in per_note.items():
+                vals.append(round(max(-60.0, min(60.0, float(np.median(v)))), 1))
+            st = OrderedDict(measuredRegions=len(good), unreliableRegions=len(idx) - len(good), notes=len(per_note),
+                             mode="stretch" if fit is not None else "equal")
+            if vals:
+                w = max(vals, key=abs)
+                wr = [rt[0] for rt, v in per_note.items() if round(max(-60.0, min(60.0, float(np.median(v)))), 1) == w][0]
+                st.update(worst=w, worstRoot=int(wr), medianAbs=round(float(np.median(np.abs(vals))), 1),
+                          over10=int(sum(1 for v in vals if abs(v) > 10)))
+            if fit is not None:
+                st["stretchCurveCents"] = {str(k): round(float(np.polyval(fit, k)), 1) for k in (21, 36, 48, 60, 72, 84, 96, 108)}
+            stats[name] = st
+        if root_fixes:
+            stats["rootFixes"] = root_fixes
+        # releases: the attack correction of the same (artic, root)
+        by_root = defaultdict(list)
+        for x in recs:
+            if x["kind"] == "attack" and x["tfix"] != 0.0:
+                by_root[(x["a"], x["root"])].append(x["tfix"])
+        for x in recs:
+            if x["kind"] == "release":
+                v = by_root.get((x["a"], x["root"]))
+                x["tfix"] = round(float(np.median(v)), 1) if v else 0.0
+        return stats
 
     def _write_map(self):
         with open(os.path.join(self.dir, "map.json"), "w") as f:
@@ -1134,8 +1401,31 @@ class Compiler:
                 + ("Modified by Waves Crate: trimmed, looped, level-normalised and re-encoded as FLAC.\n"
                    if R['licence'].upper().startswith("CC-BY") else "")
                 + (f"Licence risk: {R['licenceRisk']}\n" if R.get("licenceRisk") else "") + "\n")
+        # shared-library mechanical noise: its own licences/credits (noiselib.py manifests)
+        nsets = OrderedDict()
+        for n_ in getattr(self, "_noise_meta", {}).values():
+            nsets.setdefault(n_["set"], set()).add((n_["licence"], n_["credit"]))
+        noise_txt = ""
+        credits = OrderedDict()
+        for st, lc in nsets.items():
+            for lic, cr in sorted(lc):
+                noise_txt += f"- noise set '{st}': {lic} — {cr}\n"
+                for piece in cr.split("; "):
+                    if lic.upper().startswith("CC-BY") and piece not in R["credit"]:
+                        credits[piece] = lic
+        if noise_txt:
+            noise_txt = ("\n\n===== Mechanical noise samples (Terrain shared noise library, Tools/organics/noiselib.py) =====\n"
+                         + noise_txt + "Every noise file's origin (source recording, cut points, edits, sha256) is in "
+                         "provenance.csv.\n")
+            lp = os.path.join(self.raw, "TerrainNoise", "LICENSE.txt")
+            if os.path.exists(lp):
+                noise_txt += "\n" + open(lp).read()
+        self.report["noiseCredits"] = [{"credit": k, "licence": v} for k, v in credits.items()]
+        if credits:
+            self.map["credit"] = R["credit"] + "; mechanical noises: " + "; ".join(credits)
+            self._write_map()
         with open(os.path.join(sdir, "LICENCE.txt"), "w") as f:
-            f.write(head + "\n\n".join(parts))
+            f.write(head + "\n\n".join(parts) + noise_txt)
         # optional per-sample evidence (recipe "provenanceMap": a CSV under Tools/organics/, keyed by source_file
         # relative to raw/): e.g. the Freesound sound id, uploader and licence of every file. When a map is given,
         # EVERY compiled sample must be in it — an untraced file never ships.
@@ -1147,13 +1437,28 @@ class Compiler:
             pcols = [c for c in rows[0].keys() if c != "source_file"]
             pmap = {r["source_file"]: r for r in rows}
             shutil.copy2(mp, os.path.join(sdir, os.path.basename(mp)))
-            missing = [os.path.relpath(s, self.raw) for s in src_index if os.path.relpath(s, self.raw) not in pmap]
+            missing = [os.path.relpath(s, self.raw) for s in src_index if os.path.relpath(s, self.raw) not in pmap
+                       and not os.path.relpath(s, self.raw).startswith("TerrainNoise" + os.sep)]
             if missing:
                 raise RuntimeError(f"{len(missing)} samples have no provenance evidence, e.g. {missing[:3]}")
+        noise_src = {}
+        for rg in getattr(self, "_regs_final", []):
+            if rg.nz:
+                noise_src[rg.src] = rg.nz
         with open(os.path.join(sdir, "provenance.csv"), "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["file", "source_file", "url", "author", "licence", "date", "sha256", "edits"] + pcols)
+            w.writerow(["file", "source_file", "url", "author", "licence", "date", "sha256", "edits"] + pcols
+                       + ["noise_set", "extract_file", "extract_sha256"])
             for s, i in src_index.items():
+                if s in noise_src:
+                    o = noise_src[s]["origin"]
+                    res = results[s]
+                    w.writerow([f"samples/{i + 1:04d}.flac", o["source_file"], o["url"], o["author"], o["licence"],
+                                o.get("date", TODAY), o["sha256"],
+                                o["edits"] + f"; extracted to {os.path.relpath(s, self.raw)}; peak-normalised "
+                                f"({-res['comp_db']:+.2f} dB); dithered; FLAC"] + ["" for _ in pcols]
+                               + [noise_src[s]["set"], os.path.relpath(s, self.raw), meta[s]["sha256"]])
+                    continue
                 res = results[s]
                 edits = ["trimmed", "end fade", f"peak-normalised ({-res['comp_db']:+.2f} dB)",
                          "TPDF-dithered to 16-bit" if sf.info(res["out"]).subtype == "PCM_16" else "24-bit",
@@ -1164,32 +1469,62 @@ class Compiler:
                     edits.append("tail-loop markers (metadata only)")
                 w.writerow([f"samples/{i + 1:04d}.flac", os.path.relpath(s, self.raw), R["url"], R["author"],
                             R["licence"], TODAY, meta[s]["sha256"], "; ".join(edits)]
-                           + [pmap.get(os.path.relpath(s, self.raw), {}).get(c, "") for c in pcols])
+                           + [pmap.get(os.path.relpath(s, self.raw), {}).get(c, "") for c in pcols] + ["", "", ""])
 
     # ------------------------------------------------------------------ 5. calibrate + preview + QA
+    def loudness_at(self, rd, note, vel=100):
+        y = rd.render(note, vel, 2.0, 1.6, with_release=False, with_noise=False)
+        mono = y.mean(axis=1)
+        ons = an.find_onset(mono, 0, len(mono))
+        return an.loudness_k(y[ons: ons + rd.sr], rd.sr)
+
     def calibrate_and_preview(self):
-        rd = an.Renderer(self.dir)
+        """Loudness calibration (tp105): every instrument's centre key (middle C when playable) at velocity 100
+        with the runtime's default Velocity 0.75 lands at CALIB_LUFS (K-weighted, first 1 s from the onset), unless
+        that would put the same key at velocity 127 above PEAK_CEIL_DB — then the instrument is pulled down to the
+        ceiling and the miss is reported. −24 LUFS is the loudest target every instrument's centre-key crest
+        (peak@127 − loudness@100, up to 23 dB for plucked strings) allows. The velocity-127 peak over 5 keys
+        across the range is reported too (register balance is the recording's; it is not flattened). One offset for all regions keeps the
+        instrument's own velocity dynamics intact. Shared-library noise regions are then set absolutely to
+        (achieved loudness + relDb) for their loudest 100 ms."""
+        nz = {i: r.pop("_nz") for i, r in enumerate(self.map["regions"]) if r.get("_nz")}
+        for r in self.map["regions"]:
+            r.pop("_nz", None)
+        self._write_map()
+        rd = an.Renderer(self.dir, velo=VELO_DEFAULT)
         att = [r for r in self.map["regions"] if r["kind"] == "attack" and r["a"] == 0]
         klo, khi = min(r["lk"] for r in att), max(r["hk"] for r in att)
         note = 60 if klo <= 60 <= khi else int(round((klo + khi) / 2))
         self.report["qaNote"] = note
-
-        def level(vel, dur=1.5, hold=1.2):
-            y = rd.render(note, vel, dur, hold, with_release=False)
-            mono = y.mean(axis=1)
-            ons = an.find_onset(mono, 0, len(mono))
-            seg = mono[ons: ons + int(0.5 * rd.sr)]
-            return y, an.db(float(np.sqrt(np.mean(seg ** 2))) if len(seg) else 0.0)
-
-        _, l100 = level(100)
-        off = CALIB_RMS_DB - l100 if l100 > -150 else 0.0
-        pk127 = max(an.db(float(np.abs(level(v, 2.0, 1.6)[0]).max())) for v in (96, 112, 120, 127)) + off
-        if pk127 > -1.0:
-            off -= (pk127 + 1.0)
-        for r in self.map["regions"]:
-            r["gainDb"] = round(r["gainDb"] + off, 3)
+        l100 = self.loudness_at(rd, note)
+        off = CALIB_LUFS - l100 if l100 > -150 else 0.0
+        keys = sorted({int(round(k)) for k in np.linspace(klo, khi, 5)} | {note})
+        pks = {}
+        for k in keys:
+            y = rd.render(k, 127, 2.0, 1.6, with_release=False, with_noise=False)
+            pks[k] = an.db(float(np.abs(y).max()))
+        pk127 = pks[note]
+        limited = 0.0
+        if pk127 + off > PEAK_CEIL_DB:
+            limited = pk127 + off - PEAK_CEIL_DB
+            off -= limited
+        for i, r in enumerate(self.map["regions"]):
+            if i not in nz:
+                r["gainDb"] = round(r["gainDb"] + off, 3)
+        achieved = l100 + off
         self.report["calibrationDb"] = round(off, 2)
+        self.report["loudness"] = OrderedDict(before=round(l100, 2), target=CALIB_LUFS, achieved=round(achieved, 2),
+                                              peakLimitedDb=round(limited, 2), peak127Db=round(pk127 + off, 2),
+                                              peak127RangeDb=round(max(pks.values()) + off, 2), keys=keys)
+        # shared-library noise: absolute level = achieved note loudness + relDb (at velocity 100)
+        for i, n_ in nz.items():
+            r = self.map["regions"][i]
+            va = 1.0 - VELO_DEFAULT * (1.0 - (100 / 127.0) ** n_["velPow"])
+            r["gainDb"] = round(achieved + n_["relDb"] - n_["nzK"] - an.db(va), 3)
+        self._noise_meta = nz
         self._write_map()
+        rd = an.Renderer(self.dir, velo=VELO_DEFAULT)
+        self.report["loudness"]["verify"] = round(self.loudness_at(rd, note), 2)
         rd = an.Renderer(self.dir)
         # preview: middle C (or the nearest playable note), vel 90, 3 s, note-off at 2.2 s
         pv = rd.render(note, 90, 3.0, 2.2)
@@ -1317,6 +1652,8 @@ def rebuild_index(out_root: str, recipes_dir: str) -> list:
                          ("licence", rec.get("licence", "")), ("credit", m["credit"])])
         if rec.get("licenceRisk"):
             e["licenceRisk"] = rec["licenceRisk"]
+        if rep.get("noiseCredits"):
+            e["extraLicences"] = rep["noiseCredits"]
         entries.append(e)
     entries.sort(key=lambda e: (CATEGORIES.index(e["category"]), e["name"]))
     with open(os.path.join(out_root, "index.json"), "w") as f:
@@ -1354,6 +1691,14 @@ def snapshot(out_root: str, recipes_dir: str):
         ids = ", ".join(f"`{x['id']}`" for x in es)
         risk = "".join(f" **Licence risk: {x['licenceRisk']}.**" for x in es if x.get("licenceRisk"))
         lines.append(f"- {credit}. Licensed under {lic.replace('CC-BY-', 'CC BY ')} — {LICENCE_URLS.get(lic, '')} ({ids}){risk}")
+    extra = OrderedDict()
+    for e in idx:
+        for x in e.get("extraLicences", []):
+            if x["licence"].upper().startswith("CC-BY"):
+                extra.setdefault((x["credit"], x["licence"]), []).append(e["id"])
+    for (cr, lic), ids_ in extra.items():
+        lines.append(f"- {cr} — mechanical key/action noises. Licensed under {lic.replace('CC-BY-', 'CC BY ')} — "
+                     f"{LICENCE_URLS.get(lic, '')} ({', '.join('`' + i + '`' for i in ids_)})")
     lines += ["", "## With thanks (CC0 / public domain / Unlicense — credit not required)", ""]
     thanks = OrderedDict()
     for e in idx:

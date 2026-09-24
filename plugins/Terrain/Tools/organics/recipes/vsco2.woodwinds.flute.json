@@ -38,5 +38,33 @@
    "sfz": "VSCO-2-CE/Flute-KS.sfz",
    "sw": "d#2"
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "breath-puff",
+   "trig": "on",
+   "relDb": -30,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.8
+  },
+  {
+   "set": "sax-keyclose",
+   "trig": "on",
+   "relDb": -38,
+   "zone": "key",
+   "keyMap": "stretch",
+   "maxFiles": 2,
+   "velPow": 0.8
+  },
+  {
+   "set": "sax-keyopen",
+   "trig": "off",
+   "relDb": -36,
+   "zone": "key",
+   "keyMap": "stretch",
+   "maxFiles": 2,
+   "velPow": 0.3
+  }
  ]
 }

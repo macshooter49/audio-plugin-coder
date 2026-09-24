@@ -19,5 +19,15 @@
    "name": "Normal",
    "sfz": "Versilian-EtherealwindsHarpIICE/Harp_Normal.sfz"
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "guitar-fret",
+   "trig": "off",
+   "relDb": -40,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.4
+  }
  ]
 }

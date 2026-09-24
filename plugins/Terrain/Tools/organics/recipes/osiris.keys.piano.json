@@ -1,0 +1,41 @@
+{
+ "id": "osiris.keys.piano",
+ "name": "Osiris Piano",
+ "family": "grand",
+ "category": "Keys",
+ "tags": [
+  "piano",
+  "felt",
+  "quiet",
+  "intimate",
+  "mechanical"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Osiris Piano by Versilian Studios and Karoryfer Samples, CC0",
+ "author": "Versilian Studios LLC and Karoryfer Samples",
+ "url": "https://github.com/sfzinstruments/Osiris_Piano",
+ "licenceDir": "sfzinstruments/Osiris_Piano",
+ "piano": true,
+ "budgetMB": 110,
+ "capScale": true,
+ "cc": {
+  "101": 0,
+  "102": 0
+ },
+ "artics": [
+  {
+   "name": "Natural",
+   "sfz": "sfzinstruments/Osiris_Piano/Osiris Piano/Programs/01-natural.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "piano-keyup",
+   "trig": "off",
+   "relDb": -30,
+   "zone": "key",
+   "keyStep": 2,
+   "velPow": 0.5
+  }
+ ]
+}
