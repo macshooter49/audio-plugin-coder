@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "TerrainGlobalPrefs.h"   // tp103 — Settings: engine prefs + library locations
 #include "LoopTempo.h"   // tp57 — the BPM lock reads the loop's own tempo (JUCE-free, gated by Tests/looptempo_cert.cpp)
 static const char* const kSrcBSfx[4] = { "SRC_E", "SRC_F", "SRC_G", "SRC_H" };   // tp20 — bank 1's route pills, every device
 #if JUCE_MAC
@@ -436,6 +437,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
         auto* v = new tw::SynthVoice();
         v->setModCurves (&modCurvesLive_);    // fb554 — set ONCE; the SET it points at is republished later · fb573 — the audio thread's own copy
         v->setGlobalSources (&globalSrc_); // fb563 — set ONCE; the VALUES inside change every block
+        v->setQualityPolicy (&filterOsPolicy_);   // tp103 — Settings → Playing / Bounce quality
         v->setCrossBlendBus (&crossBus_, 0);   // tp53 — bank 0 = oscillators A–D; the board its taps are published on
         v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
                                           // so no per-block push is needed for drawn curves
@@ -537,6 +539,12 @@ TerrainAudioProcessor::TerrainAudioProcessor()
     //  instance opened with capture off must never allocate the ~1,058 MB in the first place.
     if (captureOffMarker().existsAsFile()) captureEnabled_.store (false, std::memory_order_release);
     if (motionOffMarker().existsAsFile())  motionEnabled_.store  (false, std::memory_order_release);   // tp62
+    {   // tp103 — Settings → Performance, honoured in a session that never opens an editor (tw::prefs)
+        const auto ep = tw::prefs::readEnginePrefs();
+        sleepEnabled_.store (ep.sleep, std::memory_order_relaxed);
+        cutTailsOnStop_.store (ep.cutTails, std::memory_order_relaxed);
+        setQualityPrefs (ep.rtQ, ep.offQ, ep.presetsMayQuality);
+    }
     masterGuard_ = (wrapperType == wrapperType_Standalone);   // tp69 — the limiter + soft clip guard a D/A, never a host's float path
 
     // Spectral-morph rebuild runs on the message thread (the rebuild is ~2.3 ms since fb467,
@@ -3181,7 +3189,7 @@ void TerrainAudioProcessor::ensureBankB()
     {
         auto* v = new tw::SynthVoice();
         v->setModCurves (&modCurvesLive_);
-        v->setGlobalSources (&globalSrc_);
+        v->setGlobalSources (&globalSrc_); v->setQualityPolicy (&filterOsPolicy_);   // tp103
         v->setCrossBlendBus (&crossBus_, 1);   // tp53 — bank 1 = oscillators E–H
         v->setDrawTable (drawTable_ + 2 * ParameterIDs::kOscPerBank);   // bank 1's eight draw slots
         synthVoicesB_[(size_t) i] = v;
@@ -10421,6 +10429,173 @@ RvbEngineSet TerrainAudioProcessor::rvbEngineSetPool (int e) noexcept
     return s;
 }
 
+// ══ tp103 — SETTINGS → PERFORMANCE, THE AUDIO-THREAD HALF ═══════════════════════════════════════════════════════
+//  flushAudioTails() (tp29, the preset load) empties the FX-mode engines, the pools and the rack Delay's
+//  neighbours — but not the synth rack's reverbs or its Delay, which live in their own members. Cut tails on
+//  stop has to silence EVERYTHING still ringing, so it gets the whole set. Audio thread only, like tp29.
+void TerrainAudioProcessor::flushRackTails() noexcept
+{
+    flushAudioTails();
+    hallReverb.reset(); roomReverb.reset(); plateReverb.reset(); springReverb.reset(); digitalReverb.reset();
+    vintageReverb.reset(); basinReverb.reset(); shimmerReverb.reset(); convolutionReverb.reset();
+    for (int e = 0; e < kFxExtra; ++e)
+    {
+        const auto s = rvbEngineSetPool (e);
+        if (s.hall)    s.hall->reset();    if (s.room)    s.room->reset();    if (s.plate)   s.plate->reset();
+        if (s.spring)  s.spring->reset();  if (s.digital) s.digital->reset(); if (s.vintage) s.vintage->reset();
+        if (s.basin)   s.basin->reset();   if (s.shimmer) s.shimmer->reset(); if (s.conv)    s.conv->reset();
+    }
+    delayEngine.reset();
+    for (int n = 0; n < wc::kFlowInstances; ++n) { glitches_[n].reset(); chops_[n].reset(); }
+}
+
+int TerrainAudioProcessor::effectiveDistQuality (int presetQ) const noexcept
+{
+    // A preset's own Distortion Quality knob wins while "Presets can change quality" is on; otherwise the
+    // Playing quality sets the tier (Eco = the mode's own floor, Standard = 2×, High = 2× + ADAA). A DAW's
+    // offline render may only RAISE it: Bounce High ≥ High, Best = Ultra.
+    int q = presetsMayQuality_.load (std::memory_order_relaxed) ? juce::jlimit (0, 3, presetQ)
+                                                                 : rtQuality_.load (std::memory_order_relaxed);
+    if (isNonRealtime())
+    {
+        const int off = offQuality_.load (std::memory_order_relaxed);
+        if (off == 1) q = juce::jmax (q, 2);
+        if (off == 2) q = 3;
+    }
+    return q;
+}
+
+double TerrainAudioProcessor::tailWindowSeconds() const noexcept
+{
+    // One second of silence, or longer than the longest gap any delay line can leave between two echoes —
+    // a silent output between the repeats of a 4-bar delay is not a finished tail. Every line counts whether
+    // or not its device is lit this block: waiting too long costs a little idle CPU, waking too late would
+    // eat an echo.
+    float ms = juce::jmax (1500.0f /* MoogDelay's ceiling */, delayEngine.longestTimeMs());
+    for (auto& d : delayPool_) ms = juce::jmax (ms, d.longestTimeMs());
+    return juce::jmax (1.0, (double) ms * 0.001 + 0.25);
+}
+
+//  SLEEP WHEN SILENT. Once the output has stayed under −100 dBFS for the tail window with no voice sounding
+//  (tailStage decides), each block is answered with silence until something could make sound again: any MIDI
+//  event (a note, a CC, the sustain pedal — nothing is dropped), the transport starting, the test chime, a
+//  browser preview, a slice audition, the tape loop, live input on the input bus, a patch load's flush, the
+//  setting being turned off, or an offline render (a bounce is never slept). The capture ring still receives
+//  the silence, so an export keeps its timeline.
+bool TerrainAudioProcessor::sleepGate (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi) noexcept
+{
+    bool playing = false;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+            playing = pos->getIsPlaying();
+    playEdgeStart_  = playing && ! hostWasPlaying_;
+    playEdgeStop_   = hostWasPlaying_ && ! playing;
+    hostWasPlaying_ = playing;
+
+    if (! sleeping_.load (std::memory_order_relaxed)) return false;
+    bool wake = ! sleepEnabled_.load (std::memory_order_relaxed) || isNonRealtime() || ! midi.isEmpty() || playEdgeStart_
+             || testToneArmed_.load (std::memory_order_acquire) || tailFlushPending_.load (std::memory_order_acquire)
+             || noiseAuditionReq_.load (std::memory_order_relaxed) != noiseAudSeen_
+             || wtAuditionReq_.load (std::memory_order_relaxed)    != wtAudSeen_
+             || sampAuditionReq_.load (std::memory_order_relaxed)  != sampAudSeen_
+             || tapeLoopPlaying.load (std::memory_order_relaxed) > 0.5f || tapeLoopRecording.load (std::memory_order_relaxed) > 0.5f;
+    if (! wake)
+    {
+        const juce::SpinLock::ScopedTryLockType t (auditionLock);
+        if (t.isLocked() && ! auditionQueue.empty()) wake = true;
+    }
+    if (! wake)
+    {
+        const int nIn = juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels());
+        for (int c = 0; c < nIn && ! wake; ++c)
+            if (buffer.getMagnitude (c, 0, buffer.getNumSamples()) > 1.0e-5f) wake = true;
+    }
+    if (wake)
+    {
+        sleeping_.store (false, std::memory_order_relaxed);
+        silentRun_ = 0;
+        return false;
+    }
+    buffer.clear();
+    playEdgeStop_ = false;   // a stop while asleep has nothing to cut; it must not fire the fade on waking
+    if (captureEnabled_.load (std::memory_order_relaxed))
+        captureBuffer.writeBlock (buffer.getReadPointer (0), buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr,
+                                  buffer.getNumSamples());
+    return true;
+}
+
+//  THE TAIL STAGE — the last thing before the capture, so the export hears exactly what the host does.
+//  (1) CUT TAILS ON STOP: on the play→stop edge the output fades to zero over 10 ms (a raised-cosine, so
+//      the step it adds is a fraction of the signal's own), then every tail is emptied and every voice is
+//      stopped, then the output fades back in over the next 10 ms (from silence — whatever plays next
+//      starts clean instead of stepping in).
+//  (2) SLEEP: measures the finished block. Sleep starts only after the tail window of output under
+//      −100 dBFS with no voice active in any bank or sampler layer.
+void TerrainAudioProcessor::tailStage (juce::AudioBuffer<float>& buffer, int numSamples) noexcept
+{
+    const int nch = juce::jmin (2, buffer.getNumChannels());
+    const double sr = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    if (playEdgeStop_ && cutTailsOnStop_.load (std::memory_order_relaxed) && cutPhase_ == 0 && ! isNonRealtime())   // a bounce keeps its tail
+    {
+        cutPhase_ = 1; cutPos_ = 0; cutLen_ = juce::jmax (16, (int) std::lround (0.010 * sr));
+    }
+    playEdgeStop_ = false;
+    if (cutPhase_ != 0)
+    {
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float g = 1.0f;
+            if (cutPhase_ == 1)
+            {
+                g = 0.5f + 0.5f * std::cos (juce::MathConstants<float>::pi * (float) cutPos_ / (float) cutLen_);
+                if (++cutPos_ >= cutLen_)
+                {
+                    // the fade has landed on zero: empty the tails and stop every voice. The rest of THIS block
+                    // was rendered before the flush, so it stays silent (phase 3); the climb starts next block.
+                    flushRackTails();
+                    synthEngine.allNotesOff (0, false);
+                    if (auto* b = bankB_.load (std::memory_order_acquire)) b->allNotesOff (0, false);
+                    for (auto& L : layers) L.synth.allNotesOff (0, false);
+                    cutPhase_ = 3; g = 0.0f;
+                }
+            }
+            else if (cutPhase_ == 3) g = 0.0f;
+            else if (cutPhase_ == 2)
+            {
+                g = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * (float) cutPos_ / (float) cutLen_);
+                if (++cutPos_ >= cutLen_) cutPhase_ = 0;
+            }
+            for (int c = 0; c < nch; ++c) buffer.getWritePointer (c)[i] *= g;
+        }
+        if (cutPhase_ == 3) { cutPhase_ = 2; cutPos_ = 0; }
+    }
+
+    float pk = 0.0f;
+    for (int c = 0; c < nch; ++c) pk = juce::jmax (pk, buffer.getMagnitude (c, 0, numSamples));
+    if (pk > outPeakHold_.load (std::memory_order_relaxed)) outPeakHold_.store (pk, std::memory_order_relaxed);
+
+    if (! sleepEnabled_.load (std::memory_order_relaxed) || isNonRealtime())
+    { silentRun_ = 0; sleeping_.store (false, std::memory_order_relaxed); return; }
+    const bool quiet = pk < 1.0e-5f && cutPhase_ == 0
+                    && tapeLoopPlaying.load (std::memory_order_relaxed) < 0.5f
+                    && tapeLoopRecording.load (std::memory_order_relaxed) < 0.5f
+                    && ! testToneArmed_.load (std::memory_order_relaxed);
+    if (! quiet) { silentRun_ = 0; return; }
+    // a key still held, or an Arp on the chain, is a note generator: its NEXT note arrives with no MIDI event to
+    // wake us (a slow arp can leave seconds of silence between steps), so neither may ever be slept through
+    bool arp = false;
+    if (resoHeldN_ == 0) { const auto fc = flowChainNow(); for (int n = 0; n < wc::kFlowInstances; ++n) arp = arp || fc.arpOn[n]; }
+    if (resoHeldN_ > 0 || arp) { silentRun_ = 0; return; }
+    silentRun_ += numSamples;
+    if ((double) silentRun_ < tailWindowSeconds() * sr) return;
+    // the window is full — the voice census runs only now, once per block, and only while silent
+    if (anyVoiceActive()) { silentRun_ = 0; return; }
+    for (auto& L : layers)
+        for (int v = 0; v < L.synth.getNumVoices(); ++v)
+            if (auto* sv = L.synth.getVoice (v); sv != nullptr && sv->isVoiceActive()) { silentRun_ = 0; return; }
+    sleeping_.store (true, std::memory_order_relaxed);
+}
+
 // ⚠️ MESSAGE THREAD ONLY (called from timerCallback). Builds the one engine each active pooled
 // reverb currently needs. The audio thread only ever publishes an int request (rvbWantType_) and
 // reads the resulting pointer — it never allocates, which is the whole point of doing it here.
@@ -10627,6 +10802,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         qwertyR_.store (r, std::memory_order_release);
     }
+
+    // tp103 — Settings → Performance → Sleep when silent. After the QWERTY drain (a computer-keyboard note
+    // wakes it like any MIDI) and before anything writes the output. Asleep = silence + the capture timeline.
+    if (sleepGate (buffer, midiMessages)) return;
+    // tp103 — Settings → Performance → Playing / Bounce quality: the voice filter's 2× policy for this block.
+    filterOsPolicy_.store ((isNonRealtime() && offQuality_.load (std::memory_order_relaxed) >= 1)
+                               ? 2 : rtQuality_.load (std::memory_order_relaxed), std::memory_order_relaxed);
 
     // ══ fb563 — MIDI PERFORMANCE SOURCES + MACROS ═══════════════════════════════════════════
     //  Nothing read the wheel, aftertouch or pitch bend before this (pitchWheelMoved /
@@ -14903,7 +15085,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             distortionEngine.setMode      ((int) *rawParam (ParameterIDs::SYN_DST_TYPE));
             distortionEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DST_CHARACTER));
-            distortionEngine.setQuality   ((int) *rawParam (ParameterIDs::SYN_DST_QUALITY));
+            distortionEngine.setQuality   (effectiveDistQuality ((int) *rawParam (ParameterIDs::SYN_DST_QUALITY)));   // tp103 — the global quality policy
             distortionEngine.setAuto      (rawParam (ParameterIDs::SYN_DST_AUTO)->load()  > 0.5f);
             distortionEngine.setPill2     (rawParam (ParameterIDs::SYN_DST_PILL2)->load() > 0.5f);
             distortionEngine.setKeyHz     (wc::tuningA4Hz().load (std::memory_order_relaxed) * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last-played note (the glide tracker; mono law on a post-mix bus)
@@ -15199,7 +15381,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             const int ty = (int) R.type->load();
             if (ty != poolDstType_[(size_t) e]) { poolDstType_[(size_t) e] = ty; eng.setMode (ty); }
             eng.setCharacter ((int) R.chr->load());
-            eng.setQuality   ((int) R.qual->load());
+            eng.setQuality   (effectiveDistQuality ((int) R.qual->load()));   // tp103
             eng.setAuto      (R.autoP->load() > 0.5f);
             eng.setPill2     (R.pill2->load() > 0.5f);
             eng.setKeyHz     (wc::tuningA4Hz().load (std::memory_order_relaxed) * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last note
@@ -16579,6 +16761,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //    after Chop, Glitch and the auditions, the capture is exactly what the host receives — and anything added to the
     //    chain later (the patcher) is inside it automatically, as long as it runs above this line. No return statement
     //    sits between the audio stages and here, so every block is captured. Tests/capture_last_gate.py pins the order.
+    tailStage (buffer, numSamples);   // tp103 — cut tails on stop (the fade) + the sleep detector; the capture hears it
     if (captureEnabled_.load (std::memory_order_relaxed))   // tp43 — off = no ring, no write
         captureBuffer.writeBlock (leftChannel,
             numChannels > 1 ? rightChannel : nullptr, numSamples);
@@ -18439,7 +18622,7 @@ static void tiWriteSampleSpare (const juce::AudioBuffer<float>& buf, double sr, 
 {
     try
     {
-        const auto samplesDir = terrainDataDirP().getChildFile ("Samples");
+        const auto samplesDir = TerrainAudioProcessor::userSamplesRoot();   // tp103 — or the folder chosen in Settings
         if (srcPath.contains ("/Resources/Samples/") || srcPath.contains ("\\Resources\\Samples\\")) return;   // factory
         if (srcPath.isNotEmpty() && ! srcPath.startsWith ("mem:") && juce::File (srcPath).isAChildOf (samplesDir)) return;   // already ours
         const auto dir = samplesDir.getChildFile ("Imported");
@@ -21008,10 +21191,24 @@ bool TerrainAudioProcessor::readPatchHeader (const juce::File& f, juce::String& 
 { return tw::bank::readHeader (f, manifestJsonOut, error); }
 
 // ═══ fb619 — BANKS ════════════════════════════════════════════════════════════════════════════
-juce::File TerrainAudioProcessor::banksUserRoot() { return terrainDataDirP().getChildFile ("Banks"); }
+// tp103 — Settings → Presets & Library → Where things live: a folder the user chose wins while it exists; if it is
+//  gone (an unplugged drive) saving still lands in the default rather than failing, and the page says which is live.
+juce::File TerrainAudioProcessor::banksUserRoot()
+{
+    const auto o = tw::prefs::libraryOverride (tw::prefs::Lib::presets);
+    return o.isDirectory() ? o : terrainDataDirP().getChildFile ("Banks");
+}
+juce::File TerrainAudioProcessor::userSamplesRoot()
+{
+    const auto o = tw::prefs::libraryOverride (tw::prefs::Lib::samples);
+    return o.isDirectory() ? o : terrainDataDirP().getChildFile ("Samples");
+}
 
 juce::File TerrainAudioProcessor::banksFactoryRoot()
 {
+    // tp103 — a factory library moved out of the bundle (Settings → Where things live) is a folder holding Banks/
+    if (const auto o = tw::prefs::libraryOverride (tw::prefs::Lib::factory); o.getChildFile ("Banks").isDirectory())
+        return o.getChildFile ("Banks");
     // wtFactoryRoot()'s up-walk, verbatim, for Resources/Banks
     static const juce::File bundled = []
     {
