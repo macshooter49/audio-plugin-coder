@@ -1136,9 +1136,23 @@ class Compiler:
                 + (f"Licence risk: {R['licenceRisk']}\n" if R.get("licenceRisk") else "") + "\n")
         with open(os.path.join(sdir, "LICENCE.txt"), "w") as f:
             f.write(head + "\n\n".join(parts))
+        # optional per-sample evidence (recipe "provenanceMap": a CSV under Tools/organics/, keyed by source_file
+        # relative to raw/): e.g. the Freesound sound id, uploader and licence of every file. When a map is given,
+        # EVERY compiled sample must be in it — an untraced file never ships.
+        pmap, pcols = {}, []
+        if R.get("provenanceMap"):
+            mp = os.path.join(HERE, R["provenanceMap"])
+            with open(mp, newline="") as f:
+                rows = list(csv.DictReader(f))
+            pcols = [c for c in rows[0].keys() if c != "source_file"]
+            pmap = {r["source_file"]: r for r in rows}
+            shutil.copy2(mp, os.path.join(sdir, os.path.basename(mp)))
+            missing = [os.path.relpath(s, self.raw) for s in src_index if os.path.relpath(s, self.raw) not in pmap]
+            if missing:
+                raise RuntimeError(f"{len(missing)} samples have no provenance evidence, e.g. {missing[:3]}")
         with open(os.path.join(sdir, "provenance.csv"), "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["file", "source_file", "url", "author", "licence", "date", "sha256", "edits"])
+            w.writerow(["file", "source_file", "url", "author", "licence", "date", "sha256", "edits"] + pcols)
             for s, i in src_index.items():
                 res = results[s]
                 edits = ["trimmed", "end fade", f"peak-normalised ({-res['comp_db']:+.2f} dB)",
@@ -1149,7 +1163,8 @@ class Compiler:
                 if "tail" in res:
                     edits.append("tail-loop markers (metadata only)")
                 w.writerow([f"samples/{i + 1:04d}.flac", os.path.relpath(s, self.raw), R["url"], R["author"],
-                            R["licence"], TODAY, meta[s]["sha256"], "; ".join(edits)])
+                            R["licence"], TODAY, meta[s]["sha256"], "; ".join(edits)]
+                           + [pmap.get(os.path.relpath(s, self.raw), {}).get(c, "") for c in pcols])
 
     # ------------------------------------------------------------------ 5. calibrate + preview + QA
     def calibrate_and_preview(self):
