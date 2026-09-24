@@ -1611,6 +1611,14 @@ html.ti-mod-glass #plugin > #footer { visibility: hidden; }
   align-items: center;
   gap: 8px;
 }
+/* tp101 — Max: "TERRAIN is supposed to stay directly in the middle". V1 was a flex item in the centred group, which
+   pulled TERRAIN ~10 px left of the window centre. Now TERRAIN is the group's ONLY flex item (dead centre) and V1 hangs
+   off its right edge exactly as the CPU meter hangs off its left — same 6 px visible gap as before (8 gap − 2 margin),
+   same 3 px optical drop. Nothing else moves. */
+.header-left > .brand-version {
+  position: absolute; left: 100%; top: 0; height: 44px; box-sizing: border-box;
+  display: flex; align-items: center; margin-left: 6px; white-space: nowrap; pointer-events: none;
+}
 .header-right {
   display: flex;
   align-items: center;
@@ -7285,7 +7293,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             :root { --ti-num-ink: #2A2035; }                                    /* light theme → dark ink (the inverse) */
             :root[data-theme="dark"] { --ti-num-ink: rgba(255,255,255,0.95); }  /* dark theme  → WHITE, like .big */
             /* always-dark cards/engines keep WHITE numbers in BOTH themes (their ground never flips) */
-            .ti-card, #mod-engine, #mm { --ti-num-ink: rgba(255,255,255,0.95); }
+            .ti-card, #mod-engine { --ti-num-ink: rgba(255,255,255,0.95); }   /* tp101 — #mm left this list: it stands on the THEMED window glass now, so its numbers follow the theme (white on dark, ink on light) */
             .knob-value,
             .mini-knob-value,
             .fx-knob-value,
