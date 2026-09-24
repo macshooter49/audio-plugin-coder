@@ -540,8 +540,8 @@ static const float kNoDet[16] = {};
 //==================================================================================================
 //  tp105 NO-SILENCE sweep (Max: "Xylophone, F4 — every OTHER press is silent… NO SILENCES, ever").
 //  Every installed instrument × every articulation × every key of its range (± margin) × velocities
-//  {20, 64, 100, 127} × 8 repeated presses: each press must reach −60 dBFS within 30 ms + the Human timing
-//  (3 ms at the default 0.25) + the region's own authored onset at the playback ratio (a soft bowed cello
+//  {20, 64, 100, 127} × Human {0, 0.41, 1} × 8 repeated presses: each press must reach −60 dBFS within 30 ms + the
+//  Human timing (12 ms × Human) + the region's own authored onset at the playback ratio (a soft bowed cello
 //  layer speaks 97 ms in — that is the recording, not a silence).
 //==================================================================================================
 static int runSweep (const juce::File& root, int margin)
@@ -569,16 +569,17 @@ static int runSweep (const juce::File& root, int margin)
             if (hi < 0) continue;
             lo = std::max (0, lo - margin); hi = std::min (127, hi + margin);
             OrganicEngine e; e.prepare (kSR, kBlk); e.setInstrument (I);
-            OrganicParams p; p.artic = a;                        // the defaults (Human 0.25): what Max plays
             std::vector<float> L (kBlk), R (kBlk);
+            for (float human : { 0.f, 0.41f, 1.f })             // Human 0 · 0.41 (Max's patch) · 1: fake RR at every strength
             for (int key = lo; key <= hi; ++key)
                 for (int v : vels)
                 {
+                    OrganicParams p; p.artic = a; p.human = human;
                     int silent = 0;
                     for (int press = 0; press < 8; ++press)
                     {
                         e.noteOn (key, (float) v / 127.f, 1, kNoDet, 0x1234567u + (uint32_t) (key * 131 + v * 7 + press * 7919));
-                        float pk = 0.f; int64_t t = 0, win = (int64_t) (0.033 * kSR); bool winSet = false;
+                        float pk = 0.f; int64_t t = 0, win = (int64_t) ((0.031 + 0.012 * human) * kSR); bool winSet = false;   // + the Human timing (12 ms × h)
                         for (int guard = 0; guard < 400 && t < win; ++guard)
                         {
                             std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
@@ -602,7 +603,7 @@ static int runSweep (const juce::File& root, int margin)
                         ++presses;
                         if (pk < 0.001f) { ++fails; ++silent; }
                     }
-                    if (silent > 0 && first.size() < 300) first += fmt (" a%d:k%dv%d(%d/8)", a, key, v, silent);
+                    if (silent > 0 && first.size() < 300) first += fmt (" a%d:k%dv%dh%.2f(%d/8)", a, key, v, human, silent);
                 }
             e.kill(); e.setInstrument (nullptr);
         }

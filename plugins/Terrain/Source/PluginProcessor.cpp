@@ -610,6 +610,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
             beaconWake_.wait (500);   // fb567 — interruptible: the destructor signals it, so the join returns at once
             // re-read the marker every ~2 s so it can be toggled live
             if ((cpuTick % 4) == 0) cpuProbeOn = cpuProbeEnv || onMarker.existsAsFile();
+            tw::organics_prof::on.store (cpuProbeOn, std::memory_order_relaxed);   // tp105 — the ORG core line
             if (cpuProbeOn && (++cpuTick % 10) == 0)   // fb488 — every ~5 s: the DSP load, as a number
             {
                 const double tks = (double) dspTicks_.exchange (0, std::memory_order_relaxed);
@@ -623,6 +624,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
                     const double gSec = (double) dspGather_.exchange (0, std::memory_order_relaxed) / tps;
                     const double vSec = (double) dspVoices_.exchange (0, std::memory_order_relaxed) / tps;
                     const double pSec = dspSec - gSec - vSec;
+                    const double oSec = (double) tw::organics_prof::ticks.exchange (0, std::memory_order_relaxed) / tps;   // tp105
                     // fb509 — the per-segment split of the build (names at the SEGM marks).
                     double segS[kUiSegs];
                     for (int si = 0; si < kUiSegs; ++si)
@@ -637,7 +639,8 @@ TerrainAudioProcessor::TerrainAudioProcessor()
                         .replaceWithText (juce::String::formatted (
                             "DSP %.1f%% of one core  [gather %.1f | voices %.1f | fx+master %.1f]  blk %d @ %.0f Hz  voices %d | bakes %u | frames %u acks %u | lastFrame %u B\n"
                             "UI  %.1f%% of one core  [build %.1f | ship %.1f]  %d ticks (%.0f Hz), %.2f ms/tick\n"
-                            "SEG pre %.1f | mv %.1f | fol %.1f | scope %.1f | save %.1f | eq %.1f | geo %.1f\n",
+                            "SEG pre %.1f | mv %.1f | fol %.1f | scope %.1f | save %.1f | eq %.1f | geo %.1f\n"
+                            "ORG core %.2f%% of one core (the Organics engines' own render, inside voices)\n",
                             100.0 * dspSec / audSec,
                             100.0 * gSec / audSec, 100.0 * vSec / audSec, 100.0 * pSec / audSec,
                             (int) (smp / juce::jmax (1.0, (double) dspBlocks_.exchange (0, std::memory_order_relaxed))), sr,   // fb492 AVERAGE block
@@ -651,7 +654,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
                             uiN > 0 ? 1000.0 * uiSec / (double) uiN : 0.0,
                             100.0 * segS[0] / audSec, 100.0 * segS[1] / audSec, 100.0 * segS[2] / audSec,
                             100.0 * segS[3] / audSec, 100.0 * segS[4] / audSec, 100.0 * segS[5] / audSec,
-                            100.0 * segS[6] / audSec));
+                            100.0 * segS[6] / audSec, 100.0 * oSec / audSec));
                 }
             }
             const uint32_t now = mtHeartbeat_.load (std::memory_order_relaxed);
@@ -8224,6 +8227,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                                                                              juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), kDef[k]));
         }
     }
+    // ══ tp105 — ORGANICS ROUND 2 (contract amendment): VIBRATO takes knob 3 (ATTACK stays declared + hidden at Natural 0.5,
+    //  not a mod dest) and the back panel gains Vibrato Rate / Delay, Velocity Curve, Tuning. Declared LAST, after tp104's
+    //  block, for the same reason as every appended block: no existing parameter index moves (host automation by index).
+    //  VIBRATE 0..1 → 3..9 Hz (default 0.417 = 5.5 Hz) · VIBDELAY 0..1 → 0..2 s (0.175 = 0.35 s) · VCURVE 0 Soft / 1 Linear /
+    //  2 Hard · TUNING 0 As recorded / 1 Equal. Ints, not choices (the page draws its own dropdowns; RACK LAW-safe).
+    {
+        for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+        {
+            const juce::String L = juce::String::charToString ((juce::juce_wchar) ('A' + o));
+            layoutReal.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ParameterIDs::kOsc_ORG_VIBRATO[o], 1 },
+                                "Synth OSC " + L + " Organic Vibrato", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+            layoutReal.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ParameterIDs::kOsc_ORG_VIBRATE[o], 1 },
+                                "Synth OSC " + L + " Organic Vibrato Rate", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.417f));
+            layoutReal.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ParameterIDs::kOsc_ORG_VIBDELAY[o], 1 },
+                                "Synth OSC " + L + " Organic Vibrato Delay", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.175f));
+            layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { ParameterIDs::kOsc_ORG_VCURVE[o], 1 },
+                                "Synth OSC " + L + " Organic Velocity Curve", 0, 2, 1));
+            layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { ParameterIDs::kOsc_ORG_TUNING[o], 1 },
+                                "Synth OSC " + L + " Organic Tuning", 0, 1, 1));
+        }
+    }
     return layoutReal;
 }
 
@@ -12993,7 +13017,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         // ── tp104 — ORGANICS engine: gather the twelve per OSC (ORGANICS-ENGINE-GATHER). Only when this bank has an osc on
         //    engine 7 (the unused law: an Organics-free block reads nothing new). APVTS 0..1 → OrganicParams' DSP units
-        //    (contract §4): the bipolar four 2v−1, Image 1.5v, the rest as-is. Mod: dest OrganicBase + o·10 + k — for bank 1
+        //    (contract §4): the bipolar four 2v−1, Image 1.5v, the rest as-is. tp105: knob 3 = VIBRATO (Attack is read
+        //    raw, hidden at Natural); the back panel's Rate 3..9 Hz / Delay 0..2 s / Velocity Curve / Tuning; and the amp
+        //    envelope's attack/release (the engine's note-off decay = max(amp release, Release knob time)). Mod: dest OrganicBase + o·10 + k — for bank 1
         //    too (destForBank rebased E–H's explicit ints onto this bank's A–D slots, so `o` is 0..3 in both).
         tw::OrganicParams orgP[4];
         const bool orgBank = engineIdx == tw::organics::kEngineIndex || engineIdxB == tw::organics::kEngineIndex
@@ -13006,7 +13032,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 q.dyn     = 2.0f * kn (ParameterIDs::kOsc_ORG_DYNAMICS, 0) - 1.0f;
                 q.tone    = 2.0f * kn (ParameterIDs::kOsc_ORG_TONE,     1) - 1.0f;
                 q.body    = 2.0f * kn (ParameterIDs::kOsc_ORG_BODY,     2) - 1.0f;
-                q.attack  = 2.0f * kn (ParameterIDs::kOsc_ORG_ATTACK,   3) - 1.0f;
+                q.attack  = 0.0f;   // tp105: ATTACK left the panel (the amp envelope owns attack) — declared + hidden, played at Natural
+                                    //   whatever an old session stored (a control nobody can see must not change the sound)
+                q.vibrato =        kn (ParameterIDs::kOsc_ORG_VIBRATO,  3);                  // tp105: dest knob 3 = Vibrato
                 q.human   =        kn (ParameterIDs::kOsc_ORG_HUMAN,    4);
                 q.release =        kn (ParameterIDs::kOsc_ORG_RELEASE,  5);
                 q.noise   =        kn (ParameterIDs::kOsc_ORG_NOISE,    6);
@@ -13014,6 +13042,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 q.velo    =        kn (ParameterIDs::kOsc_ORG_VELOCITY, 8);
                 q.image   = 1.5f * kn (ParameterIDs::kOsc_ORG_IMAGE,    9);
                 q.artic   = juce::jlimit (0, 7, (int) *rpar (ParameterIDs::kOsc_ORG_ARTIC[o]));
+                // tp105 back panel + the amp envelope the engine's release links to (EFFECTIVE values, ms → s)
+                q.vibRate    = 3.0f + 6.0f * juce::jlimit (0.0f, 1.0f, (float) *rpar (ParameterIDs::kOsc_ORG_VIBRATE[o]));
+                q.vibDelay   = 2.0f * juce::jlimit (0.0f, 1.0f, (float) *rpar (ParameterIDs::kOsc_ORG_VIBDELAY[o]));
+                q.velCurve   = juce::jlimit (0, 2, (int) *rpar (ParameterIDs::kOsc_ORG_VCURVE[o]));
+                q.tuning     = juce::jlimit (0, 1, (int) *rpar (ParameterIDs::kOsc_ORG_TUNING[o]));
+                q.ampAttack  = juce::jmax (0.0f, ampA) * 0.001f;
+                q.ampRelease = juce::jmax (0.0f, ampR) * 0.001f;
                 orgP[o] = q;
             }
         // ── BLEND MODES: gather the 4 warp slots × 4 oscs once (cross-osc FM/PD/AM/RM) ──

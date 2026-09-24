@@ -4879,7 +4879,9 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             const char* const* tbl[kOrgRelayKnobs] = {
                 ParameterIDs::kOsc_ORG_INST, ParameterIDs::kOsc_ORG_ARTIC, ParameterIDs::kOsc_ORG_DYNAMICS, ParameterIDs::kOsc_ORG_TONE,
                 ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
-                ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE };
+                ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE,
+                ParameterIDs::kOsc_ORG_VIBRATO, ParameterIDs::kOsc_ORG_VIBRATE, ParameterIDs::kOsc_ORG_VIBDELAY,   // tp105
+                ParameterIDs::kOsc_ORG_VCURVE, ParameterIDs::kOsc_ORG_TUNING };
             for (int o = 0; o < 4; ++o)
                 for (int k = 0; k < kOrgRelayKnobs; ++k)
                     if (orgRelay_[o][k] != nullptr)
@@ -17238,7 +17240,9 @@ juce::WebBrowserComponent::Options TerrainUiCore::withOrganics (juce::WebBrowser
     const char* const* tbl[kOrgRelayKnobs] = {
         ParameterIDs::kOsc_ORG_INST, ParameterIDs::kOsc_ORG_ARTIC, ParameterIDs::kOsc_ORG_DYNAMICS, ParameterIDs::kOsc_ORG_TONE,
         ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
-        ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE };
+        ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE,
+        ParameterIDs::kOsc_ORG_VIBRATO, ParameterIDs::kOsc_ORG_VIBRATE, ParameterIDs::kOsc_ORG_VIBDELAY,   // tp105
+        ParameterIDs::kOsc_ORG_VCURVE, ParameterIDs::kOsc_ORG_TUNING };
     for (int osc = 0; osc < 4; ++osc)
         for (int k = 0; k < kOrgRelayKnobs; ++k)
         {

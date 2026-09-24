@@ -40,7 +40,7 @@ done
 $CXX "$OUT"/*.o $FW -o "$OUT/organics_engine_test" 2> "$OUT/link.log" || { echo "  LINK FAIL — first error:"; grep -m1 -i 'error\|undefined' "$OUT/link.log"; exit 1; }
 
 # tp105 NO-SILENCE sweep: every installed instrument × artic × key (range ± ORG_SWEEP_MARGIN, default 12) × vel {20,64,100,127}
-#   × 8 presses must sound (−60 dBFS within 30 ms + Human timing + the region's authored onset).
+#   × Human {0, 0.41, 1} × 8 presses must sound (−60 dBFS within 30 ms + Human timing + the region's authored onset).
 #   bash Tests/organics_engine_test.sh --sweep [root]   (root default: $TERRAIN_ORGANICS_DIR, else ~/Library/WavesCrate/TerrainInstrument/Organics)
 if [ "${1:-}" = "--sweep" ]; then
   SR="${2:-${TERRAIN_ORGANICS_DIR:-$HOME/Library/WavesCrate/TerrainInstrument/Organics}}"

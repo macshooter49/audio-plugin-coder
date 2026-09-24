@@ -1245,6 +1245,12 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_ORG_SUSTAIN[] = "SYN_OSC_A_ORG_SUSTAIN";
     constexpr char SYN_OSC_A_ORG_VELOCITY[] = "SYN_OSC_A_ORG_VELOCITY";
     constexpr char SYN_OSC_A_ORG_IMAGE[] = "SYN_OSC_A_ORG_IMAGE";
+    // tp105 — Vibrato (knob 3, replaces Attack on the panel) + the back panel: rate, delay, velocity curve, tuning
+    constexpr char SYN_OSC_A_ORG_VIBRATO[] = "SYN_OSC_A_ORG_VIBRATO";
+    constexpr char SYN_OSC_A_ORG_VIBRATE[] = "SYN_OSC_A_ORG_VIBRATE";
+    constexpr char SYN_OSC_A_ORG_VIBDELAY[] = "SYN_OSC_A_ORG_VIBDELAY";
+    constexpr char SYN_OSC_A_ORG_VCURVE[] = "SYN_OSC_A_ORG_VCURVE";
+    constexpr char SYN_OSC_A_ORG_TUNING[] = "SYN_OSC_A_ORG_TUNING";
     constexpr char SYN_OSC_B_MODAL_FAMILY[]   = "SYN_OSC_B_MODAL_FAMILY";
     constexpr char SYN_OSC_B_MODAL_FORM[]     = "SYN_OSC_B_MODAL_FORM";
     constexpr char SYN_OSC_B_MODAL_SOURCE[]   = "SYN_OSC_B_MODAL_SOURCE";
@@ -1270,6 +1276,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_ORG_SUSTAIN[] = "SYN_OSC_B_ORG_SUSTAIN";
     constexpr char SYN_OSC_B_ORG_VELOCITY[] = "SYN_OSC_B_ORG_VELOCITY";
     constexpr char SYN_OSC_B_ORG_IMAGE[] = "SYN_OSC_B_ORG_IMAGE";
+    constexpr char SYN_OSC_B_ORG_VIBRATO[] = "SYN_OSC_B_ORG_VIBRATO";
+    constexpr char SYN_OSC_B_ORG_VIBRATE[] = "SYN_OSC_B_ORG_VIBRATE";
+    constexpr char SYN_OSC_B_ORG_VIBDELAY[] = "SYN_OSC_B_ORG_VIBDELAY";
+    constexpr char SYN_OSC_B_ORG_VCURVE[] = "SYN_OSC_B_ORG_VCURVE";
+    constexpr char SYN_OSC_B_ORG_TUNING[] = "SYN_OSC_B_ORG_TUNING";
     constexpr char SYN_OSC_C_MODAL_FAMILY[]   = "SYN_OSC_C_MODAL_FAMILY";
     constexpr char SYN_OSC_C_MODAL_FORM[]     = "SYN_OSC_C_MODAL_FORM";
     constexpr char SYN_OSC_C_MODAL_SOURCE[]   = "SYN_OSC_C_MODAL_SOURCE";
@@ -1295,6 +1306,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_ORG_SUSTAIN[] = "SYN_OSC_C_ORG_SUSTAIN";
     constexpr char SYN_OSC_C_ORG_VELOCITY[] = "SYN_OSC_C_ORG_VELOCITY";
     constexpr char SYN_OSC_C_ORG_IMAGE[] = "SYN_OSC_C_ORG_IMAGE";
+    constexpr char SYN_OSC_C_ORG_VIBRATO[] = "SYN_OSC_C_ORG_VIBRATO";
+    constexpr char SYN_OSC_C_ORG_VIBRATE[] = "SYN_OSC_C_ORG_VIBRATE";
+    constexpr char SYN_OSC_C_ORG_VIBDELAY[] = "SYN_OSC_C_ORG_VIBDELAY";
+    constexpr char SYN_OSC_C_ORG_VCURVE[] = "SYN_OSC_C_ORG_VCURVE";
+    constexpr char SYN_OSC_C_ORG_TUNING[] = "SYN_OSC_C_ORG_TUNING";
     constexpr char SYN_OSC_D_MODAL_FAMILY[]   = "SYN_OSC_D_MODAL_FAMILY";
     constexpr char SYN_OSC_D_MODAL_FORM[]     = "SYN_OSC_D_MODAL_FORM";
     constexpr char SYN_OSC_D_MODAL_SOURCE[]   = "SYN_OSC_D_MODAL_SOURCE";
@@ -1320,6 +1336,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_ORG_SUSTAIN[] = "SYN_OSC_D_ORG_SUSTAIN";
     constexpr char SYN_OSC_D_ORG_VELOCITY[] = "SYN_OSC_D_ORG_VELOCITY";
     constexpr char SYN_OSC_D_ORG_IMAGE[] = "SYN_OSC_D_ORG_IMAGE";
+    constexpr char SYN_OSC_D_ORG_VIBRATO[] = "SYN_OSC_D_ORG_VIBRATO";
+    constexpr char SYN_OSC_D_ORG_VIBRATE[] = "SYN_OSC_D_ORG_VIBRATE";
+    constexpr char SYN_OSC_D_ORG_VIBDELAY[] = "SYN_OSC_D_ORG_VIBDELAY";
+    constexpr char SYN_OSC_D_ORG_VCURVE[] = "SYN_OSC_D_ORG_VCURVE";
+    constexpr char SYN_OSC_D_ORG_TUNING[] = "SYN_OSC_D_ORG_TUNING";
 
     // ── BLEND MODES (Serum-2-style cross-osc warp) — 4 slots (B1..B4) × 4 oscs, any-to-any.
     //    Each slot = MODE (Off/FM/PD/AM/RM/Sync/Warp/Dist/Filter) + SRC (Osc A..D/Sub/Noise/Self) + DEPTH 0..1.
@@ -1583,6 +1604,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_E_ORG_SUSTAIN[] = "SYN_OSC_E_ORG_SUSTAIN";
     constexpr char SYN_OSC_E_ORG_VELOCITY[] = "SYN_OSC_E_ORG_VELOCITY";
     constexpr char SYN_OSC_E_ORG_IMAGE[] = "SYN_OSC_E_ORG_IMAGE";
+    constexpr char SYN_OSC_E_ORG_VIBRATO[] = "SYN_OSC_E_ORG_VIBRATO";
+    constexpr char SYN_OSC_E_ORG_VIBRATE[] = "SYN_OSC_E_ORG_VIBRATE";
+    constexpr char SYN_OSC_E_ORG_VIBDELAY[] = "SYN_OSC_E_ORG_VIBDELAY";
+    constexpr char SYN_OSC_E_ORG_VCURVE[] = "SYN_OSC_E_ORG_VCURVE";
+    constexpr char SYN_OSC_E_ORG_TUNING[] = "SYN_OSC_E_ORG_TUNING";
     constexpr char SYN_OSC_E_WSLOT1_MODE[] = "SYN_OSC_E_WSLOT1_MODE";
     constexpr char SYN_OSC_E_WSLOT1_SRC[] = "SYN_OSC_E_WSLOT1_SRC";
     constexpr char SYN_OSC_E_WSLOT1_DEPTH[] = "SYN_OSC_E_WSLOT1_DEPTH";
@@ -1753,6 +1779,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_F_ORG_SUSTAIN[] = "SYN_OSC_F_ORG_SUSTAIN";
     constexpr char SYN_OSC_F_ORG_VELOCITY[] = "SYN_OSC_F_ORG_VELOCITY";
     constexpr char SYN_OSC_F_ORG_IMAGE[] = "SYN_OSC_F_ORG_IMAGE";
+    constexpr char SYN_OSC_F_ORG_VIBRATO[] = "SYN_OSC_F_ORG_VIBRATO";
+    constexpr char SYN_OSC_F_ORG_VIBRATE[] = "SYN_OSC_F_ORG_VIBRATE";
+    constexpr char SYN_OSC_F_ORG_VIBDELAY[] = "SYN_OSC_F_ORG_VIBDELAY";
+    constexpr char SYN_OSC_F_ORG_VCURVE[] = "SYN_OSC_F_ORG_VCURVE";
+    constexpr char SYN_OSC_F_ORG_TUNING[] = "SYN_OSC_F_ORG_TUNING";
     constexpr char SYN_OSC_F_WSLOT1_MODE[] = "SYN_OSC_F_WSLOT1_MODE";
     constexpr char SYN_OSC_F_WSLOT1_SRC[] = "SYN_OSC_F_WSLOT1_SRC";
     constexpr char SYN_OSC_F_WSLOT1_DEPTH[] = "SYN_OSC_F_WSLOT1_DEPTH";
@@ -1923,6 +1954,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_G_ORG_SUSTAIN[] = "SYN_OSC_G_ORG_SUSTAIN";
     constexpr char SYN_OSC_G_ORG_VELOCITY[] = "SYN_OSC_G_ORG_VELOCITY";
     constexpr char SYN_OSC_G_ORG_IMAGE[] = "SYN_OSC_G_ORG_IMAGE";
+    constexpr char SYN_OSC_G_ORG_VIBRATO[] = "SYN_OSC_G_ORG_VIBRATO";
+    constexpr char SYN_OSC_G_ORG_VIBRATE[] = "SYN_OSC_G_ORG_VIBRATE";
+    constexpr char SYN_OSC_G_ORG_VIBDELAY[] = "SYN_OSC_G_ORG_VIBDELAY";
+    constexpr char SYN_OSC_G_ORG_VCURVE[] = "SYN_OSC_G_ORG_VCURVE";
+    constexpr char SYN_OSC_G_ORG_TUNING[] = "SYN_OSC_G_ORG_TUNING";
     constexpr char SYN_OSC_G_WSLOT1_MODE[] = "SYN_OSC_G_WSLOT1_MODE";
     constexpr char SYN_OSC_G_WSLOT1_SRC[] = "SYN_OSC_G_WSLOT1_SRC";
     constexpr char SYN_OSC_G_WSLOT1_DEPTH[] = "SYN_OSC_G_WSLOT1_DEPTH";
@@ -2093,6 +2129,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_H_ORG_SUSTAIN[] = "SYN_OSC_H_ORG_SUSTAIN";
     constexpr char SYN_OSC_H_ORG_VELOCITY[] = "SYN_OSC_H_ORG_VELOCITY";
     constexpr char SYN_OSC_H_ORG_IMAGE[] = "SYN_OSC_H_ORG_IMAGE";
+    constexpr char SYN_OSC_H_ORG_VIBRATO[] = "SYN_OSC_H_ORG_VIBRATO";
+    constexpr char SYN_OSC_H_ORG_VIBRATE[] = "SYN_OSC_H_ORG_VIBRATE";
+    constexpr char SYN_OSC_H_ORG_VIBDELAY[] = "SYN_OSC_H_ORG_VIBDELAY";
+    constexpr char SYN_OSC_H_ORG_VCURVE[] = "SYN_OSC_H_ORG_VCURVE";
+    constexpr char SYN_OSC_H_ORG_TUNING[] = "SYN_OSC_H_ORG_TUNING";
     constexpr char SYN_OSC_H_WSLOT1_MODE[] = "SYN_OSC_H_WSLOT1_MODE";
     constexpr char SYN_OSC_H_WSLOT1_SRC[] = "SYN_OSC_H_WSLOT1_SRC";
     constexpr char SYN_OSC_H_WSLOT1_DEPTH[] = "SYN_OSC_H_WSLOT1_DEPTH";

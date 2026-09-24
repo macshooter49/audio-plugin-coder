@@ -21,6 +21,15 @@
 //    [7] switch the engine away → the voices' engines freed and the library resident count back to 0 within 6 s.
 //    [8] organicsPreview(id) plays preview audio with no note (or reports no preview.flac in the fixture).
 //    [9] organicViz: while a note sounds the feed carries {osc, notes:[{n,lvl}]}; 300 ms after, it stops.
+//   tp105:
+//   [10] osc E (bank B) on Organics sounds AND its organicViz event says osc 4.
+//   [11] THE PATCHER: an Organics osc A with its output cable cut reaches the output through a rack device (Utility 1);
+//        its direct tap hears the raw engine past a closed filter (post-filter dark, tapped bright). The flow cards (a Chop
+//        on an Organics osc) are gated on the AU: Tests/au_patcher_rules.cpp with ORG_ID=<id> (this harness has no rack clock).
+//   [12] THE RELEASE LINK: with a long amp release (2 s) the piano-like fixture keeps sounding after note-off far longer
+//        than with a short one (0.05 s) — the amp envelope lengthens the Organics release — and the voice ends after both.
+//   [13] the tp105 parameters exist for A–H (VIBRATO / VIBRATE / VIBDELAY / VCURVE / TUNING), and a mod route to dest knob 3
+//        (5272 + o·10 + 3) moves the VIBRATO (pitch wobble on osc A), not Attack.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -195,7 +204,21 @@ static void useOrganic (Inst& a, int osc, const juce::String& id)
     juce::ignoreUnused (js);
 }
 
-static bool want (int k) { const char* o = std::getenv ("ORG_ONLY"); return o == nullptr || std::strchr (o, (char) ('0' + k)) != nullptr; }
+static bool want (int k)
+{
+    const char* o = std::getenv ("ORG_ONLY");
+    if (o == nullptr) return true;
+    if (k >= 10) { const std::string t = "," + std::string (o) + ","; return t.find ("," + std::to_string (k) + ",") != std::string::npos; }
+    return std::strchr (o, (char) ('0' + k)) != nullptr;
+}
+// tp105 — a parameter by its DISPLAY name (the AU harnesses' names), NORMALISED value
+static void setN (TerrainAudioProcessor& p, const char* name, float norm)
+{
+    for (auto* prm : p.getParameters())
+        if (prm->getName (256) == name) { prm->setValueNotifyingHost (norm); return; }
+    std::printf ("!! no parameter named '%s'\n", name); std::exit (2);
+}
+static double rmsWin (const std::vector<float>& x, size_t a, size_t n) { return rmsOf (x, a, a + n); }
 
 int main()
 {
@@ -434,6 +457,122 @@ int main()
              (js.isEmpty() ? juce::String ("(nothing)") : js).toStdString() + fmt (" · after release+0.4 s: %.0f events", after ? (double) ev3.size() : 0.0));
     }
 
+
+    // ═══ [10] OSC E + organicViz osc 4 ═══
+    std::printf ("\n[10] Osc E (bank B) on Organics: sound + organicViz osc 4\n");
+    if (want (10))
+    {
+        Inst a;
+        setP (*a.p, ParameterIDs::SYN_OSC_A_ENABLE, 0.f);
+        setP (*a.p, ParameterIDs::kOsc_ENABLE[4], 1.f);
+        a.tick (4);
+        useOrganic (a, 4, "test.sine");
+        const auto st = a.waitLoaded (4);
+        a.p->uiClients_.store (1);
+        a.clear(); a.block ({ {69,1} }); a.run (0.4);
+        juce::Array<juce::var> ev; const bool got = a.p->takeOrganicViz (ev);
+        int oscSeen = -1; for (auto& e : ev) if ((int) e["osc"] >= 0) oscSeen = (int) e["osc"];
+        const size_t s0 = (size_t) (0.1 * SR); double hz = 0;
+        const double c = centsOff (a.L, s0, 8192, 440.0, &hz), r = rmsOf (a.L, s0, s0 + 8192);
+        chk (st == "ok" && r > 1e-3 && std::fabs (c) <= 3.0 && got && oscSeen == 4, "10 osc E sounds at 440 Hz and its organicViz event is osc 4",
+             ("status " + st.toStdString() + " · ") + fmt ("rms %.1f dBFS · %+.2f cents · viz events %.0f, osc %.0f", dbOf (r), c, (double) ev.size(), (double) oscSeen));
+        a.p->uiClients_.store (0);
+    }
+
+    // ═══ [11] THE PATCHER ═══
+    std::printf ("\n[11] The Patcher: rack routing, direct taps, a flow card\n");
+    if (want (11))
+    {
+        struct Tp { bool rack, direct, inFilter, cutOut; };
+        auto rend = [] (Tp t) {
+            Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+            setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+            setN (*a.p, "Synth OSC A Filter 1 Send", t.inFilter ? 1.f : 0.f);
+            setP (*a.p, ParameterIDs::SYN_FILTER1_TYPE, 0.f); setP (*a.p, ParameterIDs::SYN_FILTER1_CUT, 60.f);
+            if (t.cutOut) setN (*a.p, "Synth OSC A Out", 0.f);
+            if (t.rack)
+            {
+                setN (*a.p, "Utility In Chain", 1.f); setN (*a.p, "Utility Power", 1.f); setN (*a.p, "Utility Chain Rank", 0.5f);
+                setN (*a.p, "Utility SRC_A", 1.f);
+                setN (*a.p, "Utility Direct Taps", t.direct ? 1.0f / 2047.0f : 0.f);
+            }
+            a.tick (60); a.run (0.2);
+            a.clear(); a.block ({ {69,1} }); a.run (0.5);
+            return a.L;
+        };
+        const auto viaRack = rend ({ true, false, false, true });
+        const auto dark    = rend ({ true, false, true,  false });
+        const auto tapped  = rend ({ true, true,  true,  false });
+        const size_t s0 = (size_t) (0.15 * SR);
+        const double lr = dbOf (rmsWin (viaRack, s0, 8192)), ld = dbOf (rmsWin (dark, s0, 8192)), lt = dbOf (rmsWin (tapped, s0, 8192));
+        double hz = 0; const double c = centsOff (viaRack, s0, 8192, 440.0, &hz);
+        chk (lr > -40.0 && std::fabs (c) <= 3.0, "11a output cable cut → the Organics osc reaches the output THROUGH Utility 1 (rack routing)",
+             fmt ("%.1f dBFS at %+.2f cents", lr, c));
+        chk (lt > ld + 20.0, "11b a direct tap hears the raw Organics engine past a closed filter; the post-filter tap is dark",
+             fmt ("post-filter tap %.1f dBFS · direct tap %.1f dBFS", ld, lt));
+        // (the flow cards — a Chop on an Organics osc — are gated on the REAL AU: Tests/au_patcher_rules.cpp with ORG_ID set)
+    }
+
+    // ═══ [12] THE RELEASE LINK ═══
+    std::printf ("\n[12] The amp envelope's release lengthens the Organics release; the voice ends after both\n");
+    if (want (12))
+    {
+        auto tail = [] (float ampRelMs, double& t60s, bool& voiceEnded) {
+            Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+            setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+            setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_RELEASE, 0.f);          // the knob's shortest time (20 ms)
+            setP (*a.p, ParameterIDs::SYN_ENV_AMP_R, ampRelMs);
+            a.clear(); a.block ({ {69,1} }); a.run (0.5);
+            const size_t off = a.L.size();
+            a.block ({ {69,0} }); a.run (3.5);
+            const double ref = rmsOf (a.L, off - 4800, off);
+            t60s = -1;
+            for (size_t w = off; w + 480 <= a.L.size(); w += 480) if (rmsOf (a.L, w, w + 480) < ref * 1e-3) { t60s = (double) (w - off) / SR; break; }
+            voiceEnded = true;
+            for (int i = 0; i < TerrainAudioProcessor::kSynthVoiceCount; ++i) if (auto* v = a.p->synthVoices_[(size_t) i]) if (v->isVoiceActive()) voiceEnded = false;
+        };
+        double tS = 0, tL = 0; bool eS = false, eL = false;
+        tail (50.f, tS, eS); tail (2000.f, tL, eL);
+        chk (tS > 0 && tL > 0 && tL > 1.5 && tS < 0.2 && eS && eL,
+             "12 amp release 0.05 s → a short tail; 2 s → the Organics tail follows it (−60 dB), and both voices end",
+             fmt ("−60 dB after note-off: amp 0.05 s → %.3f s · amp 2 s → %.3f s · voices ended %.0f / %.0f", tS, tL, eS ? 1 : 0, eL ? 1 : 0));
+    }
+
+    // ═══ [13] THE NEW PARAMETERS + DEST KNOB 3 = VIBRATO ═══
+    std::printf ("\n[13] tp105 parameters A–H; mod dest knob 3 drives the Vibrato\n");
+    if (want (13))
+    {
+        Inst a;
+        int have = 0;
+        for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+            for (auto* tbl : { ParameterIDs::kOsc_ORG_VIBRATO, ParameterIDs::kOsc_ORG_VIBRATE, ParameterIDs::kOsc_ORG_VIBDELAY, ParameterIDs::kOsc_ORG_VCURVE, ParameterIDs::kOsc_ORG_TUNING })
+                have += a.p->apvts.getParameter (tbl[o]) != nullptr ? 1 : 0;
+        const float dVr = a.p->apvts.getParameter (ParameterIDs::SYN_OSC_H_ORG_VIBRATE)->getDefaultValue();
+        chk (have == 40 && std::fabs (dVr - 0.417f) < 1e-3, "13a VIBRATO/VIBRATE/VIBDELAY/VCURVE/TUNING declared for A–H (defaults per the amendment)",
+             fmt ("%.0f of 40 · H VIBRATE default %.3f", have, dVr));
+        auto wob = [] (float depth) {
+            Inst b; useOrganic (b, 0, "test.sine"); b.waitLoaded (0);
+            setP (*b.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+            setP (*b.p, ParameterIDs::SYN_OSC_A_ORG_VIBDELAY, 0.f);
+            b.p->setSynthModMatrix ("[{\"s\":230,\"d\":" + juce::String (wc::organicDest (0, 3)) + ",\"v\":" + juce::String (depth) + "}]");
+            juce::MidiBuffer cc; cc.addEvent (juce::MidiMessage::controllerEvent (1, 1, 127), 0);
+            b.block ({}, &cc); b.run (0.1);
+            b.clear(); b.block ({ {69,1} }); b.run (1.5);
+            // per-cycle pitch spread by zero crossings over 0.6..1.5 s
+            double lo = 1e9, hi = -1e9, last = -1;
+            for (size_t i = (size_t) (0.6 * SR); i < b.L.size(); ++i)
+                if (b.L[i - 1] < 0.f && b.L[i] >= 0.f)
+                {
+                    const double t = (double) (i - 1) + (double) (-b.L[i - 1]) / (double) (b.L[i] - b.L[i - 1]);
+                    if (last >= 0) { const double c = 1200.0 * std::log2 ((SR / (t - last)) / 440.0); lo = std::min (lo, c); hi = std::max (hi, c); }
+                    last = t;
+                }
+            return 0.5 * (hi - lo);
+        };
+        const double w0 = wob (0.f), w1 = wob (1.f);
+        chk (w0 < 2.0 && w1 > 20.0, "13b mod wheel → dest 5275 (osc A knob 3) = VIBRATO: the pitch wobbles, and not at depth 0",
+             fmt ("per-cycle pitch spread (test.sine's marker partial jitters the zero crossings ~1 ¢): route depth 0 ±%.2f cents · depth 1 ±%.1f cents", w0, w1));
+    }
     std::printf ("\norganics_integration_cert: %d PASS · %d FAIL · %d SKIP\n", npass, nfail, nskip);
     return nfail ? 1 : 0;
 }

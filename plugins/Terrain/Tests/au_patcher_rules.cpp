@@ -14,6 +14,9 @@
 //    clang++ -O2 -std=c++17 Tests/au_patcher_rules.cpp -o /tmp/aupr \
 //            -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreAudio
 //    /tmp/aupr
+//  tp105 — ORG_ID=<organics id> [TERRAIN_ORGANICS_DIR=<lib>]: the same rules with osc A / E on the ORGANICS engine
+//    (engine 7 + <ORGANICS><OSC slot id/> spliced into the state, as a host restores it) — an Organics oscillator is
+//    routed, tapped and chopped exactly like any other. TERRAIN_AU_BUNDLE=<Terrain.component> side-loads that build.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -24,6 +27,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <dlfcn.h>
 static const double SR = 48000.0; static const int BLK = 512;
 static int npass = 0, nfail = 0;
 static void chk (bool ok, const char* what, const char* detail = "")
@@ -37,6 +41,19 @@ struct Au
     {
         setenv ("TERRAIN_DETERMINISTIC", "1", 1);
         AudioComponentDescription d {}; d.componentType = kAudioUnitType_MusicDevice; d.componentSubType = 'Tern'; d.componentManufacturer = 'Wvcr';
+        static AudioComponent reg = nullptr;   // tp105 — TERRAIN_AU_BUNDLE: that build, in-process, no install
+        if (const char* b = getenv ("TERRAIN_AU_BUNDLE"))
+        {
+            if (reg == nullptr)
+            {
+                void* h = dlopen ((std::string (b) + "/Contents/MacOS/Terrain").c_str(), RTLD_NOW | RTLD_LOCAL);
+                auto fac = h ? (AudioComponentFactoryFunction) dlsym (h, "TerrainAUFactory") : nullptr;
+                if (fac == nullptr) { printf ("cannot load %s\n", b); return false; }
+                AudioComponentDescription rd = d; rd.componentSubType = 'TerX';
+                reg = AudioComponentRegister (&rd, CFSTR ("Waves Crate: Terrain (bundle under test)"), 0x10000, fac);
+            }
+            d.componentSubType = 'TerX';
+        }
         AudioComponent c = AudioComponentFindNext (nullptr, &d); if (! c || AudioComponentInstanceNew (c, &au) != noErr) return false;
         AudioStreamBasicDescription f {}; f.mSampleRate = SR; f.mFormatID = kAudioFormatLinearPCM;
         f.mFormatFlags = kAudioFormatFlagsNativeFloatPacked | kAudioFormatFlagIsNonInterleaved;
@@ -72,6 +89,34 @@ struct Au
         return AudioUnitSetParameter (au, it->second, kAudioUnitScope_Global, 0, (float) idx, 0) == noErr;
     }
     void note (int n, int v) { MusicDeviceMIDIEvent (au, v ? 0x90 : 0x80, (UInt32) n, (UInt32) v, 0); }
+    // tp105 — <ORGANICS><OSC slot=…/></ORGANICS> spliced into jucePluginState and handed back (a host restore)
+    bool injectOrganic (const std::string& id, int slot)
+    {
+        CFPropertyListRef dict = nullptr; UInt32 sz = sizeof dict;
+        if (AudioUnitGetProperty (au, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &dict, &sz) != noErr || dict == nullptr) return false;
+        CFDataRef d0 = (CFDataRef) CFDictionaryGetValue ((CFDictionaryRef) dict, CFSTR ("jucePluginState"));
+        if (d0 == nullptr) { CFRelease (dict); return false; }
+        std::string xml ((const char*) CFDataGetBytePtr (d0) + 8, (size_t) (CFDataGetLength (d0) - 8)); while (! xml.empty() && xml.back() == 0) xml.pop_back();
+        const size_t close = xml.rfind ("</");
+        if (close == std::string::npos) { CFRelease (dict); return false; }
+        xml.insert (close, "<ORGANICS><OSC slot=\"" + std::to_string (slot) + "\" id=\"" + id + "\" rev=\"1\"/></ORGANICS>");
+        std::vector<UInt8> out (8 + xml.size() + 1, 0);
+        const uint32_t magic = 0x21324356u, len = (uint32_t) (xml.size() + 1);
+        std::memcpy (out.data(), &magic, 4); std::memcpy (out.data() + 4, &len, 4); std::memcpy (out.data() + 8, xml.data(), xml.size());
+        CFMutableDictionaryRef m = CFDictionaryCreateMutableCopy (nullptr, 0, (CFDictionaryRef) dict);
+        CFDataRef data = CFDataCreate (nullptr, out.data(), (CFIndex) out.size());
+        CFDictionarySetValue (m, CFSTR ("jucePluginState"), data);
+        CFPropertyListRef pl = m; const OSStatus st = AudioUnitSetProperty (au, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &pl, sizeof pl);
+        CFRelease (data); CFRelease (m); CFRelease (dict);
+        return st == noErr;
+    }
+    /** ORG_ID set → the oscillator (A, or E for bank B) plays that Organics instrument. */
+    void orgify (bool bankB)
+    {
+        const char* id = getenv ("ORG_ID"); if (id == nullptr) return;
+        setIdx (bankB ? "Synth OSC E Engine" : "Synth OSC A Engine", 7); pump (0.2);
+        injectOrganic (id, bankB ? 4 : 0); pump (1.5);
+    }
     void pump (double sec) { const double t0 = CFAbsoluteTimeGetCurrent(); while (CFAbsoluteTimeGetCurrent() - t0 < sec) CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.01, false); }
     // Renders `blocks` blocks, appending every sample to `out` (L then R per block). The timestamp
     // keeps advancing across calls — an AU that sees sample time go backwards stops rendering.
@@ -128,6 +173,7 @@ static std::vector<float> renderTap (bool bankB, Tap t)
     const char* send = bankB ? "Synth OSC E Filter 1 Send" : "Synth OSC A Filter 1 Send";
     const char* src  = bankB ? "Utility SRC_E" : "Utility SRC_A";
     if (bankB) { a.set ("Osc E Enable", 1.0f); a.set ("Synth OSC E Level", 0.5f); a.set ("Osc A Enable", 0.0f); a.pump (0.6); }   // bank B is built lazily on the message thread
+    a.orgify (bankB);   // tp105 — ORG_ID: the same rules on an Organics oscillator
     a.set (send, t.inFilter ? 1.0f : 0.0f);
     a.setIdx ("Synth Filter 1 Type", 0);   // the shipped default is NONE (27); type 0 is a low-pass
     a.set ("Synth Filter 1 Cutoff", 0.06f);
@@ -256,6 +302,7 @@ int main (int argc, char** argv)
     auto renderChop = [] (bool inline_, bool reverb, float mix) -> std::vector<float>
     {
         Au a; if (! a.open()) { printf ("no AU\n"); exit (2); }
+        a.orgify (false);   // tp105 — ORG_ID
         a.setIdx ("Flow Chain 1", 2);
         for (const char* p : { "Flow Chop Src B", "Flow Chop Src C", "Flow Chop Src D", "Flow Chop Src Sub", "Flow Chop Src Noise",
                                "Flow Chop Src E", "Flow Chop Src F", "Flow Chop Src G", "Flow Chop Src H" }) a.set (p, 0.0f);
