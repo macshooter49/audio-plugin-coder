@@ -687,6 +687,35 @@ public:
     static juce::File banksFactoryRoot();   // the bundle's Resources/Banks — wtFactoryRoot's up-walk
     juce::String getPresetCatalogJson() const;
     bool savePresetToBank (const juce::String& bank, const juce::String& metaJson, juce::File& out, juce::String& error);
+    static juce::File userSamplesRoot();    // tp103 — <terrainDataDir>/Samples, or the folder chosen in Settings
+
+    // ══ tp103 — SETTINGS → PERFORMANCE, FOR REAL (Sleep when silent · Cut tails on stop · quality) ═══════════
+    //  All three are GLOBAL settings (the page's S object, InstrumentSettings.json) read at construction
+    //  (tw::prefs::readEnginePrefs) so a session that never opens an editor honours them; the page's natives
+    //  keep them current. Audio-thread state is below, private; the laws are at sleepGate / tailStage.
+    void setSleepWhenSilent (bool on) noexcept { sleepEnabled_.store (on, std::memory_order_relaxed); }
+    void setCutTailsOnStop  (bool on) noexcept { cutTailsOnStop_.store (on, std::memory_order_relaxed); }
+    // rt: 0 Eco · 1 Standard · 2 High   off: 0 Same · 1 High · 2 Best   presetsMay: a preset's own Quality knob wins
+    void setQualityPrefs (int rt, int off, bool presetsMay) noexcept
+    {
+        rtQuality_.store (juce::jlimit (0, 2, rt), std::memory_order_relaxed);
+        offQuality_.store (juce::jlimit (0, 2, off), std::memory_order_relaxed);
+        presetsMayQuality_.store (presetsMay, std::memory_order_relaxed);
+    }
+    int  getOffQuality()      const noexcept { return offQuality_.load (std::memory_order_relaxed); }
+    bool getPresetsMayQuality() const noexcept { return presetsMayQuality_.load (std::memory_order_relaxed); }
+    bool getSleepWhenSilent() const noexcept { return sleepEnabled_.load (std::memory_order_relaxed); }
+    bool getCutTailsOnStop()  const noexcept { return cutTailsOnStop_.load (std::memory_order_relaxed); }
+    bool isSleeping()         const noexcept { return sleeping_.load (std::memory_order_relaxed); }
+    /** The voice filter's 2× policy the last block ran with: 0 never · 1 when driven (tp21) · 2 always. */
+    int  filterOsPolicyNow()  const noexcept { return filterOsPolicy_.load (std::memory_order_relaxed); }
+    /** The Distortion tier a device whose own Quality knob reads `presetQ` actually runs (0 Off … 3 Ultra). */
+    int  effectiveDistQuality (int presetQ) const noexcept;
+    /** Output peak since the last call (the Settings → Test audio meter). Message thread. */
+    float takeOutputPeak() noexcept { return outPeakHold_.exchange (0.0f, std::memory_order_relaxed); }
+    /** Empties every stateful effect in the instrument: flushAudioTails() plus the rack reverbs (instance 1 and
+        every built pooled one), the rack Delay and the flow cards' buffers. Audio thread only. */
+    void flushRackTails() noexcept;
 
     // ═══ fb621 — THE ENVIRONMENT SEAT ══════════════════════════════════════════════════════════
     //  There is no patcher yet. This is the hole it will drop into: one blob, round-tripped and
@@ -3301,6 +3330,22 @@ private:
        reader. */
     std::atomic<bool> tailFlushPending_ { false };
     void flushAudioTails() noexcept;
+
+    // ══ tp103 — Settings → Performance: the audio-thread half (see setSleepWhenSilent above) ═══════════════════
+    std::atomic<bool>  sleepEnabled_ { true }, cutTailsOnStop_ { false }, presetsMayQuality_ { true };
+    std::atomic<int>   rtQuality_ { 1 }, offQuality_ { 1 }, filterOsPolicy_ { 1 };
+    std::atomic<bool>  sleeping_ { false };
+    std::atomic<float> outPeakHold_ { 0.0f };
+    long long silentRun_  = 0;       // samples of output below −100 dBFS with no voice sounding (audio thread)
+    bool  hostWasPlaying_ = false;   // last block's transport, for the play→stop / stop→play edges
+    bool  playEdgeStart_  = false;   // this block started the transport (read by the tail stage)
+    bool  playEdgeStop_   = false;   // this block stopped it
+    int   cutPhase_ = 0, cutPos_ = 0, cutLen_ = 480;   // 0 idle · 1 fading out · 2 fading back in
+    /** Top of processBlock: true = Terrain is asleep and this block was answered with silence. */
+    bool  sleepGate (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi) noexcept;
+    /** Bottom of processBlock, just above the capture: the cut-tails fade and the silence detector. */
+    void  tailStage (juce::AudioBuffer<float>& buffer, int numSamples) noexcept;
+    double tailWindowSeconds() const noexcept;   // how long the output must stay silent before sleeping
 
     std::array<DelayEngine, (size_t) kFxExtra>          delayPool_;
     std::array<tw::DistortionEngine, (size_t) kFxExtra> distPool_;

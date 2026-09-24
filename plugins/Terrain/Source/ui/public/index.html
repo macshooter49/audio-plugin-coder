@@ -7670,6 +7670,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   #st-overlay .lst .r .x{width:14px;flex:none;display:flex;justify-content:center;color:rgba(255,255,255,.5);cursor:pointer;}
   #st-overlay .lst .r .x:hover{color:#fff;}
   #st-overlay .lst .r .lamp{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.14);flex:none;}
+  #st-overlay .lst .r .lamp.lv{background:#B794FF;}   /* tp103 — the lamp never lit: lampFlash added .lv and nothing styled it */
+  #st-overlay .lst .r .c3{width:92px;flex:none;color:var(--text-primary);font-weight:500;}
+  #st-overlay .lst .r .n.dim{color:var(--text-secondary);}
+  #st-overlay .lst .r .lk{flex:none;font-size:9.5px;color:var(--text-secondary);cursor:pointer;padding:0 2px;white-space:nowrap;}
+  #st-overlay .lst .r .lk:hover{color:var(--purple-400);}
+  #st-overlay .lst .r .lk.off{opacity:.3;pointer-events:none;}
+  #st-overlay .lst .r .tg{flex:none;font-size:9px;font-weight:500;color:var(--purple-400);}
   #st-overlay .lst .r.hd{height:22px;font-size:9.5px;font-weight:500;color:var(--text-secondary);}
   #st-overlay .lst .r.hd:hover{background:transparent;}
   #st-overlay .lst .r.learn .n{color:var(--purple-400);}
@@ -7836,7 +7843,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     cc:[{cc:1,p:'Mod Wheel',fixed:true}],
     onStart:'Init', autoVer:'Off', scan:'On',
     theme:'Dark', size:100, motion:'On', hover:'On', values:'On', drag:'Vertical', sens:.5, wheel:'On', dbl:'Reset', openOn:'Last used',
-    cpuMeter:'Off', rtQ:'Standard', offQ:'High', lockQ:'Off', voices:32, sleep:'On', tails:'Off', capture:'On', fps:60,
+    cpuMeter:'Off', rtQ:'Standard', offQ:'High', presetQ:'On', voices:32, sleep:'On', tails:'Off', capture:'On', fps:60, sizeSet:false,
     autoUpd:'On', chanUpd:'Beta' };
   var S=JSON.parse(JSON.stringify(DEF));
   if(window.__stInitS){ try{ Object.keys(window.__stInitS).forEach(function(k){ if(k in DEF) S[k]=window.__stInitS[k]; }); }catch(e){} }
@@ -7906,7 +7913,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    {p:'account',g:'Privacy',id:'usage',label:'Anonymous usage data',help:'Off unless you turn it on. When it’s on, Terrain records crash reports, which pages, features, knobs and presets you use, your Terrain and OS versions, the plugin format, and how long each session lasts. It never includes your audio, your files or anything personal. In this build the data stays in a log on this computer; nothing is sent until the Waves Crate usage service is switched on.',where:'Every host',ctl:onoff('usage')},
 
    /* ── AUDIO & MIDI (standalone) ── */
-   {p:'audio',g:'Audio device',id:'driver',label:'Audio driver',help:'The kind of audio system Terrain talks to. On a Mac it is Core Audio; on Windows you would see ASIO, WASAPI and DirectSound here.',where:'Standalone app only',need:'setAudioSetup',
+   {p:'audio',g:'Audio device',id:'driver',label:'Audio driver',help:'The kind of audio system Terrain talks to. On a Mac it is Core Audio. On Windows: Windows Audio (WASAPI — shared, exclusive and low-latency) and DirectSound. ASIO is not in this beta yet: it needs Steinberg’s ASIO SDK in the build.',where:'Standalone app only',need:'setAudioSetup',
      ctl:menu('driver',function(){ return (AS&&AS.drivers&&AS.drivers.length)?AS.drivers.map(function(n){ return {label:n}; }):[{label:'CoreAudio'}]; })},
    {p:'audio',g:'Audio device',id:'out',label:'Output device',help:'Where Terrain plays. Unplugging it falls back to the system output and says so.',where:'Standalone app only',need:'setAudioSetup',
      ctl:menu('out',function(){ return (audioOuts||['System output']).map(function(n){ return {label:n}; }); })},
@@ -7923,6 +7930,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      ctl:{t:'info',get:function(){ var one=S.buf/S.sr*1000;
        if(AS&&AS.standalone&&AS.outLatMs!=null){ var o=Math.max(one,AS.outLatMs), i=Math.max(0,AS.inLatMs||0); return o.toFixed(1)+' ms out  ·  '+(o+i).toFixed(1)+' ms round trip'; }
        var dev=(ac&&ac.outputLatency?ac.outputLatency*1000:(ac&&ac.baseLatency?ac.baseLatency*1000:2.9)); return one.toFixed(1)+' ms out  ·  '+(2*one+dev).toFixed(1)+' ms round trip'; }}},
+   {p:'audio',g:'Audio device',id:'devscan',label:'Rescan devices',help:'Plugged an interface in (or out)? This asks every driver for its devices again. The lists above also refresh by themselves every few seconds while this page is open.',where:'Standalone app only',need:'rescanAudioDevices',
+     ctl:{t:'btns',btns:[{label:'Rescan devices',on:function(){ rescanDevices(); }}]}},
    {p:'audio',g:'Audio device',id:'test',blk:'test',label:'Test audio',help:'Plays a short chime through the device and channels above — press it after changing anything to hear that sound really comes out.',where:'Standalone app only'},
    {p:'audio',g:'MIDI inputs',id:'ports',blk:'ports',label:'MIDI inputs',help:'Tick every keyboard or controller Terrain should listen to. The lamp flashes when a port sends anything.',where:'Standalone app only',need:'setMidiInput'},
    {p:'audio',g:'MIDI inputs',id:'qwerty',label:'Computer keyboard',help:'A W S E D F T G Y H U J K play an octave from C, at velocity 100.',where:'Standalone app only',ctl:{t:'chips',opts:['On','Off'],get:function(){ return S.qwerty?'On':'Off'; },set:function(v){ S.qwerty=v==='On'; }}},
@@ -7946,13 +7955,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    {p:'control',g:'Controllers',id:'pc',label:'Program change loads presets',help:'Lets a controller or a DAW clip step through the current pack.',where:'Every host',ctl:onoff('pc')},
 
    /* ── PERFORMANCE ── */
-   {p:'perf',g:'Quality',id:'rtQ',label:'Playing quality',help:'Oversampling while you play. Eco saves CPU on big patches; High is cleaner on bright FM, folding and distortion.',where:'Every host · every instance',ctl:chips(['Eco','Standard','High'],'rtQ')},
-   {p:'perf',g:'Quality',id:'offQ',label:'Bounce quality',help:'Used automatically when the DAW renders offline — slower than real time, so it can afford more.',where:'Every host',ctl:chips(['Same','High','Best'],'offQ')},
-   {p:'perf',g:'Quality',id:'lockQ',label:'Presets can change quality',help:'Off keeps your choice above no matter what a preset asks for.',where:'Every host',ctl:onoff('lockQ')},
+   {p:'perf',g:'Quality',id:'rtQ',label:'Playing quality',help:'The 2× oversampling of each voice’s filter: Eco never runs it (least CPU, a driven Ladder or Diode filter aliases more), Standard runs it only while a filter is driven or near self-oscillation, High runs it on every drive-able filter type all the time. With “Presets can change quality” off it also sets the Distortion’s tier (Eco = each mode’s own floor, Standard = 2×, High = 2× with anti-aliasing).',where:'Every host · every instance',ctl:chips(['Eco','Standard','High'],'rtQ')},
+   {p:'perf',g:'Quality',id:'offQ',label:'Bounce quality',help:'Used only while the DAW renders offline. Same: the playing quality. High: every drive-able voice filter oversampled and the Distortion at least High. Best: the same, with the Distortion at Ultra.',where:'Every host',ctl:chips(['Same','High','Best'],'offQ')},
+   {p:'perf',g:'Quality',id:'presetQ',label:'Presets can change quality',help:'On: a preset’s own Distortion Quality knob is used as saved. Off: your Playing quality sets it for every preset.',where:'Every host',ctl:onoff('presetQ')},
    {p:'perf',g:'CPU',id:'voices',label:'Voice ceiling',help:'The most notes Terrain will ever sound at once, across unison. Lower it on a laptop; the oldest note is released first.',where:'Every host · every instance',
      ctl:{t:'num',key:'voices',min:8,max:96,step:1,unit:'voices',reset:32,fmt:function(v){ return v.toFixed(0); }}},
-   {p:'perf',g:'CPU',id:'sleep',label:'Sleep when silent',help:'When nothing plays and every tail has died, Terrain stops computing until the next note.',where:'Every host',ctl:onoff('sleep')},
-   {p:'perf',g:'CPU',id:'tails',label:'Cut tails when the DAW stops',help:'On: pressing stop silences reverb and delay tails at once.',where:'Every host',ctl:onoff('tails')},
+   {p:'perf',g:'CPU',id:'sleep',label:'Sleep when silent',help:'When no note is sounding and the output has stayed below −100 dB for a second (longer if a delay could still echo), Terrain stops computing and sends silence. Any MIDI, the transport starting, a preview or live input wakes it on the same block. Never during an offline bounce.',where:'Every host',ctl:onoff('sleep')},
+   {p:'perf',g:'CPU',id:'tails',label:'Cut tails when the DAW stops',help:'On: when the DAW’s transport stops, everything still ringing — note releases, reverb, delay and every effect tail — fades out over 10 ms and is emptied, so the next play starts clean.',where:'Every host',ctl:onoff('tails')},
    {p:'perf',g:'CPU',id:'cpu',blk:'cpu',label:'CPU meter in the header',help:'A small meter on the left of the header, opposite the version. The measurement already exists (the DSP clock); this shows it.',where:'Every host'},
    {p:'perf',g:'Memory & screen',id:'capture',label:'DAW capture',help:'Terrain keeps the last minute of what it played, ready to drag out. Off frees about 200 MB and records nothing.',where:'Every host · every instance',ctl:onoff('capture')},
    {p:'perf',g:'Memory & screen',id:'fps',label:'Screen refresh',help:'How often the window redraws. 30 halves the drawing cost on slow machines.',where:'Every host',ctl:{t:'chips',opts:['60','30'],get:function(){ return String(S.fps); },set:function(v){ S.fps=+v; },unit:'fps'}},
@@ -7964,14 +7973,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    {p:'library',g:'Saving',id:'saveDef',label:'Save as default',help:'Makes the current sound what every new Terrain starts with.',where:'Every host',ctl:{t:'btns',btns:[{label:'Save current sound as default',on:function(){ S.onStart='Your default'; save(); paintPage(); toast('Saved the current sound as the default for new instances'); }}]}},
    {p:'library',g:'Bring sounds in',id:'import',label:'Import',help:'Presets, a whole pack (.zip), or a folder. Open the preset browser to drop files in.',where:'Every host',ctl:{t:'btns',btns:[{label:'Open the browser…',on:function(){ openBrowser(); }}]}},
    {p:'library',g:'Bring sounds in',id:'export',label:'Export',help:'Everything you have saved, as one pack to share or back up. Use Export in the preset browser.',where:'Every host',ctl:{t:'btns',btns:[{label:'Open the browser…',on:function(){ openBrowser(); }}]}},
-   {p:'library',g:'Where things live',id:'rescan',blk:'rescan',label:'Rescan library',help:'Re-reads every pack from disk — use it after copying presets in by hand.',where:'Every host'},
-   {p:'library',g:'Where things live',id:'scan',label:'Scan on start',help:'Off opens faster with a big library; press Rescan when you add files.',where:'Every host',ctl:onoff('scan')},
+   {p:'library',g:'Where things live',id:'libdirs',blk:'libdirs',label:'Folders',help:'Where your presets and samples are kept, and where the factory library lives. Show opens the folder in Finder / Explorer; Change… picks another (an external drive, a synced folder) and Terrain rescans. Presets already in the old folder stay there — move them across to keep them in the list.',where:'Every host · this computer'},
+   {p:'library',g:'Where things live',id:'rescan',blk:'rescan',label:'Rescan library',help:'Re-reads every preset pack and sample folder from disk — use it after copying presets or samples in by hand.',where:'Every host'},
+   {p:'library',g:'Where things live',id:'scan',label:'Scan on start',help:'On: a new Terrain window reads your whole library as it opens. Off: it waits until you open the preset browser or press Rescan — faster with a big library.',where:'Every host',ctl:onoff('scan')},
    {p:'library',g:'Factory',id:'factory',label:'Factory library',help:'The sounds that ship with Terrain. New packs will arrive through updates.',where:'Every host',st:'soon',ctl:{t:'info',get:function(){ return 'Terrain Factory · 1.0 · beta'; },link:{label:'Get new sounds',soon:true}}},
 
    /* ── INTERFACE ── */
    {p:'ui',g:'Look',id:'theme',label:'Theme',help:'Dark or Light. More looks are on the Themes page.',where:'Every host · every instance',ctl:chips(['Dark','Light'],'theme')},
-   {p:'ui',g:'Look',id:'size',label:'Window size',help:'Where every new Terrain window opens. Dragging the corner still works; it remembers the last size you dragged to.',where:'Every host',
-     ctl:menu('size',function(){ return [65,80,100,125,150,175,190].map(function(p){ return {label:p+' %',value:p,ct:Math.round(820*p/100)+' × '+Math.round(672*p/100)}; }); },function(v){ return v+' %<span class="u">'+Math.round(820*v/100)+' × '+Math.round(672*v/100)+'</span>'; })},
+   {p:'ui',g:'Look',id:'size',label:'Window size',help:'Resizes this window now, and every NEW Terrain window opens at it. Dragging the corner still works — a window (or a project) you have sized yourself keeps its own size.',where:'Every host',
+     ctl:menu('size',function(){ return [65,80,100,125,150,175,190].map(function(p){ return {label:p+' %',value:p,ct:Math.round(820*p/100)+' × '+Math.round(672*p/100)}; }); },function(v){ return v+' %<span class="u">'+Math.round(820*v/100)+' × '+Math.round(672*v/100)+'</span>'; },function(){ S.sizeSet=true; })},
    {p:'ui',g:'Look',id:'motion',label:'Motion',help:'Off: nothing animates on its own — knobs still redraw, LFOs, envelopes, filters and trackers still move, and the window costs less CPU.',where:'Every host · every instance',ctl:onoff('motion')},
    {p:'ui',g:'Help',id:'hover',label:'Hover help',help:'The card that explains a control when you rest on it (bottom right of the terrain view).',where:'Every host',ctl:onoff('hover')},
    {p:'ui',g:'Help',id:'values',label:'Values while turning',help:'Shows the number under a knob while you drag it.',where:'Every host',ctl:onoff('values')},
@@ -7992,7 +8002,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    {p:'about',g:'Updates',id:'autoUpd',label:'Check automatically',help:'Once a day, quietly. You are told, never interrupted.',where:'Every host',st:'soon',ctl:onoff('autoUpd')},
    {p:'about',g:'Updates',id:'chanUpd',label:'Update channel',help:'Beta gets new builds first.',where:'Every host',st:'soon',ctl:chips(['Beta','Stable'],'chanUpd')},
    {p:'about',g:'Licence',id:'lic',blk:'lic',label:'Licence',help:'Who Terrain is registered to, on how many computers, and how it is signed.',where:'Every host · this computer',st:'soon'},
-   {p:'about',g:'Support',id:'sup',blk:'sup',label:'Support',help:'For the beta: copy your system info into a message and tell us what happened.',where:'—'},
+   {p:'about',g:'Support',id:'sup',blk:'sup',label:'Support',help:'Report a bug… opens your mail app with a message to contact@wavescrate.com already written — the version, your system and this session filled in; you add what happened. Report a crash… does the same and shows you the crash log to attach. No mail app? The report is copied for you to paste into any email.',where:'—'},
    {p:'about',g:'Waves Crate',id:'wc',blk:'wc',label:'About Waves Crate',help:'',where:'—'},
    {p:'about',g:'Reset',id:'reset',label:'Reset all settings',help:'Puts every setting on this page back to how Terrain shipped. Your presets, packs and registration are not touched.',where:'Every host · this computer',ctl:{t:'btns',btns:[{label:'Reset settings…',on:function(){ resetSheet(); }}]}}
   ];
@@ -8012,14 +8022,14 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       case 'vel': callN('setVelCurve', S.vmode==='Fixed'? 999 : S.vcurve); break;
       case 'chan': callN('setMidiChannel', S.chan==='Omni'?0:parseInt(String(S.chan).replace('Channel ',''),10)); break;
       case 'fps': try{ window.__UI_FPS = (+S.fps===30) ? 30 : null; }catch(e){} break;
-      case 'size': callN('setBootWidth', Math.round(820*S.size/100)); break;
+      case 'size': if(S.sizeSet) callN('setBootWidth', Math.round(820*S.size/100)); break;   /* tp103 — only a pick resizes; applyAll never calls it */
       case 'mpe': try{ if(window.__setSynParam) window.__setSynParam('SYN_MPE_ON', S.mpe==='On'?1:0); }catch(e){} break;
       case 'mpeBend': try{ if(window.__setSynParam) window.__setSynParam('SYN_MPE_BEND', C01((S.mpeBend-1)/95)); }catch(e){} break;
       case 'openOn': callN('setOpenOnPage', String(S.openOn)); break;
       case 'cpu': paintHeaderCpu(); break;
       case 'sleep': callN('setSleepWhenSilent', S.sleep==='On'?1:0); break;
       case 'tails': callN('setCutTailsOnStop', S.tails==='On'?1:0); break;
-      case 'rtQ': callN('setRtQuality', S.rtQ); break;
+      case 'rtQ': case 'offQ': case 'presetQ': callN('setRtQuality', JSON.stringify({rt:S.rtQ, off:S.offQ, presets:S.presetQ})); break;   /* tp103 — all three travel together */
       case 'hover': bodyGate('ti-hover-off', S.hover!=='On'); break;
       case 'usage': logEvent('usage:'+S.usage.toLowerCase()); break;
       /* tp100 — the standalone's real audio device (setAudioSetup answers with the device as it now stands) */
@@ -8029,8 +8039,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     }
   }
   /* tp100 — AS = the device as the standalone app reports it (getAudioSetup). null in a DAW / before the first read. */
-  var AS=null, asBusy=false;
-  function takeAudio(txt){ try{ var j=typeof txt==='string'?JSON.parse(txt):txt; if(!j) return; AS=j;
+  var AS=null, asBusy=false, asLast='';
+  function takeAudio(txt,poll){ try{ if(poll&&typeof txt==='string'){ if(txt===asLast) return; if(menuEl) return; } if(typeof txt==='string') asLast=txt;
+      var j=typeof txt==='string'?JSON.parse(txt):txt; if(!j) return; AS=j;
       if(!j.standalone) return;
       if(j.outputs) audioOuts=j.outputs; if(j.inputs) audioIns=j.inputs;
       ['driver','out','inDev','outCh','inCh'].forEach(function(k){ if(j[k]!=null&&j[k]!=='') S[k]=String(j[k]); });
@@ -8039,12 +8050,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         Object.keys(S.ports).forEach(function(n){ if(!seen[n]) delete S.ports[n]; }); }
       if(j.error) try{ toast('The device said: '+j.error); }catch(e){}
       save(); if(cur==='audio'&&!q) paintPage(); }catch(e){} }
-  function pullAudio(){ var f=nfn('getAudioSetup'); if(!f||asBusy) return; asBusy=true;
-    Promise.resolve(f()).then(function(t){ asBusy=false; takeAudio(t); },function(){ asBusy=false; }); }
+  function pullAudio(poll){ var f=nfn('getAudioSetup'); if(!f||asBusy) return; asBusy=true;
+    Promise.resolve(f()).then(function(t){ asBusy=false; takeAudio(t,poll); },function(){ asBusy=false; }); }
+  /* tp103 — Rescan devices: every driver re-lists its devices (a new interface appears), then the page repaints */
+  function rescanDevices(){ var f=nfn('rescanAudioDevices'); if(!f){ pullAudio(); return; }
+    Promise.resolve(f()).then(function(t){ asLast=''; takeAudio(t); var n=(AS&&AS.outputs)?AS.outputs.length:0; toast('Found <b>'+n+'</b> output'+(n===1?'':'s')+(AS&&AS.driver?' <span class="tp-bk">· '+esc(AS.driver)+'</span>':'')); },function(){}); }
   function pushAudio(id){ var f=nfn('setAudioSetup'); if(!f) return; var o={};
     if(id==='inDev'){ o.inDev=S.inDev; if(S.inDev!=='None') o.inCh=S.inCh; } else o[id]=(id==='sr'||id==='buf')?+S[id]:S[id];
     Promise.resolve(f(JSON.stringify(o))).then(takeAudio,function(){}); }
-  function applyAll(){ ['theme','motion','capture','bend','a4','voices','vel','chan','fps','size','mpe','mpeBend','openOn','cpu','sleep','tails','rtQ','hover','tempo','qwerty'].forEach(applyRow);
+  function applyAll(){ ['theme','motion','capture','bend','a4','voices','vel','chan','fps','mpe','mpeBend','openOn','cpu','sleep','tails','rtQ','hover','tempo','qwerty'].forEach(applyRow);   /* tp103 — 'size' left out: re-applying it would resize every window on every page load */
     try{ window.__terrainUiPrefs={ drag:S.drag, sens:S.sens, wheel:S.wheel, dbl:S.dbl, values:S.values, hover:S.hover, pickup:S.pickup }; }catch(e){} }
 
   /* ═══ PRIVACY — opt-in only. A tiny LOCAL log of anonymized counters when S.usage==='On'; the network
@@ -8065,7 +8079,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       var d=el('<div class="ri'+(p.id===cur&&!q?' cur':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p.ic+'</svg><span class="nm">'+esc(p.short||p.name)+'</span></div>');
       d.onclick=function(){ go(p.id); }; r.appendChild(d); });
     r.style.opacity=q?'.35':''; }
-  function go(id,flashId){ cur=id; q=''; if(id==='audio') pullAudio(); var se=$('st-search'); if(se) se.value=''; closeMenu(); renderRail(); paintPage(); var pn=$('st-pane'); if(pn) pn.scrollTop=0;
+  function go(id,flashId){ cur=id; q=''; if(id==='audio') pullAudio(); if(id==='library') pullLib(false); var se=$('st-search'); if(se) se.value=''; closeMenu(); renderRail(); paintPage(); var pn=$('st-pane'); if(pn) pn.scrollTop=0;
     if(flashId){ var r=document.querySelector('#st-overlay [data-row="'+flashId+'"]'); if(r){ r.scrollIntoView({block:'center'}); r.classList.add('flash'); setTimeout(function(){ r.classList.remove('flash'); },1200); } } }
 
   /* ═══ CONTROLS ═══ */
@@ -8106,7 +8120,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      owner wires them with a real build. Velocity curve + CPU meter ARE wired (setVelCurve/getDspLoad). */
   var NEED={ driver:'setAudioSetup', out:'setAudioSetup', outCh:'setAudioSetup', inDev:'setAudioSetup', inCh:'setAudioSetup', sr:'setAudioSetup', buf:'setAudioSetup',
     tempo:'setStandaloneBpm', chan:'setMidiChannel', a4:'setA4', mpe:'setMpeOn', mpeBend:'setMpeOn',
-    voices:'setVoiceCeiling', rtQ:'setRtQuality', offQ:'setRtQuality', lockQ:'setRtQuality', sleep:'setSleepWhenSilent', tails:'setCutTailsOnStop', size:'setBootWidth' };
+    voices:'setVoiceCeiling', rtQ:'setRtQuality', offQ:'setRtQuality', presetQ:'setRtQuality', sleep:'setSleepWhenSilent', tails:'setCutTailsOnStop', size:'setBootWidth',
+    scan:'getLibraryInfo', devscan:'rescanAudioDevices' };
   /* tp100 — a "Standalone app only" row inside a DAW is not "coming soon": the DAW owns the sound card. */
   function appOnly(r){ return !!r && r.where==='Standalone app only' && !window.__isStandalone; }
   function isSoon(r){ return r.st==='soon' || appOnly(r) || (NEED[r.id] && !nfn(NEED[r.id])); }
@@ -8140,7 +8155,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      var lane=d.querySelector('.lane');
      ['Left','Both','Right'].forEach(function(o){ var c=el('<button class="tp-chip'+(S.testCh===o?' active':'')+'">'+o+'</button>'); c.onclick=function(){ S.testCh=o; save(); paintPage(); }; lane.appendChild(c); });
      var tr=el('<div class="tr" style="flex:1;margin-left:6px;cursor:default"><i class="lv" style="left:0;width:0"></i></div>'); lane.appendChild(tr); meters.push(tr);
-     lane.firstChild.onclick=function(){ var f=nfn('playTestTone'); if(f){ try{ f(S.testCh==='Left'?1:(S.testCh==='Right'?2:3)); }catch(e){} return; } chime(); }; hoverable(d,r); return d; },
+     lane.firstChild.onclick=function(){ testAudio(); }; hoverable(d,r); return d; },
    ports:function(r){ var b=el('<div class="blk" data-row="ports"><div class="lst"></div></div>'), L=b.firstChild;
      var names=Object.keys(S.ports);
      L.appendChild(el('<div class="r hd"><span style="width:20px"></span><span class="n">Port</span><span class="c2">Activity</span></div>'));
@@ -8174,10 +8189,28 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      ['On','Off'].forEach(function(o){ var c=el('<button class="tp-chip'+(S.cpuMeter===o?' active':'')+'">'+o+'</button>'); c.onclick=function(){ S.cpuMeter=o; save(); paintPage(); paintHeaderCpu(); }; lane.appendChild(c); });
      var tr=el('<div class="tr" style="flex:1;margin-left:6px;cursor:default"><i class="lv" style="left:0;width:0"></i></div>'), v=el('<span class="val" style="width:34px;text-align:right;flex:none">—</span>');
      lane.appendChild(tr); lane.appendChild(v); cpuEls=[tr,v]; hoverable(d,r); return d; },
-   rescan:function(r){ var d=el('<div class="sr" data-row="rescan"><div class="lbl"><span class="t">Rescan library</span></div><div class="lane"><button class="tp-btn">Rescan</button><span class="val dim" style="flex:1;margin-left:6px">from disk</span></div></div>');
-     var bt=d.querySelector('.tp-btn'), sp=d.querySelector('.val');
-     bt.onclick=function(){ bt.disabled=true; sp.style.flex='1'; callN('rescanLibrary'); bar(sp,900,function(){ sp.textContent='Library rescanned'; bt.disabled=false; toast('Library rescanned'); }); };
-     hoverable(d,r); return d; },
+   rescan:function(r){ var soon=!nfn('rescanLibrary'); var w=el('<div data-row="rescan"><div class="sr'+(soon?' soon':'')+'"><div class="lbl"><span class="t">Rescan library</span>'+(soon?soonTag(r):'')+'</div><div class="lane"><button class="tp-btn">Rescan</button><span class="val dim" style="flex:1;margin-left:6px"></span></div></div><div class="note res" style="margin-top:-4px"></div></div>');
+     var bt=w.querySelector('.tp-btn'), sp=w.querySelector('.val'), nt=w.querySelector('.note.res'); sp.textContent='from disk'; nt.textContent=libScanText?'Last rescan: '+libScanText:''; nt.style.display=libScanText?'':'none';
+     bt.onclick=function(){ rescanLibrary(bt,sp,true); };
+     hoverable(w,r); return w; },
+   /* tp103 — WHERE THINGS LIVE: the three folders, each with Show and Change… (and Default once moved) */
+   libdirs:function(r){ var b=el('<div class="blk" data-row="libdirs"><div class="lst"></div></div>'), L=b.firstChild, on=!!nfn('getLibraryInfo');
+     L.appendChild(el('<div class="r hd"><span class="c3">Folder</span><span class="n">Location</span></div>'));
+     [['presets','Your presets'],['samples','Your samples'],['factory','Factory library']].forEach(function(k){
+       var e=LIB&&LIB[k[0]], path=e?e.path:'', row=el('<div class="r"><span class="c3"></span><span class="n dim"></span>'+(e&&e.custom?'<span class="tg">Yours</span>':'')+'<span class="lk sh">Show</span><span class="lk ch">Change…</span>'+(e&&e.custom?'<span class="lk df">Default</span>':'')+'</div>');
+       row.querySelector('.c3').textContent=k[1];
+       var n=row.querySelector('.n'); n.textContent=on?(path?tildePath(path):'Not found on this computer'):'—'; if(path) n.title=path;
+       if(e&&e.missing){ n.textContent='Missing: '+tildePath(e.missing)+' · using the default'; n.title=e.missing; }
+       var sh=row.querySelector('.sh'), ch=row.querySelector('.ch'), df=row.querySelector('.df');
+       if(!on||!path) sh.classList.add('off'); if(!on) ch.classList.add('off');
+       sh.onclick=function(){ callN('revealLibraryFolder',k[0]); };
+       ch.onclick=function(){ var f=nfn('chooseLibraryFolder'); if(!f) return;
+         Promise.resolve(f(k[0])).then(function(t){ var j=null; try{ j=JSON.parse(t); }catch(x){}
+           if(j&&j.ok){ toast(esc(k[1])+' now <span class="tp-bk">'+esc(tildePath(j.path))+'</span> · rescanning'); pullLib(true); }
+           else if(j&&j.error) toast(esc(j.error)); },function(){}); };
+       if(df) df.onclick=function(){ Promise.resolve(callN('resetLibraryFolder',k[0])).then(function(){ toast(esc(k[1])+' back to the default folder · rescanning'); pullLib(true); }); };
+       L.appendChild(row); });
+     hoverable(b,r); return b; },
    try:function(r){ var b=el('<div class="blk" data-row="try"><div class="tryk"><div class="gbox"><span class="gbl" style="background:#1d1b2b">Try it</span><div class="cell"><div class="ctl k">'+knobSVG()+'</div><div class="lb">Cutoff</div><div class="vl"></div></div></div><div class="cap"></div></div></div>');
      var k=b.querySelector('.k'), vl=b.querySelector('.vl'), cap=b.querySelector('.cap'), val=.5;
      function paint(){ setRing(k,val); vl.textContent=S.values==='On'?Math.round(20*Math.pow(1000,val))+' Hz':''; }
@@ -8210,11 +8243,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      hoverable(d,r); return d; },
    lic:function(r){ var b=el('<div data-row="lic"><div class="kvp"><span class="k">Status</span><span class="v">'+(S.reg?'Beta <span class="dim">· '+esc(S.name)+'</span>':'<span class="err">Not registered</span>')+'</span><span class="k">Computers</span><span class="v">This computer <span class="dim">· 1 of 3</span> <span class="tag" style="margin-left:4px">Soon</span></span><span class="k">Code signing</span><span class="v">Ad-hoc <span class="dim">· Developer ID at 1.0</span></span></div><div class="blk"><div class="acts inl"><button class="tp-btn" disabled>Manage computers</button><button class="tp-btn" id="b-lic">'+(S.reg?'Account':'Register')+'</button></div></div></div>');
      b.querySelector('#b-lic').onclick=function(){ if(S.reg) go('account','reg'); else regSheet(1); }; hoverable(b,r); return b; },
-   sup:function(r){ var b=el('<div class="blk" data-row="sup"><div class="acts" style="margin-top:2px"><button class="tp-btn pri" style="flex:none;padding:0 14px">Copy system info</button><button class="tp-btn">Report a bug…</button><button class="tp-btn">Manual</button></div></div>');
-     var bs=b.querySelectorAll('.tp-btn'); var info=buildInfo();
-     bs[0].onclick=function(){ var t='Terrain '+info.ver+' ('+info.build+')\n'+info.wrap+' · '+(S.sr/1000)+' kHz · '+S.buf+' samples\nRegistered: '+(S.reg?S.name:'no');
-       try{ navigator.clipboard.writeText(t).then(function(){ toast('System info copied — paste it into your message'); },function(){ toast('System info ready (clipboard blocked here)'); }); }catch(e){ toast('System info ready (clipboard blocked here)'); } };
-     bs[1].onclick=function(){ toast('Opens the beta feedback form <span class="tp-bk">· link to be decided</span>'); }; bs[2].onclick=function(){ toast('Opens the Terrain manual <span class="tp-bk">· coming with 1.0</span>'); };
+   sup:function(r){ var b=el('<div class="blk" data-row="sup"><div class="acts" style="margin-top:2px;flex-wrap:wrap;row-gap:6px"><button class="tp-btn pri" style="flex:none;padding:0 14px;white-space:nowrap">Report a bug…</button><button class="tp-btn" style="white-space:nowrap">Report a crash…</button><button class="tp-btn" style="white-space:nowrap">Copy system info</button><button class="tp-btn" style="white-space:nowrap" title="The manual arrives with 1.0">Manual <span class="tag" style="margin-left:4px">Soon</span></button></div></div>');
+     var bs=b.querySelectorAll('.tp-btn');
+     bs[0].onclick=function(){ reportIssue('bug'); }; bs[1].onclick=function(){ reportIssue('crash'); };
+     bs[2].onclick=function(){ copySystemInfo(); };
+     bs[3].onclick=function(){ toast('The Terrain manual arrives with 1.0'); };
+     if(!nfn('reportIssue')){ bs[0].disabled=true; bs[1].disabled=true; }
      hoverable(b,r); return b; },
    wc:function(){ return el('<div>'
      +'<div class="mantra">Consciousness Through Sound.</div>'
@@ -8233,8 +8267,48 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   ];
   var hov=null, hovTheme=null, meters=[], lamps={}, velEl=null, cpuEls=null, audioOuts=null, audioIns=null;
 
-  function buildInfo(){ var d={ver:'1.0.0 · beta 1',build:'—',wrap:'Standalone'};
-    try{ var f=nfn('getBuildInfo'); if(f){ var raw=f(); if(raw&&!raw.then){ var j=JSON.parse(raw); if(j){ d.ver=j.ver||d.ver; d.build=j.build||d.build; d.wrap=j.wrap||d.wrap; } } } }catch(e){} return d; }
+  /* tp103 — JUCE natives answer with a PROMISE: the old synchronous read rejected it and always showed the
+     placeholder. The answer is cached; the About page repaints once when it lands. */
+  var BI=null, biAsked=false;
+  function buildInfo(){ var d={ver:'1.0.0-beta',build:'—',wrap:window.__isStandalone?'Standalone app':'—'};
+    if(BI){ d.ver=BI.ver||d.ver; d.build=BI.build||d.build; d.wrap=BI.wrap||d.wrap; return d; }
+    if(!biAsked){ var f=nfn('getBuildInfo'); if(f){ biAsked=true;
+      Promise.resolve(f()).then(function(t){ try{ BI=JSON.parse(t); }catch(e){ BI=null; } if(BI&&cur==='about'&&!q) paintPage(); },function(){}); } }
+    return d; }
+  function licStatus(){ return S.reg?('Registered to '+S.name):'Not registered'; }
+  /* tp103 — SUPPORT. The system block is written by Terrain itself (version, build, format, host, OS, CPU, RAM,
+     rate, buffer, preset, DSP load) + the licence status the page knows. */
+  function copySystemInfo(){ var f=nfn('copySystemInfo');
+    if(!f){ toast('System info needs the Terrain app or plugin'); return; }
+    Promise.resolve(f(JSON.stringify({license:licStatus()}))).then(function(){ toast('System info copied — paste it into your message'); },function(){ toast('Could not read the system info'); }); }
+  function reportIssue(kind){ var f=nfn('reportIssue'); if(!f) return;
+    Promise.resolve(f(JSON.stringify({kind:kind,license:licStatus()}))).then(function(t){ var j=null; try{ j=JSON.parse(t); }catch(e){}
+      if(!j){ toast('Could not write the report'); return; }
+      if(!j.ok){ toast('Copied — paste into an email to <b>contact@wavescrate.com</b>'); return; }
+      var tail=j.copied?' <span class="tp-bk">· the full report is on your clipboard too</span>':'';
+      if(kind==='crash') toast((j.crashLog?'Mail opened · the crash log is shown in '+(navigator.platform.indexOf('Win')>=0?'Explorer':'Finder')+' — attach it':'Mail opened · no crash log from the last 7 days')+tail);
+      else toast('Mail opened — tell us what happened'+tail); },function(){ toast('Could not open your mail app'); }); }
+  /* tp103 — THE LIBRARY. LIB = getLibraryInfo (the three folders + scan-on-start); the rescan walks off the
+     message thread and answers counts. After it the preset browser and the dice's one-shot list re-read too. */
+  var LIB=null, libScanText='', libScanRes=null;
+  function tildePath(pth){ var s=String(pth||''); var m=s.match(/^(\/Users\/[^\/]+|[A-Za-z]:\\Users\\[^\\]+)/); return m?'~'+s.slice(m[1].length):s; }
+  function pullLib(thenRescan){ var f=nfn('getLibraryInfo'); if(!f) return;
+    Promise.resolve(f()).then(function(t){ try{ LIB=JSON.parse(t); }catch(e){} if(cur==='library'&&!q&&!menuEl) paintPage(); if(thenRescan) rescanLibrary(null,null,false); },function(){}); }
+  function fmtN(n){ return String(n|0).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+  function rescanLibrary(bt,sp,loud){ var f=nfn('rescanLibrary'); if(!f) return; if(bt) bt.disabled=true; if(sp){ sp.style.flex='1'; sp.innerHTML='<div class="ld"><i style="width:60%"></i></div>'; }
+    Promise.resolve(f()).then(function(t){ var j=null; try{ j=JSON.parse(t); }catch(e){}
+      if(bt) bt.disabled=false;
+      if(!j){ if(sp) sp.textContent='Rescan failed'; return; }
+      var smp=(j.factorySamples|0)+(j.userSamples|0); libScanRes={presets:j.presets|0,packs:j.packs|0,samples:smp};
+      libScanText=fmtN(j.presets)+' presets · '+fmtN(j.packs)+' pack'+(j.packs===1?'':'s')+' · '+fmtN(smp)+' samples, '+((+j.ms||0)/1000).toFixed(1)+' s';
+      var v2=document.querySelector('#st-overlay [data-row="rescan"] .val'), n2=document.querySelector('#st-overlay [data-row="rescan"] .note.res');
+      if(v2) v2.textContent=((+j.ms||0)/1000).toFixed(1)+' s'; if(n2){ n2.textContent='Last rescan: '+libScanText; n2.style.display=''; }
+      if(loud) toast('Library rescanned <span class="tp-bk">· '+esc(libScanText)+'</span>');
+      try{ if(window.__tiPresets&&window.__tiPresets.rescan) window.__tiPresets.rescan(); }catch(e){}
+      try{ if(window.__tiSampLibReset) window.__tiSampLibReset(); }catch(e){} },function(){ if(bt) bt.disabled=false; if(sp) sp.textContent='Rescan failed'; }); }
+  /* tp103 — TEST AUDIO through the app's own output (the chime is mixed into Terrain's output natively, so it
+     leaves by the device and channels chosen above); the meter reads that output (getOutLevel). */
+  function testAudio(){ var f=nfn('playTestTone'); if(f){ try{ f(S.testCh==='Left'?1:(S.testCh==='Right'?2:3)); }catch(e){} return; } chime(); }
 
   /* ═══ THE PANE ═══ */
   function paintPage(){ closeMenu(); hov=null; hovTheme=null; var P=$('st-pane'); if(!P) return; var st=P.scrollTop; P.innerHTML=''; meters=[]; lamps={}; velEl=null; cpuEls=null;
@@ -8275,17 +8349,17 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       acts='<button class="tp-btn pri" id="ia-test">Play test audio</button>'; }
     else if(cur==='control'&&!q){ h='<div class="nm">Live input</div><div class="sub">Play anything — it shows here</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox" id="i-live"></div></div>'
         +kv([['Channel',esc(S.chan)],['Curve',S.vmode==='Fixed'?'Fixed 100':(S.vcurve===0?'Linear':(S.vcurve<0?'Soft ':'Hard ')+Math.abs(Math.round(S.vcurve*100)))],['Bend','± '+S.bend+' ST'],['MPE',esc(S.mpe)],['Mapped',S.cc.length+' CCs']]); }
-    else if(cur==='library'&&!q){ h='<div class="nm">Your library</div><div class="sub">Presets & packs</div>'+kv([['Author',esc(S.author||'—')],['On start',esc(S.onStart)]]); acts='<button class="tp-btn pri" id="ia-browse">Open the browser</button>'; }
-    else if(cur==='perf'&&!q){ h='<div class="nm">Load</div><div class="sub">What Terrain costs right now</div>'+kv([['DSP','<span id="i-cpu">—</span>'],['Voices','of '+S.voices],['Capture',S.capture==='On'?'~202 MB':'off'],['Quality',esc(S.rtQ)],['Screen',S.fps+' fps · motion '+S.motion.toLowerCase()]]); }
+    else if(cur==='library'&&!q){ h='<div class="nm">Your library</div><div class="sub">Presets & packs</div>'+kv([['Author',esc(S.author||'—')],['On start',esc(S.onStart)],['Scan',S.scan==='On'?'when Terrain opens':'on Rescan / first browse']].concat(libScanRes?[['Presets',fmtN(libScanRes.presets)+' in '+fmtN(libScanRes.packs)+' packs'],['Samples',fmtN(libScanRes.samples)]]:[])); acts='<button class="tp-btn pri" id="ia-browse">Open the browser</button>'; }
+    else if(cur==='perf'&&!q){ h='<div class="nm">Load</div><div class="sub">What Terrain costs right now</div>'+kv([['DSP','<span id="i-cpu">—</span>'],['Voices','of '+S.voices],['Capture',S.capture==='On'?'~202 MB':'off'],['Quality',esc(S.rtQ)+(S.offQ!=='Same'?' · bounce '+esc(S.offQ):'')],['Engine','<span id="i-eng">'+(S.sleep==='On'?'—':'never sleeps')+'</span>'],['Screen',S.fps+' fps · motion '+S.motion.toLowerCase()]]); }
     else if(cur==='ui'&&!q){ h='<div class="nm">Interface</div><div class="sub">How Terrain looks and feels in your hands</div>'+kv([['Theme',esc(S.theme)],['Window',S.size+' %'],['Knobs',esc(S.drag)],['Motion',esc(S.motion)]])
         +'<div class="notes"><div class="k">Tip</div><div class="tp-notebox" style="color:var(--text-soft)">Rest on any setting and this column explains it.</div></div>'; }
     else if(cur==='themes'&&!q){ h='<div class="nm">Themes</div><div class="sub">Night &amp; Daylight ship</div><div class="notes" style="border-top:0;margin-top:8px;padding-top:0"><div class="tp-notebox" style="color:var(--text-soft)">Rest on a theme to see its palette. Skins will be files you can share — the same way presets are.</div></div>'; }
     else if(cur==='about'&&!q){ var info=buildInfo(); h='<div class="nm">Terrain 1.0</div><div class="sub">'+esc(info.build)+'</div>'+kv([['User',esc(S.reg?S.name:'—')],['Licence',S.reg?'Beta':'—'],['Channel',esc(S.chanUpd)]])
-        +'<div class="notes"><div class="k">For testers</div><div class="tp-notebox" style="color:var(--text-soft)">Found something? Copy system info and send it with what you were doing. Thank you for playing it first.</div></div>'; }
+        +'<div class="notes"><div class="k">For testers</div><div class="tp-notebox" style="color:var(--text-soft)">Found something? Report a bug… writes the email for you — your version and system are already in it; just say what you were doing. Thank you for playing it first.</div></div>'; }
     else { h='<div class="nm">Settings</div><div class="sub">Rest on a result to read it</div>'; }
     I.innerHTML=h; A.innerHTML=acts; A.style.display=acts?'':'none';
     var s1=$('ia-save'); if(s1) s1.onclick=function(){ saveSheet(); };
-    var s2=$('ia-test'); if(s2) s2.onclick=function(){ chime(); };
+    var s2=$('ia-test'); if(s2) s2.onclick=function(){ testAudio(); };
     var s3=$('ia-browse'); if(s3) s3.onclick=function(){ openBrowser(); };
     paintLive(); }
   function paintLive(){ var e=$('i-live'); if(!e) return;
@@ -8315,7 +8389,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     if(cpuEls){ cpuEls[0].querySelector('i').style.width=(cpuNow==null?0:cpuNow)+'%'; cpuEls[1].textContent=cpuTxt()+(cpuNow==null?'':' %'); }
     var ic=$('i-cpu'); if(ic) ic.textContent=cpuTxt()+(cpuNow==null?'':' %');
     if(S.cpuMeter==='On') paintHeaderCpu(); }
-  (function tick(now){ var lv=level(); meters.forEach(function(m){ var i=m.querySelector('i'); if(i) i.style.width=Math.min(100,lv*260).toFixed(1)+'%'; });
+  var midiT=0, midiBusy=false, outT=0, outBusy=false, outLv=0, hpT=0, engT=0, engBusy=false;
+  function audioPageLive(){ var ov=$('st-overlay'); return !!(ov&&ov.classList.contains('on')&&cur==='audio'&&!q&&window.__isStandalone); }
+  (function tick(now){ var lv=Math.max(level(),outLv); meters.forEach(function(m){ var i=m.querySelector('i'); if(i) i.style.width=Math.min(100,lv*260).toFixed(1)+'%'; });
+    if(audioPageLive()){
+      if(now-midiT>=120&&!midiBusy){ var fm=nfn('getMidiActivity'); midiT=now; if(fm){ midiBusy=true; Promise.resolve(fm()).then(function(t){ midiBusy=false; try{ (JSON.parse(t)||[]).forEach(lampFlash); }catch(e){} },function(){ midiBusy=false; }); } }
+      if(now-outT>=50&&!outBusy){ var fo=nfn('getOutLevel'); outT=now; if(fo){ outBusy=true; Promise.resolve(fo()).then(function(v){ outBusy=false; var x=parseFloat(v); outLv=isFinite(x)?Math.max(x,outLv*.8):0; },function(){ outBusy=false; }); } }
+      if(now-hpT>=2500){ hpT=now; pullAudio(true); } }
+    else outLv=0;
+    if(now-engT>=1000&&!engBusy&&cur==='perf'&&!q&&$('i-eng')&&S.sleep==='On'){ var fe=nfn('getEngineState'); engT=now; if(fe){ engBusy=true; Promise.resolve(fe()).then(function(t){ engBusy=false; var j=null; try{ j=JSON.parse(t); }catch(e){} var e2=$('i-eng'); if(e2&&j) e2.textContent=j.sleeping?'asleep — silent, not computing':'awake'; },function(){ engBusy=false; }); } }
     if(now-cpuT>=250 && (!cpuBusy || now-cpuT>2000)){ cpuT=now; cpuBusy=false;
       if(!triedLoad){ triedLoad=true; getLoad=nfn('getDspLoad'); }
       var raw=null; if(getLoad){ try{ raw=getLoad(); }catch(e){ raw=null; } }
@@ -8485,7 +8567,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 
   /* ═══ HEADER, OPEN / CLOSE, SEARCH ═══ */
   function openSettings(on){ var ov=$('st-overlay'); if(!ov) return; ov.classList.toggle('on',on); bodyGate('st-open',on); closeMenu();
-    if(on){ arm(); renderRail(); paintPage(); paintHeaderCpu(); logEvent('open:settings'); if(cur==='audio') pullAudio(); } }
+    if(on){ arm(); renderRail(); paintPage(); paintHeaderCpu(); logEvent('open:settings'); if(cur==='audio') pullAudio(); if(cur==='library') pullLib(false); } }
   function toggleSettings(){ openSettings(!$('st-overlay').classList.contains('on')); }
   (function(){ var g=$('settings-btn'); if(g){ g.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); toggleSettings(); }, true); } })();
   $('st-close').onclick=function(){ openSettings(false); };
@@ -44235,6 +44317,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     if (on) { try { window.__tiHideModMeter && window.__tiHideModMeter(); } catch (e) {} }
   }
   function openBrowser() {
+    if (S.scanDeferred) { S.scanDeferred = false; rescan(); }   /* tp103 — Scan on start was off: the first open reads the library */
     $('tp-b').classList.add('on'); window.__tiFrozen = true;   /* the glass covers every painter; nothing under it needs a frame */
     surfaceUp();     /* fb624/fb626 — the page's floating overlays stand down */
     S.sel = S.curId >= 0 ? S.curId : S.sel; buildChips(); renderRail(); renderRows(); renderInsp(); pullFavs().then(() => { if (browserOpen()) { renderRows(); renderInsp(); } });   /* fb635 */
@@ -44907,7 +44990,16 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     call('getPresetMeta').then(m => { if (m != null) setCurrent(m); else setHeader(); });
     pullFavs();   /* fb635 — the file's {keys:[…]}, not a raw assign */
     call('getVocab').then(j => { try { const o = JSON.parse(j || 'null'); if (o && Array.isArray(o.types) && o.types.length) S.types = o.types.map(tidy); if (o && Array.isArray(o.styles) && o.styles.length) S.styles = o.styles.map(tidy); } catch (e) {} S.vocabLoaded = true; })
-      .then(() => rescan());
+      .then(() => scanOnStart()).then(on => { if (on) rescan(); else S.scanDeferred = true; });
+  }
+  /* tp103 — Settings → Presets & Library → Scan on start. The C++ reads it from the global settings file
+     (getLibraryInfo), so the answer is right before the page's own settings have been restored. Off: the
+     catalogue is read the first time the browser opens (or on Rescan). No native = the old behaviour. */
+  function scanOnStart() {
+    if (!(window.Juce && window.Juce.getNativeFunction)) return Promise.resolve(true);
+    let listed = true; try { const L = window.__JUCE__ && window.__JUCE__.initialisationData && window.__JUCE__.initialisationData.__juce__functions; if (L && L.indexOf && L.indexOf('getLibraryInfo') < 0) listed = false; } catch (e) {}
+    if (!listed) return Promise.resolve(true);
+    return call('getLibraryInfo').then(t => { let on = true; try { const o = JSON.parse(t || 'null'); if (o && o.scanOnStart === false) on = false; } catch (e) {} window.__tiScanOnStart = on; return on; }, () => true);
   }
   setHeader();
   if (window.Juce && window.Juce.getNativeFunction) boot(); else setTimeout(() => { if (window.Juce && window.Juce.getNativeFunction) boot(); }, 900);
@@ -46534,7 +46626,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      build() only creates the canvas DOM — it never adopts — so it is safe to call with the page shut, and it is
      what gives generate() a `page` to find its tool button on. The roll itself is identical to the canvas's. */
   window.__tpDice=function(){ try{ build(); }catch(e){} try{ rollDice(); }catch(e){ return false; } return true; };
-  setTimeout(function(){ try{ sampLib(function(){}); }catch(e){} },2500);   /* tp39 — the one-shot library, warm before the first roll */
+  setTimeout(function(){ try{ if(window.__tiScanOnStart===false) return; sampLib(function(){}); }catch(e){} },2500);   /* tp39 — the one-shot library, warm before the first roll · tp103 — not when Scan on start is off */
+  window.__tiSampLibReset=function(){ libCache=null; libAt=0; };   /* tp103 — Settings → Rescan library: the next roll re-reads the folder */
   window.__tpDiceAim=function(){ return layout.aim||'anything'; };
   window.__tpDiceLevel=function(){ return layout.dlevel||'medium'; };
   window.__tpDiceLevelSet=function(l){ if(LEVELS.indexOf(l)<0) return false; layout.dlevel=l; saveLayout(); return true; };   /* tp36 — the gates set the reach without a menu */

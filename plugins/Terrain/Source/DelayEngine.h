@@ -96,6 +96,9 @@ public:
     void setDucking   (float d)   { duckAmt_ = d < 0.0f ? 0.0f : (d > 1.0f ? 1.0f : d); }
     void setPing      (bool p)    { pingTgt = p ? 1.0f : 0.0f; }
     void setHQ        (bool h)    { hq_ = h; }
+    /** tp103 — the longest gap this line can leave between two echoes (L, or R incl. Spread), in ms. Sleep when
+        silent waits longer than this before it trusts a silent output (a 4-bar echo is 16 s of "silence"). */
+    float longestTimeMs() const noexcept { return std::max (timeMs_, linked_ ? timeMs_ * 1.35f : timeMsR_); }
 
     // Per-block: resolve filter coefficients + the delay-length target. Everything
     // that could zipper is ramped per-sample in processSample().

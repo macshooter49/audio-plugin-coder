@@ -2970,8 +2970,9 @@ class SynthVoice : public juce::SynthesiserVoice
             // tp21 — the note decides its own filter path from the drive/resonance it is born with.
             //  Per NOTE, not per block: see the latch at the render site. A note that needs the 2×
             //  gets it from its first sample; one that does not can still be upgraded into it later.
-            osOsLatch_ = filterSlot_.oversamplingWanted  (drv01_,  baseRes01_)
-                      || filterSlot2_.oversamplingWanted (drv012_, baseRes012_);
+            osOsLatch_ = osPolicyWants (filterSlot_.oversamplingWanted  (drv01_,  baseRes01_)
+                                     || filterSlot2_.oversamplingWanted (drv012_, baseRes012_),
+                                        filterSlot_.needsOversampling() || filterSlot2_.needsOversampling());   // tp103
 
             // ── LEGATO retarget: slide pitch to the new note, retrigger NOTHING ──
             // Armed by UnisonSynth::beginLegatoRetarget() just before startVoice().
@@ -6492,8 +6493,9 @@ class SynthVoice : public juce::SynthesiserVoice
                 const bool osEligible = filterSlot_.needsOversampling() || filterSlot2_.needsOversampling();
                 const bool osWant     = filterSlot_.oversamplingWanted  (drv01_,  baseRes01_)
                                      || filterSlot2_.oversamplingWanted (drv012_, baseRes012_);
-                if (! osEligible)              osOsLatch_ = false;
-                else if (osWant && ! osOsLatch_) { osOsLatch_ = true; resetOversamplers(); }   // rest state = what a zero input would have produced (fb603's law for bus2)
+                const int  osPol      = osPolicy();   // tp103 — Settings → Playing / Bounce quality
+                if (! osEligible || osPol == 0) osOsLatch_ = false;
+                else if ((osWant || osPol == 2) && ! osOsLatch_) { osOsLatch_ = true; resetOversamplers(); }   // rest state = what a zero input would have produced (fb603's law for bus2)
                 const bool oversample = osOsLatch_;
                 // Coefficient sample rate doubles when oversampling so the
                 // filter's prewarp + ZDF math sees the upsampled Nyquist.
@@ -7352,6 +7354,18 @@ class SynthVoice : public juce::SynthesiserVoice
         HalfBandDown2x          osDnL_,  osDnR_;
         /** Clear every 2× converter — note-on, type swap, and the NaN guard. */
         bool osOsLatch_ = false;   // tp21 — is THIS note running the 2x path? (latched at note-on, upgrade-only)
+        // tp103 — THE GLOBAL QUALITY POLICY (Settings → Performance), owned by the processor, one atomic per instance:
+        //  0 Eco = never oversample the voice filter · 1 Standard = tp21 (only when a filter is driven) · 2 High = always,
+        //  on every one of the drive-able types (needsOversampling). A DAW's offline render sets 2 when Bounce quality
+        //  asks for it. Eco drops a running note's latch on the next block (a ~2-sample step at the moment the user
+        //  chose it); High latches on the next block like any drive crossing.
+        const std::atomic<int>* osPolicy_ = nullptr;
+    public:
+        void setQualityPolicy (const std::atomic<int>* p) noexcept { osPolicy_ = p; }
+    private:
+        int  osPolicy() const noexcept { return osPolicy_ != nullptr ? osPolicy_->load (std::memory_order_relaxed) : 1; }
+        bool osPolicyWants (bool wanted, bool eligible) const noexcept
+        { const int p = osPolicy(); return eligible && (p == 2 || (p == 1 && wanted)); }
         void resetOversamplers() noexcept
         { osUp1L_.reset(); osUp1R_.reset(); osUp2L_.reset(); osUp2R_.reset(); osDnL_.reset(); osDnR_.reset(); }
 

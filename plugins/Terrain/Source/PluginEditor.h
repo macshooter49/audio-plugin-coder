@@ -19,6 +19,7 @@ class TerrainUiCore  : public juce::Component,
                                      public juce::FileDragAndDropTarget,
                                      private juce::Timer
 {
+    friend struct TiSettingsNatives;   // tp103 — the Settings page's app / library / support natives (TerrainSettingsNatives.cpp)
 public:
     TerrainUiCore (TerrainAudioProcessor&);
     ~TerrainUiCore() override;
@@ -1717,6 +1718,7 @@ public:
     void onPeerArrived();                // fb520 -- arm the WM_DESTROY rescue immediately (the timer-tick arming raced fast open/close)
     void replaceDeadCore();              // fb520 -- swap a dead core for a fresh one, in place
     void tickSizeHeal();   // fb516 -- driven by the core's 60 Hz timer (the heal needs a clock; the shell has none)
+    void applyChosenWidth (int w);   // tp103 -- Settings → Interface → Window size (TerrainSettingsNatives.cpp)
 
 private:
     TerrainAudioProcessor& audioProcessor;

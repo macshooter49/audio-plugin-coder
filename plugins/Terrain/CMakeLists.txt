@@ -44,6 +44,7 @@ target_sources(Terrain
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/TerrainUiPark.cpp
+        Source/TerrainSettingsNatives.cpp
         Source/ParametricEQ_test.cpp
         Source/MoogDelay_test.cpp
         Source/TerrainChorus_test.cpp
@@ -54,6 +55,17 @@ target_sources(Terrain
         Source/SynthVoice_test.cpp
         Source/Wavetable_test.cpp
 )
+
+# ══ tp103 — THE BUILD ID a bug report quotes (Settings → Report a bug). The commit at CONFIGURE time, set on the one
+#  TU that reads it so a new commit recompiles one file, not the whole plugin. No git (a zip of the tree) = "dev".
+execute_process(COMMAND git rev-parse --short HEAD
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                OUTPUT_VARIABLE TERRAIN_GIT_SHA OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if (NOT TERRAIN_GIT_SHA)
+    set(TERRAIN_GIT_SHA "dev")
+endif()
+set_source_files_properties(Source/TerrainSettingsNatives.cpp PROPERTIES
+    COMPILE_DEFINITIONS "TERRAIN_GIT_SHA=\"${TERRAIN_GIT_SHA}\"")
 
 # ══ fb612 — THE FACTORY WAVETABLE LIBRARY SHIPS INSIDE THE BUNDLE ═════════════════════════════
 #  Max: "we may have to make terra a factory lib … automatically installed on EVERYONE'S COMPUTER."
