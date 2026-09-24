@@ -1,0 +1,45 @@
+{
+ "id": "terrain.ep.clav",
+ "name": "Clav",
+ "family": "clav",
+ "category": "Keys",
+ "tags": [
+  "clavinet-style",
+  "funk",
+  "tangent",
+  "electric",
+  "physical model"
+ ],
+ "licence": "Proprietary-WavesCrate",
+ "credit": "Waves Crate physical model",
+ "author": "Waves Crate",
+ "url": "Tools/organics/epmodel",
+ "licenceDir": "TerrainModels",
+ "budgetMB": 64,
+ "capScale": true,
+ "releaseCap": 0.6,
+ "extendTail": 3,
+ "polyMax": 32,
+ "artics": [
+  {
+   "name": "Both Pickups",
+   "sfz": "TerrainModels/Clav/Clav.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "model-clav-on",
+   "trig": "on",
+   "relDb": -28,
+   "zone": "key",
+   "velPow": 1.2
+  },
+  {
+   "set": "model-clav-off",
+   "trig": "off",
+   "relDb": -32,
+   "zone": "key",
+   "velPow": 0.5
+  }
+ ]
+}

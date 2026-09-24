@@ -36,6 +36,11 @@ BEAR_KEYS = [dict(SAX_KEYS[0], keyMap="nearest", maxFiles=4), dict(SAX_KEYS[1], 
 WW_KEYS = [dict(SAX_KEYS[0], relDb=-38), dict(SAX_KEYS[1], relDb=-36)]
 KNOCK = [{"set": "wood-knock", "trig": "on", "relDb": -30, "zone": 12, "maxFiles": 4, "velPow": 1.4}]
 
+def EP(name, on_db=-30):
+    return [{"set": f"model-{name}-on", "trig": "on", "relDb": on_db, "zone": "key", "velPow": 1.2},
+            {"set": f"model-{name}-off", "trig": "off", "relDb": -32, "zone": "key", "velPow": 0.5}]
+
+
 TABLE = {
     # keys
     "salamander.grand.v3": PIANO_DOWN_ONLY,           # its own per-key release noises stay (trig off)
@@ -43,6 +48,9 @@ TABLE = {
     "vcsl.keys.kawai-grand": PIANO, "vcsl.keys.upright-knight": PIANO,
     "osiris.keys.piano": PIANO[1:],                   # its recordings already carry the pre-note key/hammer noise
     "karoryfer.strings.cyborg-zinc": BOW, "vcsl.winds.ocarina": BREATH_FLUTE, "karoryfer.bass.sneaky": GUITAR_FRET_ONLY,
+    # modelled EPs: their own modelled key/action noises (the DI tone never contains them)
+    "terrain.ep.rhodes": EP("tineep"), "terrain.ep.wurli": EP("reedep"), "terrain.ep.clav": EP("clav", -28),
+    "terrain.ep.pianet": EP("padreedep"),
     # strings (bowed)
     "vsco2.strings.violin-section": BOW, "vsco2.strings.viola-section": BOW, "vsco2.strings.cello-section": BOW,
     "vsco2.strings.solo-violin": BOW, "vsco2.strings.contrabass": BOW, "karoryfer.strings.cello": BOW,

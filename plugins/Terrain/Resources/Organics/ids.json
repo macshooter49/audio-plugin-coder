@@ -62,5 +62,19 @@
  "vsco2.woodwinds.oboe": 61,
  "karoryfer.guitar.shinyguitar": 62,
  "vsco2.strings.cello-section": 63,
- "karoryfer.sax.weresax-alto": 64
+ "karoryfer.sax.weresax-alto": 64,
+ "terrain.ep.clav": 65,
+ "vcsl.keys.kawai-grand": 66,
+ "vcsl.keys.upright-knight": 67,
+ "osiris.keys.piano": 68,
+ "terrain.ep.pianet": 69,
+ "terrain.ep.wurli": 70,
+ "terrain.ep.rhodes": 71,
+ "karoryfer.strings.cyborg-zinc": 72,
+ "karoryfer.bass.sneaky": 73,
+ "karoryfer.guitar.black-and-green": 74,
+ "karoryfer.plucked.cithara": 75,
+ "vcsl.winds.ocarina": 76,
+ "vcsl.mallets.mbira": 77,
+ "vcsl.perc.timpani": 78
 }

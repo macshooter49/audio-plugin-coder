@@ -3,6 +3,7 @@
 **Product:** Terrain (Waves Crate). This library feeds the Organics SF2/SFZ multi-sampler engine.
 **Owner:** Max. **Compiled:** 2026-09-24. Every licence was checked on that date.
 **Clearance pass (2026-09-24, "no emails" rule):** nothing in the factory library may depend on a permission request. The MTG saxes were cleared sound by sound (R2 closed); the Greg Sullivan EPs were removed (R4: no licence from the author); Karoryfer Weresax (CC0 alto) was added. See §8 for the cleared-status table.
+**Round 2 (tp105, 2026-09-24):** 74 instruments. EPs are back as Waves Crate physical models (no cleared real EP exists; §9.1), 10 new cleared instruments (§9.2), a shared mechanical-noise library mapped onto 54 instruments (§9.3), measured tuning corrections `tfix` (§9.4), K-weighted loudness normalisation (§9.5) and a round-robin/audibility audit (§9.6). §8 is the cleared-status table.
 **Local root:** `/Users/macshooter/Developer/VST-Plugins/organics-library/`. It lives outside the git repo. Paths below are relative to `raw/`.
 **Downloaded:** **9.6 GB** (9,880 MiB on disk) from 6 sources: VCSL, VSCO 2 CE, sfzinstruments/Karoryfer, FreePats, Versilian Etherealwinds and OLPC/Berklee.
 - Every GitHub file was checked against its git blob SHA-1, with 0 failures.
@@ -57,8 +58,8 @@ Some limits on those numbers:
 - **Tier A (CC0 / Unlicense):** about 8.1 GB. **Tier B (CC-BY):** about 1.5 GB (Salamander 838 MB, Etherealwinds harp 364 MB, MTG sax 108 MB, OLPC 148 MB, Greg Sullivan EPs 21 MB, since removed from the factory library).
 - **Biggest gaps:**
   1. a **real choir**
-  2. a **Rhodes / tine EP**, and now also **Wurlitzer, CP and Pianet** (the Greg Sullivan EPs were removed; no cleared real EP of any kind exists)
-  3. a **Clavinet**
+  2. ~~a Rhodes / tine EP, Wurlitzer, Pianet~~ **filled by Waves Crate physical models** (§9.1); a convincing **CP-style electric grand** is still missing (the model was not good enough), and no cleared *real* EP recording exists
+  3. ~~a Clavinet~~ **filled by the Clav model** (§9.1)
   4. a **real tonewheel organ**
   5. **celesta / music box**
   6. a **steel-string acoustic guitar** and a good **nylon guitar**
@@ -90,6 +91,7 @@ Column key:
 | ~~K5~~ | ~~Electric Grand (Yamaha CP80)~~ | Greg Sullivan E-Pianos | **REMOVED** | – | – | – | – | – | Removed 2026-09-24: the author states no licence at the source (R4). id `gsullivan.ep.cp80` = 9 stays reserved. |
 | ~~K6~~ | ~~Reed EP (Wurlitzer EP200)~~ | Greg Sullivan | **REMOVED** | – | – | – | – | – | Removed (R4). id `gsullivan.ep.wurlitzer-ep200` = 3 stays reserved. |
 | ~~K7~~ | ~~Pianet (Hohner Pianet T)~~ | Greg Sullivan | **REMOVED** | – | – | – | – | – | Removed (R4). id `gsullivan.ep.pianet-t` = 13 stays reserved. |
+| K5b–K7b | **Tine EP, Reed EP, Pad Reed EP, Clav** (round 2) | Waves Crate physical models → `raw/TerrainModels/*` (`Tools/organics/epmodel`) | Owned | 47–61 | 5–6 / 1 | every 3 st; damper/key-up release samples; modelled key noises | FLAC 48k | model | See §9.1. Ids `terrain.ep.rhodes / .wurli / .pianet / .clav` (new numbers; 3, 9, 13 stay reserved). |
 | K8 | **FM Tine EP** (DX7-style "E.Piano 1") | FreePats FM Piano #1, rendered from the Hexter emulator → `FreePats/FM-Piano1-*` | A | 25 | 3 / – | one sample every 6 st | FLAC 44.1k/24 mono | 2.5 | Needs a denser mapping (±3 st stretch is audible). It imitates Yamaha's factory patch; see §6 risk note R5. |
 | K9 | **FM Bright EP** | FreePats FM Piano #2 | A | 9 | 1 / – | one sample every 6 st | FLAC mono | 2 | Filler. |
 | K10 | **FM Piano / Clavisynth** (TX81Z) | VCSL TX81Z: *"patches are user-created ... sampled from the original FM hardware"* → `VCSL/Electrophones/TX81Z` | A | 132 | 3 / – | C1–C#8, one sample every 4 st | WAV 44.1k/24 mono | 3 | Clavisynth is the closest cleared thing to a Clavinet. |
@@ -411,6 +413,14 @@ Honourable mentions: Karoryfer Emilyguitar and Growlybass, VCSL Vibraphone, Rena
 | **AG-PT-set** (Zenodo 10159492, CC-BY 4.0, steel-string guitars) | Recorded through the guitars' built-in piezo pickups; 6.75 GB (over the download budget) | https://zenodo.org/records/10159492 |
 | **VocalSet** (Zenodo 1442513, CC-BY 4.0) | Solo singers, one pitch per vowel for long tones: not a choir and not a chromatic multisample | https://zenodo.org/records/1442513 |
 | **Chris Beckstrom Hammond M-100 drones** (archive.org, CC-BY 4.0) | Real tonewheel, cleared, but ~15 chord/cluster drones, not a playable multisample | archive.org/details/beckstrom_hammond_organ_drones |
+| **Round-2 EP hunt (2026-09-24)**: musical-artifacts "Wurlitzer (SFZ)" #645 and "Clavinet (SFZ)" #646 (uploader Lithalean) | The site's own API marks the licence `gray` (unknown); nothing traces to the recordist | musical-artifacts.com/artifacts/645, /646 |
+| musical-artifacts "Simple Rhodes" #9601 ("public") | Uploader-declared, untraceable, probably synth-made | musical-artifacts.com/artifacts/9601 |
+| Farfisa Hydrogen kit (Klaatu) | CC BY-SA | musical-artifacts.com/artifacts/308 |
+| Bitsonic Keyzone Electric Piano | Extracted from a commercial plugin | musical-artifacts.com/artifacts/2574 |
+| **NSynth** (re-checked round 2) | Magenta's own page: notes generated "for 1,006 instruments from commercial sample libraries"; the dataset's CC BY 4.0 cannot clear those libraries' rights | magenta.tensorflow.org/datasets/nsynth |
+| **Headroom Piano** (Bengt Nilsson, Yamaha C3) | Only the porter (kinwie) states CC BY 4.0 "with the author's permission" — the same pattern as the Greg Sullivan EPs (R4) | github.com/sfzinstruments/BengtNilsson.HeadroomPiano |
+| **Karoryfer Scarypiano** | CC0 from Karoryfer, but built on University of Iowa piano samples (R8: no explicit redistribution grant) | github.com/sfzinstruments/karoryfer.scarypiano |
+| UIowa MIS guitar (re-proposed round 2) | Stays out (R8): "may be downloaded and used for any projects, without restrictions" never grants redistribution of the files | theremin.music.uiowa.edu/MIS.html |
 | **NeoSoundFonts SP-GT-Classical-Guitar, SimonePiervergili-OldSteelGuitar** | CC0 LICENSE added by the uploader, not the recordist; the recordist's other uploads include resampled commercial products | github.com/NeoSoundFonts |
 
 ---
@@ -459,7 +469,7 @@ If Freesound CC-BY packs are added later, append a line for each, for example: `
 
 ## 8. Cleared status (2026-09-24)
 
-Max's rule: *"no emails, I want to be able to just put them in"*. Anything that needs a permission request is out. The authoritative list of shipped instruments is `Resources/Organics/index.json` (60 instruments); credits are in `Resources/Organics/CREDITS.md`.
+Max's rule: *"no emails, I want to be able to just put them in"*. Anything that needs a permission request is out. The authoritative list of shipped instruments is `Resources/Organics/index.json` (74 instruments after round 2); credits are in `Resources/Organics/CREDITS.md`.
 
 | Set | In the factory library | Licence (stated by) | Status | Evidence |
 |---|---|---|---|---|
@@ -474,3 +484,72 @@ Max's rule: *"no emails, I want to be able to just put them in"*. Anything that 
 | **Greg Sullivan E-Pianos** ×3 | **removed** | only the porter states CC BY 3.0 | **Out (R4)**; ids 3, 9, 13 reserved | §5 |
 | jRhodes (incl. GM CC0 subset), UIowa MIS, TinySOL, Ethan Winer, Karoryfer paid choirs | not included | conflicting or not explicit; each would need an email | Out | §5, §6 |
 | Freesound-only sets (Rhodes Mk II, Wurlitzer 200A, harmonium, celesta, uprights …) | not included | fine, but originals need a login | Out (login) | §4 |
+| **Round 2 additions** | | | | |
+| Waves Crate EP models (Tine EP, Reed EP, Pad Reed EP, Clav) | 4 | Proprietary-WavesCrate (rendered by our own `epmodel/`; no third-party audio; the DO-NOT-SHIP Greg Sullivan files were only *measured*) | Owned, cleared | `raw/TerrainModels/LICENSE-SOURCE.txt`, `epmodel/VALIDATION.md` |
+| VCSL Kawai grand, Knight upright, Timpani 2, Ocarina (typical), Mbira Nyamaropa | 5 | CC0 (Versilian Studios) | Cleared | `raw/VCSL/LICENSE-SOURCE.txt` |
+| Osiris Piano (Versilian + Karoryfer) | 1 | CC0 (licence file inside the release + repo licence) | Cleared | `raw/sfzinstruments/Osiris_Piano/LICENSE-SOURCE.txt` |
+| Karoryfer Black And Green Guitars, Cithara Barbarica, Sneakybass, String Cyborgs (Zinc) | 4 | CC0 (Karoryfer; R1) | Cleared | `LICENSE-SOURCE.txt` per set |
+| Shared noise library (§9.3) | on 54 instruments | CC0 (Karoryfer sets) · CC BY 3.0 (Salamander key-action noises: credit lines added to CREDITS.md for every piano that plays them) · Waves Crate (EP model noises) | Cleared, credit where CC-BY | per-file origin in each instrument's `source/provenance.csv` |
+| Headroom Piano, Scarypiano, UIowa guitar, musical-artifacts EP/Clav uploads, NSynth | not included | porter-only / UIowa-derived / uploader-only / commercial-library-derived | Out | §5 |
+
+
+---
+
+## 9. Round 2 (tp105, 2026-09-24)
+
+### 9.1 Electric pianos: Waves Crate physical models (owned, no permission needed)
+A second hunt found **no cleared real recording** of a Rhodes, Wurlitzer, Clavinet, Pianet, CP or combo organ (GitHub incl. all 70 sfzinstruments repos, musical-artifacts, archive.org, Wikimedia, Zenodo, OpenGameArt, Codeberg, itch.io; rejections in §5). NSynth stays out. So the EPs are rendered offline by our own models in `Tools/organics/epmodel/` (numpy/scipy, deterministic, `python3 epmodel/render_all.py`) into `raw/TerrainModels/`, then compiled like any SFZ. Nothing from the DO-NOT-SHIP Greg Sullivan recordings is used as audio; they were only measured (harmonic levels, centroids, T60) to fit and check the models. Full tables: `epmodel/VALIDATION.md`. Nobody has listened yet: **do a listening pass**.
+
+| Id (display name) | Model | Keys / zones | Layers / RR | Release / noise | Measured against |
+|---|---|---|---|---|---|
+| `terrain.ep.rhodes` (Tine EP) | cantilever tine (Euler-Bernoulli modes) + tonebar, neoprene hammer, asymmetric electromagnetic pickup | 28–100, every 3 st | 6 / 1 | 12 damper releases; modelled key-down/up noise | physics: bell partial 6.3–7.4× f0, −11…−22 dB in the first 50 ms, < −40 dB after 1 s; H2 −35 dB (pp) → ≈0 dB (ff) in the lower half (bark); T60 19 s (low) → 1.5 s (high) |
+| `terrain.ep.wurli` (Reed EP) | steel reed, felt hammer, electrostatic pickup 1/(d0−x), preamp soft clip | 33–96, 21 zones | 6 / 1 | 11 damper releases; key noise | 42 reference notes: median error H2 5.0 dB, H3 2.6 dB, attack centroid 15 %; bark: H2 −13 → +16 dB and H3 −15 → +14 dB pp→ff at E2 |
+| `terrain.ep.pianet` (Pad Reed EP) | adhesive pad plucking a reed, pickup | 29–89, 20 zones | 5 / 1 | 10 pad releases; key noise | 33 reference notes: median error H2 2.4 dB, H3 2.6 dB, attack centroid 22 % |
+| `terrain.ep.clav` (Clav) | struck string on the tangent/anvil, yarn damper, two single-coil pickups (comb) | 29–88, 20 zones | 6 / 1 | 20 key-up "thwack" releases; key noise | physics: attack twice as bright at ff; +3…4 ¢ strike glide; key-up blip at 0.84–0.89 f0 as predicted; T60 5.1 → 1.8 s |
+| CP-style electric grand | `cp.py` | — | — | — | **Not shipped**: misses the CP's attack clang (bass f/ff attack centroid 4–6× f0 vs 15–22× in the reference, median attack error 39 %). Honest verdict: not convincing. |
+
+### 9.2 Ten new cleared instruments
+| Id | Name | Category / family | Licence | Layers / RR | RAM MB | Notes |
+|---|---|---|---|---|---|---|
+| `vcsl.keys.kawai-grand` | Kawai Grand | Keys / grand | CC0 (VCSL) | 4 / 1 | 101.6 | release samples; room hiss floor ≈ −48 dB rel. peak |
+| `vcsl.keys.upright-knight` | Knight Upright | Keys / upright | CC0 (VCSL) | 2 / 1 | 80.4 | release samples; pedal-CC regions dropped |
+| `osiris.keys.piano` | Osiris Piano | Keys / grand | CC0 (Versilian + Karoryfer) | 2 / 1 | 108.3 | mic A only; its samples keep the pre-note key/hammer noise ("Ptah" full) |
+| `vcsl.perc.timpani` | Timpani | Percussion / marimba | CC0 (VCSL Timpani 2) | 3 / 2 | 41.8 | `unpitched` for tfix |
+| `karoryfer.guitar.black-and-green` | Hollowbody Guitars | Plucked / guitar | CC0 (Karoryfer) | 2 / 1 | 45.8 | 4 artics: Green/Black × Twang/Staccato |
+| `karoryfer.plucked.cithara` | Medieval Lyre | Plucked / harp | CC0 (Karoryfer) | 1 / 2 | 43.4 | finger, nail, sul tasto; 10 strings stretched to 52–72 |
+| `karoryfer.bass.sneaky` | Jazz Pizz Bass | Strings / bass | CC0 (Karoryfer) | 1 / 1 | 28.9 | quiet late-night pizzicato + mute |
+| `karoryfer.strings.cyborg-zinc` | Bowed Bass Pad | Strings / bass | CC0 (Karoryfer String Cyborgs) | 1 / 1 | 12.4 | looped bowed double bass |
+| `vcsl.winds.ocarina` | Ocarina | Winds / flute | CC0 (VCSL) | 1 / 1 | 14.3 | sustain + vibrato, releases |
+| `vcsl.mallets.mbira` | Mbira | Mallets & Bells / kalimba | CC0 (VCSL) | 1 / 3 | 11.1 | traditional tuning (use Tuning = As recorded) |
+
+Downloads: 2.1 GB (VCSL Kawai/Knight/Timpani 2 1.17 GB, Osiris 437 MB zip, Black And Green 581 MB, Sneakybass). No real choir, tonewheel organ, celesta or cleared acoustic guitar was found (research in §5).
+
+### 9.3 Mechanical noise library (`noiselib.py` → `raw/TerrainNoise/<set>/`, mapped by `noisemaps.py`)
+Every noise is **extracted from a recording we already ship** (cut, mono, filtered, faded, peak −1 dBFS; origin + cut points + sha256 in the set's `manifest.json` and in each instrument's `source/provenance.csv`). No new downloads, logins or permissions.
+
+| Set | trig | Source | Mapped onto |
+|---|---|---|---|
+| `piano-keydown` (30) | on | Salamander "HammerNoise" key-action transients (CC BY 3.0) | Salamander, Steinway B, Yamaha upright, Old Upright, Kawai, Knight |
+| `piano-keyup` (88, per key) | off | Salamander key-release/damper noises (CC BY 3.0) | Steinway B, Yamaha upright, Old Upright, Kawai, Knight, Osiris (Salamander keeps its own) |
+| `model-*-on/off` (6+6 each) | on/off | EP model key/action noises (Waves Crate) | Tine EP, Reed EP, Pad Reed EP, Clav |
+| `sax-keyclose` / `sax-keyopen` (120 each, per fingering, 4 RR) | on / off | Bear Sax pad clicks (CC0) | all 7 saxes (Bear: its own per-note map); flute, clarinet, oboe, bassoon (−4 dB) |
+| `breath-puff` (6) | on | Bear Sax + War Tuba breath (CC0), shaped 0.42 s puffs | woodwinds, saxes, recorder, ocarina, brass ×5, Male Aah |
+| `bow-start` (12) | on | String Cyborgs bow-screech recordings (CC0) | all bowed strings (not on pizzicato/harmonics), Bowed Bass Pad |
+| `guitar-pick` (12) / `guitar-fret` (5) | on / off | Emilyguitar muted-pluck transients / fingering noise (CC0) | electric/nylon guitars, ganjo, Jazz Bass; fret-only on Archtop and Jazz Pizz Bass; harps/zithers/lyre get fret at −40 dB |
+| `wood-knock` (8) | on | bigcat-cello body knocks (CC0) | marimba, xylophone, balafon |
+
+Levels (`relDb`) are the noise's loudest 100 ms (K-weighted) relative to the calibrated note at velocity 100, so Noise 0.5 = these, 1.0 = +12 dB: key-down −32, key-up −30, EP key −30/−32, breath −30 (flute) … −36 (voice), sax clicks −34/−32, bow −30, pick/fret −34, knock −30. They sit near Salamander's own authored release-noise level. No cleared **brass valve** noise exists (gap).
+
+### 9.4 Tuning correction `tfix`
+`analyse.measure_f0`: YIN (±150 ¢ search, k-period refinement), then the frequency of the fundamental **partial** from a Hann FFT over the same span, which is what a tuner reads and is immune to piano inharmonicity. `tfix = −(measured deviation from ET at the root + authored fine tune)`, applied by the runtime only when Tuning = Equal. Rules: one value per note and RR take (median over velocity layers, so a hard-struck string's natural sharp start is kept); unreliable → 0 (no periodicity, IQR > 12 ¢, partial/YIN disagree > 10 ¢, < 3 frames, or > 30 ¢ without ≥ 5 steady frames); whole-semitone transposes are never corrected; a sample a whole semitone off its root (±25 ¢) gets its root fixed (outside mallets/percussion). Timpani and tubular bells are `unpitched`.
+
+- **Salamander "Natural" keeps its stretch.** A cubic stretch curve is fitted to the measured pitches (A0 −11.8 ¢, C4 −1.2 ¢, C8 +34.1 ¢: a normal Railsback shape) and only each note's deviation from that curve is corrected (median 1.7 ¢). Flattening it to ET would make the octaves sound flat to the ear. "Retuned" is corrected to ET (worst 19.6 ¢ at D#2, median 2.6 ¢).
+- **Root fixes** (sample ≈ 1 semitone off its declared root): Salamander C8 (+99 ¢, its "C8" file is a C#), MTG baritone C2/D2 (+98…100 ¢), Hungarian zither ×5 (+90…122 ¢).
+- **Largest corrections** (worst note per articulation): ganjo −56 ¢ (the whole instrument is ~40 ¢ sharp), erhu sul tasto −55 ¢ / short −47 ¢, Bear Sax staccato −49 ¢, old player piano −43 ¢, clarinet staccato +39 ¢, dan tranh −38 ¢, hang −38 ¢, War Tuba staccatissimo −36 ¢, Osiris −29 ¢ (top), VSCO tuba +30 ¢, Knight upright +22 ¢, Kawai +15 ¢, Steinway B −19 ¢, VSCO violin section +8 ¢ (sustain; the "−18 ¢" first estimate did not reproduce). EP models: |tfix| < 3 ¢.
+- Per-instrument detail: `Tools/organics/library-report.md` (tp105 section) and each `build-report.json` → `tfix`.
+
+### 9.5 Loudness normalisation
+Every instrument is calibrated so its centre key (middle C when playable) at velocity 100, Velocity 0.75 (the runtime default) reaches **−24.0 LUFS** (BS.1770 K-weighting, ungated, first 1 s from the onset), with the same key at velocity 127 peaking ≤ −1 dBFS. One gain offset per instrument, so its internal velocity dynamics and register balance are untouched. Before: the old −18 dB-RMS calibration measured −7.4 (hang) … −23.8 LUFS (Clean Electric), a 16 dB spread. After: **−24.00 LUFS for all 74 (spread 0.00 dB)**, no instrument peak-limited. −24 is the loudest target that every centre-key crest (up to 23 dB on plucked strings) allows. Velocity-127 peaks elsewhere in the range are reported (`peak127RangeDb`) but not flattened.
+
+### 9.6 Round-robin and audibility audit (Max's xylophone report)
+The compiler now drops RR steps whose own segment never rises above −50 dBFS and completes every RR set (`repair_rr`: missing sequential positions cloned from a sibling, random slots widened to cover [0, 1)). The test checks all 127 velocities × every key × every articulation. Result: 0 silent regions anywhere; 3 missing sequential positions repaired in the Yamaha upright; random-slot gaps closed in French horn (5), trombone (7) and solo violin (12). **`vcsl.mallets.xylophone` has no round robins at all** (1 region per zone and layer, every sample audible), so its "every other press is silent" cannot come from the data. The likely cause is the runtime's fake-RR neighbour borrowing near the range edge, which is Agent E's area.
