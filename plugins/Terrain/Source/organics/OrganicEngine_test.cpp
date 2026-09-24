@@ -3,7 +3,8 @@
 // Goertzel marker power, DFT-phase f0, spectral centroid, band energy, RMS, onset time, HP residual peaks.
 //
 //   OrganicEngine_test --gen <dir>        write the extra fixtures (test.layers/.rr/.norr/.piano) into <dir>
-//   OrganicEngine_test <fixturesRoot>     run the gates (TERRAIN_ORGANICS_DIR is pointed at <fixturesRoot>)
+//   OrganicEngine_test <fixturesRoot> [<compiledRoot>]   run the gates (TERRAIN_ORGANICS_DIR → <fixturesRoot>);
+//                                                        with <compiledRoot>, also the real-data bars (Agent A's library)
 //
 // Built by Tests/organics_engine_test.sh (juce_core + audio_basics + audio_formats + events only).
 #include "OrganicEngine.h"
@@ -350,6 +351,24 @@ namespace an
         for (int i = 0; i < n / 2; ++i) m[(size_t) i] = std::abs (a[(size_t) i]);
         return m;
     }
+    /** f0 by FFT peak near fExp (±60 ¢): Hann window of n, zero-padded ×4, parabolic on log magnitude. */
+    static double peakFreq (const Buf& x, int64_t s, int n, double fExp)
+    {
+        int N = 1; while (N < n * 4) N <<= 1;
+        std::vector<std::complex<double>> a ((size_t) N);
+        for (int i = 0; i < n; ++i)
+        {
+            const double h = 0.5 - 0.5 * std::cos (2.0 * kPi * i / (n - 1));
+            a[(size_t) i] = s + i < (int64_t) x.size() ? h * x[(size_t) (s + i)] : 0.0;
+        }
+        fft (a);
+        const int b0 = std::max (2, (int) (fExp * std::pow (2.0, -60.0 / 1200.0) * N / kSR));
+        const int b1 = std::min (N / 2 - 2, (int) (fExp * std::pow (2.0, 60.0 / 1200.0) * N / kSR) + 1);
+        int bk = b0; for (int b = b0; b <= b1; ++b) if (std::abs (a[(size_t) b]) > std::abs (a[(size_t) bk])) bk = b;
+        const double l = std::log (std::abs (a[(size_t) bk - 1]) + 1e-30), c = std::log (std::abs (a[(size_t) bk]) + 1e-30), r = std::log (std::abs (a[(size_t) bk + 1]) + 1e-30);
+        const double d = 0.5 * (l - r) / (l - 2 * c + r);
+        return ((double) bk + d) * kSR / N;
+    }
     static double centroid (const Buf& x, int64_t s, int n = 16384)
     {
         const auto m = mag (x, s, n);
@@ -462,7 +481,7 @@ int main (int argc, char** argv)
         std::printf ("fixtures written to %s\n", root.getFullPathName().toRawUTF8());
         return 0;
     }
-    if (argc < 2) { std::printf ("usage: %s <fixturesRoot> | --gen <dir>\n", argv[0]); return 2; }
+    if (argc < 2) { std::printf ("usage: %s <fixturesRoot> [<compiledLibraryRoot>] | --gen <dir>\n", argv[0]); return 2; }
     const auto fixRoot = juce::File::getCurrentWorkingDirectory().getChildFile (argv[1]);
     setEnv ("TERRAIN_ORGANICS_DIR", fixRoot.getFullPathName().toRawUTF8());
     juce::MessageManager::getInstance();
@@ -566,6 +585,28 @@ int main (int argc, char** argv)
         bar ("velocity: right marker per band", badMarker == 0, fmt ("markers outside their band: %d %s", badMarker, firstBad.c_str()));
         bar ("velocity: summed power across crossfades", worstPow <= 0.5, fmt ("worst |Σp − 1| = %.3f dB over v 1..127", worstPow));
         bar ("velocity: no non-adjacent marker", nonAdj == 0, fmt ("velocities with >2 or non-adjacent layers: %d", nonAdj));
+
+        // contiguous layers (the compiler's format: xfLo/xfHi == lv/hv) get the runtime seam band: test.sine lo 1-63 / hi 64-127
+        {
+            auto sv = [&] (int v, double& lo, double& hi) {
+                OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (sine);
+                auto p = P0(); p.velo = 0.f;
+                e.noteOn (48, (float) v / 127.f, 1, kNoDet, 7u);
+                Rec r; run (e, p, r, 19200, 512);
+                lo = an::amp (mono (r), 4800, 12000, 3 * mtof (48)); hi = an::amp (mono (r), 4800, 12000, 5 * mtof (48));
+            };
+            double lr, hr, l0, h0; sv (20, lr, h0); sv (110, l0, hr);
+            double worst = 0; int blended = 0;
+            for (int v = 40; v <= 90; ++v)
+            {
+                double lo, hi; sv (v, lo, hi);
+                const double pw = (lo / lr) * (lo / lr) + (hi / hr) * (hi / hr);
+                worst = std::max (worst, std::abs (10 * std::log10 (pw)));
+                blended += (lo / lr > 0.05 && hi / hr > 0.05) ? 1 : 0;
+            }
+            bar ("velocity: contiguous layers get an equal-power seam", worst <= 0.5 && blended >= 8,
+                 fmt ("test.sine lo|hi at 63|64: %d velocities blend both, worst |Σp − 1| %.3f dB", blended, worst));
+        }
 
         // Dynamics: vel 64 (L2 plateau) → −1 = L1 only, +1 = L4 only
         double lo[4], hi[4], mid[4];
@@ -973,18 +1014,20 @@ int main (int argc, char** argv)
         }
         // Gentle: the first 60 ms lean on the next-softer layer (vel 100 = L3 plateau → L2 marker early, gone later)
         {
-            auto at = [&] (float attack, double& early2, double& late2, double& late3) {
+            // the L2/L3 marker RATIO in the first 40 ms cancels Gentle's own 150 ms fade-in
+            auto at = [&] (float attack, double& earlyRatio, double& late2, double& late3) {
                 OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (layers);
                 auto p = P0(); p.attack = attack; p.velo = 0.f;
                 e.noteOn (48, 100 / 127.f, 1, kNoDet, 1u);
                 Rec r; run (e, p, r, 19200, 64);
                 const auto m = mono (r);
-                early2 = an::amp (m, 480, 1440, 5 * mtof (48)); late2 = an::amp (m, 9600, 4096, 5 * mtof (48)); late3 = an::amp (m, 9600, 4096, 7 * mtof (48));
+                earlyRatio = an::amp (m, 240, 1680, 5 * mtof (48)) / std::max (1e-12, an::amp (m, 240, 1680, 7 * mtof (48)));
+                late2 = an::amp (m, 9600, 4096, 5 * mtof (48)); late3 = an::amp (m, 9600, 4096, 7 * mtof (48));
             };
             double ne, nl, n3, ge, gl, g3;
             at (0.f, ne, nl, n3); at (-1.f, ge, gl, g3);
-            bar ("Attack Gentle: first 60 ms from the softer layer", ge > 10 * ne && gl < 1e-3 && std::abs (an::db (g3 / n3)) < 0.1,
-                 fmt ("L2 marker 10-40 ms: Natural %.4f, Gentle %.4f · after 200 ms: L2 %.5f, L3 %+.2f dB re Natural", ne, ge, gl, an::db (g3 / n3)));
+            bar ("Attack Gentle: first 60 ms from the softer layer", ge > 0.5 && ne < 0.01 && gl < 1e-3 && std::abs (an::db (g3 / n3)) < 0.1,
+                 fmt ("L2/L3 marker ratio 5-40 ms: Natural %.3f, Gentle %.2f · after 200 ms: L2 %.5f, L3 %+.2f dB re Natural", ne, ge, gl, an::db (g3 / n3)));
         }
         // Tone key tracking above C6: the same region at the same pitch, key 96 vs key 84 + 1200 cents
         {
@@ -998,6 +1041,48 @@ int main (int argc, char** argv)
             };
             const double d = ratio (96, 0.f) - ratio (84, 1200.f);
             bar ("Tone key tracking: −1.5 dB/oct tilt above C6", d < -0.5 && d > -1.6, fmt ("10.4 kHz marker, key C7 vs the same pitch played from C6: %+.2f dB", d));
+        }
+        // every knob turned while a note holds: no zipper / click (the CLAUDE.md "while turning it" law).
+        // Each knob is swept end to end and back in 1 s (per-block params) on a held note; the HP(8 kHz) peak from
+        // 0.4 s on (the note start excluded) must stay ≤ −60 dB re the note OR within +1 dB of the same note held
+        // STATIC at either end of the knob (the recording's own HF, e.g. the piano fixture's air, is not a zipper).
+        {
+            const char* names[8] = { "Dynamics", "Tone", "Body", "Human", "Release", "Velocity", "Image", "Sustain" };
+            double worstDb = -300; int wi = 0; bool ok = true;
+            for (int k = 0; k < 8; ++k)
+            {
+                auto set = [k] (OrganicParams& q, float u) {
+                    switch (k)
+                    {
+                        case 0: q.dyn = 2.f * u - 1.f; break;      case 1: q.tone = 2.f * u - 1.f; break;
+                        case 2: q.body = 2.f * u - 1.f; break;     case 3: q.human = u; break;
+                        case 4: q.release = u; break;              case 5: q.velo = u; break;
+                        case 6: q.image = 1.5f * u; break;         default: q.sustain = u; break;
+                    }
+                };
+                auto render = [&] (int mode) {                                     // 0/1 static at u, 2 sweep
+                    OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (k == 7 ? piano : layers);
+                    e.noteOn (k == 7 ? 43 : 31, 0.7f, 1, kNoDet, 1u);
+                    Rec r; auto p = P0(); p.noise = 0.f;
+                    run (e, p, r, 2 * 48000, 256, 0.f, [&] (OrganicParams& q, int64_t at) {
+                        const double t = (double) at / kSR;
+                        const float u = mode < 2 ? (float) mode
+                                                 : (float) (t < 0.5 ? 0.0 : t < 1.0 ? (t - 0.5) * 2.0 : t < 1.5 ? 1.0 - (t - 1.0) * 2.0 : 0.0);
+                        set (q, u);
+                    });
+                    const auto m = mono (r);
+                    return std::pair<double, double> (an::peak (an::highpass (m, 8000.0), 19200, 72000), an::peak (m));
+                };
+                const auto s0 = render (0), s1 = render (1), sw = render (2);
+                const double rel = an::db (sw.first / std::max (s0.second, s1.second));
+                const double vsStatic = an::db (sw.first / std::max (s0.first, s1.first));
+                const bool pass = rel <= -60.0 || vsStatic <= 1.0;
+                ok &= pass;
+                const double score = pass ? std::min (rel, -60.0) : rel;
+                if (! pass || score > worstDb) { if (! pass || ok) { worstDb = rel; wi = k; } }
+                std::printf ("      sweep %-8s HP %.1f dB re note, %+.2f dB re static ends\n", names[k], rel, vsStatic);
+            }
+            bar ("knob sweeps while held: no zipper (8 knobs)", ok, fmt ("worst %s: HP residual %.1f dB re note", names[wi], worstDb));
         }
         // isActive / readLevel follow the sound
         {
@@ -1188,6 +1273,186 @@ int main (int argc, char** argv)
         bar ("missing / corrupt instrument is safe", ! missing && ! bad && ! c1 && ! c2 && ! c3 && silent,
              fmt ("missing→%s, ../→%s, bad json→%s, bad flac→%s, bad smp→%s, null engine silent %s",
                   missing ? "ptr" : "null", bad ? "ptr" : "null", c1 ? "ptr" : "null", c2 ? "ptr" : "null", c3 ? "ptr" : "null", silent ? "yes" : "NO"));
+    }
+
+    // ── 9. Real data: Agent A's compiled library (runs when <compiledRoot> is given and exists) ──────
+    if (argc >= 3 && juce::File (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2])).isDirectory())
+    {
+        const auto realRoot = juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]);
+        std::printf ("── real data: %s ──\n", realRoot.getFullPathName().toRawUTF8());
+        setEnv ("TERRAIN_ORGANICS_DIR", realRoot.getFullPathName().toRawUTF8());
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
+        auto sal = load ("salamander.grand.v3");
+        const double tSal = (juce::Time::getMillisecondCounterHiRes() - t0) / 1000.0;
+        auto vio = load ("vsco2.strings.violin-section"), solo = load ("vsco2.strings.solo-violin");
+        OrganicsLibrary::get().rescan();
+        double idxMB = 0;
+        if (auto* a = OrganicsLibrary::get().index().getArray())
+            for (auto& e : *a) if (e["id"].toString() == "salamander.grand.v3") idxMB = (double) e["sizeMB"];
+        setEnv ("TERRAIN_ORGANICS_DIR", fixRoot.getFullPathName().toRawUTF8());
+        OrganicsLibrary::get().rescan();
+        bar ("real: salamander / violin-section / solo-violin load", sal && vio && solo,
+             fmt ("salamander %zu regions, %d ch, %.1f MB resident (index sizeMB %.1f), loaded in %.2f s", sal ? sal->regions.size() : 0,
+                  sal ? sal->samples[0].channels : 0, sal ? sal->bytes / 1048576.0 : 0.0, idxMB, tSal));
+        if (sal && vio && solo)
+        {
+            // pitch: FFT peak (zero-padded, parabolic) near the expected f0 — robust to vibrato and weak fundamentals
+            auto pitchScan = [&] (const std::shared_ptr<const OrganicInstrument>& I, int k0, int k1, int step, double& worst, int& wk, double& mean) {
+                worst = 0; wk = 0; mean = 0; int cnt = 0;
+                for (int key = k0; key <= k1; key += step)
+                {
+                    OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (I);
+                    auto p = P0(); p.velo = 0.f;
+                    e.noteOn (key, 0.6f, 1, kNoDet, 1u);
+                    Rec r; run (e, p, r, 48000 + 32768, 512);
+                    if (an::rms (mono (r), 24000, 32768) < 1e-5) continue;          // outside the instrument's range
+                    const double c = an::cents (an::peakFreq (mono (r), 24000, 32768, mtof (key)), mtof (key));
+                    mean += c; ++cnt;
+                    if (std::abs (c) > std::abs (worst)) { worst = c; wk = key; }
+                }
+                mean /= std::max (1, cnt);
+            };
+            // (a) the ENGINE's repitch: each zone's sample at its root vs at the other keys of its zone (same recording,
+            //     so vibrato and the recording's own tuning cancel) → must be exactly 100 ¢ per semitone
+            auto repitch = [&] (const std::shared_ptr<const OrganicInstrument>& I, int artic, double& worst, int& wk, int& zones) {
+                worst = 0; wk = 0; zones = 0;
+                // the window is TIME-ALIGNED to the same stretch of the recording: a note repitched by d semitones
+                // reads the sample 2^(d/12) faster, so its window starts and lasts 2^(-d/12) as long in output time
+                auto f0At = [&] (int key, int root, int ref) {
+                    OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (I);
+                    auto p = P0(); p.velo = 0.f; p.artic = artic;
+                    e.noteOn (key, 0.6f, 1, kNoDet, 1u);
+                    const double k = std::pow (2.0, (ref - key) / 12.0);
+                    const int64_t st = (int64_t) std::llround (24000.0 * k); const int n = (int) std::lround (32768.0 * k);
+                    Rec r; run (e, p, r, st + n + 512, 512);
+                    return an::peakFreq (mono (r), st, n, mtof (root) * std::pow (2.0, (key - root) / 12.0));
+                };
+                std::set<int> done;
+                for (const auto& rg : I->regions)
+                {
+                    if (rg.artic != artic || rg.kind != org::Kind::Attack || rg.lk == rg.hk || done.count (rg.root) || rg.root < 28 || rg.root > 100) continue;
+                    done.insert (rg.root);
+                    const int other = rg.hk != rg.root ? rg.hk : rg.lk;
+                    const double c = an::cents (f0At (other, rg.root, other), f0At (rg.root, rg.root, other)) - 100.0 * (other - rg.root);
+                    ++zones;
+                    if (std::abs (c) > std::abs (worst)) { worst = c; wk = other; }
+                    if (zones >= 12) break;
+                }
+            };
+            double rw1, rw2; int rk1, rk2, z1, z2;
+            repitch (sal, 0, rw1, rk1, z1); repitch (vio, 0, rw2, rk2, z2);
+            bar ("real pitch: engine repitch (root vs zone neighbours)", std::abs (rw1) <= 3.0 && std::abs (rw2) <= 3.0 && z1 > 0,
+                 fmt ("salamander %d zones worst %+.3f ¢ (key %d) · violin section %d zones worst %+.3f ¢ (key %d)", z1, rw1, rk1, z2, rw2, rk2));
+            // (b) absolute tuning vs 12-TET (information: a recording's own tuning is Agent A's cents field)
+            double w1, m1, w2, m2, w3, m3; int k1, k2, k3;
+            pitchScan (sal, 33, 96, 3, w1, k1, m1);
+            pitchScan (vio, 55, 94, 3, w2, k2, m2);
+            // Salamander artic 1 ("Retuned")
+            {
+                w3 = 0; k3 = 0; m3 = 0; int cnt = 0;
+                for (int key = 33; key <= 96; key += 3)
+                {
+                    OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (sal);
+                    auto p = P0(); p.velo = 0.f; p.artic = 1;
+                    e.noteOn (key, 0.6f, 1, kNoDet, 1u);
+                    Rec r; run (e, p, r, 48000 + 32768, 512);
+                    const double c = an::cents (an::peakFreq (mono (r), 24000, 32768, mtof (key)), mtof (key));
+                    m3 += c; ++cnt; if (std::abs (c) > std::abs (w3)) { w3 = c; k3 = key; }
+                }
+                m3 /= cnt;
+            }
+            std::printf ("      INFO absolute tuning vs 12-TET: salamander Natural worst %+.1f ¢ (key %d) mean %+.1f · Retuned worst %+.1f ¢ (key %d) mean %+.1f · violin section worst %+.1f ¢ (key %d) mean %+.1f\n",
+                         w1, k1, m1, w3, k3, m3, w2, k2, m2);
+
+            // velocity continuity across contiguous layers (Velocity 0 → the level is the recordings')
+            auto velScan = [&] (const std::shared_ptr<const OrganicInstrument>& I, int key, int v0, int v1, int64_t at, double& worstStep, int& wv) {
+                worstStep = 0; wv = 0; double prev = 0;
+                for (int v = v0; v <= v1; ++v)
+                {
+                    OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (I);
+                    auto p = P0(); p.velo = 0.f;
+                    e.noteOn (key, (float) v / 127.f, 1, kNoDet, 1u);
+                    Rec r; run (e, p, r, at + 9600, 512);
+                    const double l = an::db (an::rms (mono (r), at, 9600));
+                    if (v > v0 && std::abs (l - prev) > worstStep) { worstStep = std::abs (l - prev); wv = v; }
+                    prev = l;
+                }
+            };
+            double ws; int wv;
+            velScan (sal, 60, 1, 127, 2400, ws, wv);
+            bar ("real layers: salamander C4 vel 1-127, adjacent step", ws <= 1.5, fmt ("largest level step between adjacent velocities %.2f dB (at vel %d)", ws, wv));
+            double worstSolo = 0; int soloKey = 0, soloVel = 0;
+            for (int key = 55; key <= 100; ++key)
+            {
+                double w; int v; velScan (solo, key, 48, 78, 24000, w, v);
+                if (w > worstSolo) { worstSolo = w; soloKey = key; soloVel = v; }
+            }
+            bar ("real layers: solo violin seam (the 8 dB step) hidden", worstSolo <= 1.5,
+                 fmt ("largest adjacent-velocity step over keys 55-100, vel 48-78: %.2f dB (key %d vel %d)", worstSolo, soloKey, soloVel));
+
+            // live Dynamics sweep on the violin section: ≤ 2 readers, continuous level, no click
+            {
+                OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (vio);
+                e.noteOn (67, 64 / 127.f, 1, kNoDet, 1u);
+                Rec r; auto p = P0(); int maxR = 0;
+                std::vector<float> l (256), rr2 (256);
+                for (int64_t t = 0; t < 5 * 48000; t += 256)
+                {
+                    p.dyn = (float) std::clamp (-1.0 + 2.0 * (double) (t - 48000) / (3.0 * 48000), -1.0, 1.0);
+                    std::fill (l.begin(), l.end(), 0.f); std::fill (rr2.begin(), rr2.end(), 0.f);
+                    e.render (p, 0.f, l.data(), rr2.data(), 256);
+                    maxR = std::max (maxR, organics_debug::lastRenderReaders());
+                    r.L.insert (r.L.end(), l.begin(), l.end()); r.R.insert (r.R.end(), rr2.begin(), rr2.end());
+                }
+                // a bowed section has its own HF (bow noise) and level motion, so the click reference is the SAME note
+                // held at each end of the sweep: the sweep may not add HF above what the recording already has.
+                auto held = [&] (float dyn) {
+                    OrganicEngine h; h.prepare (kSR, 512); h.setInstrument (vio);
+                    h.noteOn (67, 64 / 127.f, 1, kNoDet, 1u);
+                    Rec q; auto pp = P0(); pp.dyn = dyn; run (h, pp, q, 5 * 48000, 256);
+                    const auto hp = an::highpass (mono (q), 8000.0); return an::peak (hp, 48000, 3 * 48000);
+                };
+                const double ref = std::max (held (-1.f), held (1.f));
+                const double sw = an::peak (an::highpass (mono (r), 8000.0), 48000, 3 * 48000);
+                bar ("real Dynamics sweep: violin section G4, held", maxR <= 2 && an::db (sw / ref) <= 1.0,
+                     fmt ("readers ≤ %d · HP(8k) peak during the sweep %+.2f dB re the static holds' own peak", maxR, an::db (sw / ref)));
+            }
+            // note-offs at random phases on the real piano (handoff + damper release + key-off noise)
+            {
+                juce::Random rnd (4242);
+                OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (sal);
+                Rec r;
+                for (int i = 0; i < 60; ++i)
+                {
+                    e.noteOn (48 + rnd.nextInt (25), 0.4f + 0.5f * rnd.nextFloat(), 1, kNoDet, (uint32_t) i);
+                    run (e, P0(), r, 4800 + rnd.nextInt (19200), 64 + rnd.nextInt (448));
+                    e.noteOff (false);
+                    run (e, P0(), r, 9600 + rnd.nextInt (9600), 64 + rnd.nextInt (448));
+                }
+                const auto ck = an::clicks (mono (r));
+                bar ("real no clicks: salamander 60 notes, offs at random phases", ck.relDb <= -60 || ck.localRatio <= 1.5,
+                     fmt ("HP residual %.1f dB re peak (local ratio %.2f, worst at %.0f ms)", ck.relDb, ck.localRatio, ck.atMs));
+            }
+            // CPU on the real piano (stereo, decaying, 8-note chord)
+            {
+                std::vector<std::unique_ptr<OrganicEngine>> v;
+                const int chord[8] = { 48, 52, 55, 59, 62, 65, 69, 72 };
+                for (int i = 0; i < 8; ++i) { v.push_back (std::make_unique<OrganicEngine>()); v.back()->prepare (kSR, 512); v.back()->setInstrument (sal); }
+                std::vector<float> l (512), r (512);
+                auto p = P0(); p.sustain = 0.3f;
+                double best = 1e30, perReg = 0; int regs = 0;
+                for (int rep = 0; rep < 7; ++rep)
+                {
+                    for (int i = 0; i < 8; ++i) v[(size_t) i]->noteOn (chord[i], 0.7f, 1, kNoDet, (uint32_t) i);
+                    for (int b = 0; b < 10; ++b) for (auto& e : v) e->render (p, 0.f, l.data(), r.data(), 512);
+                    int64_t rb = 0; const auto t1 = std::chrono::steady_clock::now();
+                    for (int b = 0; b < 200; ++b) for (auto& e : v) { e->render (p, 0.f, l.data(), r.data(), 512); rb += organics_debug::lastRenderReaders(); }
+                    const double us = std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - t1).count();
+                    if (us / 200 < best) { best = us / 200; perReg = us / (double) std::max<int64_t> (1, rb); regs = (int) (rb / 200); }
+                }
+                bar ("real CPU: salamander 8-note chord", perReg <= 4.0, fmt ("%.1f µs/block, %d regions, %.2f µs per region per 512 block", best, regs, perReg));
+            }
+        }
     }
 
     std::printf ("══ %d/%d bars pass ══\n", gBars - gFails, gBars);

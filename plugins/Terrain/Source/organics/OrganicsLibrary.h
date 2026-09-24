@@ -9,8 +9,8 @@
 //   • Velocity crossfade = SFZ xfin/xfout: the region is audible over [lv, hv]; it fades IN (equal power)
 //     over [lv, xfLo] and OUT over [xfHi, hv]. xfLo == lv and xfHi == hv mean "no authored band".
 //     The compiler writes contiguous layers (xfLo/xfHi == lv/hv), so where two layers of a zone butt together
-//     (hv + 1 == next lv) the runtime adds an equal-power band at the seam, half-width 30 % of the narrower layer
-//     (1.5..8 velocities): a layer change is never a hard switch, and the live Dynamics sweep rides the same band.
+//     (hv + 1 == next lv) the runtime adds an equal-power band at the seam reaching 30 % into each layer (1.5..8
+//     velocities per side): a layer change is never a hard switch, and the live Dynamics sweep rides the same band.
 //   • cents = the region's tune (added to playback pitch). Level = gainDb × gainNorm × velCurve(vel), gainNorm
 //     linear (the compiler already folded in the 50 % natural-loudness restore, design §2.3).
 //   • kind "release" AND kind "noise" regions trigger at NOTE-OFF (key-off / damper / release noise); release

@@ -292,16 +292,18 @@ namespace tw
                     if (j == i || hi.kind != org::Kind::Attack || hi.artic != lo.artic || hi.lv != lo.hv + 1) continue;
                     if (hi.xfLo > hi.lv || hi.lk > lo.hk || hi.hk < lo.lk) continue;
                     if (hi.rrLen != lo.rrLen || hi.rrPos != lo.rrPos || hi.randLo != lo.randLo || hi.randHi != lo.randHi) continue;
-                    // Half-width scales with the narrower layer (30 %, 1.5..8 velocities): wide layers get a long,
-                    // gentle blend (an 8 dB recorded step spread over 16 velocities), narrow ones keep a plateau.
+                    // Each side of the seam reaches 30 % into its OWN layer (1.5..8 velocities), so a narrow layer
+                    // (Salamander's 121-127) borrows blend room from its wide neighbour and still keeps a plateau:
+                    // an 8 dB recorded step spreads over up to 16 velocities. Both regions share the one interval →
+                    // sin/cos over it stays equal-power.
                     const float c = (float) lo.hv + 0.5f;
-                    const float half = std::clamp (0.3f * (float) std::min (lo.hv - lo.lv + 1, hi.hv - hi.lv + 1), 1.5f, 8.0f);
-                    const float bLo = std::max (c - half, std::max ((float) lo.lv, lo.fiHi));
-                    const float bHi = std::min (c + half, (float) hi.hv);
-                    const float w = std::min (c - bLo, bHi - c);
-                    if (w <= 0.25f) continue;
-                    lo.foLo = c - w; lo.foHi = c + w;
-                    hi.fiLo = c - w; hi.fiHi = c + w;
+                    const float dLo = std::clamp (0.3f * (float) (lo.hv - lo.lv + 1), 1.5f, 8.0f);
+                    const float dHi = std::clamp (0.3f * (float) (hi.hv - hi.lv + 1), 1.5f, 8.0f);
+                    const float bLo = std::max (c - dLo, std::max ((float) lo.lv - 0.5f, lo.fiHi));
+                    const float bHi = std::min (c + dHi, (float) hi.hv + 0.5f);
+                    if (c - bLo <= 0.25f || bHi - c <= 0.25f) continue;
+                    lo.foLo = bLo; lo.foHi = bHi;
+                    hi.fiLo = bLo; hi.fiHi = bHi;
                 }
             }
         }

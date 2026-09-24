@@ -3,10 +3,13 @@
 // Shape of one engine (one oscillator slot of one voice):
 //   notes[]   — one per unison PLAYER of each noteOn ("Ensemble": own RR, own Human seed, k·7 ms·detune timing)
 //   readers[] — one per sounding sample region (layer / release / noise), pooled, logical cap 48 per engine
-//               (kMaxRegionsPerOsc) with a 5 ms steal-fade; 64 physical slots so a stolen reader can finish its fade.
+//               (kMaxRegionsPerOsc) with a 5 ms steal-fade; 96 physical slots so stolen/handed-over readers can
+//               finish their fades (live readers never exceed 48). notes[] = 96 + 16 so a new note never starves.
 // Per block: params are smoothed once, each note recomputes its region targets only when Dynamics/Body moved,
 // each reader computes ratio + gain endpoints once, then the inner loop is interpolate → gain ramp → accumulate.
-// Tone is one first-order tilt per note (pivot 700 Hz), Image one M/S multiply per engine (skipped at 1.0).
+// Tone is ONE first-order tilt per voice (pivot 700 Hz, the lead note's velocity/key/Human tone; coefficients
+// glide across the block, identity-bracketed on/off), Image one M/S multiply per engine (skipped at 1.0).
+// Memory: ~35 KB per engine (the pools), allocated in the constructor + prepare(); nothing after prepare().
 //
 // Reused from SampleEngine.h (fb204 law): the 4-point Hermite kernel, the EQUAL-GAIN smoothstep loop crossfade
 // (correlated seam reads must not sum to +3 dB) with the adaptive window limited by the lead-in room, and the
@@ -212,7 +215,7 @@ namespace tw
             float detC = 0.f, humC = 0.f, humLvl = 1.f, humToneDb = 0.f, humStartSec = 0.f, uRand = 0.f, uFake = 0.f;
             uint32_t rrIdx = 0;
             int64_t age = 0; float heldSec = 0.f;
-            float vL = 64.f, vSoft = 64.f, gentle = 0.f, lastVL = -1.f, lastBody = -99.f;
+            float vL = 64.f, vSoft = 64.f, gentle = 0.f, lastVL = -1.f, lastBody = -99.f, attack = 0.f;
             int rd[kPerNote]; int nrd = 0;
             uint64_t gen = 0;
         };
@@ -234,6 +237,7 @@ namespace tw
         bool  snap = true;
         float sDyn = 0, sBody = 0, sTone = 0, sRelease = 0.5f, sNoise = 0.5f, sVelo = 0.75f, sImage = 1.f, sSustain = 0.f;
         float toneCur = 1.0e9f, leadTone = 0.f, tb0 = 1.f, tb1 = 0.f, ta1 = 0.f, txL = 0.f, txR = 0.f, tyL = 0.f, tyR = 0.f;
+        bool  tiltOn = false;
         float attackP = 0.f;
 
         //------------------------------------------------------------------------------------------
@@ -252,7 +256,7 @@ namespace tw
             for (auto& n : notes) { n.used = false; n.nrd = 0; }
             for (auto& r : readers) r.active = false;
             pend.on = false; offPending = false; pedalUpPending = false; pedalIsDown = false;
-            level = 0.f; snap = true; toneCur = 1.0e9f; leadTone = 0.f; txL = txR = tyL = tyR = 0.f;
+            level = 0.f; snap = true; toneCur = 1.0e9f; leadTone = 0.f; txL = txR = tyL = tyR = 0.f; tiltOn = false;
             for (auto& p : retiring) if (p != nullptr && ! org::deferRelease (p)) { for (auto& g : graveyard) if (g == nullptr) { g = std::move (p); break; } }
         }
 
@@ -415,10 +419,11 @@ namespace tw
                          void add (int i, float p) noexcept { for (int k = 0; k < n; ++k) if (idx[k] == i) { pw[k] += p; return; }
                                                                if (n < kMaxTargets) { idx[n] = i; pw[n] = p; ++n; } } };
 
-        void computeTargets (const Note& n, float vEff, float body, Targets& T) const noexcept
+        /** ADD this velocity's layer set (× the two Body shifts) to T as POWER, scaled by wPow. The caller
+            takes the square root once every contribution is in (so a region reached twice sums in power). */
+        void addTargets (const Note& n, float vEff, float body, float wPow, Targets& T) const noexcept
         {
             const auto& I = *inst;
-            T.n = 0;
             const float bs = std::clamp (6.f * body, -6.f, 6.f);
             const float s0 = std::floor (bs), w = bs - s0;
             const int   ns = w > 1.0e-4f ? 2 : 1;
@@ -442,10 +447,9 @@ namespace tw
                     const auto& r = I.regions[L[i]];
                     if (! rrPass (r, n)) continue;
                     const float g = layerGain (r, vEff) * ws;
-                    if (g > 1.0e-5f) T.add (L[i], g * g);
+                    if (g > 1.0e-5f) T.add (L[i], g * g * wPow);
                 }
             }
-            for (int k = 0; k < T.n; ++k) T.pw[k] = std::sqrt (T.pw[k]);   // power-summed → gain
         }
 
         //------------------------------------------------------------------------------------------
@@ -497,17 +501,19 @@ namespace tw
             const auto& r = I.regions[(size_t) ridx];
             const auto& s = I.samples[(size_t) r.smp];
             const double ratio = ratioFor (n, r, s, pitchCents);
+            const float atk = n.attack;                             // the note's Attack, fixed at its start
             double p = (double) r.start;
             if (role == org::Kind::Attack)
             {
-                if (attackP > 0.f) p += (double) attackP * std::max (0.0, (double) r.onset - 0.0015 * s.sampleRate - (double) r.start);
+                if (atk > 0.f) p += (double) atk * std::max (0.0, (double) r.onset - 0.0015 * s.sampleRate - (double) r.start);
                 p += (double) n.humStartSec * s.sampleRate;
-                if (! atStart)
-                {
-                    p += (double) n.age * ratio;                       // time-aligned join (live Dynamics / Body)
-                    if (r.looping() && p >= (double) r.le)
-                        p = (double) r.ls + std::fmod (p - (double) r.ls, (double) (r.le - r.ls));
-                }
+            }
+            const double pStart = p;
+            if (role == org::Kind::Attack && ! atStart)
+            {
+                p += (double) n.age * ratio;                           // time-aligned join (live Dynamics / Body)
+                if (r.looping() && p >= (double) r.le)
+                    p = (double) r.ls + std::fmod (p - (double) r.ls, (double) (r.le - r.ls));
             }
             if (p >= (double) r.end - 2.0) return;
             const int slot = allocReader();
@@ -518,17 +524,21 @@ namespace tw
             rd.pos = p; rd.ratio = ratio; rd.layer = layerG;
             const float pan = r.pan * 0.01f;
             rd.panL = std::min (1.f, 1.f - pan); rd.panR = std::min (1.f, 1.f + pan);
-            if (atStart)
+            // start envelope: 2 ms C2 declick (Tight: ends before the onset; Gentle: 0-150 ms raised fade) + Tight lift
+            int fin = fadeFrames (0.002);
+            if (role == org::Kind::Attack && atk > 0.f)
+                fin = std::clamp ((int) (((double) r.onset - pStart) / ratio), fadeFrames (0.0005), fin);
+            if (role == org::Kind::Attack && atk < 0.f) fin = std::max (fin, fadeFrames (-atk * 0.150));
+            rd.fadeInLen = fin;
+            if (role == org::Kind::Attack && atk > 0.f) { rd.liftExtra = dbToLin (4.f * atk) - 1.f; rd.liftLen = fadeFrames (0.012); }
+            if (atStart) rd.firstBlock = true;
+            else
             {
-                int fin = fadeFrames (0.002);
-                if (role == org::Kind::Attack && attackP > 0.f)          // Tight: the declick ends before the onset
-                    fin = std::clamp ((int) (((double) r.onset - p) / ratio), fadeFrames (0.0005), fin);
-                if (role == org::Kind::Attack && attackP < 0.f) fin = std::max (fin, fadeFrames (-attackP * 0.150));
-                rd.fadeInLen = fin;
-                if (role == org::Kind::Attack && attackP > 0.f) { rd.liftExtra = dbToLin (4.f * attackP) - 1.f; rd.liftLen = fadeFrames (0.012); }
-                rd.firstBlock = true;
+                // mid-note join: the layer ramps in from 0 over the block AND continues the note's attack envelope
+                // (a layer joining during Gentle's 150 ms fade must not arrive at full level)
+                rd.firstBlock = false; rd.gPrev = 0.f;
+                if (role == org::Kind::Attack) rd.age = n.age;
             }
-            else { rd.firstBlock = false; rd.gPrev = 0.f; }        // mid-note join: ramp in from 0 over the block
             if (r.offByIdx >= 0) rd.chokeSeen = I.groupEpoch()[r.offByIdx].load (std::memory_order_relaxed);
             rd.stamp = ++stampCounter;
             n.rd[n.nrd++] = slot;
@@ -610,6 +620,7 @@ namespace tw
             n.artic = std::clamp (n.artic, 0, I.numArtics - 1);
             n.vL = std::clamp ((float) n.vIdx + 63.f * sDyn, 1.f, 127.f);
             attackP = std::clamp (P.attack, -1.f, 1.f);
+            n.attack = attackP;
             const int key0 = std::clamp (n.key + (int) std::lround (6.f * sBody), 0, 127);
 
             // random RR: no immediate repeat (remap the draw into the complement of the last pick's range)
@@ -675,15 +686,21 @@ namespace tw
             auto& n = notes[idx];
             const float vT = std::clamp ((float) n.vIdx + 63.f * sDyn, 1.f, 127.f);
             n.vL = atStart ? vT : n.vL + aDynNote * (vT - n.vL);
-            float vEff = n.vL;
             const int64_t gLen = (int64_t) (0.06 * sr);
             const bool gentleLive = n.gentle > 0.f && n.age < gLen;
-            if (gentleLive)
-                vEff = n.vL + n.gentle * (1.f - smooth01 ((float) n.age / (float) gLen)) * (n.vSoft - n.vL);
-            if (! atStart && ! gentleLive && std::abs (vEff - n.lastVL) < 0.02f && std::abs (sBody - n.lastBody) < 1.0e-4f) return;
-            n.lastVL = vEff; n.lastBody = sBody;
+            if (! atStart && ! gentleLive && std::abs (n.vL - n.lastVL) < 0.02f && std::abs (sBody - n.lastBody) < 1.0e-4f) return;
+            n.lastVL = n.vL; n.lastBody = sBody;
             Targets T;
-            computeTargets (n, vEff, sBody, T);
+            if (gentleLive)
+            {
+                // Gentle: an equal-power 60 ms crossfade FROM the next-softer layer set TO the played one
+                const float th = 1.5707963f * n.gentle * (1.f - smooth01 ((float) n.age / (float) gLen));
+                const float c = std::cos (th), s = std::sin (th);
+                addTargets (n, n.vL, sBody, c * c, T);
+                addTargets (n, n.vSoft, sBody, s * s, T);
+            }
+            else addTargets (n, n.vL, sBody, 1.f, T);
+            for (int k = 0; k < T.n; ++k) T.pw[k] = std::sqrt (T.pw[k]);   // power-summed → gain
             bool used[kMaxTargets] = {};
             for (int i = 0; i < n.nrd; ++i)
             {
@@ -902,25 +919,36 @@ namespace tw
         }
 
         /** The tilt as direct form I: u = b0·x + b1·x₋₁ (parallel), then y = u − a1·y₋₁ solved 4 samples at a
-            time from y₋₁ alone (the serial chain is one FMA per 4 samples instead of two per sample). */
-        void tiltBlock (float* x, int n, float& x1, float& y1) const noexcept
+            time from y₋₁ alone (the serial chain is one FMA per 4 samples instead of two per sample).
+            When the target moved, the coefficients glide from→to in 16-sample steps across the block (a DF1
+            output steps by Δcoef·signal at a switch: 16–32 small steps instead of one keeps Tone/Velocity
+            sweeps free of block-rate zipper). */
+        static void tiltBlock (float* x, int n, float& x1, float& y1, const float* from, const float* to) noexcept
         {
-            const float b0 = tb0, b1 = tb1, c = -ta1, c2 = c * c, c3 = c2 * c, c4 = c2 * c2;
-            float xp = x1;
-            for (int i = 0; i < n; ++i) { const float xi = x[i]; x[i] = b0 * xi + b1 * xp; xp = xi; }
-            x1 = xp;
-            float yp = y1;
-            int i = 0;
-            for (; i + 4 <= n; i += 4)
+            constexpr int kSub = 16;
+            const bool glide = from[0] != to[0] || from[1] != to[1] || from[2] != to[2];
+            const int nSub = (n + kSub - 1) / kSub;
+            float xp = x1, yp = y1;
+            for (int sb = 0; sb < nSub; ++sb)
             {
-                const float u0 = x[i], u1 = x[i + 1], u2 = x[i + 2], u3 = x[i + 3];
-                const float p1 = u1 + c * u0, p2 = u2 + c * u1 + c2 * u0, p3 = u3 + c * u2 + c2 * u1 + c3 * u0;
-                x[i]     = u0 + c  * yp;
-                x[i + 1] = p1 + c2 * yp;
-                x[i + 2] = p2 + c3 * yp;
-                yp = x[i + 3] = p3 + c4 * yp;
+                const int i0 = sb * kSub, i1 = std::min (n, i0 + kSub);
+                const float t = glide ? (float) (sb + 1) / (float) nSub : 1.f;
+                const float b0 = from[0] + t * (to[0] - from[0]), b1 = from[1] + t * (to[1] - from[1]);
+                const float c = -(from[2] + t * (to[2] - from[2])), c2 = c * c, c3 = c2 * c, c4 = c2 * c2;
+                for (int i = i0; i < i1; ++i) { const float xi = x[i]; x[i] = b0 * xi + b1 * xp; xp = xi; }
+                int i = i0;
+                for (; i + 4 <= i1; i += 4)
+                {
+                    const float u0 = x[i], u1 = x[i + 1], u2 = x[i + 2], u3 = x[i + 3];
+                    const float p1 = u1 + c * u0, p2 = u2 + c * u1 + c2 * u0, p3 = u3 + c * u2 + c2 * u1 + c3 * u0;
+                    x[i]     = u0 + c  * yp;
+                    x[i + 1] = p1 + c2 * yp;
+                    x[i + 2] = p2 + c3 * yp;
+                    yp = x[i + 3] = p3 + c4 * yp;
+                }
+                for (; i < i1; ++i) { yp = x[i] + c * yp; x[i] = yp; }
             }
-            for (; i < n; ++i) { yp = x[i] + c * yp; x[i] = yp; }
+            x1 = xp;
             y1 = std::abs (yp) < 1.0e-15f ? 0.f : yp;
         }
 
@@ -967,7 +995,7 @@ namespace tw
            #endif
             bool any = false;
             for (auto& nt : notes) if (nt.used) { any = true; break; }
-            if (! any) { txL = txR = tyL = tyR = 0.f; updateRetiring(); return 0.f; }
+            if (! any) { txL = txR = tyL = tyR = 0.f; tiltOn = false; toneCur = 1.0e9f; updateRetiring(); return 0.f; }
 
             std::fill (sumL.begin(), sumL.begin() + n, 0.f);
             std::fill (sumR.begin(), sumR.begin() + n, 0.f);
@@ -1015,6 +1043,11 @@ namespace tw
                 const float kt = ln.key > 84 ? -1.5f * (float) (ln.key - 84) / 12.f : 0.f;
                 leadTone = std::clamp (9.f * sTone + 4.f * (ln.vel01 - 0.6f) * sVelo + kt + ln.humToneDb, -12.f, 12.f);
             }
+            // The IDENTITY coefficients (A = 1: b0 = 1, b1 = a1) bracket every on/off: the filter glides in from
+            // identity and glides out to identity for one block before it is bypassed, and while bypassed its
+            // state is kept exactly what identity would hold — so neither switch steps the signal.
+            const float ident[3] = { 1.f, (toneK - 1.f) / (1.f + toneK), (toneK - 1.f) / (1.f + toneK) };
+            const float prev[3] = { tb0, tb1, ta1 };
             if (std::abs (leadTone - toneCur) > 0.05f)
             {
                 toneCur = leadTone;
@@ -1022,12 +1055,17 @@ namespace tw
                 const float inv = 1.f / (1.f + C * K);
                 tb0 = (A + K) * inv; tb1 = (K - A) * inv; ta1 = (C * K - 1.f) * inv;
             }
-            if (std::abs (toneCur) >= 0.05f)
+            const bool onNow = std::abs (toneCur) >= 0.05f;
+            if (onNow || tiltOn)
             {
-                tiltBlock (sumL.data(), n, txL, tyL);
-                tiltBlock (sumR.data(), n, txR, tyR);
+                const float cur[3] = { tb0, tb1, ta1 };
+                const float* f = tiltOn ? prev : ident;
+                const float* t = onNow ? cur : ident;
+                tiltBlock (sumL.data(), n, txL, tyL, f, t);
+                tiltBlock (sumR.data(), n, txR, tyR, f, t);
             }
-            else txL = txR = tyL = tyR = 0.f;
+            else { txL = tyL = sumL[(size_t) n - 1]; txR = tyR = sumR[(size_t) n - 1]; }   // identity's exact state
+            tiltOn = onNow;
             for (const auto& rd : readers) live += (rd.active && ! rd.fading) ? 1 : 0;
             gLastLive.store (live, std::memory_order_relaxed);
 

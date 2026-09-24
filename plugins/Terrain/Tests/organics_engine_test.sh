@@ -6,6 +6,7 @@
 #
 #    bash Tests/organics_engine_test.sh            # from plugins/Terrain (or anywhere)
 #    ORG_REGEN=1 bash Tests/organics_engine_test.sh   # rewrite the generated fixtures first
+#    ORG_REAL=0 bash Tests/organics_engine_test.sh    # skip the real-data bars (Agent A's compiled library)
 #
 #  Exit 0 only when every bar prints PASS. Module objects are cached in $ORG_OUT (default
 #  <repo>/build/organics_engine_test); the three organics sources recompile every run.
@@ -40,4 +41,10 @@ $CXX "$OUT"/*.o $FW -o "$OUT/organics_engine_test" 2> "$OUT/link.log" || { echo 
 
 FIX="Tests/fixtures/organics"
 if [ "${ORG_REGEN:-0}" = "1" ]; then "$OUT/organics_engine_test" --gen "$FIX" || exit 1; fi
-"$OUT/organics_engine_test" "$FIX"
+# Agent A's compiled library (outside git): the real-data bars run when it is present (ORG_REAL=0 skips them)
+REAL="${ORG_REAL_DIR:-$HOME/Developer/VST-Plugins/organics-library/compiled}"
+if [ "${ORG_REAL:-1}" = "1" ] && [ -f "$REAL/salamander.grand.v3/map.json" ]; then
+  "$OUT/organics_engine_test" "$FIX" "$REAL"
+else
+  "$OUT/organics_engine_test" "$FIX"
+fi
