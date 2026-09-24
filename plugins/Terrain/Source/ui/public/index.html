@@ -7351,9 +7351,10 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   <!-- HEADER -->
   <div id="header">
     <div class="header-left">
-      <!-- CPU% on the LEFT balances the version on the right; TERRAIN stays centred. Ultra-thin white
-           (the BPM-number style). Shown only when Settings → Performance → CPU meter is On. -->
-      <span class="brand-cpu" id="hdr-cpu" style="display:none"></span>
+      <!-- CPU% on the LEFT mirrors the version on the right; TERRAIN stays put. Ultra-thin white
+           (the BPM-number style). Shown only when Settings → Performance → CPU meter is On. tp-cpu —
+           absolutely positioned (see .brand-cpu), so it is NOT a flex item: on/off moves nothing. -->
+      <span class="brand-cpu" id="hdr-cpu" style="visibility:hidden"></span>
       <span class="brand-name">Terrain</span>
       <span class="brand-version">V1</span>
     </div>
@@ -7433,9 +7434,16 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
        Follows: centerline · fixed-positions · recycle-existing · state-persists · no-clicks.
   ═══════════════════════════════════════════════════════════════════════════════════════════ -->
   <style id="st-css">
-  /* header CPU meter (LEFT of TERRAIN; V1 stays right) — the ultra-thin white BPM-number style */
-  .brand-cpu{font-size:10px;letter-spacing:1.2px;font-weight:200;color:rgba(255,255,255,.82);margin-right:2px;padding-top:3px;font-variant-numeric:tabular-nums;white-space:nowrap;}
-  .brand-cpu i{font-style:normal;font-weight:200;color:rgba(255,255,255,.42);margin-left:2px;}
+  /* header CPU meter (LEFT of TERRAIN; V1 stays right) — the ultra-thin white BPM-number style.
+     tp-cpu — FIXED POSITION. Out of flow: absolutely positioned against .header-left (already the
+     positioned, dead-centred wordmark group), its RIGHT edge pinned to TERRAIN's left edge plus the
+     same ink gap V1 keeps on the right (measured, --cpu-gap). Showing/hiding it is visibility only,
+     so the group's width never changes and TERRAIN never moves. Ink = the global numeric ink
+     (--ti-num-ink: WHITE on dark, the inverse on light — it was hard white and vanished on light). Its own box is the full 44px bar with
+     align-items:center — on the header centreline by construction, no nudge. The number grows LEFTward. */
+  .brand-cpu{position:absolute;right:100%;top:0;height:44px;display:flex;align-items:center;margin-right:var(--cpu-gap,7.5px);
+    font-size:10px;line-height:1;letter-spacing:1.2px;font-weight:200;color:var(--ti-num-ink,#fff);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;}
+  .brand-cpu i{font-style:normal;font-weight:200;letter-spacing:0;color:var(--text-muted);margin-left:2px;}
   /* the settings TERRAIN header band = the SAME dark-glass as the sheet (don't recolour it differently) */
   body.st-open #header{background:var(--menu-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);}
 
@@ -8223,19 +8231,31 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     var rd=velEl.querySelector('#vel-rd'); if(rd) rd.textContent=S.vmode==='Fixed'?'every note at 100':(S.vcurve===0?'linear':(S.vcurve<0?'softer touch ':'harder touch ')+Math.abs(Math.round(S.vcurve*100))+' %');
     paintVelDot(lastVin!=null?lastVin:0.5); }
   function paintVelDot(vin){ if(!velEl) return; var d=velEl.querySelector('.dt'); if(!d) return; var y=S.vmode==='Fixed'?100/127:crvF(vin,S.vcurve); d.setAttribute('cx',(vin*150).toFixed(2)); d.setAttribute('cy',(90-y*88).toFixed(2)); }
-  function paintHeaderCpu(){ var e=$('hdr-cpu'); if(!e) return; if(S.cpuMeter==='On'){ e.style.display=''; e.innerHTML=cpuNow+'<i>%</i>'; } else { e.style.display='none'; e.textContent=''; } }
+  /* tp-cpu — THE HEADER CPU METER, HONEST. Max: "it's just there for show." He was right: JUCE's native
+     functions answer with a PROMISE, the old poll rejected anything with a .then, and so it ALWAYS fell
+     through to a made-up note-count estimate (2 % idle, +4.2 per held key). Now it reads the native
+     getDspLoad (TerrainAudioProcessor::getDspLoadPercent — the whole processBlock's wall time ÷ the audio
+     time it produced, light smoothing on the native side) at ~4 Hz, one request in flight, whole percent.
+     No native (a browser preview) = an em dash, never an invented number.
+     FIXED POSITION: #hdr-cpu is absolutely positioned off TERRAIN's left edge (see .brand-cpu), so showing
+     or hiding it moves nothing — visibility only, the box never leaves the layout it isn't part of. */
+  function cpuTxt(){ return cpuNow==null?'—':String(cpuNow); }
+  function paintHeaderCpu(){ var e=$('hdr-cpu'); if(!e) return; var on=S.cpuMeter==='On';
+    e.style.visibility=on?'visible':'hidden'; e.innerHTML=on?cpuTxt()+(cpuNow==null?'':'<i>%</i>'):''; }
 
-  /* frame clock: preview meter + CPU (native getDspLoad when present, else a note-count estimate) */
-  var cpuNow=0, cpuT=0, getLoad=null, triedLoad=false;
+  /* frame clock: preview meter + CPU (native getDspLoad, ~4 Hz) */
+  var cpuNow=null, cpuT=0, getLoad=null, triedLoad=false, cpuBusy=false;
+  function cpuGot(v){ var n=parseFloat(v); if(isFinite(n)) cpuNow=Math.max(0,Math.min(100,Math.round(n)));
+    if(cpuEls){ cpuEls[0].querySelector('i').style.width=(cpuNow==null?0:cpuNow)+'%'; cpuEls[1].textContent=cpuTxt()+(cpuNow==null?'':' %'); }
+    var ic=$('i-cpu'); if(ic) ic.textContent=cpuTxt()+(cpuNow==null?'':' %');
+    if(S.cpuMeter==='On') paintHeaderCpu(); }
   (function tick(now){ var lv=level(); meters.forEach(function(m){ var i=m.querySelector('i'); if(i) i.style.width=Math.min(100,lv*260).toFixed(1)+'%'; });
-    if(now-cpuT>400){ cpuT=now;
+    if(now-cpuT>=250 && (!cpuBusy || now-cpuT>2000)){ cpuT=now; cpuBusy=false;
       if(!triedLoad){ triedLoad=true; getLoad=nfn('getDspLoad'); }
-      var nv=Object.keys(held).length, got=null;
-      if(getLoad){ try{ var raw=getLoad(); if(raw!=null&&!raw.then){ got=Math.round(parseFloat(raw)); } }catch(e){} }
-      cpuNow=(got!=null&&isFinite(got))?got:Math.max(1,Math.round(2+nv*4.2*({Eco:.6,Standard:1,High:1.8}[S.rtQ]||1)));
-      if(cpuEls){ cpuEls[0].querySelector('i').style.width=Math.min(100,cpuNow)+'%'; cpuEls[1].textContent=cpuNow+' %'; }
-      var ic=$('i-cpu'); if(ic) ic.textContent=cpuNow+' %';
-      if(S.cpuMeter==='On') paintHeaderCpu(); }
+      var raw=null; if(getLoad){ try{ raw=getLoad(); }catch(e){ raw=null; } }
+      if(raw&&typeof raw.then==='function'){ cpuBusy=true;
+        raw.then(function(v){ cpuBusy=false; cpuGot(v); }, function(){ cpuBusy=false; }); }
+      else cpuGot(raw); }
     requestAnimationFrame(tick); })(0);
 
   /* ═══ SHEETS ═══ */

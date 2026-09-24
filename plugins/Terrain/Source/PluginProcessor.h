@@ -1925,24 +1925,29 @@ public:
         synthEngine.setVelCurve (c);
         if (auto* bb = bankB_.load (std::memory_order_acquire)) bb->setVelCurve (c);
     }
-    // fb-settings — CPU METER read (Settings → Performance → CPU meter in the header). Returns an
-    //   instantaneous DSP load %, the delta since the previous call (message thread only). dspTicks_ /
-    //   dspSamples_ accumulate every processBlock unconditionally; we read the delta and never reset them,
-    //   so the optional background CPU probe is left undisturbed. Smoothed and clamped to 0..100.
+    // fb-settings — CPU METER read (Settings → Performance → CPU meter in the header). Returns the DSP
+    //   load % (processBlock's own wall time ÷ the audio time it produced, the whole block — see DspClock)
+    //   over the window since the previous call (message thread only; the page polls ~4 Hz). dspTicks_ /
+    //   dspSamples_ accumulate every processBlock; we read deltas and never reset them. The opt-in beacon
+    //   probe DOES exchange them to 0 — a negative delta means that happened, so we just resync.
+    //   tp-cpu — light smoothing (0.5/0.5 ≈ one poll of lag), clamped 0..100; a window in which no audio
+    //   was processed at all reads 0 (host stopped calling us), never a stale number.
     double getDspLoadPercent() noexcept
     {
         const long long t  = dspTicks_.load   (std::memory_order_relaxed);
         const long long s  = dspSamples_.load (std::memory_order_relaxed);
         const long long dt = t - dspLoadT0_, ds = s - dspLoadS0_;
         dspLoadT0_ = t; dspLoadS0_ = s;
+        if (dt < 0 || ds < 0) return dspLoadLast_;          // beacon reset the counters: resync only
         const double sr = getSampleRate();
-        if (ds > 0 && sr > 0.0 && dt >= 0)
+        double pct = 0.0;
+        if (ds > 0 && sr > 0.0)
         {
             const double dspSec = (double) dt / (double) juce::Time::getHighResolutionTicksPerSecond();
             const double audSec = (double) ds / sr;
-            const double pct    = juce::jlimit (0.0, 100.0, 100.0 * dspSec / audSec);
-            dspLoadLast_ = 0.75 * dspLoadLast_ + 0.25 * pct;
+            pct = juce::jlimit (0.0, 100.0, 100.0 * dspSec / audSec);
         }
+        dspLoadLast_ = 0.5 * dspLoadLast_ + 0.5 * pct;
         return dspLoadLast_;
     }
     long long dspLoadT0_ = 0, dspLoadS0_ = 0;   // fb-settings — getDspLoadPercent state (message thread only)
