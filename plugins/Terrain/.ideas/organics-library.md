@@ -2,6 +2,7 @@
 
 **Product:** Terrain (Waves Crate). This library feeds the Organics SF2/SFZ multi-sampler engine.
 **Owner:** Max. **Compiled:** 2026-09-24. Every licence was checked on that date.
+**Clearance pass (2026-09-24, "no emails" rule):** nothing in the factory library may depend on a permission request. The MTG saxes were cleared sound by sound (R2 closed); the Greg Sullivan EPs were removed (R4: no licence from the author); Karoryfer Weresax (CC0 alto) was added. See §8 for the cleared-status table.
 **Local root:** `/Users/macshooter/Developer/VST-Plugins/organics-library/`. It lives outside the git repo. Paths below are relative to `raw/`.
 **Downloaded:** **9.6 GB** (9,880 MiB on disk) from 6 sources: VCSL, VSCO 2 CE, sfzinstruments/Karoryfer, FreePats, Versilian Etherealwinds and OLPC/Berklee.
 - Every GitHub file was checked against its git blob SHA-1, with 0 failures.
@@ -53,10 +54,10 @@ Some limits on those numbers:
   | Tonal Percussion | 0 (cross-listed) | 6 |
   | **Total** | **≈100** | **≈135** |
 
-- **Tier A (CC0 / Unlicense):** about 8.1 GB. **Tier B (CC-BY):** about 1.5 GB (Salamander 838 MB, Etherealwinds harp 364 MB, MTG sax 108 MB, OLPC 148 MB, Greg Sullivan EPs 21 MB).
+- **Tier A (CC0 / Unlicense):** about 8.1 GB. **Tier B (CC-BY):** about 1.5 GB (Salamander 838 MB, Etherealwinds harp 364 MB, MTG sax 108 MB, OLPC 148 MB, Greg Sullivan EPs 21 MB, since removed from the factory library).
 - **Biggest gaps:**
   1. a **real choir**
-  2. a **Rhodes / tine EP**
+  2. a **Rhodes / tine EP**, and now also **Wurlitzer, CP and Pianet** (the Greg Sullivan EPs were removed; no cleared real EP of any kind exists)
   3. a **Clavinet**
   4. a **real tonewheel organ**
   5. **celesta / music box**
@@ -65,7 +66,7 @@ Some limits on those numbers:
   8. **brass and woodwind sections** (ensembles)
   9. **ready-made tape (Mellotron-style) instruments**. These can be built in-house from cleared sources (§1.11).
 
-  See §4 for options and §8 for the draft permission emails.
+  See §4 for options and §8 for the cleared-status table.
 
 ---
 
@@ -86,9 +87,9 @@ Column key:
 | K2 | **Steinway Grand B** (pedal-up and pedal-down sets) | VCSL → `VCSL/Chordophones/Zithers/Grand Piano, Steinway B*` | A | 1361 | 3 / – | A0–C8, one sample per whole tone (42 notes). Separate Sus/NoSus recordings, release samples. | WAV 44.1k/24 stereo | 3.5 | Only 3 layers, so add velocity→lowpass to hide the steps. Room/hiss floor is about −66 dBFS; consider light denoising. Stretch ±1 st. |
 | K3 | **Upright Piano** | VCSL "Upright Piano, Yamaha" → `VCSL/Chordophones/Zithers/Upright Piano, Yamaha*` | A | 260 | 5 / 2 | A0–E7, one sample every 4–5 st (13 notes), release samples | WAV 44.1k/24 | 3 | The sparse sampling needs ±2.5 st stretch, which sounds "lo-fi". Good for a Felt/Lo-fi Upright preset. |
 | K4 | **Honky-Tonk / Old Player Piano** | FreePats "Old Piano FB" (Francis Bacon player piano, Piotr Barcz) → `FreePats/PianoFB-SFZ+FLAC-20200401` | A | 36 | 1 / – | chromatic, 78 notes | FLAC 44.1k/16 stereo | 3 | One layer only; use velocity→filter. Strong character. |
-| K5 | **Electric Grand** (Yamaha CP80) | Greg Sullivan E-Pianos → `sfzinstruments/GregSullivan.E-Pianos/CP80` | B CC-BY 3.0 | 8 | 4 / – | A0–C8, one sample every 3 st | FLAC 44.1k/16 **mono** | 3 | Noise floor about −42 dBFS (hiss). Denoise or mask with a stereo chorus. |
-| K6 | **Reed EP** (Wurlitzer EP200) | Greg Sullivan → `.../Wurlitzer EP200` | B CC-BY 3.0 | 7 | 4 / – | A1–C7, 20 notes | FLAC 44.1k/16 mono | 3 | Samples are short, so they need loops and a release tail. Hum is present. |
-| K7 | **Pianet** (Hohner Pianet T) | Greg Sullivan → `.../Pianet T` | B CC-BY 3.0 | 6 | 2 / – | F1–E6, one sample every 4 st; release samples | FLAC 44.1k/16 mono | 2.5 | Stretch ±2 st. |
+| ~~K5~~ | ~~Electric Grand (Yamaha CP80)~~ | Greg Sullivan E-Pianos | **REMOVED** | – | – | – | – | – | Removed 2026-09-24: the author states no licence at the source (R4). id `gsullivan.ep.cp80` = 9 stays reserved. |
+| ~~K6~~ | ~~Reed EP (Wurlitzer EP200)~~ | Greg Sullivan | **REMOVED** | – | – | – | – | – | Removed (R4). id `gsullivan.ep.wurlitzer-ep200` = 3 stays reserved. |
+| ~~K7~~ | ~~Pianet (Hohner Pianet T)~~ | Greg Sullivan | **REMOVED** | – | – | – | – | – | Removed (R4). id `gsullivan.ep.pianet-t` = 13 stays reserved. |
 | K8 | **FM Tine EP** (DX7-style "E.Piano 1") | FreePats FM Piano #1, rendered from the Hexter emulator → `FreePats/FM-Piano1-*` | A | 25 | 3 / – | one sample every 6 st | FLAC 44.1k/24 mono | 2.5 | Needs a denser mapping (±3 st stretch is audible). It imitates Yamaha's factory patch; see §6 risk note R5. |
 | K9 | **FM Bright EP** | FreePats FM Piano #2 | A | 9 | 1 / – | one sample every 6 st | FLAC mono | 2 | Filler. |
 | K10 | **FM Piano / Clavisynth** (TX81Z) | VCSL TX81Z: *"patches are user-created ... sampled from the original FM hardware"* → `VCSL/Electrophones/TX81Z` | A | 132 | 3 / – | C1–C#8, one sample every 4 st | WAV 44.1k/24 mono | 3 | Clavisynth is the closest cleared thing to a Clavinet. |
@@ -155,12 +156,12 @@ Column key:
 | W3 | **Oboe** (non-vibrato, vibrato, staccato) | VSCO | A | 81 | 2 / – | A#3–F6, one sample every 3 st | WAV 16 | 3 | Needs loops. |
 | W4 | **Clarinet** (sustain, staccato) | VSCO | A | 69 | 3–5 / random | D3–F#6 | WAV 16 | 3 | Needs loops. |
 | W5 | **Bassoon** (sustain, vibrato, staccato) | VSCO | A | 70 | 3 / random | A#1–C5 | WAV 16 | 3 | Needs loops. |
-| W6 | **Soprano Sax** | MTG Solo Sax (Freesound MTG packs, SFZ by kinwie) → `sfzinstruments/MTG.SoloSax` | B CC-BY 4.0 (underlying Freesound packs are CC-BY) | 108 (all 4) | 2–3 / 3+ | chromatic, 35 notes | FLAC 48k/24 mono | **4** | Looped and non-looped versions included. Breath and key-click noise layers. |
+| W6 | **Soprano Sax** | MTG Solo Sax (Freesound MTG packs, SFZ by kinwie) → `sfzinstruments/MTG.SoloSax` | B CC-BY 3.0 (every Freesound source sound, by MTG; kinwie's SFZ edit CC-BY 4.0). **Cleared per sound, 2026-09-24** | 108 (all 4) | 2–3 / 3 | chromatic, 33 notes | FLAC 48k/24 mono | **4** | Shipped: note samples only. Breath/key-noise files are excluded (not traceable to a Freesound sound). |
 | W7 | **Alto Sax** | MTG Solo Sax | B | (incl.) | 2–3 / 3+ | G#2–A5 | FLAC 48k/24 | 4 | – |
 | W8 | **Tenor Sax** | MTG Solo Sax | B | (incl.) | 2–3 / 3+ | chromatic | FLAC 48k/24 | 4 | – |
 | W9 | **Baritone Sax** | MTG Solo Sax | B | (incl.) | 3–4 / 9 random | G#1–A4 | FLAC 48k/24 | 4 | – |
 | W10 | **Vintage Bari Sax** (1926 Conn): sustain, marcato, staccato, subtone, growl | Karoryfer **Bear Sax** → `sfzinstruments/karoryfer.bear-sax` | A | 149 | **4–5 / 4** | C2–G#4, chromatic | WAV 44.1k/16–32 mono | **4.5** | Tier A counterpart to W9. |
-| W11 | **Alto Sax** (Weresax, 2 mic positions; also "saxcordion") | Karoryfer Weresax → `sfzinstruments/karoryfer.weresax` | A | 196 | 2–3 / 2 | C#3–G#5, chromatic | WAV 44.1k/24 mono | 3.5 | The README says alto and the shop says tenor; check by ear. |
+| W11 | **Alto Sax** (Weresax, 2 mic positions; also "saxcordion") | Karoryfer Weresax → `sfzinstruments/karoryfer.weresax` | A | 196 | 2 / 2 | C#3–G#5, chromatic | WAV 44.1k/24 mono | 3.5 | **Shipped 2026-09-24** as `karoryfer.sax.weresax-alto` (condenser mic, 2 layers, RR reduced to 1 by the 48 MB budget). The readme says alto and the samples folder is `alto/`; the shop's "tenor" is wrong. |
 | W12 | **Tenor Sax** (vibrato, non-vibrato, staccato) | VCSL Tenor Saxophone | A | 139 | 2–3 / – | G#2–F6, one sample per whole tone | WAV 48k/24 stereo | 3.5 | Needs loops. Tier A tenor. |
 | W13 | Saxello | VCSL | A | 47 | 2–3 / – | one sample every 4 st | WAV 48k/24 | 3 | – |
 | W14–17 | **Recorders**: baroque soprano, alto, tenor, bass (sustain, vibrato sustain, staccato) | VCSL → `VCSL/Aerophones/Edge-blown Aerophones/Baroque*` | A | 151 | 1 / – | one sample per whole tone | WAV 48k/16 stereo | 3 | Needs loops. Good "breathy flute" and tape-flute source. |
@@ -279,9 +280,9 @@ Source: the local Serum 2 install lists 143 SFZ patches in 9 categories (904 MB)
 | Serum 2 category | Serum 2 instruments | Our cleared equivalent | Status |
 |---|---|---|---|
 | Keys | Baby Grand Piano ×3, Upright Piano, Gaff Piano | Salamander (K1), VCSL Steinway B (K2), VCSL Yamaha upright (K3), Old Piano FB (K4); Osiris (optional) | ✅ |
-| Keys | Elec. Piano Suitcase (Rhodes, about 13 velocity layers) | Nothing good. Candidates: jRhodes CC0 subset in the Discord GM bank (1 layer, needs the author's confirmation), tim.kahn Rhodes Mk II (CC-BY 4.0, middle register missing) | ❌ / 🟡 |
-| Keys | Elec. Piano Wurli | Greg Sullivan EP200 (K6); OldBassMan 200A (CC-BY, Freesound) | ✅ |
-| Keys | Pianet | Greg Sullivan Pianet T (K7) | ✅ |
+| Keys | Elec. Piano Suitcase (Rhodes, about 13 velocity layers) | Nothing cleared. jRhodes GM subset: the author's own licence conflicts (see §5); tim.kahn Rhodes Mk II (CC-BY 4.0) is missing 21 notes (F4–C#6 standard naming) and is login-only | ❌ |
+| Keys | Elec. Piano Wurli | Nothing cleared. Greg Sullivan EP200 removed (R4); OldBassMan 200A (Freesound pack 5726, CC-BY 4.0, 13 notes a major third apart) needs a Freesound login to download | ❌ |
+| Keys | Pianet | Nothing cleared. Greg Sullivan Pianet T removed (R4); tarane468 Pianet T (Freesound 26137, CC0) is 4 notes only and login-only | ❌ |
 | Keys | Clav | Only VCSL TX81Z "Clavisynth" (FM) | ❌ |
 | Keys | Harmonium | Freesound cabled_mess/donyaquick harmonium (CC0, chromatic C2–D5, 96 kHz), needs a login download | 🟡 |
 | Keys | MT Choir / MT Flute / MT Strings | Build Tape Choir, Flute and Strings (§1.11); Squidotron | 🟡 (build) |
@@ -302,7 +303,7 @@ Source: the local Serum 2 install lists 143 SFZ patches in 9 categories (904 MB)
 | Strings | Full Strings, Violins, Violas, Celli, Contrabasses (sustain, mute, pizzicato, tremolo, gliss), solo violin, solo cello | VSCO 2 CE sections and solos (sustain, quiet, tremolo, spiccato, pizzicato), Karoryfer cello, Meatbass. No mutes or glissandi | ✅ (no mutes or gliss) |
 | Strings | Double Bass (short, jazz pizzicato, orchestral pizzicato) | Meatbass arco and pizzicato, VSCO contrabass | ✅ |
 | Winds | Flute, Clarinet(s), Bass Clarinet, Bassoon | VSCO flute, piccolo, oboe, clarinet, bassoon; VCSL recorders. **No bass clarinet** | ✅ / ❌ bass clarinet |
-| Winds | Sax Alto (vibrato), Sax Tenor | MTG Soprano, Alto, Tenor and Baritone; Weresax; Bear Sax; VCSL tenor sax and saxello | ✅ (stronger than Serum) |
+| Winds | Sax Alto (vibrato), Sax Tenor | MTG Soprano, Alto, Tenor and Baritone (cleared per sound); Weresax alto (CC0, shipped); Bear Sax; VCSL tenor sax and saxello | ✅ (stronger than Serum) |
 | Winds | French Horn solo and section; Trumpet (vibrato, mute) and Trumpets; Trombones (tenor, bass), Cimbasso; Tuba | VSCO horn, trumpet (straight and harmon mutes), trombones, tuba; War Tuba. **No true sections and no cimbasso** | ✅ solo / ❌ sections |
 | Choir | Ah / O / Oo in Low, High and Both | Karoryfer male "a" (solo, CC0) + OLPC female and male aa/oo, solo and small ensemble (sparse). **No real SATB choir** | ❌ (seed only) |
 | Synth | Solina, JX, MKS80, SID, SY77, DX, KRG PE | Out of scope: Terrain's own engines. VCSL TX81Z, Caveman Cosmonaut (CC0, not downloaded), String Cyborgs, FreePats pads | n/a |
@@ -321,7 +322,7 @@ Source: the local Serum 2 install lists 143 SFZ patches in 9 categories (904 MB)
 5. **Karoryfer x bigcat Cello** (A): 4–6 layers × 4 RR, sustain, staccato and pizzicato.
 6. **Karoryfer Meatbass** (A): double bass, arco and pizzicato, 5 layers.
 7. **Etherealwinds Harp II CE** (B): chromatic, 2 layers × 2 RR.
-8. **MTG Solo Saxophones** (B): 4 saxes, chromatic 48k/24, 3–9 RR.
+8. **MTG Solo Saxophones** (B, cleared per sound): 4 saxes, chromatic 48k/24, 3 RR.
 9. **jSteelDrum** (A): 5 layers × 3–4 RR, chromatic.
 10. **VSCO 2 CE strings, woodwinds and brass** (A): the only complete cleared orchestra. Good, not great (no loops, 2–3 layers).
 
@@ -335,13 +336,13 @@ Honourable mentions: Karoryfer Emilyguitar and Growlybass, VCSL Vibraphone, Rena
 
 | # | Gap | Best cleared option found | Next step |
 |---|---|---|---|
-| 1 | **Choir (SATB aahs/oohs)** | Seed material: the Karoryfer male "a" (CC0), OLPC Berklee female and male aa/oo solo and ensemble (CC-BY 3.0), and **VocalSet** (Zenodo 1442513, CC-BY 4.0: 20 singers × 5 vowels as long tones; 2–6 GB, needs slicing) | **Recommended: commission a small choir session.** 4 voices × 3 vowels (aa, oo, mm) × chromatic range × 2 dynamics, ~1 day in a studio, fully owned. Stopgap: build the "Tape Choir" from the Karoryfer vocal and OLPC voices, or slice VocalSet (Tier B). |
-| 2 | **Rhodes / tine EP** | jRhodes CC0 subset in the Discord GM bank (1 layer, author-labelled CC0); tim.kahn Rhodes Mk II (Freesound pack 3957, CC-BY 4.0, 53 notes, **F3–G#5 missing**) | Email Jeff Learman for a commercial licence to the full jRhodes3d (5 layers, 90 MB). Draft in §8, E1. Otherwise record a Rhodes. |
-| 3 | **Clavinet** | none | Record one (a hire costs about a day), or ask a sampler author for a licence. |
-| 4 | **Tonewheel organ (real B3 + Leslie)** | FreePats setBfree renders (CC0); hammondman Freesound (CC0, low fidelity) | Terrain can synthesise drawbars natively (additive). Record a real B3 later. |
+| 1 | **Choir (SATB aahs/oohs)** | Seed material: the Karoryfer male "a" (CC0), OLPC Berklee female and male aa/oo solo and ensemble (CC-BY 3.0), and **VocalSet** (Zenodo 1442513, CC-BY 4.0: 20 singers × 5 vowels as long tones; 2–6 GB, needs slicing) | **Recommended: commission a small choir session.** 4 voices × 3 vowels (aa, oo, mm) × chromatic range × 2 dynamics, ~1 day in a studio, fully owned. Stopgap: build the "Tape Choir" from the Karoryfer vocal and OLPC voices, or slice VocalSet (Tier B). **Re-hunted 2026-09-24: still nothing cleared.** VocalSet is solo singers, one pitch per vowel; ESMUC/MULTIVOX are songs; GitHub choirs are VPO, ROM rips or neural renders. |
+| 2 | **Rhodes / Wurlitzer / CP / Pianet / Clavinet (any real EP)** | **Nothing cleared.** Searched sfzinstruments (all repos), Karoryfer, VCSL, FreePats, archive.org, Zenodo, GitHub, Wikimedia, OpenGameArt and Freesound. Best near-misses: tim.kahn Rhodes Mk II (Freesound 3957, CC-BY 4.0, 21-note hole, login-only), OldBassMan Wurlitzer 200A (Freesound 5726, CC-BY 4.0, 13 notes, login-only) | Record one (a Rhodes and a Wurli hire is ~1 day), or build from a Freesound CC-BY set if a login download is ever acceptable. The runtime's `rhodes` family default now falls back to `vcsl.keys.tx81z-fm-piano`. |
+| 3 | **Clavinet** | none (jlearman/stevie-clavinet: "License is unknown") | Record one. |
+| 4 | **Tonewheel organ (real B3 + Leslie)** | FreePats setBfree renders (CC0); hammondman Freesound (CC0, low fidelity) | Terrain can synthesise drawbars natively (additive). Record a real B3 later. **Re-hunted 2026-09-24: still nothing cleared.** The only real cleared tonewheel audio is Chris Beckstrom's Hammond M-100 drones (archive.org, CC-BY 4.0): ~15 chords, not playable. |
 | 5 | **Celesta / music box / toy piano** | Celesta: **pjcohen (Freesound 23108, CC-BY, chromatic G2–G6)** and Macsat-Rd (23781, CC0, 1 octave). Toy piano: **Framing_Noise (19485, CC0, 3 velocity layers)** and nikerk Schoenhut (42113, CC0). Music box: none | Download with a Freesound login. Music box: record one (cheap). |
 | 6 | **Harmonium / reed organ** | cabled_mess/donyaquick harmonium (Freesound 29512, CC0, chromatic C2–D5, Yale recording) | Download with a Freesound login. |
-| 7 | **Steel-string acoustic, 12-string, a good nylon guitar** | none cleared (FreePats steel-string is GPL) | Record, or buy a redistribution licence. |
+| 7 | **Steel-string acoustic, 12-string, a good nylon guitar** | none cleared (FreePats steel-string is GPL) | Record, or buy a redistribution licence. **Re-hunted 2026-09-24: still nothing cleared.** Nylon: the UIowa MIS guitar is out (R8, no explicit redistribution grant). Steel: AG-PT-set (Zenodo, CC-BY 4.0) is piezo-pickup only and 6.75 GB. Karoryfer Shinyguitar's mic channel (archtop, CC0) is the closest shipped substitute. |
 | 8 | **Upright and alternative pianos** | beskhu Choiseul upright (Freesound 17088, **CC0, all 88 keys**, 1 layer); Sadiquecat living-room upright (43099, CC0, 192 kHz) | Download with a Freesound login. Better than VCSL Yamaha's sparse mapping. |
 | 9 | **Harpsichord, chromatic** | pjcohen harpsichord (Freesound 21464, CC0, 60 notes chromatic) | Optional, pending login. |
 | 10 | **Melodica / piano accordion** | urlande Hohner melodica (Freesound 9578, CC0, chromatic, short notes); Miles_Thompson Cellini accordion (31477, CC0, **lossy MP3/M4A**) | Melodica: pending login. Accordion: FreePats HN is already downloaded. |
@@ -349,7 +350,7 @@ Honourable mentions: Karoryfer Emilyguitar and Growlybass, VCSL Vibraphone, Rena
 | 12 | **Sitar, koto, shamisen, oud, pan flute, shakuhachi, duduk, gamelan, kora, singing bowls** | Only OLPC one-shots and phrases | Commission a "world" session, or buy from a vendor with a redistribution clause. Singing bowls are trivial to record ourselves. |
 | 13 | **Brass and woodwind sections, bass clarinet, cimbasso** | Stack VSCO solos (preset-level) | Commission, or accept stacked solos. **TinySOL** (IRCAM, CC-BY 4.0 on Zenodo, 1 GB) has many chromatic ordinario notes, but IRCAM's own conflicting licence (R9) needs confirmation first. |
 | 14 | **Tape / Mellotron-style** | Build from cleared sources (§1.11); Squidotron | Build in the Organics preset pipeline. Never ship tape rips. |
-| 15 | **University of Iowa MIS** (whole orchestra, piano, pp–ff, 24/96) | Grant: *"may be downloaded and used for any projects, without restrictions"* | One email to UIowa EMS would clear a large, high-quality source (§8, E2). |
+| 15 | **University of Iowa MIS** (whole orchestra, piano, nylon guitar, alto/soprano sax, pp–ff) | Grant: *"may be downloaded and used for any projects, without restrictions"* | **Out under the no-emails rule**: it never says the files themselves may be redistributed, and confirming that needs a letter. The nylon guitar (Raimundo 118, 3 dynamics, E2–B5 per string) would otherwise fill the nylon gap. |
 
 
 ---
@@ -368,7 +369,7 @@ Honourable mentions: Karoryfer Emilyguitar and Growlybass, VCSL Vibraphone, Rena
 | **Ivy Audio Piano in 162** (and other Ivy pianos) | Free for music; repackaging or redistributing is prohibited | Ivy Audio licence page |
 | **Maestro Concert Grand** (Mats Helgesson) | *"may not sell this sound set or any of the samples"* | https://github.com/sfzinstruments/MatsHelgesson.MaestroConcertGrandPiano |
 | **Splendid Grand Piano** | Its "AKAI public domain" claim has no primary source | https://github.com/sfzinstruments/SplendidGrandPiano |
-| **jRhodes3c / jRhodes3d** (Jeff Learman) | Samples are CC BY-NC 4.0. **Ask for a licence (§8, E1).** | https://github.com/sfzinstruments/jlearman.jRhodes3d |
+| **jRhodes3c / jRhodes3d** (Jeff Learman), **including the jRhodes "005-Electric Piano 1" CC0 subset in the Discord GM bank** | Full sets are CC BY-NC. The GM subset's CC0 header was written by Jeff Learman himself (commits 05d5ed8b, 945cca9c), but his current jRhodes3c LICENSE says: *"To distribute the samples themselves, such as in an application, software instrument, or as a sample set, the jRhodes samples are licensed under CC BY-NC-SA 4.0 … To use the samples in a commercial product, please contact me"*. Two conflicting statements from the same rights holder, and settling them needs an email, so it is out | https://github.com/sfzinstruments/jlearman.jRhodes3c/blob/master/LICENSE |
 | **GeneralUser GS** | The licence permits it, but the author himself warns that some sample origins are uncertain in commercial software | https://github.com/mrbumpy409/GeneralUser-GS |
 | **FluidR3 / MuseScore General** | MIT, but a 2000-era compilation with unverifiable per-sample provenance. Test and GM-fallback use only; **not factory** | MuseScore FluidR3Mono_License.md |
 | **Leisureland / Taijiguy Mellotron, Mellotron-SFZ, Plogue Sforzatron sets, Sonic Bloom "SB Mellotron", M-Tron / Tapeotronic / Chamberlin sets** | Tape rips. *"free to use, but cannot be used in any commercial, for profit software"*. Also the Mellotron trademark | https://github.com/ExistentiaVirae/Mellotron-SFZ |
@@ -404,19 +405,26 @@ Honourable mentions: Karoryfer Emilyguitar and Growlybass, VCSL Vibraphone, Rena
 | **Korg Wavestate-based pads** (SHLD / Drolez) | Resamples of a Korg ROM, and the licence sources conflict | – |
 | **"Club Sandwich"** | No such library could be found, so there was nothing to clear | – |
 | **Ethan Winer SoundFonts** | *"any way you'd like, royalty free, including for commercial projects"*, but no explicit redistribution grant, recordist not named, and the SFZ port has no licence | https://ethanwiner.com/ewsf2.html (could be cleared with one email) |
+| **Greg Sullivan E-Pianos** (CP80, Pianet T, Wurlitzer EP200; removed 2026-09-24) | Only the SFZ porter states CC BY 3.0 (*"with the author permission with the request for attribution"*). The author's own pages state no licence: sullivang.net (live, 2026-09-24) and the archive.org copies of 2004-10-25 (`/samples/cp80.html`, `/samples/pianet_t.html`, `/samples/wurlitzer_ep200.html`) and 2013-07-23 (`/home`, `/cp80-electric-grand`, `/hohner-pianet-t`, `/wurlitzer-ep203w`) only say *"Greg's free electric piano samples for Gigastudio/Gigasampler"*. His `/conversions` page links the SFZ repo with thanks but grants nothing | https://www.sullivang.net/ ; http://web.archive.org/web/20041025071305/http://www.sullivang.net:80/samples/cp80.html ; http://web.archive.org/web/20130723021139/http://www.sullivang.net/cp80-electric-grand |
+| **Discord GM bank "003-Electric Grand Piano"** (CP80) | Its "CC0, Greg Sullivan" line was written by the bank maintainers, not by Greg Sullivan | sfzinstruments/Discord-SFZ-GM-Bank |
+| **Freesound originals** (tim.kahn Rhodes, OldBassMan Wurlitzer, tarane468 Pianet, cabled_mess harmonium, pjcohen celesta …) | Licences are fine, but every original download needs a Freesound login; the only open route is lossy MP3 previews. Not used | freesound.org |
+| **AG-PT-set** (Zenodo 10159492, CC-BY 4.0, steel-string guitars) | Recorded through the guitars' built-in piezo pickups; 6.75 GB (over the download budget) | https://zenodo.org/records/10159492 |
+| **VocalSet** (Zenodo 1442513, CC-BY 4.0) | Solo singers, one pitch per vowel for long tones: not a choir and not a chromatic multisample | https://zenodo.org/records/1442513 |
+| **Chris Beckstrom Hammond M-100 drones** (archive.org, CC-BY 4.0) | Real tonewheel, cleared, but ~15 chord/cluster drones, not a playable multisample | archive.org/details/beckstrom_hammond_organ_drones |
+| **NeoSoundFonts SP-GT-Classical-Guitar, SimonePiervergili-OldSteelGuitar** | CC0 LICENSE added by the uploader, not the recordist; the recordist's other uploads include resampled commercial products | github.com/NeoSoundFonts |
 
 ---
 
 ## 6. Licence-risk notes for a human to review
 
 - **R1: Karoryfer README wording.** Older Karoryfer READMEs say *"Royalty-free for all commercial and non-commercial use"*, which on its own is a usage grant. However, every repo's LICENSE file is **CC0 1.0**, and the shop page explicitly relicensed everything: *"we changed that and now they are all CC0"*. **Low risk.** Keep the dated shop-page quote (it's in every `LICENSE-SOURCE.txt`).
-- **R2: MTG Solo Sax.** The SFZ repo is CC-BY 4.0. The underlying Freesound MTG packs (20239/20247/20251/20253) show "License: Attribution" (a sound page links CC BY 3.0). Credit both MTG and kinwie. Recheck the per-sound licences via the Freesound API before shipping. **Low risk.**
+- **R2: MTG Solo Sax. CLOSED 2026-09-24.** All 298 sounds in Freesound packs 20239/20247/20251/20253 were fetched one by one: every page shows "Attribution 3.0" (http://creativecommons.org/licenses/by/3.0/), uploader MTG, and *"Recorded in the context of the good-sounds.org project from the Music Technology Group, Universitat Pompeu Fabra, Barcelona"*, so the uploader is the recordist. Each of the 298 shipped note files was matched to exactly one sound by waveform correlation against the public preview (r ≥ 0.925, runner-up at least 0.1 lower). Evidence: `Tools/organics/provenance/mtg-solosax-freesound.csv` (per file) and `mtg-sax-packs-licence-audit.csv` (per sound), copied into each instrument's `source/`; per-file columns in `source/provenance.csv`. The breath and key-click files could not all be traced, so no instrument ships them (recipe `dropMatch`). Licence recorded as CC-BY-3.0 (the source); kinwie's SFZ is CC-BY 4.0; credit both.
 - **R3: OLPC / Berklee.** The Internet Archive metadata says CC-BY 3.0, and the OLPC wiki lists the Berklee material as CC-BY. The recordings were made for OLPC, so the provenance is clean. **Low risk.**
-- **R4: Greg Sullivan E-Pianos.** The CC-BY 3.0 relicence is stated by the SFZ porter ("with the author permission with the request for attribution"). **We have not seen the author's own statement.** Before shipping, archive sullivang.net's licence page or get an email confirmation (§8, E3). **Medium risk.**
+- **R4: Greg Sullivan E-Pianos. RESOLVED BY REMOVAL 2026-09-24.** The author's own pages (live and archived, §5) state no licence; only the SFZ porter states CC BY 3.0. All three instruments are out of `index.json`, their compiled folders and installed links are deleted, and ids 3, 9 and 13 stay reserved in `ids.json`.
 - **R5: FreePats FM Piano 1** is a render of the Hexter DX7 emulator playing (an imitation of) Yamaha's factory "E.PIANO 1" patch. A synth timbre isn't copyrightable as such, but because this is patch-data-derived, prefer VCSL TX81Z (user-made patches) for the flagship FM EP. **Low–medium risk.**
 - **R6: FreePats setBfree / Aeolus / ZynAddSubFX renders.** These are CC0 renders of GPL *software*. The GPL covers the program, not audio rendered by it. **Low risk.**
-- **R7: CC-BY sets must not be encrypted.** This covers Salamander, the Etherealwinds harp, MTG Sax, OLPC and the Greg Sullivan EPs. If the Organics engine packs or encrypts its factory content, these files must be stored as plain FLAC/WAV + SFZ. The alternative is to replace them with Tier A equivalents: VCSL Steinway, VCSL Concert Harp, Bear Sax + VCSL Tenor, the Karoryfer vocal.
-- **R8: University of Iowa MIS** (not downloaded): *"may be downloaded and used for any projects, without restrictions"*. It's permissive, but it does not explicitly allow redistribution. **Get written confirmation first (§8, E2).**
+- **R7: CC-BY sets must not be encrypted.** This covers Salamander, the Etherealwinds harp, MTG Sax and OLPC. If the Organics engine packs or encrypts its factory content, these files must be stored as plain FLAC/WAV + SFZ. The alternative is to replace them with Tier A equivalents: VCSL Steinway, VCSL Concert Harp, Bear Sax + VCSL Tenor, the Karoryfer vocal.
+- **R8: University of Iowa MIS** (not downloaded): *"may be downloaded and used for any projects, without restrictions"*. It's permissive, but it does not explicitly allow redistribution, and confirming it needs a letter. **Out under the no-emails rule.**
 - **R9: TinySOL** (IRCAM, on Zenodo as CC-BY 4.0) was **not downloaded**. The same IRCAM recordings are distributed as OrchideaSOL under the restrictive Ircam Forum License. That conflict needs IRCAM's written confirmation before use.
 
 ---
@@ -430,12 +438,11 @@ Terrain includes sampled instruments from the following open libraries:
 
 Salamander Grand Piano v3 by Alexander Holm (SFZ mapping by kinwie, sfzinstruments.github.io).
   Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/  — Modified by Waves Crate.
-Electric pianos (Yamaha CP80, Hohner Pianet T, Wurlitzer EP200) sampled by Greg Sullivan
-  (SFZ mapping by kinwie). Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ — Modified by Waves Crate.
 Etherealwinds Harp II: CE by Versilian Studios LLC. Licensed under CC BY 4.0 —
   https://creativecommons.org/licenses/by/4.0/ — Modified by Waves Crate.
-MTG Solo Saxophones: samples by the Music Technology Group, Universitat Pompeu Fabra (freesound.org/people/MTG),
-  SFZ programming by kinwie. Licensed under CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ — Modified by Waves Crate.
+MTG Solo Saxophones: samples recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org,
+  freesound.org/people/MTG), licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ ;
+  SFZ edit by kinwie (sfzinstruments), CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/ — Modified by Waves Crate.
 Voice and world-instrument samples by Berklee College of Music, recorded for Richard Boulanger and the
   One Laptop per Child project. Licensed under CC BY 3.0 — https://creativecommons.org/licenses/by/3.0/ — Modified by Waves Crate.
 
@@ -450,89 +457,20 @@ If Freesound CC-BY packs are added later, append a line for each, for example: `
 
 ---
 
-## 8. Draft permission emails (not sent)
+## 8. Cleared status (2026-09-24)
 
-Sender for all: **Max, Waves Crate <contact@wavescrate.com>**. None of these have been sent. Replace the `[…]` placeholders before sending.
+Max's rule: *"no emails, I want to be able to just put them in"*. Anything that needs a permission request is out. The authoritative list of shipped instruments is `Resources/Organics/index.json` (60 instruments); credits are in `Resources/Organics/CREDITS.md`.
 
-### E1: Jeff Learman: commercial licence for jRhodes3d, and confirmation of the CC0 subset
-**To:** jjlearman@gmail.com
-**Subject:** Commercial licence request: jRhodes3d samples in the Terrain synth plugin
-
-> Hi Jeff,
->
-> I'm Max from Waves Crate. We make Terrain, a commercial software synthesizer, and we're building its factory sample library from openly licensed recordings. We already plan to include your jSteelDrum under its Unlicense terms. Thank you for it; it sounds great.
->
-> Your jRhodes3d (1977 Mark I Stage 73) is the best-recorded free Rhodes we've found. Its LICENSE says that for commercial use we should contact you, so here we are. We'd like a licence to **redistribute the jRhodes3d samples, possibly edited (trimmed, looped, re-encoded), as part of Terrain's factory content**. The samples would ship inside the paid plugin, not sold as a standalone sample pack. We'd credit you by name in the About screen and manual, and we're happy to pay a flat fee or discuss terms.
->
-> Also, the Discord SFZ GM Bank contains a small jRhodes subset ("005-Electric Piano 1") that your 2021 commit labels "Creative Commons CC0, Jeff Learman". Could you confirm that this subset is CC0 as labelled?
->
-> Thanks very much,
-> Max, Waves Crate, contact@wavescrate.com
-
-### E2: University of Iowa Electronic Music Studios: MIS redistribution
-**To:** the UIowa EMS contact listed at https://theremin.music.uiowa.edu/ (Lawrence Fritts, Director)
-**Subject:** Permission to include MIS recordings in a commercial software instrument
-
-> Dear Professor Fritts,
->
-> Waves Crate develops Terrain, a commercial software synthesizer. Your MIS page says the recordings *"may be downloaded and used for any projects, without restrictions."* Before we rely on that, we'd like to confirm one point explicitly.
->
-> **May we redistribute edited MIS recordings as part of a sampled instrument inside a commercial plugin?** Edits would include cutting single notes, looping, level-matching and format conversion. The recordings would ship as factory content that plays inside our software, not as a standalone sample collection.
->
-> We'd credit "University of Iowa Electronic Music Studios" in the product and manual. A short written confirmation (a reply to this email is fine) would be greatly appreciated.
->
-> Kind regards,
-> Max, Waves Crate, contact@wavescrate.com
-
-### E3: Greg Sullivan: confirm CC-BY 3.0 for the E-Pianos
-**To:** via http://www.sullivang.net/ (contact form or email listed there)
-**Subject:** Confirming the licence of your CP80 / Pianet T / Wurlitzer EP200 samples
-
-> Hi Greg,
->
-> The sfzinstruments project republished your Yamaha CP80, Hohner Pianet T and Wurlitzer EP200 samples under **Creative Commons Attribution 3.0**, and states this was "with the author permission with the request for attribution". We'd like to include them in Terrain, our commercial synthesizer, as unencrypted factory samples credited to you.
->
-> Could you confirm that CC BY 3.0 is correct and that commercial redistribution inside a software instrument is OK with you? Please also tell us how you'd like to be credited.
->
-> Thank you,
-> Max, Waves Crate, contact@wavescrate.com
-
-### E4: Karoryfer Samples: licence for a choir / voice library
-**To:** samples@karoryfer.com
-**Subject:** Redistribution licence for Torgbe Choir / Hadzi-Fia in a synth's factory library
-
-> Hi Karoryfer team,
->
-> We're building the factory library for Terrain, a commercial synth by Waves Crate, and we're using several of your CC0 libraries (Meatbass, Bear Sax, War Tuba, the cello, Shinyguitar, Emilyguitar, Growlybass, String Cyborgs, Squidpipes, the erhu, the cithara and the zither). Thank you; they're the best free instruments out there. We'll credit Karoryfer even though CC0 doesn't require it.
->
-> Our biggest gap is a real **choir / vocal "aah-ooh" instrument**. Would you license **Torgbe Choir** and/or **Hadzi-Fia** (or a custom subset) for **redistribution inside a paid synth plugin**? It would be factory content, not resold as a sample library. We're open to a flat fee or a per-unit royalty. We'd also be interested in commissioning a small SATB vowel set if that's something you do.
->
-> Also, a quick confirmation: the older READMEs say "royalty-free for all commercial and non-commercial use", while your free-samples page says all free libraries are now CC0 (except Marie Ork). Can we rely on CC0 for the libraries listed above?
->
-> Best,
-> Max, Waves Crate, contact@wavescrate.com
-
-### E5: IRCAM: TinySOL licence
-**To:** the IRCAM Forum / Studio On Line contacts listed on the Zenodo record (https://zenodo.org/records/3685367), cc Carmine-Emanuele Cella
-**Subject:** TinySOL (CC BY 4.0): redistribution inside a commercial software instrument
-
-> Dear TinySOL authors,
->
-> TinySOL is published on Zenodo under CC BY 4.0. The larger OrchideaSOL (the same Studio On Line source) is under the Ircam Forum License. Waves Crate would like to use TinySOL notes, edited and looped, as factory content in Terrain, a commercial software synthesizer, with full CC BY attribution.
->
-> Could you confirm that TinySOL's CC BY 4.0 licence covers redistribution of the audio inside a commercial software instrument?
->
-> Kind regards,
-> Max, Waves Crate, contact@wavescrate.com
-
-### E6 (optional): Ethan Winer: explicit redistribution grant
-**To:** via https://ethanwiner.com/ (contact page)
-**Subject:** Including your SoundFont samples in a commercial synth
-
-> Hi Ethan,
->
-> Your SoundFont page says the files may be used "in any way you'd like, royalty free, including for commercial projects". May we also **redistribute** the samples (edited) as factory content inside Terrain, a commercial software synthesizer? A one-line confirmation would let us include them. We'll credit you by name.
->
-> Thanks,
-> Max, Waves Crate, contact@wavescrate.com
-
+| Set | In the factory library | Licence (stated by) | Status | Evidence |
+|---|---|---|---|---|
+| VCSL, VSCO 2 CE (Versilian) | 33 instruments | CC0 (Versilian Studios) | Cleared | `LICENSE-SOURCE.txt` per set |
+| Karoryfer (Bear Sax, War Tuba, cello, Meatbass, erhu, zither, guitars, Growlybass, vocal, **Weresax alto (new)**) | 12 instruments | CC0 (Karoryfer, repo LICENSE + shop page) | Cleared (R1 low) | `LICENSE-SOURCE.txt` per set |
+| FreePats | 8 instruments | CC0 (FreePats / named authors) | Cleared | FreePats pages |
+| jSteelDrum (Jeff Learman) | 1 | Unlicense (author) | Cleared | repo LICENSE |
+| Ganjo (itsclipping) | 1 | CC0 (author) | Cleared | repo LICENSE |
+| Salamander Grand v3 (Alexander Holm) | 1 | CC BY 3.0 (author) | Cleared, credit required | `LICENSE-SOURCE.txt` |
+| Etherealwinds Harp II CE (Versilian) | 1 | CC BY 4.0 (publisher) | Cleared, credit required | `LICENSE-SOURCE.txt` |
+| **MTG Solo Saxophones** ×4 | 4 | CC BY 3.0 on every one of 298 Freesound sounds (uploader = recordist MTG/UPF); SFZ edit CC BY 4.0 (kinwie) | **Cleared per sound (R2 closed)**, credit required | `Tools/organics/provenance/*.csv`, `source/provenance.csv` |
+| **Greg Sullivan E-Pianos** ×3 | **removed** | only the porter states CC BY 3.0 | **Out (R4)**; ids 3, 9, 13 reserved | §5 |
+| jRhodes (incl. GM CC0 subset), UIowa MIS, TinySOL, Ethan Winer, Karoryfer paid choirs | not included | conflicting or not explicit; each would need an email | Out | §5, §6 |
+| Freesound-only sets (Rhodes Mk II, Wurlitzer 200A, harmonium, celesta, uprights …) | not included | fine, but originals need a login | Out (login) | §4 |

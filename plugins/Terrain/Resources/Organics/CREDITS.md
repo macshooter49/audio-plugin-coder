@@ -31,6 +31,7 @@ Terrain includes sampled instruments from the following open libraries:
 - Karoryfer Hungarian zither, CC0 (`karoryfer.plucked.hungarian-zither`)
 - Karoryfer Growlybass, CC0 (`karoryfer.bass.growlybass`)
 - FreePats Spanish Classical Guitar, CC0 (`freepats.guitar.nylon`)
+- Karoryfer Weresax (alto saxophone), CC0 (`karoryfer.sax.weresax-alto`)
 - Karoryfer Bear Sax (1926 Conn baritone), CC0 (`karoryfer.sax.bear`)
 - Karoryfer War Tuba (played by Jakub Lewicki), CC0 (`karoryfer.brass.war-tuba`)
 - Karoryfer legato vocal tutorial (Hadzi-Fia subset, CC0) (`karoryfer.voice.male-aah`)

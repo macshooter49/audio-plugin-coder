@@ -1,0 +1,25 @@
+{
+ "id": "karoryfer.sax.weresax-alto",
+ "name": "Alto Sax (Weresax)",
+ "family": "sax",
+ "category": "Winds",
+ "tags": [
+  "sax",
+  "alto",
+  "reed",
+  "jazz",
+  "cc0"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Lecolds (Karoryfer Samples)",
+ "credit": "Karoryfer Weresax (alto saxophone), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.weresax",
+ "licenceDir": "sfzinstruments/karoryfer.weresax",
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "sfzinstruments/karoryfer.weresax/Programs/Sax.sfz",
+   "sustaining": true
+  }
+ ]
+}

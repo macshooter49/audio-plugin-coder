@@ -466,6 +466,22 @@
   "credit": "MTG Solo Saxophones (Alto Sax): recorded by the Music Technology Group, Universitat Pompeu Fabra (good-sounds.org, freesound.org/people/MTG), CC BY 3.0; SFZ edit by kinwie (sfzinstruments), CC BY 4.0; modified by Waves Crate"
  },
  {
+  "id": "karoryfer.sax.weresax-alto",
+  "name": "Alto Sax (Weresax)",
+  "family": "sax",
+  "category": "Winds",
+  "tags": [
+   "sax",
+   "alto",
+   "reed",
+   "jazz",
+   "cc0"
+  ],
+  "sizeMB": 29.7,
+  "licence": "CC0-1.0",
+  "credit": "Karoryfer Weresax (alto saxophone), CC0"
+ },
+ {
   "id": "mtg.sax.baritone",
   "name": "Baritone Sax",
   "family": "sax",
