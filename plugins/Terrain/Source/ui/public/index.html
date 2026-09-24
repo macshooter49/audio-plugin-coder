@@ -4431,7 +4431,8 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
 .ti-card .fleds i.on{background:#B794FF;}
 
 /* ── ROBIN · Wheel ── */
-.rbn-ext .hero{display:grid;grid-template-columns:1fr 92px;gap:0;height:114px;}
+.rbn-ext .hero{position:relative;display:grid;grid-template-columns:1fr 92px;gap:0;height:114px;}   /* tp103 — Max: "the robin is NOT in the middle". The wheel owned the 1fr column LEFT of the 92 px readout, so it sat ~46 px left of the card's centre. It now spans the WHOLE hero (same size: the 190×114 drawing is height-bound either way) so its centre IS the card's; the readout rides above it in the right column. */
+.rbn-ext .hero .wheel{position:absolute;inset:0;} .rbn-ext .hero .stat{grid-column:2;position:relative;z-index:1;}
 .rbn-ext .wheel{position:relative;}
 .rbn-ext .wheel svg{position:absolute;inset:0;width:100%;height:100%;}
 .rbn-ext .stat{display:flex;flex-direction:column;gap:5px;justify-content:center;font-weight:300;padding-left:12px;}
