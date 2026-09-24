@@ -1,0 +1,1 @@
+4 velocity layers over all keys, root 48 (C3). Sine at root + a marker partial per layer (-14 dB): L1 k3 vel 1-44 (fade-out 36-44), L2 k5 36-84 (in 36-44, out 76-84), L3 k7 76-114 (in 76-84, out 106-114), L4 k9 106-127 (in 106-114). Loop continuous, whole cycles. Articulation 1 (Staccato): one region, marker k11.
