@@ -1660,6 +1660,7 @@ html.ti-mod-glass #header {
 .pmenu.tp-menu .pi:hover .dx { display: block; }
 .pmenu.tp-menu .pi .dx:hover { color: var(--rose); }
 .pmenu.tp-menu .pi.imp, .pmenu.tp-menu .pi.imp:hover { color: var(--purple-400); }
+.pmenu.tp-menu.tp-q .ps { color: var(--purple-400); }   /* POLISH — the mini-browser's category titles (Atmosphere / Poly Lead / …) read as CATEGORIES, not presets: the import-pack purple. Scoped to .tp-q so context menus keep their faint headers. */
 .pmenu.tp-menu .pi.dim { color: var(--menu-fg-faint); cursor: default; }
 .pmenu.tp-menu .pi.dim:hover { background: transparent; color: var(--menu-fg-faint); }
 .pmenu.tp-menu .pi.off { opacity: .4; pointer-events: none; }
@@ -3745,7 +3746,7 @@ html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-pl
 #mod-engine .mv-c .ic{display:inline-flex;width:20px;height:11px;color:inherit;}
 #mod-engine .mv-seg{font-size:9px;letter-spacing:1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-seg b{cursor:pointer;font-weight:300;} #mod-engine .mv-seg .on{color:#fff;} #mod-engine .mv-seg .off{color:var(--ghost-dim);}
-#mod-engine .mv-seg.glob .on{color:#c9b8ff;text-shadow:0 0 6px rgba(160,130,255,.9),0 1px 3px rgba(0,0,0,.9);}   /* tp37 — the GLOBAL clock: every LFO follows this pill */
+#mod-engine .mv-seg.glob .on{color:var(--purple-400);text-shadow:0 1px 3px rgba(0,0,0,.9);}   /* tp37 — the GLOBAL clock: every LFO follows this pill. POLISH — FLAT purple (import-pack purple), no glow: the 0 0 6px purple halo removed, only the legibility drop kept (Max: strict purple, no glow) */
 /* fb206 — THE SHAPER (custom LFO editor) */
 #mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
 #mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-0.6px;height:1px;background:rgba(255,255,255,.075);}   /* fb211 — THE RULER, re-measured collinear after the footer lift (env 711.5 vs overlay 712.1) */
@@ -10463,6 +10464,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         #syn-panel .ribbon-row.rr-new .voice-toggle:hover{ border-color:rgba(255,255,255,.72); color:var(--text-primary); }
         #syn-panel .ribbon-row.rr-new .voice-toggle.on{ background:transparent; border-color:var(--purple-400); color:#fff;
           text-shadow:0 0 6px rgba(255,255,255,.35); }   /* fb627 — the text's answer to fb119's drop-shadow on the emblem */
+        /* POLISH — Always / Scaled: FLAT purple, no glow (Max: like the import-pack purple). .vm-voiceview holds
+           ONLY these two voice-toggles, so this overrides the fb627 white+glow just for them; Mono/Legato/Poly keep it. */
+        #syn-panel .ribbon-row.rr-new .vm-voiceview .voice-toggle.on{ color:var(--purple-400); text-shadow:none; }
         /* NO-GLASS transparent assign popout */
         #syn-panel .rr-pop{ position:absolute; z-index:60; width:212px; background:rgba(18,18,31,.9); border:1px solid var(--border-strong); border-radius:9px; padding:10px 11px 9px; display:none; box-shadow:0 12px 34px rgba(0,0,0,.55); }
         #syn-panel .rr-pop.show{ display:block; }
@@ -11014,7 +11018,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             return '<svg viewBox="0 0 30 30">'
              +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
              +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-             +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="'+fs+'" font-weight="300" fill="var(--text-secondary)">'+txt+'</text></svg>';
+             +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="'+fs+'" font-weight="200" fill="var(--ti-num-ink)">'+txt+'</text></svg>';   /* POLISH — the SVG-drawn FX/grain knob VALUE missed the CSS ultra-thin pass (CSS cannot reach an SVG text attribute): weight 300→200 and fill text-secondary→--ti-num-ink (white on dark / dark-ink on light), matching the global numeric readout */
           }
           // fb275 — header glyphs as SVG: identical 14×14 box, all center at (7,7) → one centerline; + ⇄ ← never moves
           var IC_PLUS ='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>';
@@ -19430,8 +19434,25 @@ setTimeout(function wireOscEnable () {
 document.getElementById('syn-btn').addEventListener('click', () => {
   /* tp1 — Max: "whenever we open up terrain, it puts us on the synthesizer page. Whenever we click that synth
      button it will then put us to the patcher." The pill walks synth page → Patcher → synth page. */
+  /* POLISH — if the settings overlay is up, the pill is pure navigation: close settings and land on the
+     synth page (never toggle through to the Patcher), so "settings → synth" always reaches synth. */
+  var __stOpen = false; try { __stOpen = document.getElementById('st-overlay').classList.contains('on'); } catch (e) {}
+  if (__stOpen) { try { if (window.__st && window.__st.open) window.__st.open(false); } catch (e) {} setActivePanel('syn'); return; }
   setActivePanel(currentActivePanel === 'syn' ? 'tp' : 'syn');
 });
+/* POLISH — PAGE NAVIGATION CLOSES THE SETTINGS OVERLAY. The header stays clickable above #st-overlay, so
+   a page pill (SYN/CHOP/MOD) or a re-click of the active pill used to switch the page UNDER a stuck settings
+   sheet. Close settings on every navigation. SYN is handled in its own click above; MOD / CHOP / EQ / DLY
+   here — capture phase, so it fires even when a pill's own handler no-ops on a re-click of the active page
+   (e.g. MOD→MOD from the mod page). The tipanelchange listener covers panel changes made from code (and the
+   C++ Chop overlay's own close). */
+(function(){
+  function __closeSt(){ try { if (window.__st && window.__st.open) window.__st.open(false); } catch (e) {} }
+  ['mix-btn','mod-btn','eq-btn','delay-btn'].forEach(function(id){
+    var b = document.getElementById(id); if (b) b.addEventListener('click', __closeSt, true);
+  });
+  window.addEventListener('tipanelchange', __closeSt);
+})();
 
 // Bridge raw <input type="range"> / <select> elements to the
 // WebSliderRelay system. Each control with [data-syn="PARAM_ID"] gets
@@ -21990,6 +22011,30 @@ setTimeout(function wireSynControls () {
               refresh();
             } catch(e){}
           });
+        } catch(e){}
+      })();
+      // POLY — the third voice mode. There is NO SYN_POLY param: polyphonic == SYN_MONO off
+      // (PluginProcessor.cpp: eng.setVoiceModes(synMono, synLegato); mono=false is polyphonic). So Poly
+      // is wired as the complement of Mono — a click clears SYN_MONO (and SYN_LEGATO, a mono-only
+      // sub-mode), and it lights whenever the synth is NOT mono. Mirrors the Mono/Legato toggle wiring.
+      (function initPolyToggle(){
+        try {
+          var poly = document.querySelector('#syn-panel .voice-toggle.rr-vis-poly');
+          if (!poly || !window.Juce || !window.Juce.getSliderState) return;
+          var mono = window.Juce.getSliderState('SYN_MONO');
+          var legato = window.Juce.getSliderState('SYN_LEGATO');
+          if (!mono) return;
+          var refresh = function(){ try {
+            var v = mono.getNormalisedValue ? mono.getNormalisedValue() : 0;
+            poly.classList.toggle('on', v < 0.5);
+          } catch(e){} };
+          if (mono.valueChangedEvent && mono.valueChangedEvent.addListener) mono.valueChangedEvent.addListener(refresh);
+          poly.addEventListener('click', function(){ try {
+            mono.setNormalisedValue(0);
+            if (legato) legato.setNormalisedValue(0);
+            refresh();
+          } catch(e){} });
+          refresh();
         } catch(e){}
       })();
       const voiceRows = document.querySelectorAll('#syn-panel [data-syn-row]');
@@ -28119,8 +28164,8 @@ function drawMasterMixKnob() {
     ctx.lineCap = 'round';
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(197,191,210,0.95)';
-  ctx.font = '300 8.5px -apple-system, "SF Pro Display", sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';   /* POLISH — ultra-thin WHITE, matching the global numeric readout (was lavender rgba(197,191,210,.95)); the ring's arc is already hardcoded white, so this surface is always dark */
+  ctx.font = '200 8.5px -apple-system, "SF Pro Display", sans-serif';   /* POLISH — canvas-drawn value missed the CSS pass: weight 300 → 200 ultra-thin */
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(String(Math.round(state.masterMix)), cx, cy + 0.8);
 }
@@ -44921,7 +44966,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var page=null, world=null, cg=null, drawg=null, nodesEl=null, addM=null, nMenu=null, toastEl=null, miniEl=null, modesEl=null, modesHome=null, tileHome={}, tileOrder=[];
   var isOpen=false, built=false, view={x:0,y:0,z:0.6}, nodes=[], cables=[], sel=null, drag=null, raf=0, shims={}, addCtx=null, addCat='All', suppressClick=false, syncT=0, applying=false, prevTapeTab=null, zTop=1;
   var layout={v:6,pos:{},ext:{},view:null,aim:'anything',dlevel:'medium',rlevel:'medium',rlinks:[],viz:false,nodes:[],finl:{}};   /* tp41 — finl: an inline flow card's anchor, the rack device it sits after */
-  var SIZES={osc:[332,140],noise:[220,160],voiceCanvas:[202,196],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150],samp:[208,92]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
+  var SIZES={osc:[332,140],noise:[220,132],voiceCanvas:[202,196],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150],samp:[208,92]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
   /* tp11 — Max: "extend the bottom … then the top … evenly": a module with dots under its knobs gets 7 px of air on top and 17 at the bottom, so a dot never lands on a knob's LFO streak */
   var PADK={osc:1,filter:1,fx:1,tape:1,noise:1}, PADT=7, PADB=17;
   function padOf(kind){ return PADK[kind]?[PADT,PADB]:[0,0]; }
@@ -45132,7 +45177,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* every module kind at the size the synth page gives it right now (the page is display:none while the Patcher is up: un-hide it for one synchronous read, nothing paints in between) */
   function measureHome(){ try{ var body=document.body, was=body.classList.contains('tp-open'); if(was) body.classList.remove('tp-open');
       var sz=function(el){ return (el&&el.offsetWidth>20&&el.offsetHeight>20)?[el.offsetWidth,el.offsetHeight]:null; };
-      var o=null; oscList().forEach(function(x){ o=o||sz(q('#osc-'+x+'-device')); }); if(o) SIZES.osc=o; var nz=sz(q('#noise-mod')); if(nz) SIZES.noise=[Math.max(220,nz[0]),nz[1]+20];   /* tp42 · tp44 — a wider, taller module on the canvas: the cloud fills it (Max) */
+      var o=null; oscList().forEach(function(x){ o=o||sz(q('#osc-'+x+'-device')); }); if(o) SIZES.osc=o; var nz=sz(q('#noise-mod')); if(nz) SIZES.noise=[Math.max(220,nz[0]),nz[1]-14];   /* tp42 · tp44 — wider on the canvas; the cloud fills it (Max). POLISH — was nz[1]+20: the module was the tallest node and hung LOW past the filter/env column, so it read as sitting on top of / among the nodes unevenly. Shorter now (the flex .noise-viz absorbs it, min-height:0 in the patcher), which pulls the knobs toward centre and lets synthH re-centre the column on the centerline. */
       var f=sz(q('#filter-device')); if(f) SIZES.filter=f; var e=sz(q('#syn-panel .device.envs')); if(e) SIZES.env=e; var l=sz(q('#syn-panel .device.mod')); if(l) SIZES.lfo=l;
       var v=sz(q('#syn-panel .voice-meta')); if(v) SIZES.voice=v; var c=sz(q('#fxr-rack .fxr-dev')); if(c) SIZES.fx=c; var r=sz(q('#flow-device .flow-vis')); if(r) SIZES.rnd=[Math.max(180,r[0]),Math.max(130,r[1])];
       if(was) body.classList.add('tp-open'); }catch(e){} }
