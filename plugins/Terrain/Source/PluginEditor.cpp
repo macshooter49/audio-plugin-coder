@@ -8559,9 +8559,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     -webkit-backdrop-filter: blur(8px);
   }
   .ti-play-pill {
-    padding: 3px 9px;
+    /* Glyph-centering: letter-spacing adds a trailing gap AFTER the last letter,
+       which pushes the visible label (1-SHOT / LOOP) half a letter-space LEFT of
+       the pill centre. Re-balance by moving that half-space from the right padding
+       to the left — the TOTAL horizontal padding is unchanged (9px+9px → the box
+       keeps its exact size and position, no reflow), only the glyph re-centres. */
+    padding: 3px calc(9px - 0.08em) 3px calc(9px + 0.08em);
     font: 700 9px/1 -apple-system, BlinkMacSystemFont, sans-serif;
     letter-spacing: 0.16em;
+    text-align: center;
     border-radius: 3px;
     color: rgba(245, 243, 255, 0.42);
     cursor: pointer;
@@ -8573,9 +8579,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     color: white;
   }
   .ti-mode-pill {
-    padding: 4px 12px;
+    /* Glyph-centering (see .ti-play-pill): 0.18em letter-spacing leaves a trailing
+       gap that shoves PITCH / SLICE half a letter-space left; move 0.09em of the
+       horizontal padding from right to left so the glyph sits dead-centre. Total
+       padding (12px+12px) is unchanged → the pill keeps its size, no reflow. */
+    padding: 4px calc(12px - 0.09em) 4px calc(12px + 0.09em);
     font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
     letter-spacing: 0.18em;
+    text-align: center;
     border-radius: 3px;
     color: rgba(245, 243, 255, 0.42);
     cursor: pointer;
@@ -10656,10 +10667,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
         // state must mirror C++.
         var wm = parseInt(s.warpMode, 10);
         var sr = parseFloat(s.stretchRatio);
-        // Per-chop ADSR — same inheritance sentinel as C++. -1 = follow global.
+        // Per-chop ADSR — the -1 inheritance sentinel is PRESERVED (matches C++
+        // Slice.h): -1 = inherit the pitch-mode baseline (fresh chops are born
+        // inheriting); a concrete value = the user overrode this chop's field.
         var am = parseFloat(s.attackMs);
         var rm = parseFloat(s.releaseMs);
-        // Full ADSR additions (always concrete, no inheritance sentinel).
         var dm = parseFloat(s.decayMs);
         var sl = parseFloat(s.sustainLevel);
         var vl = parseFloat(s.volume);
@@ -10681,9 +10693,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           stretchRatio: (isFinite(sr) ? Math.max(0.1, Math.min(15.0, sr)) : 1.0),
           attackMs:     isFinite(am) ? am : -1,
           releaseMs:    isFinite(rm) ? rm : -1,
-          decayMs:      isFinite(dm) ? Math.max(0,  Math.min(2000, dm)) : 0,
-          sustainLevel: isFinite(sl) ? Math.max(0,  Math.min(1,    sl)) : 1,
-          volume:       isFinite(vl) ? Math.max(0,  Math.min(2,    vl)) : 1,
+          decayMs:      isFinite(dm) ? (dm < 0 ? -1 : Math.max(0, Math.min(2000, dm))) : 0,
+          sustainLevel: isFinite(sl) ? (sl < 0 ? -1 : Math.max(0, Math.min(1,    sl))) : 1,
+          volume:       isFinite(vl) ? (vl < 0 ? -1 : Math.max(0, Math.min(2,    vl))) : 1,
           scanEnabled:  scEn,
           scanRate:     (isFinite(scRt) && scRt >= 0.05) ? Math.max(0.1, Math.min(8.0, scRt)) : 1.0,
           scanWindow:   (isFinite(scWn) && scWn >= 0.04) ? Math.max(0.05, Math.min(1.0, scWn)) : 1.0,
@@ -11593,11 +11605,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   function ovValueFromState (idx, key) {
     var s = getSliceData(idx);
     if (!s) return null;
-    if (key === 'attack')  return (s.attackMs  == null || s.attackMs  < 0) ? GLOBAL_ATTACK_DEFAULT  : Number(s.attackMs);
-    if (key === 'decay')   return Number(s.decayMs      || 0);
-    if (key === 'sustain') return s.sustainLevel == null ? 1.0 : Number(s.sustainLevel);
-    if (key === 'release') return (s.releaseMs == null || s.releaseMs < 0) ? GLOBAL_RELEASE_DEFAULT : Number(s.releaseMs);
-    if (key === 'volume')  return s.volume == null ? 1.0 : Number(s.volume);
+    // A per-chop slice (idx !== -1) INHERITS the pitch-mode baseline for any envelope /
+    // volume field left at the -1 "inherit" sentinel — the same resolution the DSP does
+    // in TerrainSynth::applyPitchModeBaseline — so an inheriting chop's panel shows the
+    // real pitch-mode value, not a clamped 0. Moving a slider stamps a concrete override.
+    // The pitch-mode slice itself (idx === -1) has no higher baseline, so attack/release
+    // fall to the global defaults. Tuning ('pitch') shows the slice's OWN detune — the
+    // global transpose is edited in the pitch-mode panel and added additively by the DSP.
+    var base = state.pitchModeSlice || {};
+    function inh (sv, bv) { return (idx !== -1 && (sv == null || sv < 0)) ? bv : sv; }
+    if (key === 'attack')  { var va = inh(s.attackMs,     base.attackMs);     return (va == null || va < 0) ? GLOBAL_ATTACK_DEFAULT  : Number(va); }
+    if (key === 'release') { var vr = inh(s.releaseMs,    base.releaseMs);    return (vr == null || vr < 0) ? GLOBAL_RELEASE_DEFAULT : Number(vr); }
+    if (key === 'decay')   { var vd = inh(s.decayMs,      base.decayMs);      return (vd == null || vd < 0) ? 0   : Number(vd); }
+    if (key === 'sustain') { var vs = inh(s.sustainLevel, base.sustainLevel); return (vs == null || vs < 0) ? 1.0 : Number(vs); }
+    if (key === 'volume')  { var vv = inh(s.volume,       base.volume);       return (vv == null || vv < 0) ? 1.0 : Number(vv); }
     if (key === 'pitch')   return Number(s.pitch || 0);
     if (key === 'stretch') return Number(s.stretchRatio || 1.0);
     return null;

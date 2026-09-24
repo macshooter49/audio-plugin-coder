@@ -107,6 +107,23 @@ namespace tw
     using SliceList     = std::vector<Slice>;
     using SliceListPtr  = std::shared_ptr<const SliceList>;
 
+    // A fresh chop is born INHERITING the pitch-mode baseline. Its envelope +
+    // volume carry the -1 "inherit" sentinel, so a release / tuning set in the
+    // "Pitch mode" panel holds for EVERY chop until the user overrides that
+    // specific chop (moving a slider stamps a concrete value = an override).
+    // TerrainSynth::noteOn resolves the sentinel to the concrete pitch-mode value
+    // at trigger time (applyPitchModeBaseline), so a voice never sees a sentinel.
+    // pitchOffsetSemis stays 0 because tuning is ADDITIVE (the pitch-mode transpose
+    // rides on top of the per-slice offset) — it needs no sentinel.
+    inline Slice makeInheritingSlice (juce::int64 start, juce::int64 end) noexcept
+    {
+        Slice s;
+        s.startSample = start;
+        s.endSample   = end;
+        s.attackMs = s.releaseMs = s.decayMs = s.sustainLevel = s.volume = -1.0f;
+        return s;
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // JSON serialization — matches the schema the WebView expects.
     // ──────────────────────────────────────────────────────────────────────
@@ -178,14 +195,17 @@ namespace tw
             s.attackMs  = atkRaw < 0.0 ? -1.0f : juce::jlimit (0.0f,    2000.0f, (float) atkRaw);
             s.releaseMs = relRaw < 0.0 ? -1.0f : juce::jlimit (1.0f,    5000.0f, (float) relRaw);
 
-            // Full-ADSR additions — defaults reproduce pre-ADSR behavior so
-            // legacy presets are unaffected.
-            s.decayMs       = juce::jlimit (0.0f,  2000.0f,
-                                    (float) (double) e.getProperty ("decayMs",      0.0));
-            s.sustainLevel  = juce::jlimit (0.0f,  1.0f,
-                                    (float) (double) e.getProperty ("sustainLevel", 1.0));
-            s.volume        = juce::jlimit (0.0f,  2.0f,
-                                    (float) (double) e.getProperty ("volume",       1.0));
+            // Full-ADSR additions. A NEGATIVE value is the "-1 inherit the pitch-mode
+            // baseline" sentinel (same convention as attackMs/releaseMs above) and is
+            // PRESERVED, not clamped to 0 — a chop born inheriting must round-trip as
+            // inheriting. A MISSING key keeps the pre-ADSR default (0 / 1.0 / 1.0) so
+            // legacy presets, which saved concrete values, are byte-identical on reload.
+            const double decRaw = (double) e.getProperty ("decayMs",      0.0);
+            const double susRaw = (double) e.getProperty ("sustainLevel", 1.0);
+            const double volRaw = (double) e.getProperty ("volume",       1.0);
+            s.decayMs      = decRaw < 0.0 ? -1.0f : juce::jlimit (0.0f, 2000.0f, (float) decRaw);
+            s.sustainLevel = susRaw < 0.0 ? -1.0f : juce::jlimit (0.0f, 1.0f,    (float) susRaw);
+            s.volume       = volRaw < 0.0 ? -1.0f : juce::jlimit (0.0f, 2.0f,    (float) volRaw);
 
             // Scan mode (Mark 1.5). Missing keys → defaults (off / 1.0 / 1.0)
             // so legacy presets load identically.
@@ -273,7 +293,7 @@ namespace tw
             // Last slice always ends at total to avoid leaving a tail unassigned.
             if (i + 1 == numSlices) end = total;
 
-            if (end > start) out.push_back ({ start, end, false, 0.0f });
+            if (end > start) out.push_back (makeInheritingSlice (start, end));
         }
         return out;
     }
@@ -308,7 +328,7 @@ namespace tw
         const int total = buf.getNumSamples();
         if (total < 64 || sampleRate <= 0.0)
         {
-            if (total > 0) out.push_back ({ 0, total, false, 0.0f });
+            if (total > 0) out.push_back (makeInheritingSlice (0, total));
             return out;
         }
 
@@ -388,13 +408,13 @@ namespace tw
                                       ? (juce::int64) markers[m + 1]
                                       : (juce::int64) total;
             if (end > start)
-                out.push_back ({ start, end, false, 0.0f });
+                out.push_back (makeInheritingSlice (start, end));
         }
 
         // Safety: if for some reason we ended up with nothing, return the
         // whole sample as one slice.
         if (out.empty())
-            out.push_back ({ 0, (juce::int64) total, false, 0.0f });
+            out.push_back (makeInheritingSlice (0, (juce::int64) total));
 
         return out;
     }

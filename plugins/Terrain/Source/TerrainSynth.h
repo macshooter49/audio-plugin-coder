@@ -50,6 +50,33 @@ namespace tw
          *  call setSource() / setSliceBounds() / prewarm() directly. */
         WarpRenderCache warpCache;
 
+        // ── PITCH-MODE GLOBAL BASELINE ──────────────────────────────────────────
+        //  The chop "Pitch mode" panel edits the layer's pitchModeSlice (`base`). Its
+        //  tuning + envelope are the GLOBAL baseline that Slice AND Loop modes and every
+        //  chop inherit, UNLESS the user overrides a specific slice:
+        //   • ENVELOPE (attack/decay/sustain/release/volume) — a per-slice field is an
+        //     OVERRIDE when it is >= 0; the negative sentinel (-1) means "inherit the
+        //     pitch-mode baseline". Fresh grid/transient chops are born inheriting
+        //     (Slice.h), so setting a release in pitch mode holds for every chop; a slice
+        //     the user actually edited keeps its own value. attack/release may themselves
+        //     inherit the global APVTS param when the baseline is also -1 (SamplerVoice's
+        //     existing 3rd-level fallback) — so the chain is slice → pitch-mode → global.
+        //   • TUNING is ADDITIVE: the pitch-mode transpose rides on top of the per-slice
+        //     offset, so pitching down in pitch mode pitches EVERY slice down while a slice
+        //     keeps its own relative detune.
+        //  Resolved ONCE here at note-on so the voice only ever sees concrete envelope
+        //  values — a leaked inherit-sentinel can never reach (and silence) a voice.
+        static void applyPitchModeBaseline (VoiceConfig& vc, const Slice& s, const Slice& base,
+                                            float noteMinusRootSemis) noexcept
+        {
+            vc.attackMs     = (s.attackMs     >= 0.0f) ? s.attackMs     : base.attackMs;
+            vc.releaseMs    = (s.releaseMs    >= 0.0f) ? s.releaseMs    : base.releaseMs;
+            vc.decayMs      = (s.decayMs      >= 0.0f) ? s.decayMs      : base.decayMs;
+            vc.sustainLevel = (s.sustainLevel >= 0.0f) ? s.sustainLevel : base.sustainLevel;
+            vc.volume       = (s.volume       >= 0.0f) ? s.volume       : base.volume;
+            vc.pitchSemitones = noteMinusRootSemis + base.pitchOffsetSemis + s.pitchOffsetSemis;
+        }
+
         /** Push the indy-FX capture buffer pointer onto every SamplerVoice
          *  so voices whose chop has fxIndependent=true can redirect their
          *  output away from the main synth buffer. Pass nullptr to disable.
@@ -89,11 +116,17 @@ namespace tw
             vc.sourceVersionId = sourceVersionId;
             vc.warpMode       = s.warpMode;
             vc.stretchRatio   = s.stretchRatio;
-            vc.attackMs       = s.attackMs;
-            vc.releaseMs      = s.releaseMs;
-            vc.decayMs        = s.decayMs;
-            vc.sustainLevel   = s.sustainLevel;
-            vc.volume         = s.volume;
+            // Audition inherits the pitch-mode ENVELOPE baseline (so a fresh inherit-sentinel
+            // chop previews with the real envelope, never silent) while pitch stays at unity.
+            {
+                const auto ctxS = std::atomic_load (&context);
+                const tw::Slice base = ctxS ? ctxS->pitchModeSlice : tw::Slice{};
+                vc.attackMs     = (s.attackMs     >= 0.0f) ? s.attackMs     : base.attackMs;
+                vc.releaseMs    = (s.releaseMs    >= 0.0f) ? s.releaseMs    : base.releaseMs;
+                vc.decayMs      = (s.decayMs      >= 0.0f) ? s.decayMs      : base.decayMs;
+                vc.sustainLevel = (s.sustainLevel >= 0.0f) ? s.sustainLevel : base.sustainLevel;
+                vc.volume       = (s.volume       >= 0.0f) ? s.volume       : base.volume;
+            }
             vc.scanEnabled    = false;  // audition is fire-and-forget; scan would loop forever — override slice setting
             vc.scanRate       = s.scanRate;    // kept for state cleanliness
             vc.scanWindow     = s.scanWindow;
@@ -175,15 +208,14 @@ namespace tw
                     vc.startSample    = s.startSample;
                     vc.endSample      = s.endSample;
                     vc.reverse        = s.reverse;
-                    vc.pitchSemitones = s.pitchOffsetSemis;
                     vc.sliceIndex     = idx;
                     vc.warpMode       = s.warpMode;
                     vc.stretchRatio   = s.stretchRatio;
-                    vc.attackMs       = s.attackMs;
-                    vc.releaseMs      = s.releaseMs;
-                    vc.decayMs        = s.decayMs;
-                    vc.sustainLevel   = s.sustainLevel;
-                    vc.volume         = s.volume;
+                    // Envelope + tuning inherit the pitch-mode baseline unless this slice
+                    // overrides them. ChopChromaticLayout maps each key to a DIFFERENT chop
+                    // played at native pitch, so the note offset is 0 — only the pitch-mode
+                    // global transpose rides on top of the per-slice detune.
+                    applyPitchModeBaseline (vc, s, ctx->pitchModeSlice, 0.0f);
                     vc.scanEnabled    = s.scanEnabled;
                     vc.scanRate       = s.scanRate;
                     vc.scanWindow     = s.scanWindow;
@@ -205,15 +237,12 @@ namespace tw
                     vc.startSample    = s.startSample;
                     vc.endSample      = s.endSample;
                     vc.reverse        = s.reverse;
-                    vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + s.pitchOffsetSemis;
                     vc.sliceIndex     = sliceIdx;
                     vc.warpMode       = s.warpMode;
                     vc.stretchRatio   = s.stretchRatio;
-                    vc.attackMs       = s.attackMs;
-                    vc.releaseMs      = s.releaseMs;
-                    vc.decayMs        = s.decayMs;
-                    vc.sustainLevel   = s.sustainLevel;
-                    vc.volume         = s.volume;
+                    // Envelope + tuning inherit the pitch-mode baseline unless overridden.
+                    applyPitchModeBaseline (vc, s, ctx->pitchModeSlice,
+                                            (float) (midiNoteNumber - ctx->rootMidiNote));
                     vc.scanEnabled    = s.scanEnabled;
                     vc.scanRate       = s.scanRate;
                     vc.scanWindow     = s.scanWindow;
@@ -251,15 +280,12 @@ namespace tw
                     vc.startSample    = s.startSample;
                     vc.endSample      = s.endSample;
                     vc.reverse        = s.reverse;
-                    vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + s.pitchOffsetSemis;
                     vc.sliceIndex     = pick;
                     vc.warpMode       = s.warpMode;
                     vc.stretchRatio   = s.stretchRatio;
-                    vc.attackMs       = s.attackMs;
-                    vc.releaseMs      = s.releaseMs;
-                    vc.decayMs        = s.decayMs;
-                    vc.sustainLevel   = s.sustainLevel;
-                    vc.volume         = s.volume;
+                    // Envelope + tuning inherit the pitch-mode baseline unless overridden.
+                    applyPitchModeBaseline (vc, s, ctx->pitchModeSlice,
+                                            (float) (midiNoteNumber - ctx->rootMidiNote));
                     vc.scanEnabled    = s.scanEnabled;
                     vc.scanRate       = s.scanRate;
                     vc.scanWindow     = s.scanWindow;
@@ -310,15 +336,11 @@ namespace tw
                             lvc.startSample    = s.startSample;
                             lvc.endSample      = s.endSample;
                             lvc.reverse        = s.reverse;
-                            lvc.pitchSemitones = semisFromRoot + s.pitchOffsetSemis;
                             lvc.sliceIndex     = sliceIdx;
                             lvc.warpMode       = s.warpMode;
                             lvc.stretchRatio   = s.stretchRatio;
-                            lvc.attackMs       = s.attackMs;
-                            lvc.releaseMs      = s.releaseMs;
-                            lvc.decayMs        = s.decayMs;
-                            lvc.sustainLevel   = s.sustainLevel;
-                            lvc.volume         = s.volume;
+                            // Envelope + tuning inherit the pitch-mode baseline unless overridden.
+                            applyPitchModeBaseline (lvc, s, ctx->pitchModeSlice, semisFromRoot);
                             lvc.scanEnabled    = s.scanEnabled;
                             lvc.scanRate       = s.scanRate;
                             lvc.scanWindow     = s.scanWindow;
