@@ -16,6 +16,7 @@
 // 2.5 ms terminal declick. Layer and Body crossfades are EQUAL-POWER (different recordings = uncorrelated).
 #include "OrganicEngine.h"
 #include "OrganicsLibrary.h"
+#include "../Vibrato.h"          // tp55's JUCE-free per-voice pitch LFO (64-sample grid law) — tp105 Organics vibrato
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -48,8 +49,15 @@ namespace tw
         /** C2 smootherstep for region STARTS: a sample that begins at full slope must not splash above 8 kHz. */
         inline float smoother01 (float u) noexcept { u = clamp01 (u); return u * u * u * (u * (u * 6.f - 15.f) + 10.f); }
         inline float dbToLin (float db) noexcept { return std::exp (db * 0.115129255f); }
-        /** Release/Noise knob: 0 = off, 0.5 = authored (0 dB), 1 = +6 dB. */
+        /** Release knob (release-trigger sample level): 0 = off, 0.5 = authored (0 dB), 1 = +6 dB. */
         inline float knobLevel (float v) noexcept { v = clamp01 (v); return v <= 0.5f ? 2.f * v : dbToLin (6.f * (2.f * v - 1.f)); }
+        /** tp105 Noise knob: 0 = silent, 0.5 = authored (0 dB), 1 = +12 dB (Max: "noise that you can hear"). */
+        inline float noiseLevel (float v) noexcept { v = clamp01 (v); return v <= 0.5f ? 2.f * v : dbToLin (12.f * (2.f * v - 1.f)); }
+
+        /** tp105 Vibrato depth taper: 0..1 → 0..50 cents peak, v^1.6 (0.25 → 5 ¢, 0.5 → 16.5 ¢ musical; 1 → 50 ¢ wild). */
+        inline float vibDepthCents (float v) noexcept { v = clamp01 (v); return v <= 0.f ? 0.f : 50.f * std::pow (v, 1.6f); }
+        /** The widest rate multiplier a vibrato plan can hold (100 ¢ = Vibrato::kMaxDepthCents): boundary counts use it. */
+        constexpr double kVibMaxMul = 1.0600;
 
         // SampleEngine.h::hermite (verbatim)
         inline float hermite (float xm1, float x0, float x1, float x2, float t) noexcept
@@ -172,11 +180,69 @@ namespace tw
             }
         }
 
+        /** tp105 VIBRATO run: the playback rate follows the Vibrato plan's piecewise-linear multiplier (per-sample,
+            the 64-sample grid law of Vibrato.h), so a vibrato is a true pitch sine, never a staircase. j0 = the chunk
+            index of this run's first sample (the plan is indexed from the chunk start). */
+        template <int CH, bool SINC, bool ENV>
+        void runPlainVib (const int16_t* d, double& pos, double ratio, int cnt, float& g, float dg,
+                          const float* env, float pl, float pr, float* L, float* R, const Vibrato::Block& vb, int j0) noexcept
+        {
+            float gl = g * pl, gr = g * pr;
+            const float dgl = dg * pl, dgr = dg * pr;
+            const int sh = vb.segShift, mask = (1 << sh) - 1;
+            int i = 0;
+            while (i < cnt)
+            {
+                const int j = j0 + i, sgi = j >> sh;
+                const int len = std::min (cnt - i, (1 << sh) - (j & mask));
+                double m = vb.mul[sgi] + vb.step[sgi] * (double) (j & mask);
+                const double st = vb.step[sgi];
+                for (int k = 0; k < len; ++k, ++i)
+                {
+                    const int ip = (int) pos;
+                    float yl, yr;
+                    interp<CH, SINC> (d, ip, (float) (pos - (double) ip), yl, yr);
+                    if constexpr (ENV) { L[i] += yl * (gl * env[i]); R[i] += yr * (gr * env[i]); }
+                    else               { L[i] += yl * gl;            R[i] += yr * gr; }
+                    gl += dgl; gr += dgr; pos += ratio * m; m += st;
+                }
+            }
+            g += dg * (float) cnt;
+        }
+        template <int CH, bool SINC, bool ENV>
+        void runSeamVib (const int16_t* d, double& pos, double ratio, int cnt, float& g, float dg,
+                         const float* env, float pl, float pr, float* L, float* R,
+                         double loopE, double loopLen, double invXf, const Vibrato::Block& vb, int j0) noexcept
+        {
+            const int sh = vb.segShift, mask = (1 << sh) - 1;
+            for (int i = 0; i < cnt; ++i)
+            {
+                const int j = j0 + i;
+                const double m = vb.mul[j >> sh] + vb.step[j >> sh] * (double) (j & mask);
+                const int ip = (int) pos;
+                float al, ar, bl, br;
+                interp<CH, SINC> (d, ip, (float) (pos - (double) ip), al, ar);
+                const double q = pos - loopLen;
+                const int iq = (int) q;
+                interp<CH, SINC> (d, iq, (float) (q - (double) iq), bl, br);
+                const float s = smooth01 ((float) (1.0 - (loopE - pos) * invXf));
+                float gg = g;
+                if constexpr (ENV) gg *= env[i];
+                L[i] += (al + (bl - al) * s) * (gg * pl);
+                R[i] += (ar + (br - ar) * s) * (gg * pr);
+                g += dg; pos += ratio * m;
+            }
+        }
+
         using PlainFn = void (*) (const int16_t*, double&, double, int, float&, float, const float*, float, float, float*, float*);
         using SeamFn  = void (*) (const int16_t*, double&, double, int, float&, float, const float*, float, float, float*, float*, double, double, double);
 
         template <int CH, bool SINC> PlainFn plainFor (bool env) { return env ? &runPlain<CH, SINC, true> : &runPlain<CH, SINC, false>; }
         template <int CH, bool SINC> SeamFn  seamFor  (bool env) { return env ? &runSeam<CH, SINC, true>  : &runSeam<CH, SINC, false>; }
+        using PlainVFn = void (*) (const int16_t*, double&, double, int, float&, float, const float*, float, float, float*, float*, const Vibrato::Block&, int);
+        using SeamVFn  = void (*) (const int16_t*, double&, double, int, float&, float, const float*, float, float, float*, float*, double, double, double, const Vibrato::Block&, int);
+        template <int CH, bool SINC> PlainVFn plainVFor (bool env) { return env ? &runPlainVib<CH, SINC, true> : &runPlainVib<CH, SINC, false>; }
+        template <int CH, bool SINC> SeamVFn  seamVFor  (bool env) { return env ? &runSeamVib<CH, SINC, true>  : &runSeamVib<CH, SINC, false>; }
     }
 
     int organics_debug::lastRenderReaders() noexcept { return gLastReaders.load (std::memory_order_relaxed); }
@@ -205,6 +271,7 @@ namespace tw
             bool fading = false; int fadeDelay = 0, fadeRemain = 0, fadeLen = 1; float fadeStart = 1.f;
             bool tailWrapped = false; int64_t tailAge = 0;
             uint64_t stamp = 0; uint32_t chokeSeen = 0;
+            bool relOn = false; float relG = 1.f;     // tp105: the note-off decay (exponential, −60 dB at max(amp release, knob time))
         };
 
         struct Note
@@ -218,6 +285,8 @@ namespace tw
             float vL = 64.f, vSoft = 64.f, gentle = 0.f, lastVL = -1.f, lastBody = -99.f, attack = 0.f;
             int rd[kPerNote]; int nrd = 0;
             uint64_t gen = 0;
+            int mapKey = 60;                                                  // tp105 NO-SILENCE: the key the lookups use
+            float vibPhase = 0.f, vibDepthSm = 0.f, vibRateMul = 1.f;         // tp105: this player's vibrato (phase, depth, rate)
         };
 
         struct PendingOn { bool on = false; int note = 60; float vel = 0.8f; int players = 1; float det[kMaxPlayers] {}; uint32_t seed = 0; };
@@ -239,6 +308,10 @@ namespace tw
         float toneCur = 1.0e9f, leadTone = 0.f, tb0 = 1.f, tb1 = 0.f, ta1 = 0.f, txL = 0.f, txR = 0.f, tyL = 0.f, tyR = 0.f;
         bool  tiltOn = false;
         float attackP = 0.f;
+        // tp105
+        Vibrato vib;                                     // ONE plan builder; each note's phase/depth is swapped in and out
+        float vibNorm = 0.f, vibRateHz = 5.5f, vibDelaySec = 0.35f, ampRelSec = 0.f, ampAttSec = 0.f;
+        int   velCurveMode = 1; bool tuneEq = true;
 
         //------------------------------------------------------------------------------------------
         void prepare (double sampleRate, int block)
@@ -515,7 +588,7 @@ namespace tw
 
         double ratioFor (const Note& n, const org::Region& r, const org::Sample& s, float pitchCents) const noexcept
         {
-            const double semis = (double) (n.key - r.root) + ((double) r.cents + (double) pitchCents + n.detC + n.humC) * 0.01;
+            const double semis = (double) (n.key - r.root) + ((double) r.cents + (tuneEq ? (double) r.tfix : 0.0) + (double) pitchCents + n.detC + n.humC) * 0.01;
             return std::clamp ((s.sampleRate / sr) * std::exp2 (semis * (1.0 / 12.0)), 1.0e-4, 64.0);
         }
 
@@ -589,7 +662,11 @@ namespace tw
                 }
             }
             const uint64_t gen = ++genCounter;
-            const int key = pend.note, vIdx = std::clamp ((int) std::lround (pend.vel * 127.f), 1, 127);
+            // tp105 Velocity Curve (back panel): Soft / Linear (authored) / Hard, applied to the played velocity before
+            // the authored layer map + velCurve see it (Linear is the identity: bit-identical to round 1).
+            velCurveMode = std::clamp (P.velCurve, 0, 2);
+            const float vPlayed = velCurveMode == 1 ? pend.vel : std::pow (pend.vel, velCurveMode == 0 ? 0.55f : 1.8f);
+            const int key = pend.note, vIdx = std::clamp ((int) std::lround (vPlayed * 127.f), 1, 127);
             const int artic = inst != nullptr ? std::clamp (P.artic, 0, inst->numArtics - 1) : 0;
             float maxDet = 0.f;
             for (int k = 0; k < pend.players; ++k) maxDet = std::max (maxDet, std::abs (pend.det[k]));
@@ -623,7 +700,8 @@ namespace tw
                 if (slot < 0) break;
                 auto& n = notes[slot];
                 n = Note();
-                n.used = true; n.gen = gen; n.key = key; n.vIdx = vIdx; n.vel01 = pend.vel; n.k = k; n.artic = artic; n.human = h;
+                n.used = true; n.gen = gen; n.key = key; n.vIdx = vIdx; n.vel01 = vPlayed; n.k = k; n.artic = artic; n.human = h;
+                n.mapKey = inst != nullptr ? inst->mappedKey (artic, key) : key;
                 Rng rng (pend.seed ^ (0x9E3779B1u * (uint32_t) (k + 1)));
                 const float uDet = rng.next(), uLvl = rng.next(), uStart = rng.next(), uTone = rng.next(), uTime = rng.next();
                 n.uRand = rng.next(); n.uFake = rng.next();
@@ -634,6 +712,15 @@ namespace tw
                 n.delay = (int) std::lround (((double) uTime * 0.012 * h + (double) k * 0.007 * D) * sr);
                 n.rrIdx = seqBase + (uint32_t) k;
                 n.detC = pend.det[k];
+                // tp105 Ensemble vibrato: every player its own rate (±3 %, golden-angle spread) and phase (golden-ratio
+                // spread), plus Human-scaled randomness — a section shimmers instead of beating in lockstep. Player 0
+                // starts at the zero crossing. Deterministic at Human 0 (the spread is k-indexed, not random).
+                {
+                    const float uVr = rng.next(), uVp = rng.next();   // drawn AFTER the round-1 draws: those stay identical
+                    n.vibRateMul = 1.f + 0.03f * std::sin (2.39996f * (float) k) + 0.04f * h * (uVr - 0.5f);
+                    const float ph = 0.618034f * (float) k + 0.25f * h * uVp;
+                    n.vibPhase = k == 0 && h <= 0.f ? 0.f : ph - std::floor (ph);
+                }
             }
         }
 
@@ -704,7 +791,31 @@ namespace tw
                 const auto& tr = I.regions[(size_t) t];
                 if (tr.randLo > 0.f || tr.randHi < 1.f) I.rrLast()[(size_t) n.artic * 128 + (size_t) n.key].store (t, std::memory_order_relaxed);
             }
+            // tp105: "trig":"on" mechanical noise (hammer / key-down thump, breath onset, pick) starts WITH the note —
+            // the first two players only (a section's sixteen thumps would be a drum roll, not a section).
+            if (I.hasNoise && n.k < 2) spawnKind (idx, org::Kind::Noise, true, pitchCents);
             if (n.relPending) { n.relPending = false; n.released = false; releaseNote (idx, pitchCents); }
+        }
+
+        /** Spawn every region of `kind` for this note's cell (mapped key when the played key has none). onNoise: only
+            "trig":"on" noise; otherwise "on" noise is skipped (it already sounded at the note's start). */
+        void spawnKind (int idx, org::Kind kind, bool onNoise, float pitchCents) noexcept
+        {
+            auto& n = notes[idx];
+            const auto& I = *inst;
+            const auto* spp = &I.span (n.artic, kind, n.key, n.vIdx);
+            if (spp->count == 0) spp = &I.span (n.artic, kind, n.mapKey, n.vIdx);   // out of range → the edge zone's
+            const auto& sp = *spp;
+            const uint16_t* L = I.list (sp);
+            for (uint32_t i = 0; i < sp.count; ++i)
+            {
+                const auto& r = I.regions[L[i]];
+                if (kind == org::Kind::Noise && r.trigOn != onNoise) continue;
+                if (! rrPass (r, n)) continue;
+                const int before = n.nrd;
+                spawn (idx, L[i], kind, true, 1.f, pitchCents);
+                if (n.nrd > before && ! onNoise) readers[n.rd[n.nrd - 1]].rtAtt = dbToLin (-r.rtDecay * n.heldSec);
+            }
         }
 
         void updateTargets (int idx, float pitchCents, bool atStart) noexcept
@@ -747,30 +858,30 @@ namespace tw
             n.released = true; n.pedalHeld = false;
             if (! n.started) { n.relPending = true; return; }
             n.heldSec = (float) ((double) n.age / sr);
+            // tp105 A REAL RELEASE (Max: "linked to the envelope… at 100 % make it at least 10 seconds"): every sounding
+            // attack region — decaying or looped — now decays exponentially to −60 dB over max(amp-env release, the
+            // Release knob's time) (relTime). One-shots play out, as authored. The voice holds its amp VCA for Organics
+            // oscillators while this runs, so the amp envelope's release lengthens EVERY instrument, the piano included.
             for (int i = 0; i < n.nrd; ++i)
             {
                 auto& rd = readers[n.rd[i]];
-                if (rd.role == org::Kind::Attack && rd.r->loop == org::Loop::NoLoop)
-                    startFade (rd, fadeFrames (0.04 + 0.4 * sRelease));    // the natural-decay handoff, never a cut
+                if (rd.role == org::Kind::Attack && rd.r->loop != org::Loop::OneShot) rd.relOn = true;
             }
             if (n.orphan || n.killed || inst == nullptr || ! (inst->hasRelease || inst->hasNoise)) return;
-            // release (Release knob) and mechanical key-off noise (Noise knob) both trigger here
-            const auto& I = *inst;
-            for (auto kind : { org::Kind::Release, org::Kind::Noise })
-            {
-                const auto* spp = &I.span (n.artic, kind, n.key, n.vIdx);
-                if (spp->count == 0) spp = &I.span (n.artic, kind, I.mappedKey (n.artic, n.key), n.vIdx);   // out of range → the edge zone's
-                const auto& sp = *spp;
-                const uint16_t* L = I.list (sp);
-                for (uint32_t i = 0; i < sp.count; ++i)
-                {
-                    const auto& r = I.regions[L[i]];
-                    if (! rrPass (r, n)) continue;
-                    const int before = n.nrd;
-                    spawn (idx, L[i], kind, true, 1.f, pitchCents);
-                    if (n.nrd > before) readers[n.rd[n.nrd - 1]].rtAtt = dbToLin (-r.rtDecay * n.heldSec);
-                }
-            }
+            // release (Release knob) and key-off mechanical noise (Noise knob) trigger here
+            if (inst->hasRelease) spawnKind (idx, org::Kind::Release, false, pitchCents);
+            if (inst->hasNoise)   spawnKind (idx, org::Kind::Noise,   false, pitchCents);
+        }
+
+        /** tp105 note-off decay time (s): the Release knob's taper — 20 ms at 0, the instrument's AUTHORED release
+            (map.json env.r, 30 ms..30 s) at 0.5, ≥ 12 s at 1 (log-interpolated both halves) — and never shorter than
+            the voice's amp-envelope release. */
+        float relTime (const org::Region& r) const noexcept
+        {
+            const float A = std::clamp (r.envR, 0.03f, 30.f), rr = sRelease;
+            const float T = rr <= 0.5f ? 0.02f * std::pow (A / 0.02f, 2.f * rr)
+                                       : A * std::pow (std::max (12.f, A) / A, 2.f * rr - 1.f);
+            return std::max (T, ampRelSec);
         }
 
         //------------------------------------------------------------------------------------------
@@ -796,12 +907,13 @@ namespace tw
                     }
                     break;
                 case org::Kind::Release: g *= knobLevel (sRelease) * rd.rtAtt; break;
-                case org::Kind::Noise:   g *= knobLevel (sNoise) * rd.rtAtt; break;
+                case org::Kind::Noise:   g *= noiseLevel (sNoise) * rd.rtAtt; break;
             }
             return g;
         }
 
-        void renderReader (Reader& rd, const Note& n, float pitchCents, float* oL, float* oR, int i0, int nEnd) noexcept
+        void renderReader (Reader& rd, const Note& n, float pitchCents, float* oL, float* oR, int i0, int nEnd,
+                           const Vibrato::Block* vb = nullptr) noexcept
         {
             const auto& r = *rd.r;
             const auto& s = *rd.s;
@@ -813,7 +925,13 @@ namespace tw
                 startFade (rd, fadeFrames (0.005));                       // choke: always a 5 ms fade
 
             float compDb = 0.f;
-            const float g1 = targetGain (rd, n, compDb);
+            float g1 = targetGain (rd, n, compDb);
+            if (rd.relOn)
+            {
+                // exponential, −60 dB after relTime (re-evaluated per block: the knob / its mod / the amp release are live)
+                rd.relG *= std::exp (-6.9077553f * (float) cnt / (relTime (r) * (float) sr));
+                g1 *= rd.relG;
+            }
             const float g0 = rd.firstBlock ? g1 : rd.gPrev;
             rd.firstBlock = false;
 
@@ -867,14 +985,20 @@ namespace tw
 
             const int16_t* d = s.data();
             const bool sinc = nonRealtime;
-            PlainFn plain; SeamFn seamFn;
+            PlainFn plain; SeamFn seamFn; PlainVFn plainV = nullptr; SeamVFn seamV = nullptr;
             if (s.channels == 2) { plain = sinc ? plainFor<2, true> (needEnv) : plainFor<2, false> (needEnv); seamFn = sinc ? seamFor<2, true> (needEnv) : seamFor<2, false> (needEnv); }
             else                 { plain = sinc ? plainFor<1, true> (needEnv) : plainFor<1, false> (needEnv); seamFn = sinc ? seamFor<1, true> (needEnv) : seamFor<1, false> (needEnv); }
+            if (vb != nullptr)
+            {
+                if (s.channels == 2) { plainV = sinc ? plainVFor<2, true> (needEnv) : plainVFor<2, false> (needEnv); seamV = sinc ? seamVFor<2, true> (needEnv) : seamVFor<2, false> (needEnv); }
+                else                 { plainV = sinc ? plainVFor<1, true> (needEnv) : plainVFor<1, false> (needEnv); seamV = sinc ? seamVFor<1, true> (needEnv) : seamVFor<1, false> (needEnv); }
+            }
 
             float g = g0;
             const float dg = (g1 - g0) / (float) std::max (1, cnt);
             double pos = rd.pos;
             const double ratio = rd.ratio;
+            const double ratioB = vb != nullptr ? ratio * kVibMaxMul : ratio;   // boundary counts: the plan's fastest rate
             int i = 0;
             bool ended = false;
             while (i < cnt)
@@ -891,23 +1015,25 @@ namespace tw
                     const double xfStart = loopE - xfEff;
                     if (seam && pos >= xfStart)
                     {
-                        int m = (int) std::ceil ((loopE - pos) / ratio);
+                        int m = (int) std::ceil ((loopE - pos) / ratioB);
                         m = std::clamp (m, 1, cnt - i);
-                        seamFn (d, pos, ratio, m, g, dg, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i, loopE, loopLen, 1.0 / xfEff);
+                        if (vb != nullptr) seamV (d, pos, ratio, m, g, dg, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i, loopE, loopLen, 1.0 / xfEff, *vb, i0 + i);
+                        else seamFn (d, pos, ratio, m, g, dg, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i, loopE, loopLen, 1.0 / xfEff);
                         i += m;
                         continue;
                     }
                     boundary = seam ? xfStart : loopE;
                 }
                 else boundary = endPos;
-                int m = (int) std::ceil ((boundary - pos) / ratio);
+                int m = (int) std::ceil ((boundary - pos) / ratioB);
                 if (m < 1)
                 {
                     if (! looping) { ended = true; break; }
                     m = 1;
                 }
                 m = std::min (m, cnt - i);
-                plain (d, pos, ratio, m, g, dg, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i);
+                if (vb != nullptr) plainV (d, pos, ratio, m, g, dg, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i, *vb, i0 + i);
+                else plain (d, pos, ratio, m, g, dg, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i);
                 i += m;
             }
             rd.pos = pos;
@@ -917,6 +1043,7 @@ namespace tw
 
             // retire
             if (ended || finishedFade) { rd.active = false; return; }
+            if (rd.relOn && rd.relG < 1.0e-4f && ! rd.fading) startFade (rd, fadeFrames (0.005));   // −80 dB into the release: done
             if (rd.role == org::Kind::Attack && g0 <= 0.f && g1 <= 0.f && rd.layer <= 0.f) { rd.active = false; return; }
             if (! r.looping() && ! (looping && sSustain >= 0.999f))
             {
@@ -927,6 +1054,25 @@ namespace tw
         }
 
         //------------------------------------------------------------------------------------------
+        /** tp105 VIBRATO for one note (player) this chunk — Vibrato.h's plan (tp55: a sine on the playback rate, rate
+            multiplier on a 64-sample grid, linear inside; depth one-pole per block). Depth = the knob's taper × the
+            onset envelope (vibDelay of nothing, then a 250 ms smooth fade-in). Rate = the back panel's 3..9 Hz + 0.6 Hz
+            × depth (players push faster as they dig in) × this player's own ±3 %. nullptr while parked: the render then
+            takes the untouched constant-rate path (depth 0 is bit-identical to no vibrato at all). */
+        const Vibrato::Block* vibratoFor (Note& nt, int n) noexcept
+        {
+            if (! nt.started) return nullptr;
+            const float t = (float) ((double) nt.age / sr) - vibDelaySec;
+            const float onset = t <= 0.f ? 0.f : smooth01 (t / 0.25f);
+            const float depth = vibDepthCents (vibNorm) * onset;
+            vib.phase = (double) nt.vibPhase; vib.depthSmoothed = nt.vibDepthSm;
+            const auto& b = vib.advance (depth, (vibRateHz + 0.6f * vibNorm) * nt.vibRateMul, sr, n);
+            nt.vibDepthSm = vib.depthSmoothed;
+            if (! b.active) { if (depth <= 0.f) nt.vibDepthSm = 0.f; return nullptr; }   // parked: keep this player's phase
+            nt.vibPhase = (float) vib.phase;
+            return &b;
+        }
+
         float aDynNote = 1.f;
 
         void render (const OrganicParams& P, float pitchCents, float* L, float* R, int n) noexcept
@@ -993,6 +1139,12 @@ namespace tw
             sm (sImage, std::clamp (P.image, 0.f, 1.5f));
             snap = false;
             attackP = std::clamp (P.attack, -1.f, 1.f);
+            vibNorm     = clamp01 (P.vibrato);
+            vibRateHz   = std::clamp (P.vibRate, 0.5f, 12.f);
+            vibDelaySec = std::clamp (P.vibDelay, 0.f, 4.f);
+            ampRelSec   = std::clamp (P.ampRelease, 0.f, 60.f);
+            ampAttSec   = std::clamp (P.ampAttack, 0.f, 60.f);
+            tuneEq      = P.tuning != 0;
 
             // ── events (they land at the start of this block) ──
             if (pend.on) resolveNoteOn (P);
@@ -1044,11 +1196,12 @@ namespace tw
                 else if (! nt.released && ! nt.orphan && ! nt.killed && inst != nullptr)
                     updateTargets (ni, pitchCents, false);
 
+                const Vibrato::Block* vb = (vibNorm > 0.f || nt.vibDepthSm > 0.f) ? vibratoFor (nt, n) : nullptr;
                 for (int k = 0; k < nt.nrd; ++k)
                 {
                     auto& rd = readers[nt.rd[k]];
                     if (! rd.active) continue;
-                    renderReader (rd, nt, pitchCents, sumL.data(), sumR.data(), i0, n);
+                    renderReader (rd, nt, pitchCents, sumL.data(), sumR.data(), i0, n, vb);
                     ++rendered;
                 }
                 if (nt.started && nt.k == 0 && nt.gen >= leadGen) { leadGen = nt.gen; lead = ni; }

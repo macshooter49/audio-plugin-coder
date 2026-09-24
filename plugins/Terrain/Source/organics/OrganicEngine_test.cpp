@@ -281,6 +281,31 @@ namespace gen
                 "choke group 1 (grp 1, offBy 1). Release region (all keys): 1 kHz damper tone, rt_decay 3 dB/s. Noise region (keys 0-99): 60 ms key-off burst "
                 "(noise regions trigger at note-off, level = the Noise knob).");
         }
+        // ── tp105 test.noisy: a looped pure sine (release / vibrato / tfix), an "on" and an "off" mechanical noise ──
+        {
+            std::vector<Smp> S; juce::Array<juce::var> R;
+            {   // attack: 220 Hz sine, loop continuous (whole cycles), authored release 0.5 s, tfix +25 cents
+                const double f0 = 220.0; const int64_t ls = 4800, le = ls + wholeCycles (f0, 1.0), n = le + 64;
+                S.push_back (tone (f0, n, [] (double t, int) { return (float) (0.5 * std::min (1.0, t / 0.002)); }, 1));
+                auto r = region ("attack", 0, 0, 127, 1, 127, 57, n); setLoop (r, "continuous", ls, le, 0);
+                auto* o = r.getDynamicObject(); o->setProperty ("tfix", 25.0);
+                o->getProperty ("env").getDynamicObject()->setProperty ("r", 0.5);
+                R.add (r);
+            }
+            {   // "on" noise: 100 ms 3 kHz burst, root 60 (play key 60 → 3 kHz), starts WITH the note
+                const int64_t n = 4800;
+                S.push_back (tone (3000.0, n, [] (double t, int) { return (float) (0.2 * std::min (1.0, t / 0.002) * std::min (1.0, (0.1 - t) / 0.005)); }, 1));
+                auto r = region ("noise", 1, 0, 127, 1, 127, 60, n); r.getDynamicObject()->setProperty ("trig", "on"); R.add (r);
+            }
+            {   // "off" noise (no "trig" key = off): 100 ms 5 kHz burst, root 60, at note-off
+                const int64_t n = 4800;
+                S.push_back (tone (5000.0, n, [] (double t, int) { return (float) (0.2 * std::min (1.0, t / 0.002) * std::min (1.0, (0.1 - t) / 0.005)); }, 1));
+                R.add (region ("noise", 2, 0, 127, 1, 127, 60, n));
+            }
+            writeInstrument (root, "test.noisy", "Test Noisy Sine", "violin", S, R, true, false,
+                "tp105. All keys, root 57: a 220 Hz sine, loop continuous (whole cycles), authored env release 0.5 s, tfix +25 cents. "
+                "Noise regions (root 60): trig \"on\" = 100 ms 3 kHz burst with the note; no trig (= \"off\") = 100 ms 5 kHz burst at note-off.");
+        }
     }
 }
 
@@ -466,6 +491,48 @@ static void run (OrganicEngine& e, OrganicParams p, Rec& rec, int64_t frames, in
     }
 }
 static OrganicParams P0() { OrganicParams p; p.human = 0.f; return p; }
+
+// ── tp105 measurement helpers ──
+/** Seconds from `off` until the 10 ms RMS first falls 60 dB under the RMS of the 100 ms before `off` (−1 = never). */
+static double t60 (const std::vector<float>& x, int64_t off)
+{
+    double ref = 0; for (int64_t i = off - 4800; i < off; ++i) ref += (double) x[(size_t) i] * x[(size_t) i];
+    ref = std::sqrt (ref / 4800.0);
+    for (int64_t w = off; w + 480 <= (int64_t) x.size(); w += 480)
+    {
+        double a = 0; for (int64_t i = w; i < w + 480; ++i) a += (double) x[(size_t) i] * x[(size_t) i];
+        if (std::sqrt (a / 480.0) < ref * 1.0e-3) return (double) (w - off) / kSR;
+    }
+    return -1.0;
+}
+/** Per-cycle f0 of a (near-)pure tone by interpolated rising zero crossings: {time s, cents re ref}. */
+static std::vector<std::pair<double, double>> zcTrack (const std::vector<float>& x, int64_t s0, int64_t s1, double ref)
+{
+    std::vector<std::pair<double, double>> out; double last = -1;
+    for (int64_t i = std::max<int64_t> (1, s0); i < s1 && i < (int64_t) x.size(); ++i)
+        if (x[(size_t) i - 1] < 0.f && x[(size_t) i] >= 0.f)
+        {
+            const double t = (double) (i - 1) + (double) (-x[(size_t) i - 1]) / (double) (x[(size_t) i] - x[(size_t) i - 1]);
+            if (last >= 0) out.push_back ({ 0.5 * (t + last) / kSR, 1200.0 * std::log2 ((kSR / (t - last)) / ref) });
+            last = t;
+        }
+    return out;
+}
+struct VibStats { double depth = 0, rate = 0, mean = 0; };
+static VibStats vibStats (const std::vector<std::pair<double, double>>& tr, double t0, double t1)
+{
+    std::vector<double> c; std::vector<double> ts;
+    for (auto& q : tr) if (q.first >= t0 && q.first < t1) { c.push_back (q.second); ts.push_back (q.first); }
+    VibStats v; if (c.size() < 8) return v;
+    for (double x : c) v.mean += x; v.mean /= (double) c.size();
+    auto srt = c; std::sort (srt.begin(), srt.end());
+    v.depth = 0.5 * (srt[(size_t) (0.98 * (double) (srt.size() - 1))] - srt[(size_t) (0.02 * (double) (srt.size() - 1))]);
+    int cross = 0; double first = -1, lastT = -1;
+    for (size_t i = 1; i < c.size(); ++i)
+        if (c[i - 1] < v.mean && c[i] >= v.mean) { ++cross; if (first < 0) first = ts[i]; lastT = ts[i]; }
+    v.rate = cross > 1 ? (double) (cross - 1) / (lastT - first) : 0;
+    return v;
+}
 static an::Buf mono (const Rec& r) { an::Buf m (r.L.size()); for (size_t i = 0; i < m.size(); ++i) m[i] = 0.5f * (r.L[i] + r.R[i]); return m; }
 
 static const float kNoDet[16] = {};
@@ -584,6 +651,7 @@ int main (int argc, char** argv)
              fmt ("root %s, idToIndex(test.sine)=%d, indexToId(1)=%s, index entries=%d", rootOk ? "=env" : "WRONG", idx, back.toRawUTF8(), ix.size()));
     }
     auto sine = load ("test.sine"), layers = load ("test.layers"), rr = load ("test.rr"), norr = load ("test.norr"), piano = load ("test.piano");
+    auto noisy = load ("test.noisy");   // tp105
     bar ("library: fixtures load (background thread → message cb)", sine && layers && rr && norr && piano,
          fmt ("sine=%d layers=%d rr=%d norr=%d piano=%d  resident=%d (%.2f MB)", !! sine, !! layers, !! rr, !! norr, !! piano,
               OrganicsLibrary::get().residentCount(), OrganicsLibrary::get().residentBytes() / 1048576.0));
@@ -1008,7 +1076,7 @@ int main (int argc, char** argv)
             const double eh = an::rms (dh, 9600, 4800), ef = an::rms (df, 9600, 4800);
             const double pre = an::rms (dh, 0, 9600);                  // nothing before the note-off
             const auto s0 = rnd (0.f, sine), s1 = rnd (1.f, sine);
-            bar ("Noise: key-off noise level (0 / authored / +6 dB)", eh > 1e-3 && pre == 0.0 && std::abs (an::db (ef / eh) - 6.0) <= 0.5 && s0 == s1,
+            bar ("Noise: key-off noise level (0 / authored / +12 dB)", eh > 1e-3 && pre == 0.0 && std::abs (an::db (ef / eh) - 12.0) <= 0.5 && s0 == s1,
                  fmt ("authored key-off noise %.1f dBFS (before note-off: %s), knob 1 %+.2f dB re 0.5 · no-noise instrument unaffected: %s",
                       an::db (eh), pre == 0.0 ? "silent" : "LEAK", an::db (ef / eh), s0 == s1 ? "yes" : "NO"));
         }
@@ -1360,6 +1428,169 @@ int main (int argc, char** argv)
     }
 
     // ── 9. Real data: Agent A's compiled library (runs when <compiledRoot> is given and exists) ──────
+
+    // ══ tp105 — VIBRATO · A REAL RELEASE · NOISE ON/OFF · TUNING (tfix) · VELOCITY CURVE (fixture test.noisy) ══════════
+    bar ("tp105 fixture test.noisy loads", noisy != nullptr, fmt ("noisy=%d (ORG_REGEN=1 writes it)", !! noisy));
+    if (noisy)
+    {
+        auto sineRun = [&] (OrganicParams p, int64_t frames, int players = 1, int blk = 512,
+                            std::function<void (OrganicParams&, int64_t)> hook = {}) {
+            OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (noisy);
+            e.noteOn (57, 0.8f, players, kNoDet, 7u);
+            Rec r; run (e, p, r, frames, blk, 0.f, hook); return mono (r);
+        };
+        auto pv = [] { auto p = P0(); p.tuning = 0; p.noise = 0.f; return p; };   // the pure sine (no bursts)
+        // vibrato depth taper (knob 0.25 / 0.5 / 1 → 5.4 / 16.5 / 50 cents peak), rate 5.5 + 0.6·depth Hz
+        {
+            const float knobs[3] = { 0.25f, 0.5f, 1.f };
+            double dep[3], rate[3], want[3]; bool ok = true; std::string d;
+            for (int i = 0; i < 3; ++i)
+            {
+                auto p = pv(); p.vibrato = knobs[i];
+                const auto x = sineRun (p, (int64_t) (4.0 * kSR));
+                const auto st = vibStats (zcTrack (x, 0, (int64_t) x.size(), 220.0), 1.5, 3.9);
+                dep[i] = st.depth; rate[i] = st.rate; want[i] = 50.0 * std::pow (knobs[i], 1.6);
+                const double wantR = 5.5 + 0.6 * knobs[i];
+                ok &= std::abs (dep[i] - want[i]) <= 0.08 * want[i] + 0.3 && std::abs (rate[i] - wantR) <= 0.15 && std::abs (st.mean) <= 0.3 + 0.05 * want[i];
+                d += fmt ("%s%.2f → ±%.1f¢ (want %.1f) @ %.2f Hz (want %.2f), mean %+.2f¢", i ? " · " : "", knobs[i], dep[i], want[i], rate[i], wantR, st.mean);
+            }
+            bar ("Vibrato: depth taper + rate rise, f0-tracked", ok, d);
+        }
+        // rate follows the back panel (3 / 9 Hz at depth 0.5)
+        {
+            bool ok = true; std::string d;
+            for (float hz : { 3.f, 9.f })
+            {
+                auto p = pv(); p.vibrato = 0.5f; p.vibRate = hz;
+                const auto x = sineRun (p, (int64_t) (5.0 * kSR));
+                const auto st = vibStats (zcTrack (x, 0, (int64_t) x.size(), 220.0), 1.5, 4.9);
+                ok &= std::abs (st.rate - (hz + 0.3)) <= 0.15;
+                d += fmt ("%s%.0f Hz → %.2f Hz (want %.2f)", hz < 5 ? "" : " · ", hz, st.rate, hz + 0.3);
+            }
+            bar ("Vibrato: rate 3..9 Hz from the back panel", ok, d);
+        }
+        // onset delay 0 / 1 s then a 250 ms fade-in: the time |dev| first passes 30 % of the full depth
+        {
+            bool ok = true; std::string d;
+            for (float dl : { 0.f, 1.f })
+            {
+                auto p = pv(); p.vibrato = 1.f; p.vibDelay = dl;
+                const auto x = sineRun (p, (int64_t) (3.0 * kSR));
+                const auto tr = zcTrack (x, 0, (int64_t) x.size(), 220.0);
+                double on = -1; for (auto& q : tr) if (q.first > 0.05 && std::abs (q.second) > 15.0) { on = q.first; break; }
+                const double pre = [&] { double m = 0; for (auto& q : tr) if (q.first > 0.05 && q.first < dl) m = std::max (m, std::abs (q.second)); return m; }();
+                ok &= on >= dl + 0.03 && on <= dl + 0.30 && (dl == 0.f || pre < 0.05);
+                d += fmt ("%sdelay %.0f s → 15¢ reached at %.3f s (before the delay: max %.3f¢)", dl == 0.f ? "" : " · ", dl, on, pre);
+            }
+            bar ("Vibrato: onset delay, then a 250 ms fade-in", ok, d);
+        }
+        // depth 0 is the untouched path: rate / delay knobs change nothing, and the pitch is exact
+        {
+            auto a = pv(); auto b = pv(); b.vibRate = 9.f; b.vibDelay = 0.f;
+            const auto xa = sineRun (a, 96000), xb = sineRun (b, 96000);
+            const auto st = vibStats (zcTrack (xa, 0, (int64_t) xa.size(), 220.0), 0.2, 1.9);
+            bar ("Vibrato 0: bit-identical path, pitch exact", xa == xb && std::abs (st.mean) < 0.02 && st.depth < 0.02,
+                 fmt ("rate/delay moved at depth 0: %s · mean %+.4f¢, spread ±%.4f¢", xa == xb ? "identical" : "DIFFERENT", st.mean, st.depth));
+        }
+        // no zipper / clicks: the depth knob swept 0 → 1 → 0 over 3 s while held (a mod wheel)
+        {
+            auto p = pv(); p.vibDelay = 0.f;
+            const auto x = sineRun (p, (int64_t) (4.0 * kSR), 1, 256, [] (OrganicParams& q, int64_t at) {
+                const double t = (double) at / kSR; q.vibrato = (float) (t < 0.5 ? 0.0 : t < 2.0 ? (t - 0.5) / 1.5 : t < 3.5 ? 1.0 - (t - 2.0) / 1.5 : 0.0); });
+            const auto ck = an::clicks (x);
+            bar ("Vibrato: depth sweep 0→1→0 held, no zipper", ck.relDb <= -60.0 || ck.localRatio <= 1.5,
+                 fmt ("HP(8k) residual %.1f dB re peak (local ratio %.2f, worst at %.0f ms)", ck.relDb, ck.localRatio, ck.atMs));
+        }
+        // Ensemble: 2 players, Human 0, no detune — lockstep would be exactly 2× one player; own rates/phases decorrelate
+        {
+            auto dec = [&] (float vib) {
+                auto p = pv(); p.vibrato = vib; p.vibDelay = 0.f;
+                const auto x2 = sineRun (p, (int64_t) (4.0 * kSR), 2), x1 = sineRun (p, (int64_t) (4.0 * kSR), 1);
+                an::Buf d (x2.size()); for (size_t i = 0; i < d.size(); ++i) d[i] = x2[i] - 2.f * x1[i];
+                return an::db (an::rms (d, (int64_t) (1.0 * kSR), (int64_t) (2.9 * kSR)) / an::rms (x2, (int64_t) (1.0 * kSR), (int64_t) (2.9 * kSR)));
+            };
+            const double d0 = dec (0.f), d5 = dec (0.5f);
+            bar ("Vibrato Ensemble: players differ (shimmer, not lockstep)", d0 < -120.0 && d5 > -30.0,
+                 fmt ("2 players − 2× one player: vibrato 0 %.0f dB (identical = lockstep) · vibrato 0.5 %.1f dB re the pair", d0, d5));
+        }
+        // A REAL RELEASE: −60 dB time vs the Release knob (amp release 0) and vs the amp release (knob 0), looped tone
+        {
+            auto rel = [&] (float knob, float ampRel) {
+                OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (noisy);
+                auto p = pv(); p.release = knob; p.ampRelease = ampRel; p.noise = 0.f;   // the tone's release (key-off burst off)
+                e.noteOn (57, 0.8f, 1, kNoDet, 7u);
+                Rec r; run (e, p, r, 24000, 512); e.noteOff (false);
+                run (e, p, r, (int64_t) (16.0 * kSR), 512);
+                return t60 (mono (r), 24000);
+            };
+            const float knobs[5] = { 0.f, 0.25f, 0.5f, 0.75f, 1.f };
+            const double wantK[5] = { 0.02, 0.1, 0.5, 0.5 * std::sqrt (24.0), 12.0 };
+            bool ok = true; std::string d;
+            for (int i = 0; i < 5; ++i)
+            {
+                const double t = rel (knobs[i], 0.f);
+                ok &= t > 0 && std::abs (t - wantK[i]) <= 0.12 * wantK[i] + 0.012;
+                d += fmt ("%s%.2f→%.3fs (%.3f)", i ? " " : "knob ", knobs[i], t, wantK[i]);
+            }
+            bar ("Release knob: 20 ms · authored 0.5 s · 12 s (−60 dB)", ok, d);
+            ok = true; d.clear();
+            for (float a : { 0.3f, 2.f, 5.f })
+            {
+                const double t = rel (0.f, a);
+                ok &= t > 0 && std::abs (t - a) <= 0.12 * a + 0.012;
+                d += fmt ("%samp %.1fs→%.3fs", a < 1 ? "" : " · ", a, t);
+            }
+            const double both = rel (0.75f, 0.3f);   // max(): the knob's 2.45 s wins over a 0.3 s amp release
+            ok &= std::abs (both - wantK[3]) <= 0.12 * wantK[3];
+            bar ("Release = max(amp-env release, knob time)", ok, d + fmt (" · knob .75 + amp 0.3 s → %.3f s", both));
+        }
+        // NOISE on / off: the on-burst (3 kHz) with the note, the off-burst (5 kHz) at note-off; knob 0 / 0.5 / 1
+        {
+            auto nz = [&] (float knob, double& on, double& off, double& onLate, double& offEarly) {
+                OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (noisy);
+                auto p = pv(); p.noise = knob;
+                e.noteOn (60, 0.8f, 1, kNoDet, 7u);
+                Rec r; run (e, p, r, 14400, 512); e.noteOff (false); run (e, p, r, 14400, 512);
+                const auto x = mono (r);
+                on = an::amp (x, 480, 3840, 3000.0); offEarly = an::amp (x, 9600, 3840, 5000.0);
+                off = an::amp (x, 14400 + 480, 3840, 5000.0); onLate = an::amp (x, 14400 + 480, 3840, 3000.0);
+            };
+            double on0, off0, a, b, on5, off5, onL, offE, on1, off1;
+            nz (0.f, on0, off0, a, b); nz (0.5f, on5, off5, onL, offE); nz (1.f, on1, off1, a, b);
+            const bool ok = on0 < 1e-6 && off0 < 1e-6 && on5 > 0.05 && off5 > 0.05 && onL < 0.01 * on5 && offE < 1e-6
+                         && std::abs (an::db (on1 / on5) - 12.0) <= 0.5 && std::abs (an::db (off1 / off5) - 12.0) <= 0.5;
+            bar ("Noise: trig on with the note, off at note-off, 0/authored/+12", ok,
+                 fmt ("on-burst %.1f dBFS · off-burst %.1f dBFS (knob 0: %.0f / %.0f dB) · knob 1: %+.2f / %+.2f dB re 0.5 · off-burst before note-off %.0f dB",
+                      an::db (on5), an::db (off5), an::db (on0), an::db (off0), an::db (on1 / on5), an::db (off1 / off5), an::db (offE)));
+        }
+        // TUNING: tfix +25 cents applied at Equal (1), ignored As recorded (0)
+        {
+            auto f = [&] (int tuning) {
+                auto p = P0(); p.tuning = tuning;
+                const auto x = sineRun (p, 72000);
+                return vibStats (zcTrack (x, 0, (int64_t) x.size(), 220.0), 0.3, 1.4).mean;
+            };
+            const double c0 = f (0), c1 = f (1);
+            bar ("Tuning: tfix applied at Equal, not As recorded", std::abs (c0) < 0.05 && std::abs (c1 - 25.0) < 0.05,
+                 fmt ("As recorded %+.3f¢ · Equal %+.3f¢ (tfix +25)", c0, c1));
+        }
+        // VELOCITY CURVE: Soft / Hard at velocity 64 = Linear at the curve's velocity (0.55 / 1.8 power), bit for bit;
+        // Soft louder than Linear louder than Hard (Velocity knob 1 so the level follows the velocity)
+        {
+            auto rn = [&] (int curve, float vel) {
+                OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (noisy);
+                auto p = pv(); p.velo = 1.f; p.velCurve = curve;
+                e.noteOn (57, vel, 1, kNoDet, 7u);
+                Rec r; run (e, p, r, 24000, 512); return mono (r);
+            };
+            const float v = 64.f / 127.f;
+            const auto s0 = rn (0, v), s1 = rn (1, v), s2 = rn (2, v);
+            const auto l0 = rn (1, std::pow (v, 0.55f)), l2 = rn (1, std::pow (v, 1.8f));
+            const double d0 = an::db (an::rms (s0, 9600, 9600) / an::rms (s1, 9600, 9600)), d2 = an::db (an::rms (s2, 9600, 9600) / an::rms (s1, 9600, 9600));
+            bar ("Velocity curve: Soft > Linear > Hard (vel 64)", s0 == l0 && s2 == l2 && d0 > 2.0 && d2 < -3.0,
+                 fmt ("Soft %+.2f dB · Hard %+.2f dB re Linear · each = Linear at v^0.55 / v^1.8: %s / %s", d0, d2, s0 == l0 ? "identical" : "DIFFERENT", s2 == l2 ? "identical" : "DIFFERENT"));
+        }
+    }
     if (argc >= 3 && juce::File (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2])).isDirectory())
     {
         const auto realRoot = juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]);
@@ -1369,6 +1600,7 @@ int main (int argc, char** argv)
         auto sal = load ("salamander.grand.v3");
         const double tSal = (juce::Time::getMillisecondCounterHiRes() - t0) / 1000.0;
         auto vio = load ("vsco2.strings.violin-section"), solo = load ("vsco2.strings.solo-violin");
+        auto vibes = load ("vcsl.mallets.vibraphone");   // tp105 release table (absent → reported, not failed)
         OrganicsLibrary::get().rescan();
         double idxMB = 0;
         if (auto* a = OrganicsLibrary::get().index().getArray())
@@ -1516,6 +1748,40 @@ int main (int argc, char** argv)
                 const auto ck = an::clicks (mono (r));
                 bar ("real no clicks: salamander 60 notes, offs at random phases", ck.relDb <= -60 || ck.localRatio <= 1.5,
                      fmt ("HP residual %.1f dB re peak (local ratio %.2f, worst at %.0f ms)", ck.relDb, ck.localRatio, ck.atMs));
+            }
+
+            // tp105 — THE RELEASE ON REAL INSTRUMENTS: the −60 dB point after note-off vs the knob (amp release 0) and vs
+            // the amp release (knob 0), Salamander C3 · violin section G4 · vibraphone F4 (Max: "at 100 % … at least 10 s")
+            {
+                auto vib = vibes;
+                struct Inst { const char* nm; std::shared_ptr<const OrganicInstrument> I; int key; };
+                const Inst ins[3] = { { "salamander C3", sal, 48 }, { "violin sect G4", vio, 67 }, { "vibraphone F4", vib, 65 } };
+                bool okK = true, okA = true;
+                for (const auto& in : ins)
+                {
+                    if (! in.I) { std::printf ("      INFO release: %s not in the compiled library\n", in.nm); continue; }
+                    auto rel = [&] (float knob, float ampRel, bool off = true) {
+                        OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (in.I);
+                        auto p = P0(); p.release = knob; p.ampRelease = ampRel; p.noise = 0.f;   // the tone's release (key-off noise off)
+                        e.noteOn (in.key, 0.8f, 1, kNoDet, 7u);
+                        Rec r; run (e, p, r, 48000, 512); if (off) e.noteOff (false);
+                        run (e, p, r, (int64_t) (16.0 * kSR), 512);
+                        return t60 (mono (r), 48000);
+                    };
+                    const double nat = rel (0.5f, 0.f, false);   // the recording's own −60 dB from the same point, key held
+                    const double k0 = rel (0.f, 0.f), k5 = rel (0.5f, 0.f), k1 = rel (1.f, 0.f);
+                    const double a03 = rel (0.f, 0.3f), a2 = rel (0.f, 2.f), a5 = rel (0.f, 5.f);
+                    std::printf ("      INFO release %-15s knob 0 %6.3f s · 0.5 %6.3f s · 1 %6.3f s  |  amp 0.3 s %6.3f s · 2 s %6.3f s · 5 s %6.3f s  |  key held (natural) %6.3f s  (−60 dB re note-off; -1 = > 16 s)\n",
+                                 in.nm, k0, k5, k1, a03, a2, a5, nat);
+                    auto T = [] (double t) { return t < 0 ? 1.0e9 : t; };   // −1 = never fell 60 dB in 16 s = longer than 16 s
+                    // knob 1 reaches 10 s or the recording's own decay, whichever comes first (a decaying piano cannot ring
+                    // longer than its sample; Sustain's tail loop is the knob for that)
+                    okK &= T (k1) >= T (k5) && T (k5) > T (k0) && T (k0) <= 0.1 && T (k1) >= std::min (10.0, T (nat)) - 0.25;
+                    okA &= T (a5) >= std::min (1.5 * T (a2), T (nat) - 0.25) && T (a2) > 1.5 * T (a03);
+                    if (in.I == vio) okK &= T (k1) >= 10.0;
+                }
+                bar ("real release: knob 0 < 0.5 ≤ 1 ≥ min(10 s, natural)", okK, "see the INFO table above (violin section: knob 1 ≥ 10 s)");
+                bar ("real release: the amp release lengthens every instrument", okA, "amp 0.3 → 2 → 5 s each ≥ 1.5× longer, piano included");
             }
             // CPU on the real piano (stereo, decaying, 8-note chord)
             {
