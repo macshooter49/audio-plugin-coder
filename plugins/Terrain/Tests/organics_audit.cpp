@@ -7,6 +7,7 @@
 //                                              10 s release, loudness through the engine, velocity response)
 //   organics_audit --loops <root> [idFilter]   every sustain loop held 8 s: pump (repeated swell) + seam click
 //   organics_audit --knobs <root>              every knob 0 → 100 % on four instruments + live-turn zipper/click
+//   organics_audit --tone  <root> [base]       Tone on the pure tones / rich ones / C7 / the whole library (tp108)
 //   organics_audit --calib <root> [idFilter]   the calibration point through the engine (Tools/organics/engine_calibrate.py)
 //   organics_audit --pitchdump <root> <dir> <id> [vels]  renders for Tests/organics_pitch_check.py (Tuning = Equal)
 //   organics_audit --note  <root> <id> <artic> <key> <vel> [hold] [release] [wav]   one note, its click candidates
@@ -729,6 +730,7 @@ static int runPitchDump (const juce::File& out, const juce::String& id, const ju
 }
 
 int runKnobs (const juce::File& root);   // organics_audit_knobs.cpp
+int runTone (const juce::File& root, bool baseOnly);   // organics_audit_tone.cpp (tp108)
 
 int main (int argc, char** argv)
 {
@@ -747,6 +749,7 @@ int main (int argc, char** argv)
     }
     if (mode == "--loops") return runLoops (root, argc >= 4 ? juce::String (argv[3]) : juce::String());
     if (mode == "--knobs") return runKnobs (root);
+    if (mode == "--tone")  return runTone (root, argc >= 4 && std::string (argv[3]) == "base");
     if (mode == "--calib") return runCalib (argc >= 4 ? juce::String (argv[3]) : juce::String());
     if (mode == "--pitchdump" && argc >= 5) return runPitchDump (juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]), argv[4], argc >= 6 ? juce::String (argv[5]) : juce::String());
     if (mode == "--note" && argc >= 7) return runNote (argv[3], std::atoi (argv[4]), std::atoi (argv[5]), std::atoi (argv[6]), argc >= 8 ? std::atof (argv[7]) : 0.6,

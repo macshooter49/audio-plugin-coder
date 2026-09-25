@@ -21,6 +21,7 @@
 #include <complex>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <new>
@@ -773,6 +774,206 @@ static void tp107Bars (const std::shared_ptr<const OrganicInstrument>& noisy, co
 }
 
 //==================================================================================================
+//==================================================================================================
+//  tp108 — TONE ON PURE TONES. The tilt alone moved a near-sine's centroid ×1.0–1.4 end to end; the spectrum-aware stages
+//  (a Chebyshev exciter on +, the tilt's shelf morphed into a low-pass on −) must make it ×1.8+, keep 10–50 % clean, add no
+//  aliasing, stay click-free while swept, stay out of spectra the tilt already moves (and out of noise), and cost nothing at 0.
+//==================================================================================================
+namespace tp108
+{
+    /** POWER-weighted centroid of [s, s+n) — the knob sweep's brightness metric (organics_audit --tone). */
+    static double pcen (const an::Buf& x, int64_t s = 960, int n = 8192)
+    {
+        const auto m = an::mag (x, s, n);
+        double num = 0, den = 0;
+        for (size_t i = 1; i < m.size(); ++i) { const double f = (double) i * kSR / n; if (f < 20 || f > 20000) continue; num += f * m[i] * m[i]; den += m[i] * m[i]; }
+        return num / std::max (1e-30, den);
+    }
+    /** Power in [f1, f2) re the whole 20 Hz–24 kHz, dB. */
+    static double bandDb (const an::Buf& x, double f1, double f2, int64_t s = 960, int n = 8192)
+    {
+        const auto m = an::mag (x, s, n);
+        double e = 0, t = 0;
+        for (size_t i = 1; i < m.size(); ++i) { const double f = (double) i * kSR / n, p = m[i] * m[i]; if (f < 20) continue; t += p; if (f >= f1 && f < f2) e += p; }
+        return 10 * std::log10 (std::max (1e-30, e) / std::max (1e-30, t));
+    }
+    /** Harmonic (k = 2..12) and inharmonic (everything else, 50 Hz up) power re the fundamental, dB — a 4-term Blackman-Harris
+        window (−92 dB sidelobes: a Hann window's own skirts round harmonics 8 dB over the fundamental read as "off the grid")
+        and ±6 bins round every k·f0 counted as that harmonic. */
+    static std::pair<double, double> harmonics (const an::Buf& x, double f0, int64_t s = 9600, int n = 16384)
+    {
+        std::vector<std::complex<double>> a ((size_t) n);
+        for (int i = 0; i < n; ++i)
+        {
+            const double t = 2.0 * kPi * i / (n - 1), w = 0.35875 - 0.48829 * std::cos (t) + 0.14128 * std::cos (2 * t) - 0.01168 * std::cos (3 * t);
+            a[(size_t) i] = s + i < (int64_t) x.size() ? w * x[(size_t) (s + i)] : 0.0;
+        }
+        an::fft (a);
+        double fund = 0, harm = 0, inh = 0;
+        for (int i = 1; i < n / 2; ++i)
+        {
+            const double f = (double) i * kSR / n, p = std::norm (a[(size_t) i]);
+            if (f < 50) continue;
+            const double k = std::round (f / f0), dk = std::abs (f - k * f0) * n / kSR;
+            if (k >= 1 && dk <= 6.0) { if (k == 1) fund += p; else if (k <= 12) harm += p; else inh += p; }
+            else inh += p;
+        }
+        return { 10 * std::log10 (std::max (1e-30, harm) / std::max (1e-30, fund)), 10 * std::log10 (std::max (1e-30, inh) / std::max (1e-30, fund)) };
+    }
+    static an::Buf render (const std::shared_ptr<const OrganicInstrument>& I, int key, float vel, OrganicParams p, int64_t frames,
+                           bool stages = true, std::function<void (OrganicParams&, int64_t)> hook = {})
+    {
+        organics_debug::setToneStages (stages);
+        I->resetPerformanceState();
+        OrganicEngine e; e.prepare (kSR, 256); e.setInstrument (I);
+        e.noteOn (key, vel, 1, kNoDet, 1u);
+        Rec r; run (e, p, r, frames, 256, 0.f, hook);
+        organics_debug::setToneStages (true);
+        return mono (r);
+    }
+}
+
+static void tp108Bars (const std::shared_ptr<const OrganicInstrument>& pure, const std::shared_ptr<const OrganicInstrument>& sine,
+                       const std::shared_ptr<const OrganicInstrument>& norr)
+{
+    using namespace tp108;
+    auto pp = [] (float tone) { auto p = P0(); p.noise = 0.f; p.tuning = 0; p.tone = tone; return p; };
+    // 1. DRAMATIC: a pure sine's centroid ×1.8+ from Tone −1 to +1 (it was ×1.00 with the tilt alone) at three pitches
+    {
+        std::string d; bool ok = true;
+        for (int key : { 57, 81, 96 })
+        {
+            const double lo = pcen (render (pure, key, 0.63f, pp (-1.f), 12000)), hi = pcen (render (pure, key, 0.63f, pp (1.f), 12000));
+            const double lo0 = pcen (render (pure, key, 0.63f, pp (-1.f), 12000, false)), hi0 = pcen (render (pure, key, 0.63f, pp (1.f), 12000, false));
+            const auto st = organics_debug::lastTone();
+            ok &= hi / lo >= 1.8;
+            d += fmt ("%sk%d ×%.2f (tilt alone ×%.2f, sparse %.2f)", d.empty() ? "" : " · ", key, hi / lo, hi0 / lo0, st.sparse);
+        }
+        bar ("tp108 Tone: a pure sine ×1.8+ from −1 to +1", ok, d);
+    }
+    // 2. EXACT HARMONICS: at +1 the added content sits on the harmonic grid (Chebyshev: a sine → its harmonics, nothing else)
+    {
+        const auto x = render (pure, 57, 0.63f, pp (1.f), 36000);
+        const auto h = harmonics (x, 220.0);
+        bar ("tp108 Tone +1 on a sine: harmonics, not noise", h.first >= -6.0 && h.second <= -45.0,
+             fmt ("220 Hz sine at +1: harmonics 2–12 %+.1f dB re the fundamental, everything off the grid %+.1f dB", h.first, h.second));
+    }
+    // 3. THE TAPER (the lifeguard law): the knob's 10–50 % is Tone −0.8 … 0 — the dark side, a linear filter: it can't add a
+    //    harmonic. The first half of the bright side is a sheen; 100 % is the whole distance.
+    {
+        const float ts[6] = { -0.8f, -0.5f, 0.f, 0.25f, 0.5f, 1.f };
+        double hd[6]; std::string d;
+        for (int i = 0; i < 6; ++i)
+        {
+            hd[i] = harmonics (render (pure, 57, 0.63f, pp (ts[i]), 36000), 220.0).first;
+            d += fmt ("%s%+.2f → %+.1f dB", i ? " · " : "", ts[i], hd[i]);
+        }
+        bar ("tp108 Tone taper: 10–50 % adds no harmonic", hd[0] <= hd[2] + 1.0 && hd[1] <= hd[2] + 1.0, fmt ("harmonics 2–12 re the fundamental (knob 10 %%, 25 %%, 50 %%, 62.5 %%, 75 %%, 100 %%): %s", d.c_str()));
+        bar ("tp108 Tone taper: a sheen at 62.5 %, the lot at 100 %", hd[3] <= -20.0 && hd[4] <= -10.0 && hd[5] >= 0.0 && hd[3] < hd[4] && hd[4] < hd[5],
+             fmt ("+0.25 %+.1f dB (≤ −20) · +0.5 %+.1f dB (≤ −10) · +1 %+.1f dB (≥ 0: the harmonics outweigh the fundamental)", hd[3], hd[4], hd[5]));
+    }
+    // 4. NO ALIASING: a C7 sine at +1 — every harmonic past 14 kHz faded out, the band keeps the rest from folding
+    {
+        const auto on = render (pure, 96, 0.63f, pp (1.f), 36000), off = render (pure, 96, 0.63f, pp (1.f), 36000, false);
+        const double a = bandDb (on, 16000.0, 24000.0), b = bandDb (off, 16000.0, 24000.0);
+        const auto h = harmonics (on, mtof (96));
+        bar ("tp108 Tone +1 at C7: nothing over 16 kHz", a <= -60.0 && h.second <= -40.0,
+             fmt ("energy > 16 kHz %+.1f dB re the note (the tilt alone %+.1f) · off the harmonic grid %+.1f dB", a, b, h.second));
+    }
+    // 5. NO CLICK: swept −1 → +1 → −1 on a held C7 sine (the exciter crossing on/off, the gate, the dark morph) — the HP(8k)
+    //    residual may not exceed the static note's at either end
+    {
+        auto hp = [] (const an::Buf& x) { return an::peak (an::highpass (x, 8000.0), 9600, 72000); };
+        const auto sLo = render (pure, 96, 0.63f, pp (-1.f), 96000), sHi = render (pure, 96, 0.63f, pp (1.f), 96000);
+        const auto sw = render (pure, 96, 0.63f, pp (-1.f), 96000, true, [] (OrganicParams& q, int64_t at) {
+            const double t = (double) at / kSR;
+            q.tone = (float) (t < 0.2 ? -1.0 : t < 1.0 ? -1.0 + 2.0 * (t - 0.2) / 0.8 : t < 1.8 ? 1.0 - 2.0 * (t - 1.0) / 0.8 : -1.0); });
+        const double ref = std::max (hp (sLo), hp (sHi)), got = hp (sw);
+        bar ("tp108 Tone swept on a pure tone: no click", an::db (got / ref) <= 1.0,
+             fmt ("C7 sine, Tone −1 → +1 → −1 in 1.6 s: HP(8k) peak %+.2f dB re the static note at either end (≤ +1)", an::db (got / ref)));
+    }
+    // 6. DARK: on a sparse note (test.sine C3: a sine + a −14 dB marker partial, SPARSE 1) −1 takes the partials down
+    //    further than the tilt alone could (its −9 dB shelf has a floor; the morphed shelf does not). The marker sits under
+    //    the 700 Hz pivot, where a first-order morph gains ~5 dB; the real bars show it on whole notes (the centroids).
+    {
+        auto mk = [&] (bool st) { return harmonics (render (sine, 48, 0.63f, pp (-1.f), 14400, st), mtof (48), 4800, 8192); };
+        const auto on = mk (true), off = mk (false);
+        const auto stt = organics_debug::lastTone();
+        bar ("tp108 Tone −1: dark keeps going past the tilt", on.first <= off.first - 3.0,
+             fmt ("test.sine C3 (sparse %.2f): its partials re the fundamental at −1 %+.1f dB (the tilt alone %+.1f)", stt.sparse, on.first, off.first));
+    }
+    // 7. STAYS OUT: white noise (the tilt can't move it, but it is not a sparse spectrum) and a rich zone → bit-identical
+    {
+        bool same = true; std::string d;
+        for (int key : { 6, 48 })
+            for (float t : { -1.f, 1.f })
+            {
+                const auto a = render (norr, key, 0.6f, pp (t), 24000), b = render (norr, key, 0.6f, pp (t), 24000, false);
+                const bool eq = a.size() == b.size() && std::memcmp (a.data(), b.data(), sizeof (float) * a.size()) == 0;
+                same &= eq;
+                d += fmt ("%sk%d %+.0f %s", d.empty() ? "" : " · ", key, t, eq ? "=" : "≠");
+            }
+        bar ("tp108 Tone: noise and a rich spectrum untouched", same, fmt ("test.norr white-noise zone (k6) and a harmonic zone the tilt moves (k48), stages on vs off: %s", d.c_str()));
+    }
+}
+
+/** The real library (organics_audit --tone has the full table; these are its load-bearing rows). TODAY = ceff345d. */
+static void tp108RealBars (const juce::File& realRoot, const juce::File& fixRoot)
+{
+    using namespace tp108;
+    setEnv ("TERRAIN_ORGANICS_DIR", realRoot.getFullPathName().toRawUTF8());
+    OrganicsLibrary::get().rescan();
+    auto pp = [] (float tone) { auto p = P0(); p.noise = 0.f; p.tone = tone; return p; };
+    auto cen = [&] (const std::shared_ptr<const OrganicInstrument>& I, int key, float t) { return pcen (render (I, key, 80 / 127.f, pp (t), 24000)); };
+    // pure tones ×1.8
+    {
+        struct R { const char* id; int key; } rows[] = { { "vcsl.mallets.vibraphone", 65 }, { "vcsl.mallets.glockenspiel", 84 }, { "vcsl.bells.tubular", 67 }, { "vsco2.woodwinds.flute", 84 } };
+        bool ok = true; std::string d;
+        for (auto& r : rows)
+        {
+            auto I = load (r.id);
+            if (! I) { d += fmt ("%s%s missing", d.empty() ? "" : " · ", r.id); continue; }
+            const double q = cen (I, r.key, 1.f) / cen (I, r.key, -1.f);
+            ok &= q >= 1.8;
+            d += fmt ("%s%s k%d ×%.2f", d.empty() ? "" : " · ", r.id, r.key, q);
+        }
+        bar ("real tp108: pure tones ×1.8+ (−1 → +1)", ok, d);
+    }
+    // rich ones: within ±15 % of today at ±1
+    {
+        struct R { const char* id; int key; double lo, hi; } rows[] = {
+            { "salamander.grand.v3", 60, 385.5, 678.4 }, { "vsco2.strings.violin-section", 69, 455.3, 1432.4 },
+            { "vsco2.brass.trumpet", 67, 673.7, 1305.8 }, { "freepats.guitar.nylon", 52, 185.2, 292.7 } };
+        bool ok = true; std::string d;
+        for (auto& r : rows)
+        {
+            auto I = load (r.id);
+            if (! I) { d += fmt ("%s%s missing", d.empty() ? "" : " · ", r.id); continue; }
+            const double a = cen (I, r.key, -1.f) / r.lo - 1.0, b = cen (I, r.key, 1.f) / r.hi - 1.0;
+            ok &= std::abs (a) <= 0.15 && std::abs (b) <= 0.15;
+            d += fmt ("%s%s k%d %+.1f/%+.1f %%", d.empty() ? "" : " · ", r.id, r.key, 100 * a, 100 * b);
+        }
+        bar ("real tp108: rich ones within ±15 % of today (−1/+1)", ok, d);
+    }
+    // C7 at +1: nothing new over 16 kHz
+    {
+        struct R { const char* id; double today; } rows[] = { { "vcsl.mallets.vibraphone", -55.1 }, { "vcsl.mallets.glockenspiel", -47.4 }, { "vsco2.woodwinds.flute", -49.4 } };
+        bool ok = true; std::string d;
+        for (auto& r : rows)
+        {
+            auto I = load (r.id);
+            if (! I) { d += fmt ("%s%s missing", d.empty() ? "" : " · ", r.id); continue; }
+            const double a = bandDb (render (I, 96, 80 / 127.f, pp (1.f), 24000), 16000.0, 24000.0);
+            ok &= a <= std::max (r.today + 6.0, -60.0);
+            d += fmt ("%s%s %+.1f dB (today %+.1f)", d.empty() ? "" : " · ", r.id, a, r.today);
+        }
+        bar ("real tp108: C7 at +1, energy > 16 kHz ≤ today + 6 dB", ok, d);
+    }
+    org::drainDeferredReleases();
+    setEnv ("TERRAIN_ORGANICS_DIR", fixRoot.getFullPathName().toRawUTF8());
+    OrganicsLibrary::get().rescan();
+}
+
 int main (int argc, char** argv)
 {
     if (argc >= 3 && std::string (argv[1]) == "--sweep")
@@ -1469,7 +1670,9 @@ int main (int argc, char** argv)
 
     // ── 7. CPU (µs per region per 512-frame block) ────────────────────────────────────────────────
     {
-        auto bench = [&] (const std::shared_ptr<const OrganicInstrument>& I, int players, double& usPerBlock, double& usPerRegion, int& regions) {
+        auto bench = [&] (const std::shared_ptr<const OrganicInstrument>& I, int players, double& usPerBlock, double& usPerRegion, int& regions,
+                          float tone = 0.3f, bool stages = false) {
+            organics_debug::setToneStages (stages);
             std::vector<std::unique_ptr<OrganicEngine>> v;
             const int chord[8] = { 48, 52, 55, 59, 62, 65, 69, 72 };
             float det[16]; for (int k = 0; k < 16; ++k) det[k] = (float) ((k % 2 ? 1 : -1) * (k + 1) * 1.5);
@@ -1479,7 +1682,7 @@ int main (int argc, char** argv)
                 v.back()->noteOn (chord[i], 0.8f, players, det, (uint32_t) i + 1);
             }
             std::vector<float> l (512), r (512);
-            auto p = P0(); p.tone = 0.3f; p.noise = 0.f;
+            auto p = P0(); p.tone = tone; p.noise = 0.f;
             for (int b = 0; b < 20; ++b) for (auto& e : v) e->render (p, 0.f, l.data(), r.data(), 512);   // warm-up, all players started
             // best of 9 runs (other processes share this machine; the minimum is the engine's own cost)
             const int blocks = 300;
@@ -1493,13 +1696,126 @@ int main (int argc, char** argv)
                 const double us = std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - t0).count();
                 if (us / blocks < usPerBlock) { usPerBlock = us / blocks; usPerRegion = us / (double) std::max<int64_t> (1, regionBlocks); regions = (int) (regionBlocks / blocks); }
             }
+            organics_debug::setToneStages (true);
         };
         double b1, r1, b7, r7, bm, rm; int n1, n7, nm;
         bench (norr, 1, b1, r1, n1); bench (norr, 7, b7, r7, n7); bench (sine, 1, bm, rm, nm);
         bar ("CPU: engine core ≤ 4 µs per region per 512 block", r1 <= 4.0 && r7 <= 4.0 && rm <= 4.0,
-             fmt ("stereo %.2f µs/region (players 1), %.2f (players 7) · mono %.2f", r1, r7, rm));
+             fmt ("stereo %.2f µs/region (players 1), %.2f (players 7) · mono %.2f  (Tone 0.3, the tilt; tp108 stages off)", r1, r7, rm));
         std::printf ("      8-note chord, stereo loop + tilt: players 1 → %.1f µs/block (%d regions) · players 7 → %.1f µs/block (%d regions) · mono players 1 → %.1f µs (%d)\n",
                      b1, n1, b7, n7, bm, nm);
+
+        // tp108 — THE TONE STAGES' OWN COST: two identical 8-note chords, one rendered with the stages on and one with them off
+        // (the tp107 tilt alone), INTERLEAVED block by block so machine load hits both alike; the minimum of 15 runs of each.
+        // Steady state (the per-note spectrum measurement is over after 4 blocks; it is costed separately below).
+        {
+            auto ab = [&] (const std::shared_ptr<const OrganicInstrument>& I, int players, float tone) {
+                std::vector<std::unique_ptr<OrganicEngine>> on, off;
+                const int chord[8] = { 48, 52, 55, 59, 62, 65, 69, 72 };
+                float det[16]; for (int k = 0; k < 16; ++k) det[k] = (float) ((k % 2 ? 1 : -1) * (k + 1) * 1.5);
+                for (auto* v : { &on, &off })
+                    for (int i = 0; i < 8; ++i)
+                    {
+                        v->push_back (std::make_unique<OrganicEngine>()); v->back()->prepare (kSR, 512); v->back()->setInstrument (I);
+                        v->back()->noteOn (chord[i], 0.8f, players, det, (uint32_t) i + 1);
+                    }
+                std::vector<float> l (512), r (512);
+                auto p = P0(); p.tone = tone; p.noise = 0.f;
+                for (int b = 0; b < 20; ++b)
+                {
+                    organics_debug::setToneStages (true);  for (auto& e : on)  e->render (p, 0.f, l.data(), r.data(), 512);
+                    organics_debug::setToneStages (false); for (auto& e : off) e->render (p, 0.f, l.data(), r.data(), 512);
+                }
+                double best[2] = { 1e30, 1e30 }; int64_t regs[2] = { 1, 1 };
+                for (int rep = 0; rep < 25; ++rep)
+                {
+                    double us[2] = { 0, 0 }; int64_t rb[2] = { 0, 0 };
+                    for (int b = 0; b < 100; ++b)
+                        for (int k = 0; k < 2; ++k)
+                        {
+                            organics_debug::setToneStages (k == 0);
+                            const auto t0 = std::chrono::steady_clock::now();
+                            for (auto& e : (k == 0 ? on : off)) { e->render (p, 0.f, l.data(), r.data(), 512); rb[k] += organics_debug::lastRenderReaders(); }
+                            us[k] += std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - t0).count();
+                        }
+                    for (int k = 0; k < 2; ++k) if (us[k] < best[k]) { best[k] = us[k]; regs[k] = std::max<int64_t> (1, rb[k]); }
+                }
+                organics_debug::setToneStages (true);
+                return best[0] / (double) regs[0] - best[1] / (double) regs[1];   // µs per region per 512 block
+            };
+            std::string s; double worstUp = 0.0, worstDn = 0.0, worst0 = 0.0;
+            struct Case { const char* n; const std::shared_ptr<const OrganicInstrument>* I; int players; };
+            const Case cases[] = { { "sine p1", &sine, 1 }, { "norr p1", &norr, 1 }, { "sine p7", &sine, 7 } };
+            for (const auto& c : cases)
+            {
+                const double up = ab (*c.I, c.players, 1.f), zero = ab (*c.I, c.players, 0.f), dn = ab (*c.I, c.players, -1.f);
+                worstUp = std::max (worstUp, up); worst0 = std::max (worst0, std::abs (zero)); worstDn = std::max (worstDn, dn);
+                s += fmt (" %s: +1 %+.2f · 0 %+.2f · −1 %+.2f;", c.n, up, zero, dn);
+            }
+            bar ("CPU: Tone stages ≤ 0.5 µs extra per region (+1, a sine)", worstUp <= 0.5, fmt ("µs per region per 512 block, on − off —%s", s.c_str()));
+            {
+                // Tone 0 never enters the stages (one branch per block): the chord renders BIT-IDENTICALLY with them on and off,
+                // and no stage ran — the timing above is only the machine's noise
+                const int chord[8] = { 48, 52, 55, 59, 62, 65, 69, 72 };
+                auto p = P0(); p.tone = 0.f; p.noise = 0.f;
+                auto chordRun = [&] (bool stages) {
+                    organics_debug::setToneStages (stages);
+                    sine->resetPerformanceState();
+                    std::vector<std::unique_ptr<OrganicEngine>> v;
+                    for (int i = 0; i < 8; ++i) { v.push_back (std::make_unique<OrganicEngine>()); v.back()->prepare (kSR, 512); v.back()->setInstrument (sine); v.back()->noteOn (chord[i], 0.8f, 1, kNoDet, (uint32_t) i + 1); }
+                    std::vector<float> out, l (512), r (512);
+                    for (int b = 0; b < 60; ++b)
+                    {
+                        std::fill (l.begin(), l.end(), 0.f); std::fill (r.begin(), r.end(), 0.f);
+                        for (auto& e : v) e->render (p, 0.f, l.data(), r.data(), 512);
+                        out.insert (out.end(), l.begin(), l.end()); out.insert (out.end(), r.begin(), r.end());
+                    }
+                    organics_debug::setToneStages (true);
+                    return out;
+                };
+                const int before = organics_debug::lastTone().stages;
+                const auto a = chordRun (true);
+                const int ran = organics_debug::lastTone().stages != before ? 1 : 0;
+                const auto b = chordRun (false);
+                const bool same = a.size() == b.size() && std::memcmp (a.data(), b.data(), sizeof (float) * a.size()) == 0;
+                bar ("CPU: Tone 0 never enters the stages", same && ran == 0,
+                     fmt ("8-note chord, 60 blocks: stages on vs off %s; timing |on − off| %.3f µs per region (the machine's noise)", same ? "bit-identical" : "DIFFER", worst0));
+            }
+            bar ("CPU: Tone −1 (the pure-tone low-pass) ≤ 0.5 µs extra", worstDn <= 0.5, fmt ("worst %.2f µs per region per 512 block", worstDn));
+        }
+        // the note's spectrum measurement: 4 real 2048-point FFTs of the lead region, one per block, once per note
+        {
+            OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (sine);
+            std::vector<float> l (512), r (512);
+            auto p = P0(); p.tone = 1.f;
+            double best = 1e30;
+            for (int rep = 0; rep < 20; ++rep)
+            {
+                e.kill(); for (int b = 0; b < 4; ++b) e.render (p, 0.f, l.data(), r.data(), 512);
+                e.noteOn (60, 0.8f, 1, kNoDet, 1u);
+                e.render (p, 0.f, l.data(), r.data(), 512);                       // the note starts, segment 1
+                double us = 0;
+                for (int b = 0; b < 3; ++b)
+                {
+                    const auto t0 = std::chrono::steady_clock::now();
+                    e.render (p, 0.f, l.data(), r.data(), 512);                   // segments 2..4 (the FFT blocks)
+                    us += std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - t0).count();
+                }
+                organics_debug::setToneStages (false);
+                double base = 0;
+                e.kill(); for (int b = 0; b < 4; ++b) e.render (p, 0.f, l.data(), r.data(), 512);
+                e.noteOn (60, 0.8f, 1, kNoDet, 1u); e.render (p, 0.f, l.data(), r.data(), 512);
+                for (int b = 0; b < 3; ++b)
+                {
+                    const auto t0 = std::chrono::steady_clock::now();
+                    e.render (p, 0.f, l.data(), r.data(), 512);
+                    base += std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - t0).count();
+                }
+                organics_debug::setToneStages (true);
+                best = std::min (best, (us - base) / 3.0);
+            }
+            bar ("CPU: the per-note spectrum ≤ 25 µs per FFT block", best <= 25.0, fmt ("%.1f µs extra in each of the 4 blocks after a note-on (Tone ≠ 0 only), then nothing", best));
+        }
     }
 
     // ── 8. Memory / threads ────────────────────────────────────────────────────────────────────────
@@ -1762,7 +2078,10 @@ int main (int argc, char** argv)
                  fmt ("Soft %+.2f dB · Hard %+.2f dB re Linear · each = Linear at v^0.55 / v^1.8: %s / %s", d0, d2, s0 == l0 ? "identical" : "DIFFERENT", s2 == l2 ? "identical" : "DIFFERENT"));
         }
         tp107Bars (noisy, piano);
+        tp108Bars (noisy, sine, norr);
     }
+    if (argc >= 3 && juce::File (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2])).isDirectory())
+        tp108RealBars (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]), fixRoot);
     if (argc >= 3 && juce::File (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2])).isDirectory())
     {
         const auto realRoot = juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]);

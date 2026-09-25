@@ -2,7 +2,7 @@
 // Part of Tests/organics_audit (--knobs). Every front knob and every back-panel control, 0 → 10 → 25 → 50 → 75 → 100 %,
 // on five instruments (a decaying piano, a sustaining section, a wind, two mallets), each measured with the ONE metric
 // that tracks what the knob is for (phase-independent): Dynamics = K-loudness + centroid, Tone = centroid, Body = log-
-// spectrum distance, Vibrato = pitch-track depth, Human = press-to-press spread, Release = T60 after note-off, Noise =
+// spectrum distance (Tone ×1.8 on the mallets and the flute — tp108), Vibrato = pitch-track depth, Human = press-to-press spread, Release = T60 after note-off, Noise =
 // the noise signal's level re the note, Sustain = level 3 s in, Velocity = vel 30 → 127 range, Image = side/mid.
 // Then LIVE TURNS: each knob swept 0 → 100 → 0 % across a held note, block by block — the click metric must not fire
 // (zipper / steps) beyond what the static note itself shows.
@@ -196,7 +196,10 @@ int runKnobs (const juce::File&)
         const int64_t S0 = (int64_t) (0.02 * SR);   // brightness right after the attack (a struck bar's overtones are gone by 250 ms)
         row ("Dynamics", [&] (double v) { auto p = base; p.dyn = (float) (2 * v - 1); auto r = rendk (I, p, K, 80, 1.0, 0.0); return centroidk (r.M, S0, 8192); }, "Hz centroid", 1.15, 2, oneLayer);
         row ("Dyn level", [&] (double v) { auto p = base; p.dyn = (float) (2 * v - 1); auto r = rendk (I, p, K, 80, 1.0, 0.0); return dbk (rmsk (r.M, S, (int64_t) (0.5 * SR))); }, "dB RMS (a layer shift reads as timbre by design)", 0.0, 3);
-        row ("Tone", [&] (double v) { auto p = base; p.tone = (float) (2 * v - 1); auto r = rendk (I, p, K, 80, 1.0, 0.0); return centroidk (r.M, S0, 8192); }, "Hz centroid", 1.3, 2);
+        // tp108: on the near-pure tones (the mallets, the flute) the spectrum-aware stages make Tone ×1.8+ end to end (the tilt
+        // alone: vibraphone ×1.15, glockenspiel ×1.09); elsewhere the tilt's own ×1.3 (organics_audit --tone has the whole table)
+        const bool pureTone = std::string (in.id).find ("mallets") != std::string::npos || std::string (in.id).find ("flute") != std::string::npos;
+        row ("Tone", [&] (double v) { auto p = base; p.tone = (float) (2 * v - 1); auto r = rendk (I, p, K, 80, 1.0, 0.0); return centroidk (r.M, S0, 8192); }, "Hz centroid", pureTone ? 1.8 : 1.3, 2);
         {
             auto ref = rendk (I, base, K, 80, 1.0, 0.0);
             row ("Body", [&] (double v) { auto p = base; p.body = (float) (2 * v - 1); auto r = rendk (I, p, K, 80, 1.0, 0.0); return specDist (r.M, ref.M, S); }, "dB spec-dist re 50 %", 3.0, 1);

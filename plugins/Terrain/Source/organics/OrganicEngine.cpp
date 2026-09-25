@@ -9,7 +9,9 @@
 // each reader computes ratio + gain endpoints once, then the inner loop is interpolate → gain ramp → accumulate.
 // Tone is ONE first-order tilt per voice (pivot max(700 Hz, f0 of the lead note), the lead note's velocity/key/Human
 // tone; coefficients glide across the block, identity-bracketed on/off), Image one M/S multiply per engine (skipped at 1.0).
-// Memory: ~35 KB per engine (the pools), allocated in the constructor + prepare(); nothing after prepare().
+// tp108: on a note the tilt can't move (a pure tone) Tone also runs ToneShape — a Chebyshev exciter on the + side and the
+// tilt's shelf morphed into a low-pass on the − side, both sized from the lead note's own spectrum (see ToneShape).
+// Memory: ~45 KB per engine (the pools + ToneShape), allocated in the constructor + prepare(); nothing after prepare().
 //
 // Reused from SampleEngine.h (fb204 law): the 4-point Hermite kernel, the EQUAL-GAIN smoothstep loop crossfade
 // (correlated seam reads must not sum to +3 dB) with the adaptive window limited by the lead-in room, and the
@@ -37,6 +39,8 @@ namespace tw
     {
         std::atomic<int> gLastReaders { 0 }, gLastRegion { -1 }, gLastLive { 0 }, gSteals { 0 }, gTailRel { 0 };
         std::atomic<int> gNzDecisions { 0 }, gNzHits { 0 }, gNzVar { -1 }, gNzVarN { 0 }, gNzDelay { 0 }; std::atomic<float> gNzDb { 0.f };   // tp107
+        std::atomic<bool> gTnEnabled { true };   // tp108 test hook: the Tone stages off = the tp107 tilt alone (CPU A/B)
+        std::atomic<float> gTnSwing { 0.f }, gTnSwingR { 0.f }, gTnFlat { 0.f }, gTnGap { 0.f }, gTnDom { 0.f }, gTnExc { 0.f }, gTnLp { 0.f }; std::atomic<int> gTnStages { 0 };  // tp108
 
         inline uint32_t mix32 (uint32_t h) noexcept
         {
@@ -58,6 +62,181 @@ namespace tw
         inline float knobLevel (float v) noexcept { v = clamp01 (v); return v <= 0.5f ? 2.f * v : dbToLin (6.f * (2.f * v - 1.f)); }
         /** tp105 Noise knob: 0 = silent, 0.5 = authored (0 dB), 1 = +12 dB (Max: "noise that you can hear"). */
         inline float noiseLevel (float v) noexcept { v = clamp01 (v); return v <= 0.5f ? 2.f * v : dbToLin (12.f * (2.f * v - 1.f)); }
+
+        // ── tp108: the Tone exciter's passes (see OrganicEngine::Impl::ToneShape). NEON on Apple silicon / ARM, the same
+        //    arithmetic in scalar elsewhere. ─────────────────────────────────────────────────────────────────────────────────
+        constexpr int kTnGroup = 32;                                   // the envelope's node spacing (frames)
+        struct TnBand { float m[5] {}; float y1 = 0.f, y2 = 0.f; };   // m[0] = mid₋₁ … m[4] = mid₋₅ · y₋₁, y₋₂
+        /** The band's all-pole part: y = u + p1·y₋₁ + p2·y₋₂ (a resonant pole pair at f_dom), four frames at a time from the
+            impulse response h (h0 = 1) and the homogeneous responses A (to y₋₁) and B (to y₋₂). */
+        struct TnPoles { float p1 = 0.f, p2 = 0.f, h1 = 0.f, h2 = 0.f, h3 = 0.f, A[4] {}, B[4] {}; };
+        inline void tnPolesSet (TnPoles& q, double p1, double p2) noexcept
+        {
+            q.p1 = (float) p1; q.p2 = (float) p2;
+            const double h1 = p1, h2 = p1 * h1 + p2, h3 = p1 * h2 + p2 * h1;
+            q.h1 = (float) h1; q.h2 = (float) h2; q.h3 = (float) h3;
+            double a[6] = { 0.0, 1.0 }, b[6] = { 1.0, 0.0 };   // index 0 = y₋₂, 1 = y₋₁, then y0..y3
+            for (int k = 2; k < 6; ++k) { a[k] = p1 * a[k - 1] + p2 * a[k - 2]; b[k] = p1 * b[k - 1] + p2 * b[k - 2]; }
+            for (int k = 0; k < 4; ++k) { q.A[k] = (float) a[k + 2]; q.B[k] = (float) b[k + 2]; }
+        }
+        /** THE SHAPER'S INPUT BAND, one pass: mid = ½(L+R) → u = Σ f_t·mid₋ₜ (t = 0..5, the zeros) → the resonant pole pair;
+            y into out[], and the peak |y| of every 16-frame group into gpk[]. */
+        inline void tnBand (const float* L, const float* R, float* out, float* gpk, int n, const float* f, const TnPoles& q, TnBand& s) noexcept
+        {
+            float m1 = s.m[0], m2 = s.m[1], m3 = s.m[2], m4 = s.m[3], m5 = s.m[4], y1 = s.y1, y2 = s.y2;
+            int i = 0;
+            for (int g = 0; g < (n + kTnGroup - 1) / kTnGroup; ++g) gpk[g] = 0.f;
+           #if ORG_NEON
+            {
+                const float t0[4] = { 1.f, q.h1, q.h2, q.h3 }, t1[4] = { 0.f, 1.f, q.h1, q.h2 }, t2[4] = { 0.f, 0.f, 1.f, q.h1 }, t3[4] = { 0.f, 0.f, 0.f, 1.f };
+                const float32x4_t T0 = vld1q_f32 (t0), T1 = vld1q_f32 (t1), T2 = vld1q_f32 (t2), T3 = vld1q_f32 (t3), VA = vld1q_f32 (q.A), VB = vld1q_f32 (q.B);
+                const float32x4_t half = vdupq_n_f32 (0.5f);
+                const float pm[4] = { m4, m3, m2, m1 }, pp[4] = { 0.f, 0.f, 0.f, m5 };
+                float32x4_t Mp = vld1q_f32 (pm), Mpp = vld1q_f32 (pp), PK = vdupq_n_f32 (0.f);
+                for (int g = 0; i + 4 <= n; ++g)
+                {
+                    const int e = std::min (n & ~3, i + kTnGroup);
+                    for (; i < e; i += 4)
+                    {
+                        const float32x4_t M = vmulq_f32 (half, vaddq_f32 (vld1q_f32 (L + i), vld1q_f32 (R + i)));
+                        float32x4_t U = vmulq_n_f32 (M, f[0]);
+                        U = vfmaq_n_f32 (U, vextq_f32 (Mp, M, 3), f[1]); U = vfmaq_n_f32 (U, vextq_f32 (Mp, M, 2), f[2]);
+                        U = vfmaq_n_f32 (U, vextq_f32 (Mp, M, 1), f[3]); U = vfmaq_n_f32 (U, Mp, f[4]);
+                        U = vfmaq_n_f32 (U, vextq_f32 (Mpp, Mp, 3), f[5]);
+                        Mpp = Mp; Mp = M;
+                        float32x4_t P = vmulq_laneq_f32 (T0, U, 0);
+                        P = vfmaq_laneq_f32 (P, T1, U, 1); P = vfmaq_laneq_f32 (P, T2, U, 2); P = vfmaq_laneq_f32 (P, T3, U, 3);
+                        const float32x4_t Y = vfmaq_n_f32 (vfmaq_n_f32 (P, VB, y2), VA, y1);
+                        y1 = vgetq_lane_f32 (Y, 3); y2 = vgetq_lane_f32 (Y, 2);
+                        vst1q_f32 (out + i, Y);
+                        PK = vmaxq_f32 (PK, vabsq_f32 (Y));
+                    }
+                    gpk[g] = vmaxvq_f32 (PK); PK = vdupq_n_f32 (0.f);
+                }
+                if (i > 0) { m1 = vgetq_lane_f32 (Mp, 3); m2 = vgetq_lane_f32 (Mp, 2); m3 = vgetq_lane_f32 (Mp, 1); m4 = vgetq_lane_f32 (Mp, 0); m5 = vgetq_lane_f32 (Mpp, 3); }
+            }
+           #endif
+            for (; i < n; ++i)
+            {
+                const float a = 0.5f * (L[i] + R[i]), u = f[0] * a + f[1] * m1 + f[2] * m2 + f[3] * m3 + f[4] * m4 + f[5] * m5;
+                m5 = m4; m4 = m3; m3 = m2; m2 = m1; m1 = a;
+                const float y = u + q.p1 * y1 + q.p2 * y2;
+                y2 = y1; y1 = y; out[i] = y;
+                gpk[i / kTnGroup] = std::max (gpk[i / kTnGroup], std::abs (y));
+            }
+            s.m[0] = m1; s.m[1] = m2; s.m[2] = m3; s.m[3] = m4; s.m[4] = m5;
+            s.y1 = std::abs (y1) < 1.0e-15f ? 0.f : y1; s.y2 = std::abs (y2) < 1.0e-15f ? 0.f : y2;
+        }
+
+        /** THE ENVELOPE, continuous and step-free: a node at every 32-frame group boundary, E_{g+1} = max(1.08·peak_g,
+            1.08·peak_{g+1}, E_g·d) (one group of look-ahead inside the block; d a release of ~30 periods, so it rides a decay
+            or a tremolo without tracing the waveform), linear between nodes — both ends of every group are over its peak, so
+            |u| = |y|/e < 1. The block's first node IS the last block's last one; the uniform 8 % margin (a breathy flute swings that fast) lets the next block's
+            first group (unseen) fit under it, and a faster swell is caught by the next node. Nothing in it is periodic in the
+            block: a per-block envelope stepped at every boundary (a 187.5 Hz comb out to Nyquist on a breathy flute), and a
+            margin at the last node only bumped e once per block (±187.5 Hz sidebands round every harmonic). nodes[0..ng]. */
+        /** The DC of Σ q_j·u^j for u = r·cos θ: Σ_{j even} q_j·r^j·C(j, j/2)/2^j — what the even orders add as an offset on a
+            (near-)sine, known in closed form, so it is taken out exactly instead of estimated from the output. */
+        inline float tnDc (const float* q, float r) noexcept
+        {
+            const float r2 = r * r, r4 = r2 * r2;
+            (void) r4;
+            return q[0] + r2 * (0.5f * q[2] + r2 * (0.375f * q[4] + r2 * (0.3125f * q[6] + r2 * (0.2734375f * q[8]))));
+        }
+        /** The envelope's memory across blocks: its last node (and that node's DC term) and the last 8 groups' peaks. */
+        struct TnEnv { float E = 0.f, DC = 0.f; float past[8] {}; };   // past[0] = 8 groups ago … past[7] = the last one
+        /** Node g sits 8 % over the largest group peak within ±W groups of it (W ≈ one period: the crest level, not a
+            sawtooth between crests — a ripple at f0 sampled on the 32-frame grid beats into lines between the harmonics),
+            never under the release E·d, and the block's first node continues the last block's (only a real attack raises
+            it). The groups before the block come from `past`; the ones after it are not known yet, so the margin covers
+            them. e·DC(r) rides along with r = 1/1.08 (the tone's amplitude re e on a steady (near-)sine). nodes[0..ng]. */
+        inline void tnNodes (float* ext, int ng, int W, TnEnv& st, float d, const float* q, float* nodes, float* dcn) noexcept
+        {
+            // ext = [the last block's 8 group peaks | this block's ng | 8 zeros]: node g covers groups g − W … g + W − 1
+            constexpr float kMargin = 1.08f;
+            const float dcR = tnDc (q, 1.f / kMargin);
+            for (int k = 0; k < 8; ++k) { ext[k] = st.past[k]; ext[8 + ng + k] = 0.f; }
+            // every window's max in O(1): prefix / suffix maxima over runs of the window's length (van Herk / Gil-Werman)
+            const int len = 2 * W, tot = 16 + ng;
+            float* pre = ext + tot;                     // scratch after ext (the caller sizes it 3 × (16 + groups))
+            float* suf = pre + tot;
+            for (int i = 0; i < tot; ++i) pre[i] = (i % len) == 0 ? ext[i] : std::max (pre[i - 1], ext[i]);
+            for (int i = tot - 1; i >= 0; --i) suf[i] = (i == tot - 1 || (i + 1) % len == 0) ? ext[i] : std::max (suf[i + 1], ext[i]);
+            auto win = [&] (int node) { const int a = 8 + node - W, b = a + len - 1; return kMargin * (b < tot ? std::max (suf[a], pre[b]) : suf[a]); };
+            // node 0 CONTINUES the last block's (a step in e steps every harmonic, ∝ e^(1−k): a click); from silence it starts
+            // at the block's own level. A swell faster than the margin (a vibraphone's motor: ~5 % a block) is covered by the
+            // ramp to node 1 — at worst a crest peeks over e for part of the first group and u is held at ±1 there
+            float e0 = st.E > 0.f ? st.E : win (0);
+            nodes[0] = e0;
+            dcn[0] = st.E > 0.f ? st.DC : e0 * dcR;
+            for (int g = 1; g <= ng; ++g)
+            {
+                e0 = std::max (win (g), e0 * d);
+                nodes[g] = e0;
+                dcn[g] = e0 * dcR;
+            }
+            st.E = e0; st.DC = dcn[ng];
+            for (int k = 0; k < 8; ++k) st.past[k] = ext[ng + k];                  // the last 8 groups (older ones from `past` when ng < 8)
+        }
+
+        struct TnShape { const float* q; const float* nodes; const float* dcn; float a0, da, g0, dg, d0, dd; };
+        /** THE HARMONICS INTO THE VOICE, one pass: per group, e and 1/e ramp between its nodes (1/e as a chord: never above
+            the smaller node's inverse), u = clamp(y/e, ±1), h = a·(e·Σ q_k·u^k − e·DC(r)) (a ramps across the block, e·DC(r)
+            between the nodes); L = g·L + h − dc, R likewise (g and the slow residual dc ramp across the block). Returns Σ h. */
+        inline float tnShape (const float* x, float* L, float* R, int n, const TnShape& a) noexcept
+        {
+            const float* q = a.q;
+            float sum = 0.f, p8[8] = {};
+           #if ORG_NEON
+            const float32x4_t Q0 = vdupq_n_f32 (q[0]), Q1 = vdupq_n_f32 (q[1]), Q2 = vdupq_n_f32 (q[2]), Q3 = vdupq_n_f32 (q[3]), Q4 = vdupq_n_f32 (q[4]),
+                              Q5 = vdupq_n_f32 (q[5]), Q6 = vdupq_n_f32 (q[6]), Q7 = vdupq_n_f32 (q[7]), Q8 = vdupq_n_f32 (q[8]);
+            const float32x4_t one = vdupq_n_f32 (1.f), mone = vdupq_n_f32 (-1.f), four = vdupq_n_f32 (4.f);
+            const float jj[4] = { 1.f, 2.f, 3.f, 4.f };
+            const float32x4_t J1 = vld1q_f32 (jj);
+            float32x4_t S = vdupq_n_f32 (0.f);
+           #endif
+            for (int s0 = 0, g = 0; s0 < n; s0 += kTnGroup, ++g)
+            {
+                const int m = std::min (kTnGroup, n - s0);
+                const float e0 = a.nodes[g], e1 = a.nodes[g + 1], inv = 1.f / (float) m, c0 = a.dcn[g], dc = (a.dcn[g + 1] - c0) * inv;
+                const float iS = e0 > 1.0e-12f ? 1.f / e0 : 0.f, di = ((e1 > 1.0e-12f ? 1.f / e1 : 0.f) - iS) * inv, de = (e1 - e0) * inv;
+                int j = 0;
+               #if ORG_NEON
+                if (m == kTnGroup)
+                {
+                    const float32x4_t IS = vdupq_n_f32 (iS), E0 = vdupq_n_f32 (e0), C0 = vdupq_n_f32 (c0), A0 = vdupq_n_f32 (a.a0 + a.da * (float) s0), G = vdupq_n_f32 (a.g0 + a.dg * (float) s0),
+                                      D = vdupq_n_f32 (a.d0 + a.dd * (float) s0);
+                    float32x4_t J = J1;
+                    for (; j < kTnGroup; j += 4)
+                    {
+                        const float32x4_t u = vminq_f32 (one, vmaxq_f32 (mone, vmulq_f32 (vld1q_f32 (x + s0 + j), vfmaq_n_f32 (IS, J, di))));
+                        float32x4_t p = vfmaq_f32 (Q7, Q8, u);
+                        p = vfmaq_f32 (Q6, p, u); p = vfmaq_f32 (Q5, p, u); p = vfmaq_f32 (Q4, p, u); p = vfmaq_f32 (Q3, p, u);
+                        p = vfmaq_f32 (Q2, p, u); p = vfmaq_f32 (Q1, p, u); p = vfmaq_f32 (Q0, p, u);
+                        const float32x4_t h = vmulq_f32 (vsubq_f32 (vmulq_f32 (vfmaq_n_f32 (E0, J, de), p), vfmaq_n_f32 (C0, J, dc)), vfmaq_n_f32 (A0, J, a.da));
+                        S = vaddq_f32 (S, h);
+                        const float32x4_t gg = vfmaq_n_f32 (G, J, a.dg), hd = vsubq_f32 (h, vfmaq_n_f32 (D, J, a.dd));
+                        vst1q_f32 (L + s0 + j, vfmaq_f32 (hd, gg, vld1q_f32 (L + s0 + j)));
+                        vst1q_f32 (R + s0 + j, vfmaq_f32 (hd, gg, vld1q_f32 (R + s0 + j)));
+                        J = vaddq_f32 (J, four);
+                    }
+                }
+               #endif
+                for (; j < m; ++j)
+                {
+                    const float fj = (float) (j + 1), fs = (float) (s0 + j + 1);
+                    const float u = std::min (1.f, std::max (-1.f, x[s0 + j] * (iS + di * fj)));
+                    const float poly = q[0] + u * (q[1] + u * (q[2] + u * (q[3] + u * (q[4] + u * (q[5] + u * (q[6] + u * (q[7] + u * q[8])))))));
+                    const float h = ((e0 + de * fj) * poly - (c0 + dc * fj)) * (a.a0 + a.da * fs), gg = a.g0 + a.dg * fs, hd = h - (a.d0 + a.dd * fs);
+                    p8[j & 7] += h;
+                    L[s0 + j] = gg * L[s0 + j] + hd; R[s0 + j] = gg * R[s0 + j] + hd;
+                }
+            }
+           #if ORG_NEON
+            sum = vaddvq_f32 (S);
+           #endif
+            return sum + (((p8[0] + p8[1]) + (p8[2] + p8[3])) + ((p8[4] + p8[5]) + (p8[6] + p8[7])));
+        }
         /** tp107 ROUND-ROBIN NOISE — the knob is also the CHANCE that a note-on / note-off makes its noise, like a player whose
             thumps and clicks come and go: 0 never · 0.25 one in three · 0.5 two in three (authored level) · 1 nine in ten
             (+12 dB). Linear in each half; every event decides independently. */
@@ -305,6 +484,12 @@ namespace tw
     int   organics_debug::lastNoiseVariantCount() noexcept { return gNzVarN.load (std::memory_order_relaxed); }
     float organics_debug::lastNoiseDb() noexcept           { return gNzDb.load (std::memory_order_relaxed); }
     int   organics_debug::lastNoiseDelay() noexcept        { return gNzDelay.load (std::memory_order_relaxed); }
+    void organics_debug::setToneStages (bool on) noexcept { gTnEnabled.store (on, std::memory_order_relaxed); }
+    organics_debug::ToneState organics_debug::lastTone() noexcept
+    {
+        return { gTnSwing.load (std::memory_order_relaxed), gTnSwingR.load (std::memory_order_relaxed), gTnFlat.load (std::memory_order_relaxed), gTnGap.load (std::memory_order_relaxed), gTnDom.load (std::memory_order_relaxed),
+                 gTnExc.load (std::memory_order_relaxed), gTnLp.load (std::memory_order_relaxed), gTnStages.load (std::memory_order_relaxed) };
+    }
 
     //==============================================================================================
     struct OrganicEngine::Impl
@@ -353,6 +538,335 @@ namespace tw
             float vibPhase = 0.f, vibDepthSm = 0.f, vibRateMul = 1.f;         // tp105: this player's vibrato (phase, depth, rate)
         };
 
+        /** tp108 — TONE ON PURE TONES. The tilt (in renderChunk) can only re-weight partials that exist, so on a near-sine (a
+            vibraphone bar, a glockenspiel, tubular bells, a flute's upper register) its ±9 dB moved the centroid ×1.0–1.4 end to
+            end. Two stages, both sized PER NOTE by what the tilt itself can do to that note:
+              • MEASURE (only once Tone ≠ 0): the lead note's own recording, four 2048-frame FFTs from 20 ms past its onset (one per
+                block), each bin at the frequency it plays at, the tilt's ±1 |H|² applied analytically → the tilt's own centroid
+                and f_rms SWINGS. SPARSE = 1 where the tilt can't move the note (a sine, a vibraphone, a clarinet's chalumeau), 0
+                where it already can (a piano's C4, a guitar, a violin section, a trumpet); tonal spectra only (flatness ≤ 0.2 —
+                a noise the tilt can't move is not sparse). Also: f_dom (the spectral peak, the SOUNDING pitch) and the strongest
+                partial ≥ 1.5·f_dom.
+              • + side, EXCITER (before the tilt): depth a = kExcite·SPARSE³·t² (the first half a sheen, 100 % the whole
+                distance; none at all under 0.01, or on a note whose full depth stays under 0.06). The mid, band-passed around
+                f_dom (a resonant pole pair, Q 2, + zeros at DC, Nyquist and a notch on an inharmonic partial — or any strong one
+                on a high note — so nothing but the fundamental's neighbourhood reaches the polynomial), divided by a CONTINUOUS
+                envelope (nodes every 32 frames, one group of look-ahead, release ~30 periods, |u| ≤ 1 by construction), drives
+                Σ h_k·T_k(u) — Chebyshev polynomials, so a sine becomes EXACTLY its harmonics 2..8 (k·f_dom past 10→14 kHz
+                faded; the few left on a high note scaled up to ×2.5 so it still brightens) — times e·a, the even orders' DC
+                removed, the voice level-compensated by 1/√(1 + a²Σh²).
+              • − side, DARK (no filter of its own): the tilt section's own first-order shelf is morphed (zero up to 0.45·fs,
+                pole down to 0.7·f_dom, geometrically by SPARSE·(−t)^1.5, gain at f_dom unchanged) — the −9 dB floor is gone and
+                dark keeps going.
+            Depths are smoothed (τ 20 ms); every ramp is continuous across blocks: no step, no zipper. Tone 0 never enters here
+            (bit-identical to tp107, 0 µs). Cost with the exciter running: ~0.75 µs per 512 frames (NEON), ~16 µs in each of the
+            four blocks after a note-on while its spectrum is measured; ~10 KB per engine. */
+        struct ToneShape
+        {
+            static constexpr double kBandQ = 2.0;
+            static constexpr float kCenLo = 1.3f, kCenHi = 1.55f, kRmsLo = 1.5f, kRmsHi = 1.95f, kExcite = 1.2f;
+            static constexpr int   kH = 7;                                          // harmonics 2..8
+            static constexpr float kProfile[kH] = { 0.5f, 0.4f, 0.3f, 0.22f, 0.16f, 0.12f, 0.09f };
+            static constexpr int   kN = 2048, kM = kN / 2, kSegs = 4;              // 4 × 43 ms at 48 kHz: 20 → 190 ms of the note
+            double sr = 48000.0;
+            std::vector<float> mono, gpk, nodes, dcn, re, im;                                // re/im: the kM-point complex FFT (real kN in pairs)
+            // measurement (the lead note)
+            uint64_t gen = ~0ull; bool frozen = false; int segs = 0;
+            const int16_t* srcD = nullptr; int srcCh = 1; int64_t srcPos = 0, srcEnd = 0; double srcRatio = 1.0;   // the lead region's audio
+            double acn[2] {}, acd[2] {}, arn[2] {}, pkP = 0.0, flatAcc = 0.0, upP = 0.0;
+            float upF = 0.f;                                                       // the strongest partial ≥ 1.5·f_dom
+            float swing = 0.f, swingRms = 0.f, sparse = 0.f, fDom = 0.f, flat = 0.f;
+            // exciter
+            float aCur = 0.f, gPrev = 1.f, dcPrev = 0.f, dcTgt = 0.f, bandDom = -1.f, bandNotch = -1.f, bandF[6] {};
+            TnPoles bandP;
+            TnEnv envSt;
+            TnBand band;
+            bool  excOn = false;
+            float polyDom = -1.f, qC = 0.f;
+            float qf[kH + 2] {};                                                   // Σ w_k·h_k·T_k(u) as a polynomial in u (degree 8)
+            // low-pass depth (the tilt section applies it)
+            float dCur = 0.f;
+            int   stages = 0;
+
+            /** Hann window + e^{−j2πk/kN} (k = 0..kM) for the snapshot FFT, built once (prepare, message thread), read-only after. */
+            struct Tables
+            {
+                float win[kN], cs[kM + 1], sn[kM + 1];
+                Tables()
+                {
+                    for (int i = 0; i < kN; ++i) win[i] = (float) (0.5 - 0.5 * std::cos (2.0 * 3.14159265358979 * i / (kN - 1)));
+                    for (int k = 0; k <= kM; ++k) { cs[k] = (float) std::cos (2.0 * 3.14159265358979 * k / kN); sn[k] = (float) -std::sin (2.0 * 3.14159265358979 * k / kN); }
+                }
+            };
+            static const Tables& tables() { static const Tables t; return t; }
+
+            void prepare (double sampleRate, int block)
+            {
+                sr = sampleRate;
+                mono.assign ((size_t) block, 0.f);
+                gpk.assign (3 * ((size_t) block / kTnGroup + 2 + 16), 0.f);   // 8 past groups · this block's · 8 padding, then the window scratch
+                nodes.assign ((size_t) block / kTnGroup + 3, 0.f);
+                dcn.assign ((size_t) block / kTnGroup + 3, 0.f);
+                for (auto* v : { &re, &im }) v->assign ((size_t) kM, 0.f);
+                (void) tables();
+                reset();
+            }
+            void resetMeasure() noexcept
+            {
+                frozen = false; segs = 0; pkP = 0.0; upP = 0.0; upF = 0.f; srcD = nullptr;
+                for (int s = 0; s < 2; ++s) acn[s] = acd[s] = arn[s] = 0.0;
+                flatAcc = 0.0;
+            }
+            void reset() noexcept
+            {
+                gen = ~0ull; resetMeasure();
+                swing = swingRms = sparse = fDom = flat = 0.f;
+                aCur = 0.f; envSt = {}; gPrev = 1.f; dcPrev = dcTgt = 0.f; band = {}; bandDom = -1.f; bandNotch = -1.f; excOn = false; polyDom = -1.f;
+                dCur = 0.f; stages = 0;
+            }
+            bool busy() const noexcept { return excOn || aCur > 0.f || dCur > 0.f; }
+
+            /** In-place radix-2 complex FFT of re/im (kM points; twiddle e^{−j2πi/kM} = the table at 2i). */
+            void fft() noexcept
+            {
+                const auto& T = tables();
+                for (int i = 1, j = 0; i < kM; ++i)
+                {
+                    int bit = kM >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
+                    if (i < j) { std::swap (re[(size_t) i], re[(size_t) j]); std::swap (im[(size_t) i], im[(size_t) j]); }
+                }
+                for (int len = 2, step = kM / 2; len <= kM; len <<= 1, step >>= 1)
+                    for (int i = 0; i < kM; i += len)
+                        for (int k = 0; k < len / 2; ++k)
+                        {
+                            const float wr = T.cs[2 * k * step], wi = T.sn[2 * k * step];
+                            const size_t a = (size_t) (i + k), b = a + (size_t) (len / 2);
+                            const float xr = re[b] * wr - im[b] * wi, xi = re[b] * wi + im[b] * wr;
+                            re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi;
+                        }
+            }
+            /** THE NOTE'S SPECTRUM, read from the lead region's own recording (it is in memory the moment the note starts, so
+                Tone acts from the first blocks, not after the note has sounded): four 2048-frame Hann segments from 20 ms past
+                the region's onset (past the strike — the knob sweep's own 20 → 190 ms window), one real FFT per block (~15 µs),
+                each bin moved to the frequency it PLAYS at (× the reader's repitch ratio), and the tilt's own ±1 |H(f)|²
+                applied bin by bin — so the stages know how far the tilt alone moves THIS note: the power-weighted CENTROID
+                swing C(+1)/C(−1) (what the ear and the knob sweep call brightness; a weak hiss barely moves it) and the f_rms
+                swing (which a stack of weak upper harmonics does move). SPARSE = the larger of the two shortfalls: 1 = the tilt
+                can't brighten it (a sine, a vibraphone bar, a clarinet's chalumeau), 0 = it already can (a piano's C4, a guitar,
+                a violin section). f_dom = the spectral peak (the SOUNDING pitch: a glockenspiel sounds far over its key). The
+                estimate refines after every segment (the depths glide). */
+            void setSource (uint64_t leadGen, const org::Sample& smp, const org::Region& rg, double ratio) noexcept
+            {
+                gen = leadGen; resetMeasure();
+                srcD = smp.data(); srcCh = std::max (1, smp.channels); srcRatio = ratio;
+                srcEnd = std::min<int64_t> (rg.end, smp.frames);
+                srcPos = std::min<int64_t> (srcEnd, std::max<int64_t> (rg.start, rg.onset) + (int64_t) (0.02 * smp.sampleRate));
+            }
+            /** A lead note with no attack region to read: nothing to size the stages on — they stand down for it. */
+            void noSource (uint64_t leadGen) noexcept { gen = leadGen; resetMeasure(); sparse = 0.f; frozen = true; }
+            void measure (float pivotHz) noexcept
+            {
+                if (srcD == nullptr || srcPos + kN > srcEnd) { if (segs == 0) sparse = 0.f; frozen = true; return; }   // too short: leave it
+                const auto& T = tables();
+                constexpr float k16 = 1.f / 32768.f;
+                for (int f = 0; f < kN; ++f)
+                {
+                    const int16_t* fr = srcD + (size_t) (srcPos + f) * (size_t) srcCh;
+                    const float v = (srcCh > 1 ? 0.5f * ((float) fr[0] + (float) fr[1]) : (float) fr[0]) * k16 * T.win[f];
+                    if (f & 1) im[(size_t) (f >> 1)] = v; else re[(size_t) (f >> 1)] = v;   // real frames in pairs: z[m] = x[2m] + j·x[2m+1]
+                }
+                srcPos += kN;
+                analyse (pivotHz);
+                if (++segs >= kSegs) frozen = true;
+            }
+            void analyse (float pivotHz) noexcept
+            {
+                const auto& T = tables();
+                fft();
+                const double K = std::tan (3.14159265358979 * (double) pivotHz / sr), K2 = K * K, A2 = std::pow (10.0, 0.9);   // (+9 dB)²
+                const int k0 = std::max (1, (int) std::ceil (20.0 * kN / sr)), k1 = std::min (kM - 1, (int) (20000.0 * kN / sr));
+                double cn[2] {}, cd[2] {}, rn[2] {}, sP = 0.0, sL = 0.0; int nb = 0;
+                for (int k = k0; k <= k1; ++k)
+                {
+                    // unpack bin k of the real kN-point transform from the kM-point complex one
+                    const size_t a = (size_t) k, b = (size_t) (kM - k);
+                    const float zr = re[a], zi = im[a], cr = re[b], ci = -im[b];                        // Z[k], conj(Z[M−k])
+                    const float er = 0.5f * (zr + cr), ei = 0.5f * (zi + ci), dr = zr - cr, di = zi - ci;
+                    const float orr = 0.5f * di, oi = -0.5f * dr;                                       // (Z[k] − conj Z[M−k]) / 2j
+                    const float xr = er + T.cs[k] * orr - T.sn[k] * oi, xi = ei + T.cs[k] * oi + T.sn[k] * orr;
+                    const double P = (double) xr * xr + (double) xi * xi;
+                    const double f = (double) k * sr * srcRatio / kN;                                   // where this bin PLAYS
+                    if (f > 0.45 * sr) break;
+                    if (P > pkP) { pkP = P; fDom = (float) f; }
+                    if (f <= 16000.0) { sP += P; sL += std::log (P + 1.0e-30); ++nb; }
+                    const double w = std::tan (3.14159265358979 * f / sr), w2 = w * w;
+                    for (int s = 0; s < 2; ++s)
+                    {
+                        const double a2 = s == 0 ? A2 : 1.0 / A2, g = P * (a2 * w2 + K2) / (w2 + a2 * K2);   // the ±1 tilt's |H|²
+                        cn[s] += g * f; cd[s] += g; rn[s] += g * f * f;
+                    }
+                }
+                for (int s = 0; s < 2; ++s) { acn[s] += cn[s]; acd[s] += cd[s]; arn[s] += rn[s]; }
+                if (nb > 0 && sP > 0.0) flatAcc += std::exp (sL / nb) / (sP / nb);                      // this segment's spectral flatness
+                flat = (float) (flatAcc / (double) (segs + 1));
+                if (acd[0] <= 0.0 || acd[1] <= 0.0 || acn[1] <= 0.0) return;   // silence so far: leave it alone
+                fDom = std::clamp (fDom, 20.f, (float) (0.2 * sr));
+                // the strongest partial ≥ 1.5·f_dom (a flute's octave, a bar's 2.76·f, a bell's upper modes): the band's notch may go there
+                for (int k = k0; k <= k1; ++k)
+                {
+                    const double f = (double) k * sr * srcRatio / kN;
+                    if (f > 0.45 * sr) break;
+                    if (f < 1.5 * fDom) continue;
+                    const size_t a = (size_t) k, b = (size_t) (kM - k);
+                    const float zr = re[a], zi = im[a], cr = re[b], ci = -im[b];
+                    const float er = 0.5f * (zr + cr), ei = 0.5f * (zi + ci), dr = zr - cr, di = zi - ci;
+                    const float orr = 0.5f * di, oi = -0.5f * dr;
+                    const float xr = er + T.cs[k] * orr - T.sn[k] * oi, xi = ei + T.cs[k] * oi + T.sn[k] * orr;
+                    const double P = (double) xr * xr + (double) xi * xi;
+                    if (P > upP) { upP = P; upF = (float) f; }
+                }
+                swing    = (float) ((acn[0] / acd[0]) / (acn[1] / acd[1]));
+                swingRms = (float) std::sqrt ((arn[0] / acd[0]) / (arn[1] / acd[1]));
+                // a NOISE the tilt can't move (all of it over the pivot) is not a sparse spectrum: only tonal ones (spectral
+                // flatness ≤ 0.2 — a sine ~0, an instrument ≤ 0.1, white noise 0.56) are handed to the stages
+                const float tonal = std::clamp ((0.4f - flat) / 0.2f, 0.f, 1.f);
+                sparse = tonal * std::max (std::clamp ((kCenHi - swing) / (kCenHi - kCenLo), 0.f, 1.f),
+                                           std::clamp ((kRmsHi - swingRms) / (kRmsHi - kRmsLo), 0.f, 1.f));
+            }
+            /** The Chebyshev sum Σ w_k·h_k·T_k(u) as monomial coefficients; w_k fades every harmonic whose k·f_dom passes
+                10→14 kHz (the tilt lifts what is left up to +9 dB — the top octave stays for the sample's own air). */
+            void buildPoly() noexcept
+            {
+                if (fDom == polyDom) return;
+                polyDom = fDom;
+                const float f0 = (float) std::min (10000.0, 0.21 * sr), f1 = (float) std::min (14000.0, 0.29 * sr);
+                // the weights that fit, and the brightness they give a sine (f_rms ratio, a = 1) against the whole profile's
+                double w[kH + 2] {}, Af = 0, Cf = 0, A = 0, C = 0;
+                for (int k = 2; k <= kH + 1; ++k)
+                {
+                    const double h = kProfile[k - 2];
+                    w[k] = h * std::clamp ((f1 - (float) k * fDom) / (f1 - f0), 0.f, 1.f);
+                    Af += h * h * k * k; Cf += h * h; A += w[k] * w[k] * k * k; C += w[k] * w[k];
+                }
+                // A high note keeps only the harmonics that fit under 14 kHz — scale them up so Tone +1 still brightens it as
+                // much as the whole profile would (a C8 glockenspiel: the octave alone, over its fundamental), capped at the
+                // brightness those harmonics can reach at all (the highest one's own frequency) and at ×2.5.
+                if (C > 1.0e-9)
+                {
+                    int kTop = 2; for (int k = 2; k <= kH + 1; ++k) if (w[k] > 0.0) kTop = k;
+                    const double Bf2 = (1.0 + Af) / (1.0 + Cf), Bav2 = (1.0 + A) / (1.0 + C);
+                    const double Bt2 = std::min (Bf2, 0.9 * (double) (kTop * kTop));
+                    if (Bav2 < Bt2)
+                    {
+                        const double lam = std::min (2.5, std::sqrt ((Bt2 - 1.0) / std::max (1.0e-9, A - Bt2 * C)));
+                        if (A - Bt2 * C > 1.0e-9 && lam > 1.0) for (auto& x : w) x *= lam;
+                        else if (A - Bt2 * C <= 1.0e-9) for (auto& x : w) x *= 2.5;
+                    }
+                }
+                double t0[kH + 2] {}, t1[kH + 2] {}, t2[kH + 2] {}, q[kH + 2] {};
+                t0[0] = 1.0; t1[1] = 1.0;
+                double c = 0;
+                for (int k = 2; k <= kH + 1; ++k)
+                {
+                    for (int j = 0; j <= kH + 1; ++j) t2[j] = (j > 0 ? 2.0 * t1[j - 1] : 0.0) - t0[j];     // T_k = 2u·T_{k−1} − T_{k−2}
+                    for (int j = 0; j <= kH + 1; ++j) q[j] += w[k] * t2[j];
+                    c += w[k] * w[k];
+                    std::memcpy (t0, t1, sizeof t0); std::memcpy (t1, t2, sizeof t1);
+                }
+                for (int j = 0; j <= kH + 1; ++j) qf[j] = (float) q[j];
+                qC = (float) c;
+            }
+
+            void excite (float* L, float* R, int n, float t, float pivotHz) noexcept
+            {
+                stages = 0;
+                if (! frozen && t != 0.f) { measure (pivotHz); stages |= 4; }
+
+                const float blk = 1.f - std::exp (-(float) n / (float) (0.02 * sr));
+                // depth: kExcite·SPARSE³·t². A note whose FULL depth stays under 0.06 (its harmonics ≤ −30 dB: the tilt was
+                // nearly enough) and any target under 0.01 run no exciter at all — it costs nothing where it would do nothing.
+                const float full = kExcite * sparse * sparse * sparse;
+                float tgt = t > 0.f && fDom > 0.f && full >= 0.06f ? full * t * t : 0.f;
+                if (tgt < 0.01f) tgt = 0.f;
+                const float a0 = aCur;
+                aCur += blk * (tgt - aCur);
+                if (std::abs (tgt - aCur) < 1.0e-5f) aCur = tgt;
+                if (aCur <= 0.f && a0 <= 0.f)
+                {
+                    if (excOn) { excOn = false; band = {}; gPrev = 1.f; envSt = {}; dcPrev = dcTgt = 0.f; }
+                    return;
+                }
+                buildPoly();
+                // the shaper hears the fundamental's neighbourhood only (upper partials, a stray low component and the hiss stay
+                // out of the polynomial). The band's notch pair takes an INHARMONIC partial (a bar's 2.76·f, a bell's modes)
+                // within 30 dB of the fundamental — its sum and difference tones would land off the harmonic grid — and, on a
+                // note at or over 1.5 kHz, any partial within 20 dB (a flute's octave: its products would fold past Nyquist).
+                // A low note's harmonic partials are left alone (their products land ON the grid: consonant).
+                const float upR = fDom > 0.f ? upF / fDom : 0.f;
+                const bool inharm = std::abs (upR - std::round (upR)) > 0.06f;
+                const float notchF = upF > 0.f && upF < 0.45 * sr && ((inharm && upP >= 1.0e-3 * pkP) || (fDom >= 1500.f && upP >= 1.0e-2 * pkP)) ? upF : 0.f;
+                if (fDom != bandDom || notchF != bandNotch)
+                {
+                    bandDom = fDom; bandNotch = notchF;
+                    const double pi = 3.14159265358979, w = 2.0 * pi * (double) std::min (fDom, (float) (0.4 * sr)) / sr, K = std::tan (0.5 * w);
+                    // no inharmonic partial: the pair sits at fs/4 (12 kHz) — the hiss up there, crossed with the harmonics, is what
+                    // would land over 16 kHz (or at Nyquist for a fundamental that is itself up there)
+                    const double fz = notchF > 0.f ? (double) notchF : (fDom < 0.15 * sr ? 0.25 * sr : 0.5 * sr);
+                    const double cn = std::cos (2.0 * pi * fz / sr);
+                    (void) K;
+                    // the poles: a resonant pair at f_dom, Q = kBandQ (the RBJ band-pass denominator)
+                    const double al = std::sin (w) / (2.0 * kBandQ), a0 = 1.0 + al, p1 = 2.0 * std::cos (w) / a0, p2 = -(1.0 - al) / a0;
+                    tnPolesSet (bandP, p1, p2);
+                    // (1 − z⁻¹)(1 + z⁻¹)² = 1 + z⁻¹ − z⁻² − z⁻³, times (1 − 2·cos θ·z⁻¹ + z⁻²)
+                    const double z3[4] = { 1.0, 1.0, -1.0, -1.0 }, z2[3] = { 1.0, -2.0 * cn, 1.0 };
+                    double fir[6] {};
+                    for (int i = 0; i < 4; ++i) for (int j = 0; j < 3; ++j) fir[i + j] += z3[i] * z2[j];
+                    double hr = 0.0, hi = 0.0;
+                    for (int t = 0; t < 6; ++t) { hr += fir[t] * std::cos (w * t); hi -= fir[t] * std::sin (w * t); }
+                    const double dr = 1.0 - p1 * std::cos (w) - p2 * std::cos (2.0 * w), di = p1 * std::sin (w) + p2 * std::sin (2.0 * w);
+                    const double gain = std::sqrt (dr * dr + di * di) / std::max (1.0e-12, std::sqrt (hr * hr + hi * hi));   // unity at f_dom
+                    for (int t = 0; t < 6; ++t) bandF[t] = (float) (fir[t] * gain);
+                }
+                tnBand (L, R, mono.data(), gpk.data() + 8, n, bandF, bandP, band);
+                // H = e·a·Q(y/e): e the continuous group-peak envelope (release ~30 periods: rides a fast decay or a tremolo
+                // without tracing the waveform), a the smoothed depth
+                const float d16 = std::exp (-(float) kTnGroup / (float) (std::clamp (30.0 / (double) fDom, 0.02, 0.3) * sr));
+                const int ng = (n + kTnGroup - 1) / kTnGroup;
+                const int W = std::clamp ((int) std::ceil (sr / std::max (20.0, (double) fDom) / kTnGroup), 2, 8);   // ≈ one period, ≥ 2 groups (a crest's sub-sample level varies group to group)
+                tnNodes (gpk.data(), ng, W, envSt, d16, qf, nodes.data(), dcn.data());
+                const float g1 = 1.f / std::sqrt (1.f + aCur * aCur * qC), g0 = excOn ? gPrev : 1.f;
+                const float inv = 1.f / (float) n;
+                // into L and R with the level compensation and the even orders' DC removed: the DC (it follows the envelope) is
+                // the block mean smoothed (τ 10 ms, block-size independent), subtracted as a ramp to the newest estimate — one
+                // block late, continuous at every boundary, nothing above ~16 Hz touched
+                TnShape a;
+                a.q = qf; a.nodes = nodes.data(); a.dcn = dcn.data();
+                a.a0 = a0; a.da = (aCur - a0) * inv;
+                a.g0 = g0; a.dg = (g1 - g0) * inv;
+                // the slow residual DC (a band that is not a pure sine), tracked PER UNIT OF DEPTH so it glides out with a:
+                // subtracted as dcPrev·a0 → dcTgt·a1 across the block (one block late, τ 200 ms)
+                a.d0 = excOn ? dcPrev * a0 : 0.f; a.dd = ((excOn ? dcTgt * aCur : 0.f) - a.d0) * inv;
+                const float mean = tnShape (mono.data(), L, R, n, a) * inv, aAvg = 0.5f * (a0 + aCur);
+                const float unit = aAvg > 1.0e-4f ? mean / aAvg : dcTgt;
+                dcPrev = excOn ? dcTgt : 0.f;
+                dcTgt = excOn ? dcTgt + (1.f - std::exp (-(float) n / (float) (0.2 * sr))) * (unit - dcTgt) : 0.f;
+                gPrev = g1; excOn = true; stages |= 1;
+            }
+
+            /** The − side's depth now (0..1, smoothed τ 20 ms): SPARSE · (−t)^1.5. The engine's own tilt section turns into a
+                low-pass by it (see renderChunk) — no filter of its own, so dark costs nothing extra. */
+            float darkDepth (int n, float t) noexcept
+            {
+                const float blk = 1.f - std::exp (-(float) n / (float) (0.02 * sr));
+                const float s = t < 0.f ? -t : 0.f;
+                const float tgt = fDom > 0.f ? sparse * s * std::sqrt (s) : 0.f;
+                dCur += blk * (tgt - dCur);
+                if (std::abs (tgt - dCur) < 1.0e-4f) dCur = tgt;
+                if (dCur > 0.f) stages |= 2;
+                return dCur;
+            }
+        };
+
         struct PendingOn { bool on = false; int note = 60; float vel = 0.8f; int players = 1; float det[kMaxPlayers] {}; uint32_t seed = 0; };
 
         // ── state ──
@@ -369,8 +883,10 @@ namespace tw
         float level = 0.f;
         bool  snap = true;
         float sDyn = 0, sBody = 0, sTone = 0, sRelease = 0.5f, sNoise = 0.5f, sVelo = 0.75f, sImage = 1.f, sSustain = 0.f;
+        float toneDark = 0.f;                            // tp108: the low-pass depth the tilt coefficients were made with
         float toneCur = 1.0e9f, leadTone = 0.f, tb0 = 1.f, tb1 = 0.f, ta1 = 0.f, txL = 0.f, txR = 0.f, tyL = 0.f, tyR = 0.f;
         bool  tiltOn = false;
+        ToneShape tn;                                    // tp108: the spectrum-aware exciter (+) and low-pass (−) around the tilt
         float attackP = 0.f;
         // tp105
         Vibrato vib;                                     // ONE plan builder; each note's phase/depth is swapped in and out
@@ -383,6 +899,7 @@ namespace tw
             sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
             maxBlock = std::max (16, block);
             for (auto* v : { &sumL, &sumR, &envBuf }) v->assign ((size_t) maxBlock, 0.f);
+            tn.prepare (sr, maxBlock);
             tonePivotHz = 700.f;
             toneK = (float) std::tan (3.14159265358979 * 700.0 / sr);
             (void) sincTable();
@@ -395,6 +912,7 @@ namespace tw
             for (auto& r : readers) r.active = false;
             pend.on = false; offPending = false; pedalUpPending = false; pedalIsDown = false;
             level = 0.f; snap = true; toneCur = 1.0e9f; leadTone = 0.f; txL = txR = tyL = tyR = 0.f; tiltOn = false;
+            tn.reset(); toneDark = 0.f;
             for (auto& p : retiring) if (p != nullptr && ! org::deferRelease (p)) { for (auto& g : graveyard) if (g == nullptr) { g = std::move (p); break; } }
         }
 
@@ -1445,7 +1963,7 @@ namespace tw
            #endif
             bool any = false;
             for (auto& nt : notes) if (nt.used) { any = true; break; }
-            if (! any) { txL = txR = tyL = tyR = 0.f; tiltOn = false; toneCur = 1.0e9f; updateRetiring(); return 0.f; }
+            if (! any) { txL = txR = tyL = tyR = 0.f; tiltOn = false; toneCur = 1.0e9f; tn.reset(); toneDark = 0.f; updateRetiring(); return 0.f; }
 
             std::fill (sumL.begin(), sumL.begin() + n, 0.f);
             std::fill (sumR.begin(), sumR.begin() + n, 0.f);
@@ -1493,6 +2011,26 @@ namespace tw
             // level (glockenspiel C6: Tone 0 → 100 % moved the centroid 0.7 %). Tracking f0 (the fundamental at the unity
             // point, the partials above it tilted) keeps Tone a brightness control on every key; up to F5 the pivot is
             // 700 Hz as before.
+            // tp108: the + side's EXCITER runs on the summed voice BEFORE the tilt (so the tilt shapes the partials it adds).
+            //   Tone exactly 0 with both stages at rest → never entered: bit-identical to tp107 and 0 µs.
+            const bool tnOn = gTnEnabled.load (std::memory_order_relaxed);
+            if (tnOn && (sTone != 0.f || tn.busy()))
+            {
+                if (lead >= 0 && notes[lead].gen != tn.gen)
+                {
+                    // the lead note's loudest attack reader is the recording the stages size themselves on
+                    const Reader* best = nullptr;
+                    for (int k = 0; k < notes[lead].nrd; ++k)
+                    {
+                        const auto& rd = readers[notes[lead].rd[k]];
+                        if (rd.active && rd.role == org::Kind::Attack && rd.s != nullptr && rd.r != nullptr && (best == nullptr || rd.layer > best->layer)) best = &rd;
+                    }
+                    if (best != nullptr) tn.setSource (notes[lead].gen, *best->s, *best->r, best->ratio);
+                    else tn.noSource (notes[lead].gen);
+                }
+                tn.excite (sumL.data(), sumR.data(), n, sTone,
+                           lead >= 0 ? std::clamp (440.f * std::exp2 ((float) (notes[lead].key - 69) / 12.f), 700.f, (float) (0.2 * sr)) : tonePivotHz);
+            }
             bool pivotMoved = false;
             if (lead >= 0)
             {
@@ -1512,14 +2050,35 @@ namespace tw
             // state is kept exactly what identity would hold — so neither switch steps the signal.
             const float ident[3] = { 1.f, (toneK - 1.f) / (1.f + toneK), (toneK - 1.f) / (1.f + toneK) };
             const float prev[3] = { tb0, tb1, ta1 };
-            if (std::abs (leadTone - toneCur) > 0.05f || (pivotMoved && std::abs (toneCur) >= 0.05f))
+            // tp108: on a SPARSE note (a pure tone the tilt can't darken) the − side turns this same section into a first-order
+            // LOW-PASS — corner 32·f_dom → f_dom/√2 as the depth dk goes 0 → 1, the loss at f_dom made up — by gliding its
+            // coefficients from the tilt's toward the low-pass's: the shelf's −9 dB floor is gone, dark keeps going, and it costs
+            // nothing (dk = 0 everywhere else: the tp107 tilt, bit for bit).
+            const float dk = tnOn && (sTone != 0.f || tn.busy()) ? tn.darkDepth (n, sTone) : 0.f;
+            if (std::abs (leadTone - toneCur) > 0.05f || (pivotMoved && (std::abs (toneCur) >= 0.05f || toneDark > 0.f))
+                || std::abs (dk - toneDark) > 1.0e-3f || (dk == 0.f && toneDark != 0.f))
             {
-                toneCur = leadTone;
+                toneCur = leadTone; toneDark = dk;
                 const float A = dbToLin (toneCur), C = A, K = toneK;
                 const float inv = 1.f / (1.f + C * K);
                 tb0 = (A + K) * inv; tb1 = (K - A) * inv; ta1 = (C * K - 1.f) * inv;
+                if (dk > 0.f && A < 1.f)
+                {
+                    // the tilt as a shelf: g·(1 + s/wz)/(1 + s/wp) with g = 1/A, wz = K/A, wp = A·K (prewarped). Darker = its zero
+                    // slides up to 0.45·fs (the −9 dB floor is gone, the 6 dB/oct slope keeps going) and its pole down to
+                    // 0.7·f_dom, both geometrically by dk; the gain at f_dom stays exactly today's (no level jump).
+                    const double fd = tn.fDom > 0.f ? (double) tn.fDom : 1000.0, pi = 3.14159265358979;
+                    const double wz = (double) K / A, wp = (double) A * K, wd = std::tan (pi * std::min (fd, 0.45 * sr) / sr);
+                    const double W = std::tan (pi * 0.45), wpMin = std::tan (pi * std::min (0.7 * fd, 0.4 * sr) / sr);
+                    const double wz2 = wz < W ? wz * std::pow (W / wz, (double) dk) : wz;
+                    const double wp2 = wp > wpMin ? wp * std::pow (wpMin / wp, (double) dk) : wp;
+                    auto mag2 = [wd] (double z, double p) { return (1.0 + (wd / z) * (wd / z)) / (1.0 + (wd / p) * (wd / p)); };
+                    const double g2 = (1.0 / A) * std::sqrt (mag2 (wz, wp) / mag2 (wz2, wp2));
+                    const double k = g2 * (wp2 / wz2) / (wp2 + 1.0);
+                    tb0 = (float) (k * (wz2 + 1.0)); tb1 = (float) (k * (wz2 - 1.0)); ta1 = (float) ((wp2 - 1.0) / (wp2 + 1.0));
+                }
             }
-            const bool onNow = std::abs (toneCur) >= 0.05f;
+            const bool onNow = std::abs (toneCur) >= 0.05f || toneDark > 0.f;
             if (onNow || tiltOn)
             {
                 const float cur[3] = { tb0, tb1, ta1 };
@@ -1530,6 +2089,12 @@ namespace tw
             }
             else { txL = tyL = sumL[(size_t) n - 1]; txR = tyR = sumR[(size_t) n - 1]; }   // identity's exact state
             tiltOn = onNow;
+            if (tnOn && (sTone != 0.f || tn.busy()))
+            {
+                gTnSwing.store (tn.swing, std::memory_order_relaxed); gTnGap.store (tn.sparse, std::memory_order_relaxed); gTnSwingR.store (tn.swingRms, std::memory_order_relaxed); gTnFlat.store (tn.flat, std::memory_order_relaxed);
+                gTnDom.store (tn.fDom, std::memory_order_relaxed);    gTnExc.store (tn.aCur, std::memory_order_relaxed);
+                gTnLp.store (tn.dCur, std::memory_order_relaxed);     gTnStages.store (tn.stages, std::memory_order_relaxed);
+            }
             for (const auto& rd : readers) live += (rd.active && ! rd.fading) ? 1 : 0;
             gLastLive.store (live, std::memory_order_relaxed);
 
