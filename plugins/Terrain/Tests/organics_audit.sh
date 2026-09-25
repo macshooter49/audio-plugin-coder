@@ -7,6 +7,7 @@
 #    Tests/organics_audit.sh lib   [idFilter]    whole-library sweep (≈ 20 min for 74 instruments)   exit 0 = PASS
 #    Tests/organics_audit.sh loops [idFilter]    every sustain loop: pump ≤ 4 dB (Tremolo/Vibrato 6 dB; recipes with "loopMotionWhy" exempt), no seam click
 #    Tests/organics_audit.sh knobs               every knob 0→100 % (perceptual metrics) + live turns
+#    Tests/organics_audit.sh tone [base]         Tone: pure tones ≥ ×1.8, rich ones within ±15 % of today, C7 >16 kHz, whole library ≥ ×1.3
 #    Tests/organics_audit.sh null <file> [check] the Organics render null (write before a CPU-only change, check after)
 #  ORG_AUDIT_TSV=<file> (lib) writes one row per rendered note.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -30,7 +31,7 @@ for m in juce_core juce_audio_basics juce_audio_formats juce_events; do
     $CXX $FLAGS -x objective-c++ -c "$J/$m/$m.mm" -o "$OUT/$m.o" 2> "$OUT/$m.log" || { echo "COMPILE FAIL $m"; grep -m1 'error' "$OUT/$m.log"; exit 1; }
   fi
 done
-for s in Source/organics/OrganicsLibrary.cpp Source/organics/OrganicEngine.cpp Tests/organics_audit.cpp Tests/organics_audit_knobs.cpp Tests/juce_compdate_stub.cpp; do
+for s in Source/organics/OrganicsLibrary.cpp Source/organics/OrganicEngine.cpp Tests/organics_audit.cpp Tests/organics_audit_knobs.cpp Tests/organics_audit_tone.cpp Tests/juce_compdate_stub.cpp; do
   o="$OUT/audit/$(basename "${s%.cpp}").o"
   $CXX $FLAGS -DTERRAIN_TOOLS_ORGANICS="\"$PWD/Tools/organics\"" -c "$s" -o "$o" 2> "$o.log" || { echo "COMPILE FAIL $s — first error:"; grep -m1 'error' "$o.log"; exit 1; }
 done
@@ -44,8 +45,9 @@ case "$MODE" in
   lib)   exec "$OUT/organics_audit" --lib   "$ROOT" "${1:-}" ;;
   loops) exec "$OUT/organics_audit" --loops "$ROOT" "${1:-}" ;;
   knobs) exec "$OUT/organics_audit" --knobs "$ROOT" ;;
+  tone)  exec "$OUT/organics_audit" --tone  "$ROOT" "${1:-}" ;;
   calib) exec "$OUT/organics_audit" --calib "$ROOT" "${1:-}" ;;
   note)  exec "$OUT/organics_audit" --note  "$ROOT" "$@" ;;
   null)  exec "$OUT/organics_audit" --null  "$ROOT" "$1" "${2:-}" ;;
-  *) echo "usage: $0 lib|loops|knobs|null"; exit 2 ;;
+  *) echo "usage: $0 lib|loops|knobs|tone|null"; exit 2 ;;
 esac
