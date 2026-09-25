@@ -23,6 +23,10 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#if (defined (__ARM_NEON) || defined (__ARM_NEON__)) && ! defined (ORG_NO_NEON)
+ #include <arm_neon.h>
+ #define ORG_NEON 1
+#endif
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -145,6 +149,42 @@ namespace tw
             const uint64_t inc = (uint64_t) (ratio * kFix + 0.5);
             float gl = g * pl, gr = g * pr;
             const float dgl = dg * pl, dgr = dg * pr;
+           #if ORG_NEON
+            if constexpr (CH == 2 && ! SINC)
+            {
+                // tp105 CPU — the stereo Hermite as ONE 2-lane kernel: the four interleaved frames around the read point
+                // are ONE 128-bit load (8 × int16 = xm1 x0 x1 x2 for L and R), widened to two float32x4, and the cubic
+                // runs on {L, R} together — half the arithmetic and an eighth of the loads of the scalar pair. Same
+                // polynomial as hermite() (SampleEngine.h), same order of operations.
+                float32x2_t gv = { gl, gr };
+                const float32x2_t dgv = { dgl, dgr };
+                for (int i = 0; i < cnt; ++i)
+                {
+                    const int16_t* q = d + (int) (P >> 32) * 2 - 2;
+                    const int16x8_t v = vld1q_s16 (q);
+                    const float32x4_t lo = vcvtq_f32_s32 (vmovl_s16 (vget_low_s16 (v)));    // xm1L xm1R x0L x0R
+                    const float32x4_t hi = vcvtq_f32_s32 (vmovl_s16 (vget_high_s16 (v)));   // x1L  x1R  x2L x2R
+                    const float32x2_t xm1 = vget_low_f32 (lo), x0 = vget_high_f32 (lo), x1 = vget_low_f32 (hi), x2 = vget_high_f32 (hi);
+                    const float32x2_t c  = vmul_n_f32 (vsub_f32 (x1, xm1), 0.5f);
+                    const float32x2_t vv = vsub_f32 (x0, x1);
+                    const float32x2_t w  = vadd_f32 (c, vv);
+                    const float32x2_t a  = vadd_f32 (vadd_f32 (w, vv), vmul_n_f32 (vsub_f32 (x2, x0), 0.5f));
+                    const float32x2_t bn = vadd_f32 (w, a);
+                    const float t = (float) (uint32_t) P * kFrac;
+                    float32x2_t y = vsub_f32 (vmul_n_f32 (a, t), bn);
+                    y = vadd_f32 (vmul_n_f32 (y, t), c);
+                    y = vadd_f32 (vmul_n_f32 (y, t), x0);
+                    float32x2_t gg = gv;
+                    if constexpr (ENV) gg = vmul_n_f32 (gg, env[i]);
+                    const float32x2_t o = vmul_f32 (y, gg);
+                    L[i] += vget_lane_f32 (o, 0); R[i] += vget_lane_f32 (o, 1);
+                    gv = vadd_f32 (gv, dgv); P += inc;
+                }
+                pos = (double) P * (1.0 / kFix);
+                g += dg * (float) cnt;
+                return;
+            }
+           #endif
             for (int i = 0; i < cnt; ++i)
             {
                 float yl, yr;
@@ -803,6 +843,9 @@ namespace tw
         {
             auto& n = notes[idx];
             const auto& I = *inst;
+            // CPU: a knob at 0 is OFF — its regions would render at gain 0 for their whole length (Salamander: a hammer
+            // and a damper reader per note). Not spawned; a knob raised later affects the next notes.
+            if ((kind == org::Kind::Noise && sNoise <= 0.f) || (kind == org::Kind::Release && sRelease <= 0.f)) return;
             const auto* spp = &I.span (n.artic, kind, n.key, n.vIdx);
             if (spp->count == 0) spp = &I.span (n.artic, kind, n.mapKey, n.vIdx);   // out of range → the edge zone's
             const auto& sp = *spp;

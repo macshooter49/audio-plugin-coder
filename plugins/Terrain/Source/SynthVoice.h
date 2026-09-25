@@ -6689,7 +6689,8 @@ class SynthVoice : public juce::SynthesiserVoice
                 // viz dot). Every other LFO advances its phase ONCE per block (skipSamples below)
                 // so the per-block mod matrix's peek() stays correct. With nothing routed this
                 // drops 10 sin() calls per sample per voice to 1.
-                unsigned lfoTickMask = 1u;   // L1 always (viz dot)
+                unsigned lfoTickMask = 1u;   // L1 always (viz dot) — tp105: unless NOTHING reads it (below)
+                bool l1Routed = false;       // tp105 — any enabled route with L1 as source or LfoAmt1 as dest
                 bool anyCutRoute = false, anyAmtRoute = false;
                 int  cutRouteIdx[wc::MAX_ASSIGNMENTS]; int nCutRoutes = 0;   // fb636 — enabled Cut1/Cut2 routes, in order
                 int  amtRouteIdx[wc::MAX_ASSIGNMENTS]; int nAmtRoutes = 0;   // tp101 — enabled LFO/env -> LfoAmt routes, in order (the per-sample amt walk)
@@ -6699,6 +6700,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     if (! as.enabled) continue;
                     const int sI = (int) as.source, dI = (int) as.dest;
                     const bool sIsLfo = (sI >= 0 && sI < wc::NUM_LFOS);
+                    if (sI == 0 || dI == (int) wc::ModDest::LfoAmt1) l1Routed = true;
                     // fb568 — a NON-LFO cutoff route (macro/wheel/aftertouch/bend/random/alt/follower/key)
                     //  arms the cut gather too; only an LFO source needs its per-sample tick.
                     if (as.dest == wc::ModDest::Cut1 || as.dest == wc::ModDest::Cut2)
@@ -6709,6 +6711,11 @@ class SynthVoice : public juce::SynthesiserVoice
                         if (sIsLfo || wc::isEnvModSource (sI)) amtRouteIdx[nAmtRoutes++] = a;   // tp101 — exactly the routes the per-sample amt sum reads
                     }
                 }
+                // tp105 CPU — L1 was ticked per SAMPLE in every voice only to feed the editor's LFO dot (a sin() per sample
+                //  per voice: 17 % of an Organics tail voice, sampled). When no route reads L1 at all its audio consumers are
+                //  none, so it takes the per-block skip-advance like every other unrouted LFO and the dot reads peek() once a
+                //  block (the audio is bit-identical: nothing that reaches the output reads L1's state).
+                if (! l1Routed) lfoTickMask &= ~1u;
                 bool laneGlideSettled = false;   // fb636 — see SETTLED GLIDES above the first loop
                 for (int i = 0; i < numSamples; ++i)
                 {
@@ -6747,7 +6754,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     float lfoOut_[wc::NUM_LFOS];
                     for (int L = 0; L < wc::NUM_LFOS; ++L)
                         lfoOut_[L] = (lfoTickMask & (1u << L)) ? synthLfo_[L].processSample() : 0.0f;
-                    lfoVisValue_ = lfoOut_[0];                 // L1 → editor viz dot
+                    if (l1Routed) lfoVisValue_ = lfoOut_[0];   // L1 → editor viz dot (unrouted: peek() after the skip, below)
                     // LFO→LFO amt scales each source before it routes (per-sample).
                     if (anyAmtRoute)
                     {
@@ -7111,6 +7118,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 for (int L = 0; L < wc::NUM_LFOS; ++L)
                     if (! (lfoTickMask & (1u << L)))
                         synthLfo_[L].skipSamples (numSamples);
+                if (! l1Routed) lfoVisValue_ = synthLfo_[0].peek();   // tp105 — the dot, once a block
 
                 // NaN/Inf guard — Pirkle/Stilson note that ZDF ladders can blow
                 // up under pathological coefficient updates. One bad sample
@@ -8741,7 +8749,10 @@ class SynthVoice : public juce::SynthesiserVoice
             if (! e.isActive() && ! doNoteOn) return;   // idle: 0 µs (and the consumer reads null → 0)
             const float pitchCents = (float) ((glideNote_ - (double) orgNote_) * 100.0) + (float) (oct * 1200 + semi * 100) + cent;
             e.render (orgParams_[o], pitchCents, wL, wR, numSamples);
-            orgAlive_[o] = e.isActive();   // tp105 — keeps the voice alive through the engine's release tail
+            // tp105 — keeps the voice alive through the engine's release tail, but only while it is AUDIBLE: the voice's own
+            //  fast-kill law (amp release under −80 dB → the 8 ms declick and the slot is free) applied to the engine's block
+            //  peak, so a ringing tail under −80 dBFS never holds a whole voice chain (filters, envelopes, LFOs) awake.
+            orgAlive_[o] = e.isActive() && e.readLevel() > 1.0e-4f;
             if (uniCount > 1)
             {
                 juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);   // the house unison auto-gain (RMS-constant)

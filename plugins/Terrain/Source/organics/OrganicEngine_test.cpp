@@ -1738,17 +1738,31 @@ int main (int argc, char** argv)
             {
                 juce::Random rnd (4242);
                 OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (sal);
-                Rec r;
+                Rec r; std::vector<int64_t> offs;
                 for (int i = 0; i < 60; ++i)
                 {
                     e.noteOn (48 + rnd.nextInt (25), 0.4f + 0.5f * rnd.nextFloat(), 1, kNoDet, (uint32_t) i);
                     run (e, P0(), r, 4800 + rnd.nextInt (19200), 64 + rnd.nextInt (448));
+                    offs.push_back ((int64_t) r.L.size());
                     e.noteOff (false);
                     run (e, P0(), r, 9600 + rnd.nextInt (9600), 64 + rnd.nextInt (448));
                 }
                 const auto ck = an::clicks (mono (r));
-                bar ("real no clicks: salamander 60 notes, offs at random phases", ck.relDb <= -60 || ck.localRatio <= 1.5,
-                     fmt ("HP residual %.1f dB re peak (local ratio %.2f, worst at %.0f ms)", ck.relDb, ck.localRatio, ck.atMs));
+                // tp105: the claim is about the NOTE-OFFS. The whole-buffer argmax lands on a piano ATTACK (a new note's hammer
+                // transient, 30 ms after its note-on) and flips between two equal −46.0 dB peaks on a 1e-8 difference — so the
+                // bar now reads the same metric inside the 60 ms after each note-off, where a handoff click would live.
+                const auto x = mono (r); const auto h = an::highpass (x, 8000.0); const double sp = an::peak (x);
+                double hp = 0; int64_t at = 0;
+                for (auto o : offs) for (int64_t i = std::max<int64_t> (256, o - 240); i < std::min<int64_t> ((int64_t) h.size(), o + 2880); ++i)
+                    if (std::abs (h[(size_t) i]) > hp) { hp = std::abs (h[(size_t) i]); at = i; }
+                std::vector<double> dd;
+                for (int64_t i = std::max<int64_t> (1, at - 2400); i < std::min<int64_t> ((int64_t) x.size(), at + 2400); ++i) dd.push_back (std::abs ((double) x[(size_t) i] - x[(size_t) i - 1]));
+                std::nth_element (dd.begin(), dd.begin() + (long) dd.size() / 2, dd.end());
+                const double lr = std::abs ((double) x[(size_t) at] - x[(size_t) at - 1]) / std::max (1e-20, dd[dd.size() / 2]);
+                const double offDb = an::db (hp / std::max (1e-20, sp));
+                bar ("real no clicks: salamander 60 notes, offs at random phases", offDb <= -60 || lr <= 1.5,
+                     fmt ("after the 60 note-offs: HP residual %.1f dB re peak (local ratio %.2f, at %.0f ms) · whole render %.1f dB (worst at %.0f ms, a note's attack)",
+                          offDb, lr, 1000.0 * (double) at / kSR, ck.relDb, ck.atMs));
             }
 
             // tp105 — THE RELEASE ON REAL INSTRUMENTS: the −60 dB point after note-off vs the knob (amp release 0) and vs

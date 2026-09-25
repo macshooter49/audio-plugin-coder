@@ -414,7 +414,7 @@ int main (int argc, char** argv)
                 a.set ("Osc A Enable", 1.0f, false);
                 if (g.unison > 1) a.set ("Synth OSC A Unison", (float) (g.unison - 1) / 15.0f);
                 if (eng == 7) { a.setIdx ("Synth OSC A Engine", 7); a.pump (0.2); a.injectOrganic (g.inst); a.pump (2.5); }
-                a.set ("Synth Amp Release", 0.35f, false);   // a musical amp release (~1.2 s on the 1..10000 ms skew) — the tails are the point
+                a.set ("Synth Amp Release", 0.35f, false);   // 3.5 s amp release (the AU reports 1..10000 ms; set() is linear in it) — the tails are the point
                 a.pump (0.3); a.render (6, nullptr);
                 std::remove (probe.c_str());
                 std::vector<double> t; a.peak = 0.0f;
@@ -450,6 +450,7 @@ int main (int argc, char** argv)
                 const double p95 = srt.empty() ? 0 : srt[(size_t) (0.95 * (double) (srt.size() - 1))];
                 printf ("  %-44s %-8s mean %6.0f us (%5.2f %%) · p95 %6.0f us (%5.2f %%) · %ld reps · peak %.1f dBFS\n", g.name, eng == 7 ? "ORGANIC" : "WT",
                         mean, mean / budgetUs() * 100.0, p95, p95 / budgetUs() * 100.0, reps, pk > 1e-9f ? 20.0 * std::log10 ((double) pk) : -240.0);
+                if (! getenv ("ORG_PROBE")) continue;   // the probe file is shared by EVERY Terrain instance on the machine (a DAW, a UI harness): opt-in
                 if (FILE* f = fopen (probe.c_str(), "r")) { char ln[512]; while (fgets (ln, sizeof ln, f)) if (! std::strncmp (ln, "DSP", 3) || ! std::strncmp (ln, "ORG", 3)) printf ("        %s", ln); fclose (f); }
                 else printf ("        (no probe file at %s — run longer than ~6 s)\n", probe.c_str());
             }
