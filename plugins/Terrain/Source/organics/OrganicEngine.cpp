@@ -40,7 +40,7 @@ namespace tw
         std::atomic<int> gLastReaders { 0 }, gLastRegion { -1 }, gLastLive { 0 }, gSteals { 0 }, gTailRel { 0 };
         std::atomic<int> gNzDecisions { 0 }, gNzHits { 0 }, gNzVar { -1 }, gNzVarN { 0 }, gNzDelay { 0 }; std::atomic<float> gNzDb { 0.f };   // tp107
         std::atomic<bool> gTnEnabled { true };   // tp108 test hook: the Tone stages off = the tp107 tilt alone (CPU A/B)
-        std::atomic<float> gTnSwing { 0.f }, gTnSwingR { 0.f }, gTnFlat { 0.f }, gTnGap { 0.f }, gTnDom { 0.f }, gTnExc { 0.f }, gTnLp { 0.f }; std::atomic<int> gTnStages { 0 };  // tp108
+        std::atomic<float> gTnSwing { 0.f }, gTnSwingR { 0.f }, gTnFlat { 0.f }, gTnGap { 0.f }, gTnDom { 0.f }, gTnExc { 0.f }, gTnLp { 0.f }, gTnGateA { 1.f }, gTnRho { 0.f }; std::atomic<int> gTnStages { 0 };  // tp108
 
         inline uint32_t mix32 (uint32_t h) noexcept
         {
@@ -80,7 +80,7 @@ namespace tw
             for (int k = 0; k < 4; ++k) { q.A[k] = (float) a[k + 2]; q.B[k] = (float) b[k + 2]; }
         }
         /** THE SHAPER'S INPUT BAND, one pass: mid = ½(L+R) → u = Σ f_t·mid₋ₜ (t = 0..5, the zeros) → the resonant pole pair;
-            y into out[], and the peak |y| of every 16-frame group into gpk[]. */
+            y into out[], and the peak |y| of every group into gpk[]. */
         inline void tnBand (const float* L, const float* R, float* out, float* gpk, int n, const float* f, const TnPoles& q, TnBand& s) noexcept
         {
             float m1 = s.m[0], m2 = s.m[1], m3 = s.m[2], m4 = s.m[3], m5 = s.m[4], y1 = s.y1, y2 = s.y2;
@@ -177,6 +177,35 @@ namespace tw
             }
             st.E = e0; st.DC = dcn[ng];
             for (int k = 0; k < 8; ++k) st.past[k] = ext[ng + k];                  // the last 8 groups (older ones from `past` when ng < 8)
+        }
+
+        constexpr int kTnHist = 4096;                                  // the band's history (frames, a power of two): ≥ one period at 20 Hz
+        /** PERIODICITY of the band's output over this block: every 8th frame, e = y − y(t − P) (P = one period, linear
+            interpolation) against y and y(t − P): Σe² / (Σy² + Σy(t−P)²), the smallest over P·{0.97, 0.985, 1, 1.015, 1.03}
+            (a vibrato, a few cents of tuning) — 0 for anything that repeats every period (a tone WITH all its harmonic partials),
+            ~1 for a noise, high while the level itself moves fast (an onset) or another mode sounds beside it. The block is written
+            into the ring first. */
+        inline float tnAperiodicity (const float* y, int n, float* hist, int& head, float P0) noexcept
+        {
+            constexpr int M = kTnHist - 1;
+            for (int i = 0; i < n; ++i) hist[(head + i) & M] = y[i];
+            float best = 1.f;
+            for (const float m : { 1.f, 0.985f, 1.015f, 0.97f, 1.03f })
+            {
+                const float P = std::min (P0 * m, (float) (kTnHist - 8));
+                const int ip = (int) P; const float fr = P - (float) ip;
+                float ee = 0.f, pp = 0.f;
+                for (int i = 0; i < n; i += 8)
+                {
+                    const int t = head + i;
+                    const float d = (1.f - fr) * hist[(t - ip) & M] + fr * hist[(t - ip - 1) & M], e = y[i] - d;
+                    ee += e * e; pp += y[i] * y[i] + d * d;
+                }
+                best = std::min (best, pp > 1.0e-24f ? ee / pp : 1.f);
+                if (best < 0.005f) break;                                       // periodic at the first guess: done
+            }
+            head = (head + n) & M;
+            return best;
         }
 
         struct TnShape { const float* q; const float* nodes; const float* dcn; float a0, da, g0, dg, d0, dd; };
@@ -488,7 +517,7 @@ namespace tw
     organics_debug::ToneState organics_debug::lastTone() noexcept
     {
         return { gTnSwing.load (std::memory_order_relaxed), gTnSwingR.load (std::memory_order_relaxed), gTnFlat.load (std::memory_order_relaxed), gTnGap.load (std::memory_order_relaxed), gTnDom.load (std::memory_order_relaxed),
-                 gTnExc.load (std::memory_order_relaxed), gTnLp.load (std::memory_order_relaxed), gTnStages.load (std::memory_order_relaxed) };
+                 gTnExc.load (std::memory_order_relaxed), gTnLp.load (std::memory_order_relaxed), gTnStages.load (std::memory_order_relaxed), gTnGateA.load (std::memory_order_relaxed), gTnRho.load (std::memory_order_relaxed) };
     }
 
     //==============================================================================================
@@ -549,12 +578,16 @@ namespace tw
                 partial ≥ 1.5·f_dom.
               • + side, EXCITER (before the tilt): depth a = kExcite·SPARSE³·t² (the first half a sheen, 100 % the whole
                 distance; none at all under 0.01, or on a note whose full depth stays under 0.06). The mid, band-passed around
-                f_dom (a resonant pole pair, Q 2, + zeros at DC, Nyquist and a notch on an inharmonic partial — or any strong one
+                f_dom (a resonant pole pair, Q 3, + zeros at DC, Nyquist and a notch on an inharmonic partial — or any strong one
                 on a high note — so nothing but the fundamental's neighbourhood reaches the polynomial), divided by a CONTINUOUS
                 envelope (nodes every 32 frames, one group of look-ahead, release ~30 periods, |u| ≤ 1 by construction), drives
                 Σ h_k·T_k(u) — Chebyshev polynomials, so a sine becomes EXACTLY its harmonics 2..8 (k·f_dom past 10→14 kHz
                 faded; the few left on a high note scaled up to ×2.5 so it still brightens) — times e·a, the even orders' DC
-                removed, the voice level-compensated by 1/√(1 + a²Σh²).
+                removed, the voice level-compensated by 1/√(1 + a²Σh²). tp108b, nothing past 16 kHz on ANY note: (1) a SPILL
+                PREDICTION from the note's own spectrum through the band fades the orders its other partials would mix past
+                16 kHz (a −50 dB budget, the high orders first); (2) a PERIODICITY GATE (only where the top order can reach
+                16 kHz) scales each block's depth by how periodic the band's content is at f_dom's period — a breathy onset,
+                a chiff, a second mode beside the fundamental close it (the flute's trimmed C7: −33 → −66 dB over 16 kHz).
               • − side, DARK (no filter of its own): the tilt section's own first-order shelf is morphed (zero up to 0.45·fs,
                 pole down to 0.7·f_dom, geometrically by SPARSE·(−t)^1.5, gain at f_dom unchanged) — the −9 dB floor is gone and
                 dark keeps going.
@@ -563,13 +596,16 @@ namespace tw
             four blocks after a note-on while its spectrum is measured; ~10 KB per engine. */
         struct ToneShape
         {
-            static constexpr double kBandQ = 2.0;
+            static constexpr double kBandQ = 3.0, kSpillBudget = 1.0e-5;   // −50 dB re the note
             static constexpr float kCenLo = 1.3f, kCenHi = 1.55f, kRmsLo = 1.5f, kRmsHi = 1.95f, kExcite = 1.2f;
             static constexpr int   kH = 7;                                          // harmonics 2..8
             static constexpr float kProfile[kH] = { 0.5f, 0.4f, 0.3f, 0.22f, 0.16f, 0.12f, 0.09f };
             static constexpr int   kN = 2048, kM = kN / 2, kSegs = 4;              // 4 × 43 ms at 48 kHz: 20 → 190 ms of the note
             double sr = 48000.0;
-            std::vector<float> mono, gpk, nodes, dcn, re, im;                                // re/im: the kM-point complex FFT (real kN in pairs)
+            std::vector<float> mono, gpk, nodes, dcn, hist, re, im, spec, pm2;   // spec: the note's power per FFT bin (the measurement)
+            double orderFade[kH + 2] { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+            int histHead = 0, kTop = 8;
+            float pc0 = 0.f;                                // re/im: the kM-point complex FFT (real kN in pairs)
             // measurement (the lead note)
             uint64_t gen = ~0ull; bool frozen = false; int segs = 0;
             const int16_t* srcD = nullptr; int srcCh = 1; int64_t srcPos = 0, srcEnd = 0; double srcRatio = 1.0;   // the lead region's audio
@@ -577,6 +613,7 @@ namespace tw
             float upF = 0.f;                                                       // the strongest partial ≥ 1.5·f_dom
             float swing = 0.f, swingRms = 0.f, sparse = 0.f, fDom = 0.f, flat = 0.f;
             // exciter
+            float aEff = 0.f, gate = 1.f, lastRho = 0.f;                         // the depth applied last block · the tonality gate
             float aCur = 0.f, gPrev = 1.f, dcPrev = 0.f, dcTgt = 0.f, bandDom = -1.f, bandNotch = -1.f, bandF[6] {};
             TnPoles bandP;
             TnEnv envSt;
@@ -607,7 +644,8 @@ namespace tw
                 gpk.assign (3 * ((size_t) block / kTnGroup + 2 + 16), 0.f);   // 8 past groups · this block's · 8 padding, then the window scratch
                 nodes.assign ((size_t) block / kTnGroup + 3, 0.f);
                 dcn.assign ((size_t) block / kTnGroup + 3, 0.f);
-                for (auto* v : { &re, &im }) v->assign ((size_t) kM, 0.f);
+                hist.assign ((size_t) kTnHist, 0.f);
+                for (auto* v : { &re, &im, &spec, &pm2 }) v->assign ((size_t) kM, 0.f);
                 (void) tables();
                 reset();
             }
@@ -616,12 +654,13 @@ namespace tw
                 frozen = false; segs = 0; pkP = 0.0; upP = 0.0; upF = 0.f; srcD = nullptr;
                 for (int s = 0; s < 2; ++s) acn[s] = acd[s] = arn[s] = 0.0;
                 flatAcc = 0.0;
+                std::fill (spec.begin(), spec.end(), 0.f);
             }
             void reset() noexcept
             {
                 gen = ~0ull; resetMeasure();
                 swing = swingRms = sparse = fDom = flat = 0.f;
-                aCur = 0.f; envSt = {}; gPrev = 1.f; dcPrev = dcTgt = 0.f; band = {}; bandDom = -1.f; bandNotch = -1.f; excOn = false; polyDom = -1.f;
+                aCur = 0.f; aEff = 0.f; gate = 1.f; lastRho = 0.f; envSt = {}; gPrev = 1.f; dcPrev = dcTgt = 0.f; band = {}; bandDom = -1.f; bandNotch = -1.f; excOn = false; polyDom = -1.f;
                 dCur = 0.f; stages = 0;
             }
             bool busy() const noexcept { return excOn || aCur > 0.f || dCur > 0.f; }
@@ -655,9 +694,9 @@ namespace tw
                 can't brighten it (a sine, a vibraphone bar, a clarinet's chalumeau), 0 = it already can (a piano's C4, a guitar,
                 a violin section). f_dom = the spectral peak (the SOUNDING pitch: a glockenspiel sounds far over its key). The
                 estimate refines after every segment (the depths glide). */
-            void setSource (uint64_t leadGen, const org::Sample& smp, const org::Region& rg, double ratio) noexcept
+            void setSource (uint64_t leadGen, const org::Sample& smp, const org::Region& rg, double ratio, float pitchCents) noexcept
             {
-                gen = leadGen; resetMeasure();
+                gen = leadGen; resetMeasure(); pc0 = pitchCents;
                 srcD = smp.data(); srcCh = std::max (1, smp.channels); srcRatio = ratio;
                 srcEnd = std::min<int64_t> (rg.end, smp.frames);
                 srcPos = std::min<int64_t> (srcEnd, std::max<int64_t> (rg.start, rg.onset) + (int64_t) (0.02 * smp.sampleRate));
@@ -677,7 +716,18 @@ namespace tw
                 }
                 srcPos += kN;
                 analyse (pivotHz);
-                if (++segs >= kSegs) frozen = true;
+                if (++segs >= kSegs) { frozen = true; refineDom(); }
+            }
+            /** f_dom to a fraction of a bin (the periodicity gate needs the period to ~0.5 %; a 2048-point bin is 23 Hz): the
+                accumulated spectrum's peak, parabolic on its log. */
+            void refineDom() noexcept
+            {
+                int pk = 0; float pv = 0.f;
+                for (int k = 2; k < kM - 1; ++k) if (spec[(size_t) k] > pv) { pv = spec[(size_t) k]; pk = k; }
+                if (pk < 2) return;
+                const double l = std::log (spec[(size_t) pk - 1] + 1.0e-30), c = std::log (spec[(size_t) pk] + 1.0e-30), r = std::log (spec[(size_t) pk + 1] + 1.0e-30);
+                const double den = l - 2.0 * c + r, d = den < 0.0 ? std::clamp (0.5 * (l - r) / den, -0.5, 0.5) : 0.0;
+                fDom = std::clamp ((float) (((double) pk + d) * sr * srcRatio / kN), 20.f, (float) (0.2 * sr));
             }
             void analyse (float pivotHz) noexcept
             {
@@ -698,6 +748,7 @@ namespace tw
                     const double f = (double) k * sr * srcRatio / kN;                                   // where this bin PLAYS
                     if (f > 0.45 * sr) break;
                     if (P > pkP) { pkP = P; fDom = (float) f; }
+                    spec[(size_t) k] += (float) P;
                     if (f <= 16000.0) { sP += P; sL += std::log (P + 1.0e-30); ++nb; }
                     const double w = std::tan (3.14159265358979 * f / sr), w2 = w * w;
                     for (int s = 0; s < 2; ++s)
@@ -763,6 +814,8 @@ namespace tw
                         else if (A - Bt2 * C <= 1.0e-9) for (auto& x : w) x *= 2.5;
                     }
                 }
+                for (int k = 2; k <= kH + 1; ++k) w[k] *= orderFade[k];   // what the note's other partials would push past 16 kHz
+                kTop = 1; for (int k = 2; k <= kH + 1; ++k) if (w[k] > 1.0e-3) kTop = k;
                 double t0[kH + 2] {}, t1[kH + 2] {}, t2[kH + 2] {}, q[kH + 2] {};
                 t0[0] = 1.0; t1[1] = 1.0;
                 double c = 0;
@@ -775,9 +828,63 @@ namespace tw
                 }
                 for (int j = 0; j <= kH + 1; ++j) qf[j] = (float) q[j];
                 qC = (float) c;
+                (void) 0;
             }
 
-            void excite (float* L, float* R, int n, float t, float pivotHz) noexcept
+            /** SPILL PREDICTION (once per note, from the measured spectrum). The Chebyshev weights fade every k·f_dom past 14 kHz —
+                exact for a lone sine at f_dom. Anything else the band lets through (a horn's 2nd and 3rd harmonics on a high note,
+                a bar's upper mode, hiss) mixes into order k: first-order products land at f + (k−1)·f_dom, second-order at
+                2f + (k−2)·f_dom. Through the band's actual response, the fraction of the band's power that would land past 16 kHz
+                that way is E1_k (first-order) and E2_k (second); order k's predicted spill ≈ w_k²·k²·(E1_k + k²·E2_k²/4). The
+                whole note gets a budget of −50 dB, spent from the lowest order up (the high orders are faded first). A pure tone:
+                nothing past, every fade 1 — the sound unchanged. */
+            void predictSpill (double p1, double p2) noexcept
+            {
+                const double pi = 3.14159265358979, lim = std::min (16000.0, 0.45 * sr);
+                std::vector<float>& Pb = pm2;                                                   // the band's output power per bin
+                double tot = 0.0;
+                for (int k = 1; k < kM; ++k)
+                {
+                    const double f = (double) k * sr * srcRatio / kN;
+                    if (f > 0.45 * sr) { Pb[(size_t) k] = 0.f; continue; }
+                    const double w = 2.0 * pi * f / sr;
+                    double nr = 0.0, ni = 0.0;
+                    for (int t = 0; t < 6; ++t) { nr += bandF[t] * std::cos (w * t); ni -= bandF[t] * std::sin (w * t); }
+                    const double dr = 1.0 - p1 * std::cos (w) - p2 * std::cos (2.0 * w), di = p1 * std::sin (w) + p2 * std::sin (2.0 * w);
+                    const double g = (nr * nr + ni * ni) / std::max (1.0e-30, dr * dr + di * di);
+                    Pb[(size_t) k] = (float) (spec[(size_t) k] * g);
+                    tot += Pb[(size_t) k];
+                }
+                for (int k = 2; k <= kH + 1; ++k) orderFade[k] = 1.0;
+                if (tot <= 0.0) return;
+                // a BUDGET for the whole note (−50 dB re the note), spent from the lowest order up: the low orders give the most
+                // brightness per unit of spill, the high ones are faded first until the sum fits
+                double spill[kH + 2] {};
+                for (int k = 2; k <= kH + 1; ++k)
+                {
+                    const double c1 = lim - (double) (k - 1) * fDom, c2 = 0.5 * (lim - (double) (k - 2) * fDom);
+                    double e1 = 0.0, e2 = 0.0;
+                    for (int b = 1; b < kM; ++b)
+                    {
+                        const double f = (double) b * sr * srcRatio / kN;
+                        if (std::abs (f - fDom) < 0.03 * fDom) continue;                        // the tone itself
+                        if (f > c1) e1 += Pb[(size_t) b];
+                        if (f > c2) e2 += Pb[(size_t) b];
+                    }
+                    e1 /= tot; e2 /= tot;
+                    const double h = kProfile[k - 2] * 2.5;                                     // the largest weight order k can get
+                    spill[k] = h * h * k * k * (e1 + 0.25 * k * k * e2 * e2);
+                }
+                double left = kSpillBudget;
+                for (int k = 2; k <= kH + 1; ++k)
+                {
+                    if (spill[k] <= left) { left -= spill[k]; continue; }
+                    orderFade[k] = left > 0.0 ? std::sqrt (left / spill[k]) : 0.0;
+                    left = 0.0;
+                }
+            }
+
+            void excite (float* L, float* R, int n, float t, float pitchCents, float pivotHz) noexcept
             {
                 stages = 0;
                 if (! frozen && t != 0.f) { measure (pivotHz); stages |= 4; }
@@ -786,14 +893,14 @@ namespace tw
                 // depth: kExcite·SPARSE³·t². A note whose FULL depth stays under 0.06 (its harmonics ≤ −30 dB: the tilt was
                 // nearly enough) and any target under 0.01 run no exciter at all — it costs nothing where it would do nothing.
                 const float full = kExcite * sparse * sparse * sparse;
-                float tgt = t > 0.f && fDom > 0.f && full >= 0.06f ? full * t * t : 0.f;
+                float tgt = t > 0.f && frozen && fDom > 0.f && full >= 0.06f ? full * t * t : 0.f;
                 if (tgt < 0.01f) tgt = 0.f;
                 const float a0 = aCur;
                 aCur += blk * (tgt - aCur);
                 if (std::abs (tgt - aCur) < 1.0e-5f) aCur = tgt;
                 if (aCur <= 0.f && a0 <= 0.f)
                 {
-                    if (excOn) { excOn = false; band = {}; gPrev = 1.f; envSt = {}; dcPrev = dcTgt = 0.f; }
+                    if (excOn) { excOn = false; band = {}; gPrev = 1.f; envSt = {}; dcPrev = dcTgt = 0.f; aEff = 0.f; gate = 1.f; std::fill (hist.begin(), hist.end(), 0.f); }
                     return;
                 }
                 buildPoly();
@@ -826,27 +933,55 @@ namespace tw
                     const double dr = 1.0 - p1 * std::cos (w) - p2 * std::cos (2.0 * w), di = p1 * std::sin (w) + p2 * std::sin (2.0 * w);
                     const double gain = std::sqrt (dr * dr + di * di) / std::max (1.0e-12, std::sqrt (hr * hr + hi * hi));   // unity at f_dom
                     for (int t = 0; t < 6; ++t) bandF[t] = (float) (fir[t] * gain);
+                    predictSpill (p1, p2);
+                    polyDom = -1.f;                                                   // rebuild with the new fades
                 }
+                // PERIODICITY GATE. The Chebyshev sum turns a PERIODIC input into harmonics of its period — and anything else into
+                // intermodulation: a breathy onset or a chiff that the band lets through (±f/4 wide) spreads k-fold, ×6 of 2.5 kHz
+                // noise is 15 kHz of hash (the flute's C7 after the tp108 library trim: −33 dB over 16 kHz, all of it in the first
+                // 110 ms). So this block's depth is scaled by how periodic the band's content is at f_dom's period (0 = exactly,
+                // 1 = a noise): ≤ 0.02 → full depth, ≥ 0.06 → none (a sustained tone 0.00–0.01, a ±50-cent vibrato ≈ 0.018; the flute's
+                // onset, a 0.73·f mode at −10 dB beside the fundamental, 0.1–0.9: every order would mix it off the grid). It drops at once and recovers with τ 20 ms; the applied depth
+                // ramps block to block (no step). A sustained tone (its harmonics, its vibrato): gate 1, the sound unchanged.
+                // It only matters where it can reach 16 kHz: the top order's products span up to ~kTop·1.5·f (the band is ±f/4
+                // wide, its skirts wider) — a low note's aperiodic neighbours (a bell's modes, a bassoon's buzz) land far below
+                // (the gate stands aside and costs nothing: RISK 0 under kTop·1.5·f = 12 kHz, full at 16 kHz).
                 tnBand (L, R, mono.data(), gpk.data() + 8, n, bandF, bandP, band);
+                {
+                    const double fNow = (double) fDom * std::exp2 ((double) (pitchCents - pc0) / 1200.0);
+                    const float risk = std::clamp ((float) ((kTop * 1.5 * fNow - 12000.0) / 4000.0), 0.f, 1.f);
+                    float gNow = 1.f;
+                    if (risk > 0.f)
+                    {
+                        const float P = (float) std::clamp ((double) sr / std::max (20.0, fNow), 2.0, (double) kTnHist - 8.0);
+                        const float rho = tnAperiodicity (mono.data(), n, hist.data(), histHead, P);
+                        gNow = 1.f - risk * (1.f - std::clamp ((0.06f - rho) / 0.04f, 0.f, 1.f));
+                        lastRho = rho;
+                    }
+                    else lastRho = 0.f;
+                    gate = gNow < gate ? gNow : gate + blk * (gNow - gate);
+                }
+                const float aApplied0 = excOn ? aEff : 0.f, aApplied1 = aCur * gate;
+                aEff = aApplied1;
                 // H = e·a·Q(y/e): e the continuous group-peak envelope (release ~30 periods: rides a fast decay or a tremolo
                 // without tracing the waveform), a the smoothed depth
                 const float d16 = std::exp (-(float) kTnGroup / (float) (std::clamp (30.0 / (double) fDom, 0.02, 0.3) * sr));
                 const int ng = (n + kTnGroup - 1) / kTnGroup;
                 const int W = std::clamp ((int) std::ceil (sr / std::max (20.0, (double) fDom) / kTnGroup), 2, 8);   // ≈ one period, ≥ 2 groups (a crest's sub-sample level varies group to group)
                 tnNodes (gpk.data(), ng, W, envSt, d16, qf, nodes.data(), dcn.data());
-                const float g1 = 1.f / std::sqrt (1.f + aCur * aCur * qC), g0 = excOn ? gPrev : 1.f;
+                const float g1 = 1.f / std::sqrt (1.f + aApplied1 * aApplied1 * qC), g0 = excOn ? gPrev : 1.f;
                 const float inv = 1.f / (float) n;
                 // into L and R with the level compensation and the even orders' DC removed: the DC (it follows the envelope) is
                 // the block mean smoothed (τ 10 ms, block-size independent), subtracted as a ramp to the newest estimate — one
                 // block late, continuous at every boundary, nothing above ~16 Hz touched
                 TnShape a;
                 a.q = qf; a.nodes = nodes.data(); a.dcn = dcn.data();
-                a.a0 = a0; a.da = (aCur - a0) * inv;
+                a.a0 = aApplied0; a.da = (aApplied1 - aApplied0) * inv;
                 a.g0 = g0; a.dg = (g1 - g0) * inv;
                 // the slow residual DC (a band that is not a pure sine), tracked PER UNIT OF DEPTH so it glides out with a:
                 // subtracted as dcPrev·a0 → dcTgt·a1 across the block (one block late, τ 200 ms)
-                a.d0 = excOn ? dcPrev * a0 : 0.f; a.dd = ((excOn ? dcTgt * aCur : 0.f) - a.d0) * inv;
-                const float mean = tnShape (mono.data(), L, R, n, a) * inv, aAvg = 0.5f * (a0 + aCur);
+                a.d0 = excOn ? dcPrev * aApplied0 : 0.f; a.dd = ((excOn ? dcTgt * aApplied1 : 0.f) - a.d0) * inv;
+                const float mean = tnShape (mono.data(), L, R, n, a) * inv, aAvg = 0.5f * (aApplied0 + aApplied1);
                 const float unit = aAvg > 1.0e-4f ? mean / aAvg : dcTgt;
                 dcPrev = excOn ? dcTgt : 0.f;
                 dcTgt = excOn ? dcTgt + (1.f - std::exp (-(float) n / (float) (0.2 * sr))) * (unit - dcTgt) : 0.f;
@@ -2025,10 +2160,10 @@ namespace tw
                         const auto& rd = readers[notes[lead].rd[k]];
                         if (rd.active && rd.role == org::Kind::Attack && rd.s != nullptr && rd.r != nullptr && (best == nullptr || rd.layer > best->layer)) best = &rd;
                     }
-                    if (best != nullptr) tn.setSource (notes[lead].gen, *best->s, *best->r, best->ratio);
+                    if (best != nullptr) tn.setSource (notes[lead].gen, *best->s, *best->r, best->ratio, pitchCents);
                     else tn.noSource (notes[lead].gen);
                 }
-                tn.excite (sumL.data(), sumR.data(), n, sTone,
+                tn.excite (sumL.data(), sumR.data(), n, sTone, pitchCents,
                            lead >= 0 ? std::clamp (440.f * std::exp2 ((float) (notes[lead].key - 69) / 12.f), 700.f, (float) (0.2 * sr)) : tonePivotHz);
             }
             bool pivotMoved = false;
@@ -2093,7 +2228,7 @@ namespace tw
             {
                 gTnSwing.store (tn.swing, std::memory_order_relaxed); gTnGap.store (tn.sparse, std::memory_order_relaxed); gTnSwingR.store (tn.swingRms, std::memory_order_relaxed); gTnFlat.store (tn.flat, std::memory_order_relaxed);
                 gTnDom.store (tn.fDom, std::memory_order_relaxed);    gTnExc.store (tn.aCur, std::memory_order_relaxed);
-                gTnLp.store (tn.dCur, std::memory_order_relaxed);     gTnStages.store (tn.stages, std::memory_order_relaxed);
+                gTnLp.store (tn.dCur, std::memory_order_relaxed); gTnGateA.store (tn.gate, std::memory_order_relaxed); gTnRho.store (tn.lastRho, std::memory_order_relaxed);     gTnStages.store (tn.stages, std::memory_order_relaxed);
             }
             for (const auto& rd : readers) live += (rd.active && ! rd.fading) ? 1 : 0;
             gLastLive.store (live, std::memory_order_relaxed);
