@@ -825,11 +825,15 @@
   /* tp75 — the Shaper's SAWTOOTH at phase ph (loop units): TWO periods across x 8..34 (13 wide each), 17 tall about y 21 — a
      ramp rises to the top, drops straight down, rises again; at phase 0 the drop sits mid-tile (the home reads as a saw at
      rest). The wave travels through a fixed window, nothing is clipped. A few points a frame, only while the clock moves. */
-  function sawD(ph){ ph = ph - Math.floor(ph); var top = 12.5, bot = 29.5, yL = ph < 1e-4 ? bot : bot - 17 * (1 - ph), yR = ph < 1e-4 ? top : yL;
-      var o = 'M8.0 ' + yL.toFixed(1), lastX = 8, lastY = yL;
-      for (var xd = 8 + 13 * ph; xd < 34 - 1e-4; xd += 13){ if (xd < 8 + 1e-4) continue;   /* a drop ON an edge is the next cycle's, not this picture's */ o += ' L' + xd.toFixed(1) + ' ' + top + ' L' + xd.toFixed(1) + ' ' + bot; lastX = xd; lastY = bot; }
-      if (lastX < 34 - 1e-4 || Math.abs(lastY - yR) > 1e-4) o += ' L34.0 ' + yR.toFixed(1);
-      return o; }
+  function sawD(ph){
+    /* tp108 — Max: "the Shaper emblem just goes back and forth, jittery — it should keep moving forward, like water, rev up and
+       rev down." The hard sawtooth's vertical drops hopped across a 26 px window (and 0.1 px rounding made each frame twitch).
+       Now: ONE smooth wave, two periods across x 8..34, that only ever TRAVELS FORWARD (left → right) one period per beat, while
+       its height slowly swells and settles over four beats (revs up, revs down). 53 points at 0.01 px, no clip, one path. */
+    var p = ph - Math.floor(ph), swell = 0.78 + 0.22 * Math.sin(2 * Math.PI * ph / 4), amp = 8.2 * swell, o = '';
+    for (var k = 0; k <= 52; k++){ var x = 8 + 26 * k / 52, y = 21 - amp * Math.sin(2 * Math.PI * ((x - 8) / 13 - p));
+      o += (k ? ' L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2); }
+    return o; }
   function tilePaint(tl, tau, r){
     if (tl.smil){ try { tl.smil.setCurrentTime(tau); } catch (e) {} }
     if (tl.sine){ try { tl.sine.setAttribute('d', sawD(tau)); } catch (e) {} }
@@ -6815,7 +6819,9 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
 #syn-panel .flow-mode.act .orbit { background: conic-gradient(from 0deg, transparent 0deg 278deg, rgba(183,148,255,0.42) 320deg, transparent 352deg); opacity: .26; }
 #syn-panel .flow-mode.act .clip::after { display: none; }
 #syn-panel .flow-mode.act .emb { color: #fff; opacity: 1;
-  filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }   /* fb119 BIG POP (mockup F1 variant C,
+  filter: none; }   /* tp108 — Max: "I shouldn't see any other box inside these things": the lit emblem's white drop-shadow
+  rendered as a lighter BOX around the ink whenever the Patcher zoomed (WebKit rasterises a filtered layer as a rectangle), and
+  Max doesn't want glow on lines anyway. The lit tile still reads: full-white ink + the purple outline. */   /* fb119 BIG POP (mockup F1 variant C,
   Max-picked) — ...and the lit one JUMPS: full white + a stronger inner light */
 #syn-panel .flow-mode.act .emb [opacity] { opacity: .75; }   /* fb118 — the dim structural parts
   (glitch base stairs .32, robin ghosts .45) lift when lit, staying under the animated bright bits */
@@ -7182,10 +7188,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                Scoped to .ctl so the classic list (mode pickers, the noise menu, the envelope hub)
                does not move by a pixel. */
             :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl { min-width: 200px; padding: 6px 0; }
-            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item { display: grid; grid-template-columns: minmax(0,1fr) auto 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item { display: grid; grid-template-columns: minmax(0,1fr) var(--ctx-badge-w, auto) 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; }
             :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item::before { content: none; }
             :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item .syn-ctx-lab { grid-column: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item .syn-ctx-badge { grid-column: 2; margin-left: 0; padding-left: 0; max-width: 112px; text-align: right; }
+            :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item .syn-ctx-badge.word { text-align: left; }   /* tp108 — words share one left edge; numbers keep the right */
             :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-arrow,
             :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-ck { grid-column: 3; width: 16px; height: 16px; display: grid; place-items: center; color: rgba(255,255,255,0.45); }
             :is(#syn-panel .syn-ctx-menu, body > .syn-ctx-menu).ctl .syn-ctx-item:hover .syn-ctx-arrow { color: #FFFFFF; }
@@ -7816,7 +7823,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
   #st-overlay .sr .dd .u{color:var(--text-secondary);margin-left:6px;}
   /* numbers — ultra-thin white (the BPM-number style); unit tight, and it never moves as digits change */
   #st-overlay .num{font-size:13px;color:rgba(255,255,255,.92);font-weight:200;font-variant-numeric:tabular-nums;}
-  #st-overlay .num b{cursor:ns-resize;user-select:none;font:inherit;font-weight:200;color:#fff;display:inline-block;min-width:1.5em;text-align:right;}
+  #st-overlay .num b{cursor:ns-resize;user-select:none;font:inherit;font-weight:200;color:#fff;display:inline-block;min-width:1.5em;text-align:left;}   /* tp108 — Max: "48 ST needs to line up with Per key and the On button": numbers start on the lane's left edge like every other control (they were right-aligned in their box, so 2 / 48 sat to the right of 440) */
   #st-overlay .num span{font-weight:200;color:rgba(255,255,255,.5);margin-left:3px;}
   #st-overlay .sr .lane .tr{flex:1;}
   #st-overlay .blk{padding:4px 18px 8px;}
@@ -8106,10 +8113,10 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      ctl:{t:'num',key:'bend',min:0,max:24,step:1,unit:'ST',reset:2,fmt:function(v){ return v.toFixed(0); }}},
    {p:'control',g:'Receiving',id:'a4',label:'Tuning reference',help:'Concert pitch for A4. Every oscillator, the sub, the resonator and a pitched chop pad follow it, and a dropped sample is named on this grid. 432 is 31.8 cents below 440. Scala / .tun files and MTS-ESP come later.',where:'Every host · every instance',
      ctl:{t:'num',key:'a4',min:415,max:466,step:1,unit:'Hz',reset:440,fmt:function(v){ return v.toFixed(0); }}},
-   {p:'control',g:'Expression',id:'mpe',label:'MPE',help:'For Roli, LinnStrument, Osmose, Push 3 and PolyBrute 12 (MPE Receive): each note gets its own bend, pressure and slide (CC 74), on its own channel; channel 1 is the master (the wheel, the pedal). Pressure and Slide are mod-matrix sources; bend moves the note’s pitch. In Ableton use the AU — Live’s VST3 path drops per-note expression. A controller or host that sends the MPE configuration message turns it on by itself.',where:'Every host · saved with the instance',ctl:onoff('mpe')},
-   {p:'control',g:'Expression',id:'mpeBend',label:'MPE bend range',help:'Per-note bend in semitones. 48 is the MPE standard; your controller should match (a controller that sends its range over MIDI overrides it).',where:'Every host · saved with the instance',
+   {p:'control',g:'Expression',id:'mpe',label:'MPE',help:'For any MPE controller: each note gets its own bend, pressure and slide (CC 74), on its own channel; channel 1 is the master (the wheel, the pedal). Pressure and Slide are mod-matrix sources; bend moves the note’s pitch. In Ableton use the AU — Live’s VST3 path drops per-note expression. A controller or host that sends the MPE configuration message turns it on by itself.',where:'Every host · saved with the instance',ctl:onoff('mpe')},
+   {p:'control',g:'Expression',id:'mpeBend',label:'MPE bend range',help:'How far a sideways finger movement bends ONE note, in semitones. It only matters when your controller bends notes (slide a finger left or right on the key or surface). Set it to the same number as your controller (48 is the MPE standard) so a slide of one key lands exactly on the next note; a mismatch makes slides overshoot or fall short. A controller that sends its range over MIDI sets it for you.',where:'Every host · saved with the instance',
      ctl:{t:'num',key:'mpeBend',min:1,max:96,step:1,unit:'ST',reset:48,fmt:function(v){ return v.toFixed(0); }},dim:function(){ return S.mpe!=='On'; }},
-   {p:'control',g:'Expression',id:'polyat',label:'Poly aftertouch',help:'Always on. Key pressure (poly aftertouch) moves only the note you press — an Arturia PolyBrute on Aftertouch Poly or any FullTouch mode sends it. Channel (mono) pressure moves every note. Route Aftertouch in the mod matrix to hear it.',where:'Every host',
+   {p:'control',g:'Expression',id:'polyat',label:'Poly aftertouch',help:'Always on. Key pressure (poly aftertouch) moves only the note you press — any keyboard or controller that sends poly aftertouch. Channel (mono) pressure moves every note. Route Aftertouch in the mod matrix to hear it.',where:'Every host',
      ctl:{t:'info',get:function(){ return 'Per key — each note follows its own pressure'; }}},
    {p:'control',g:'Controllers',id:'ccmap',blk:'ccmap',label:'MIDI learn',help:'Right-click any knob → MIDI Learn, then move a control. Or press Learn here and turn a knob on your controller. Mod wheel is always CC 1.',where:'Saved with the instance'},
    {p:'control',g:'Controllers',id:'pickup',label:'Knob pickup',help:'When a hardware knob and Terrain disagree: Jump snaps at once, Hook waits until you pass the current value, Scale glides the rest of the way.',where:'Every host',ctl:chips(['Jump','Hook','Scale'],'pickup')},
@@ -10869,11 +10876,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               <div class="flow-mode" data-mode="chop" title="Shaper">
                 <span class="clip"><span class="orbit"></span></span>
                 <svg class="emb" viewBox="0 0 42 42">
-                  <!-- tp75 — the Shaper's emblem: ONE sawtooth, dead centre, between FIXED ends (nothing clipped); the frame
+                  <!-- tp108 — the Shaper's emblem: ONE smooth wave that travels forward (was a sawtooth), between FIXED ends (nothing clipped); the frame
                        dispatcher's flowTiles painter rewrites its phase on the motion clock — one period per beat of the host's
                        BPM (window.__hostBpm), wind-up / wind-down like every tile, still with motion off. Home = phase 0 (a plain ramp). -->
                   <path class="shpWave" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"
-                    d="M8.0 29.5 L21.0 12.5 L21.0 29.5 L34.0 12.5"/>
+                    d="M8.00 21.00 L8.50 19.47 L9.00 18.03 L9.50 16.76 L10.00 15.74 L10.50 15.02 L11.00 14.65 L11.50 14.65 L12.00 15.02 L12.50 15.74 L13.00 16.76 L13.50 18.03 L14.00 19.47 L14.50 21.00 L15.00 22.53 L15.50 23.97 L16.00 25.24 L16.50 26.26 L17.00 26.98 L17.50 27.35 L18.00 27.35 L18.50 26.98 L19.00 26.26 L19.50 25.24 L20.00 23.97 L20.50 22.53 L21.00 21.00 L21.50 19.47 L22.00 18.03 L22.50 16.76 L23.00 15.74 L23.50 15.02 L24.00 14.65 L24.50 14.65 L25.00 15.02 L25.50 15.74 L26.00 16.76 L26.50 18.03 L27.00 19.47 L27.50 21.00 L28.00 22.53 L28.50 23.97 L29.00 25.24 L29.50 26.26 L30.00 26.98 L30.50 27.35 L31.00 27.35 L31.50 26.98 L32.00 26.26 L32.50 25.24 L33.00 23.97 L33.50 22.53 L34.00 21.00"/>
                 </svg>
               </div>
               <!-- GLITCH -->
@@ -25138,6 +25145,18 @@ setTimeout(function wireSynControls () {
         });
         menuEl.classList.add('act');
         menuEl.setAttribute('aria-hidden', 'false');
+        /* tp108 — Max: "MIDI CC 1 · Remove" must line up with "Fold shape · Linear". Each row is its own grid, so the value
+           column was only as wide as ITS word (Remove started 4 px left of Linear). ONE shared column for the whole menu,
+           as wide as its widest value: words start on one left edge, numbers (tabular) still end on one right edge. */
+        try {
+          menuEl.style.removeProperty('--ctx-badge-w');
+          if (menuEl.classList.contains('ctl')) {
+            let bw = 0; const bs = menuEl.querySelectorAll('.syn-ctx-item .syn-ctx-badge');
+            bs.forEach(function (b) { bw = Math.max(bw, Math.ceil(b.scrollWidth)); });
+            bs.forEach(function (b) { b.classList.toggle('word', !/^[\s+\-−±]*[\d.,]/.test(b.textContent || '')); });
+            if (bw > 0) menuEl.style.setProperty('--ctx-badge-w', Math.min(112, bw) + 'px');
+          }
+        } catch (e) {}
         // Position: clamp to viewport. Use measured menu size after rendering
         // so tall menus (filter type with 5 sections + 27 items) clamp right.
         const pw = synPanel ? synPanel.getBoundingClientRect() : { left: 0, top: 0, width: window.__vw(), height: window.__vh() };
@@ -39630,7 +39649,10 @@ restoreThemeFromBackend();
            Time, boom … I want to put Bode second, I want to put Pan third." Eight kinds, eight positions, so a kind
            is never duplicated and every pick is a SWAP — which is exactly Max's "I just put it in second". */
         function slotMenu(e,p){ if(!window.__cardOnly && !window.__synShowMenu)return; var c=chainOf(S), here=c[p];
-          var rows=[{ isHeader:true, label:'Position '+(p+1)+' in the chain' }];
+          /* tp108 — Max: "just like the effects: the list of effects comes up. No 'position in the chain', no Space /
+             Modulation categories, no purple, no Reset chain — just the effects, alphabetically." One flat A→Z list;
+             the current kind carries the house dot. The pick still SWAPS/REPLACES the kind at this position (tp79/tp80). */
+          var rows=[];
           function place(k){
             /* tp80 — two cases, because the roster is longer than the chain: a kind ALREADY down trades
                positions with whatever is here (Max: "I just put it in second"), and one that is NOT down
@@ -39638,14 +39660,8 @@ restoreThemeFromBackend();
             var a=chainOf(S), at=a.indexOf(k); if(at===p)return; if(at>=0) a[at]=a[p]; a[p]=k;
             for(var q=0;q<SLOTS;q++) S.set('slotk'+q,a[q]);
             S.set('lane',k); push(); paintBank(); paint(); }
-          /* 2026-09-23 (Max) — the effects list is ALPHABETICALLY CATEGORISED (SHP_CAT): categories A→Z,
-             the effects inside each A→Z. The pick still SWAPS the kind into this position (tp79/tp80). */
-          var byCat={}; LN.forEach(function(l,k){ var cat=SHP_CAT[l[2]]||'Other'; (byCat[cat]=byCat[cat]||[]).push({k:k,name:l[2]}); });
-          Object.keys(byCat).sort().forEach(function(cat){ rows.push({ isHeader:true, cat:true, label:cat });   /* tp102 — a CATEGORY title reads purple, like the mini browser's */
-            byCat[cat].sort(function(a,b){ return a.name<b.name?-1:1; }).forEach(function(it){
-              rows.push({ label:it.name, white:true, isChecked:it.k===here, onPick:(function(k){ return function(){ place(k); }; })(it.k) }); }); });
-          rows.push({ isHeader:true, label:'Chain' });
-          rows.push({ label:'Reset order', white:true, onPick:function(){ for(var q=0;q<SLOTS;q++) S.set('slotk'+q,q); push(); paintBank(); paint(); } });
+          LN.map(function(l,k){ return { k:k, name:l[2] }; }).sort(function(a,b){ return a.name.localeCompare(b.name); }).forEach(function(it){
+            rows.push({ label:it.name, white:true, isChecked:it.k===here, onPick:(function(k){ return function(){ place(k); }; })(it.k) }); });
           showRows(rows, e.clientX, e.clientY); }
         function paintBank(){ var i=lane(), c=chainOf(S);
           TIC.EA(fxEl.querySelectorAll('.fxb'),function(b,p){ var k=c[p];
