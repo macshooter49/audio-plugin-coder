@@ -745,7 +745,7 @@ private:
     //  slider state (getSynParams / setSynParam), like every other E–H knob. Built in withOrganics(), which the
     //  constructor calls while assembling the Options, i.e. BEFORE the WebView exists; declared before webView, so
     //  they are destroyed after it.
-    static constexpr int kOrgRelayKnobs = 12;
+    static constexpr int kOrgRelayKnobs = 17;   // tp105: + VIBRATO VIBRATE VIBDELAY VCURVE TUNING
     std::unique_ptr<juce::WebSliderRelay> orgRelay_[4][kOrgRelayKnobs];
     juce::WebBrowserComponent::Options withOrganics (juce::WebBrowserComponent::Options o);
     juce::uint32 orgVizEmitMs_ = 0;   // the organicViz feed's ≤ 15 Hz clock

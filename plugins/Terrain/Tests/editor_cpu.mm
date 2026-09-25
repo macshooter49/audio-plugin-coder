@@ -15,6 +15,13 @@
 //  CLOSED (fb521 parks the page instead of destroying it — does a parked page still spend?).
 //  A chord every second, keys up at 0.6 s, while "playing". The page is chosen through the saved state's
 //  uiPage (fb514: the editor boots straight onto it), so each page gets a fresh editor.
+//  tp105 — every phase also prints `dsp`: the render calls' own wall time ÷ the audio time they produced — the
+//  number the header CPU meter shows (getDspLoadPercent: processBlock's wall time ÷ audio time). The render thread
+//  runs at USER_INTERACTIVE QoS (a DAW's audio thread is real-time on a performance core; a default-QoS thread
+//  lands on efficiency cores and reads 2–3× slow).
+//    EDCPU_ORG=<instrument id>  osc A on ORGANIC with that instrument (the <ORGANICS> state a host restores)
+//    EDCPU_CHORD8=1             an 8-note chord (C3 E3 G3 B3 C4 E4 G4 B4) instead of the 4-note one
+//    EDCPU_UNISON=<n>           osc A unison n (Ensemble players on Organics)
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #import <Cocoa/Cocoa.h>
 #import <AudioToolbox/AudioToolbox.h>
@@ -31,6 +38,8 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <map>
+#include <pthread.h>
 
 @protocol TIAUCocoaUIBase
 - (NSView*) uiViewForAudioUnit: (AudioUnit) au withSize: (NSSize) s;
@@ -84,6 +93,42 @@ struct AuHost
 {
     AudioUnit au = nullptr;
     std::thread render; std::atomic<bool> stop { false }; std::atomic<bool> playing { false };
+    std::atomic<long long> renderNs { 0 }, renderFrames { 0 };   // tp105 — the header meter's own quotient
+    bool setByName (const char* name, float value)
+    {
+        UInt32 sz = 0; Boolean w = false;
+        AudioUnitGetPropertyInfo (au, kAudioUnitProperty_ParameterList, kAudioUnitScope_Global, 0, &sz, &w);
+        std::vector<AudioUnitParameterID> ids (sz / sizeof (AudioUnitParameterID));
+        AudioUnitGetProperty (au, kAudioUnitProperty_ParameterList, kAudioUnitScope_Global, 0, ids.data(), &sz);
+        for (auto id : ids)
+        {
+            AudioUnitParameterInfo pi {}; UInt32 s2 = sizeof pi;
+            if (AudioUnitGetProperty (au, kAudioUnitProperty_ParameterInfo, kAudioUnitScope_Global, id, &pi, &s2) != noErr) continue;
+            char nm[256] = {}; if (pi.cfNameString) CFStringGetCString (pi.cfNameString, nm, sizeof nm, kCFStringEncodingUTF8);
+            if (std::strcmp (nm, name) == 0) return AudioUnitSetParameter (au, id, kAudioUnitScope_Global, 0, value, 0) == noErr;
+        }
+        std::printf ("  !! no parameter '%s'\n", name); return false;
+    }
+    bool injectOrganic (const std::string& id)
+    {   // tp104's au_cpu_profile splice: <ORGANICS><OSC slot="0" id=…/></ORGANICS> into jucePluginState, handed back like a restore
+        CFPropertyListRef dict = nullptr; UInt32 sz = sizeof dict;
+        if (AudioUnitGetProperty (au, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &dict, &sz) != noErr || dict == nullptr) return false;
+        CFDataRef d0 = (CFDataRef) CFDictionaryGetValue ((CFDictionaryRef) dict, CFSTR ("jucePluginState"));
+        if (d0 == nullptr) { CFRelease (dict); return false; }
+        std::string xml ((const char*) CFDataGetBytePtr (d0) + 8, (size_t) (CFDataGetLength (d0) - 8)); while (! xml.empty() && xml.back() == 0) xml.pop_back();
+        const size_t close = xml.rfind ("</");
+        if (close == std::string::npos) { CFRelease (dict); return false; }
+        xml.insert (close, "<ORGANICS><OSC slot=\"0\" id=\"" + id + "\" rev=\"1\"/></ORGANICS>");
+        std::vector<UInt8> out (8 + xml.size() + 1, 0);
+        const uint32_t magic = 0x21324356u, len = (uint32_t) (xml.size() + 1);
+        std::memcpy (out.data(), &magic, 4); std::memcpy (out.data() + 4, &len, 4); std::memcpy (out.data() + 8, xml.data(), xml.size());
+        CFMutableDictionaryRef m = CFDictionaryCreateMutableCopy (nullptr, 0, (CFDictionaryRef) dict);
+        CFDataRef data = CFDataCreate (nullptr, out.data(), (CFIndex) out.size());
+        CFDictionarySetValue (m, CFSTR ("jucePluginState"), data);
+        CFPropertyListRef pl = m; const OSStatus st = AudioUnitSetProperty (au, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &pl, sizeof pl);
+        CFRelease (data); CFRelease (m); CFRelease (dict);
+        return st == noErr;
+    }
     bool init()
     {
         AudioComponentDescription d {}; d.componentType = kAudioUnitType_MusicDevice; d.componentSubType = 'Tern'; d.componentManufacturer = 'Wvcr';
@@ -111,9 +156,13 @@ struct AuHost
     {
         render = std::thread ([this]
         {
+            pthread_set_qos_class_self_np (QOS_CLASS_USER_INTERACTIVE, 0);   // tp105 — a DAW's audio thread is not an E-core thread
             std::vector<float> l ((size_t) BLK), r ((size_t) BLK);
             std::vector<uint8_t> raw (sizeof (AudioBufferList) + sizeof (AudioBuffer)); auto* abl = (AudioBufferList*) raw.data();
-            double st = 0.0; long blk = 0; bool down = false; const int chord[4] = { 48, 55, 60, 64 };
+            double st = 0.0; long blk = 0; bool down = false;
+            const bool c8 = std::getenv ("EDCPU_CHORD8") != nullptr;
+            const int chord4[4] = { 48, 55, 60, 64 }, chord8[8] = { 48, 52, 55, 59, 60, 64, 67, 71 };
+            const std::vector<int> chord = c8 ? std::vector<int> (chord8, chord8 + 8) : std::vector<int> (chord4, chord4 + 4);
             auto next = std::chrono::steady_clock::now(); const auto period = std::chrono::microseconds ((long) (1.0e6 * BLK / SR));
             while (! stop.load())
             {
@@ -123,7 +172,9 @@ struct AuHost
                 abl->mNumberBuffers = 2;
                 abl->mBuffers[0] = { 1, (UInt32) (BLK * 4), l.data() }; abl->mBuffers[1] = { 1, (UInt32) (BLK * 4), r.data() };
                 AudioUnitRenderActionFlags fl = 0; AudioTimeStamp ts {}; ts.mSampleTime = st; ts.mFlags = kAudioTimeStampSampleTimeValid;
+                const double r0 = nowMs();
                 AudioUnitRender (au, &fl, &ts, 0, (UInt32) BLK, abl);
+                renderNs.fetch_add ((long long) ((nowMs() - r0) * 1.0e6)); renderFrames.fetch_add (BLK);
                 st += BLK; ++blk; next += period; std::this_thread::sleep_until (next);
             }
         });
@@ -176,6 +227,13 @@ int main (int argc, char** argv)
         std::printf ("\n══ fb636 — THE OPEN EDITOR'S COST, PAGE BY PAGE (installed AU, visible window, real-time render) ══\n");
         calibrate();
         AuHost h; if (! h.init()) return 1;
+        if (const char* org = std::getenv ("EDCPU_ORG"))
+        {   // tp105 — osc A on ORGANIC with a real instrument (the page then shows the Organics view + its visualiser)
+            h.setByName ("Synth OSC A Engine", 7.0f); pumpMs (200);
+            std::printf ("  (osc A = ORGANIC '%s': inject %s)\n", org, h.injectOrganic (org) ? "ok" : "FAILED");
+            pumpMs (3000);
+        }
+        if (const char* u = std::getenv ("EDCPU_UNISON")) h.setByName ("Synth OSC A Unison", (float) (std::atoi (u) - 1) / 15.0f);   // the AU reports it NORMALISED over 1..16 (tp32 trap)
         h.startRender(); pumpMs (500);
         const std::set<pid_t> web0 = webkitPids ("WebContent"), gpu0 = webkitPids ("GPU");
         NSWindow* win = [[NSWindow alloc] initWithContentRect: NSMakeRect (120, 120, 820, 672) styleMask: NSWindowStyleMaskTitled
@@ -186,9 +244,11 @@ int main (int argc, char** argv)
         {
             auto sum = [&] (const std::set<pid_t>& s) { double t = 0; for (pid_t p : s) { const double v = cpuNs (p); if (v > 0) t += v; } return t; };
             const double h0 = cpuNs (getpid()), w0 = sum (web), g0 = sum (gpu), t0 = nowMs();
+            const long long rn0 = h.renderNs.load(), rf0 = h.renderFrames.load();
             pumpMs (secs * 1000.0);
             const double dt = (nowMs() - t0) * 1e6;
-            std::printf ("  %-34s host %6.1f%%   web %6.1f%%   gpu %6.1f%%   (web pids %zu, gpu pids %zu)\n", label,
+            const double dsp = 100.0 * (double) (h.renderNs.load() - rn0) / std::max (1.0, (double) (h.renderFrames.load() - rf0) / SR * 1.0e9);
+            std::printf ("  %-34s dsp %5.1f%%   host %6.1f%%   web %6.1f%%   gpu %6.1f%%   (web pids %zu, gpu pids %zu)\n", label, dsp,
                          100 * (cpuNs (getpid()) - h0) / dt, 100 * (sum (web) - w0) / dt, 100 * (sum (gpu) - g0) / dt, web.size(), gpu.size());
             std::fflush (stdout);
         };

@@ -222,6 +222,8 @@ namespace tw
                 R.envA = (float) num (e, "a", 0); R.envH = (float) num (e, "h", 0); R.envD = (float) num (e, "d", 0);
                 R.envS = (float) num (e, "s", 1); R.envR = (float) num (e, "r", 0.25);
                 R.rtDecay = (float) std::max (0.0, num (o, "rtDecay", 0));
+                R.trigOn  = o["trig"].toString() == "on";                           // tp105 (missing = "off")
+                R.tfix    = (float) juce::jlimit (-100.0, 100.0, num (o, "tfix", 0)); // tp105 cents (Tuning = Equal applies it)
                 // velCurve → 128-entry table (piecewise linear; default linear)
                 std::vector<std::pair<float, float>> pts;
                 if (const auto* vc = o["velCurve"].getArray())
@@ -266,7 +268,7 @@ namespace tw
             int64_t b = 0;
             for (auto& s : I.samples) b += (int64_t) (s.pcm.size() * sizeof (int16_t) + s.envDb.size() * sizeof (float));
             b += (int64_t) (I.regions.size() * sizeof (org::Region) + I.spans.size() * sizeof (org::Span)
-                            + I.lists.size() * sizeof (uint16_t) + I.rrKeys.size());
+                            + I.lists.size() * sizeof (uint16_t) + I.rrKeys.size() + I.nearKey.size());
             I.bytes = b;
             return true;
         }
@@ -375,6 +377,27 @@ namespace tw
                         if (k == (int) org::Kind::Attack)
                             for (auto idx : tmp) if (I.regions[idx].isRR) I.rrKeys[(size_t) a * 128 + (size_t) key] = 1;
                     }
+            // tp105 NO-SILENCE law (Max: "it's round-robinning to a silence"): a key outside the authored range maps to
+            // the nearest key that has an attack region; a tie goes UP (the edge sample then pitches down, not up).
+            I.nearKey.assign ((size_t) I.numArtics * 128, 0);
+            for (int a = 0; a < I.numArtics; ++a)
+            {
+                bool mapped[128] = {};
+                for (const auto& r : I.regions)
+                    if (r.artic == a && r.kind == org::Kind::Attack)
+                        for (int key = r.lk; key <= r.hk; ++key) mapped[key] = true;
+                for (int key = 0; key < 128; ++key)
+                {
+                    int best = key;
+                    if (! mapped[key])
+                        for (int d = 1; d < 128; ++d)
+                        {
+                            if (key + d < 128 && mapped[key + d]) { best = key + d; break; }
+                            if (key - d >= 0  && mapped[key - d]) { best = key - d; break; }
+                        }
+                    I.nearKey[(size_t) a * 128 + (size_t) key] = (uint8_t) best;
+                }
+            }
         }
     };
 
