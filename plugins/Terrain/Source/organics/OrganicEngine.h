@@ -43,9 +43,10 @@ namespace tw
         int   lastNoiseDelay() noexcept;
         /** tp108 Tone on pure tones — the most recent engine that ran a Tone stage: the tilt's predicted swing
             (centroid(+1)/centroid(−1), and the same in f_rms), the note's spectral flatness, the note's SPARSE score (0 = the tilt is enough … 1 = a sine), the dominant frequency (Hz),
-            the exciter depth and the low-pass depth now, and the stages that ran (1 exciter · 2 low-pass · 4 measuring).
+            the exciter depth and the low-pass depth now, the stages that ran, and the exciter's tonality gate (0..1) with the residual
+            it came from (in units of a tone 5 % off f_dom) (1 exciter · 2 low-pass · 4 measuring).
             Process-wide (tests only). */
-        struct ToneState { float swing, swingRms, flat, sparse, fDom, exc, lp; int stages; };
+        struct ToneState { float swing, swingRms, flat, sparse, fDom, exc, lp; int stages; float gate, rho; };
         ToneState lastTone() noexcept;
         /** tp108: false = the Tone stages never run (the tp107 tilt alone) — the CPU A/B and the null (tests only). */
         void setToneStages (bool on) noexcept;

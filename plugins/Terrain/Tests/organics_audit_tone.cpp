@@ -10,7 +10,8 @@
 //   ORG_TONE_PROBE=1 adds the cheap-probe columns and the +1 spectral peaks per row (diagnostics).
 //        • C7 at +1: the energy above 16 kHz no more than 6 dB over today's +1 (or under −60 dB re the note).
 //   2. the WHOLE LIBRARY: every installed instrument at its centre key, centroid(+1) / centroid(−1) ≥ 1.3 (the knob sweep's
-//      own bar) — Tone reads on every instrument.
+//      own bar) — Tone reads on every instrument; and every instrument's C7 at +1: the energy over 16 kHz with the Tone stages
+//      no more than 6 dB over the tilt alone (or under −60 dB re the note) — no aliasing blow-up anywhere.
 #include "../Source/organics/OrganicEngine.h"
 #include "../Source/organics/OrganicsLibrary.h"
 #include <juce_events/juce_events.h>
@@ -202,9 +203,11 @@ int runTone (const juce::File&, bool baseOnly)
     if (baseOnly) return 0;
 
     // ── 2. the whole library: every instrument at its centre key ──
-    std::printf ("── the whole library: centroid(+1) / centroid(−1) at the centre key (artic 0, vel 80), bar ×1.3 ──\n");
+    std::printf ("── the whole library: centroid(+1) / centroid(−1) at the centre key (artic 0, vel 80), bar ×1.3 · C7 at +1: energy > 16 kHz"
+                 " with the Tone stages ≤ max(the tilt alone + 6 dB, −60 dB) ──\n");
     const auto idx = OrganicsLibrary::get().index();
     int n = 0, lowN = 0; double lowR = 1e9; std::string lowId;
+    int hotN = 0; double worstC7 = -1e9; std::string worstC7Id;
     for (int ii = 0; idx.isArray() && ii < idx.size(); ++ii)
     {
         const juce::String id = idx[ii]["id"].toString();
@@ -220,6 +223,16 @@ int runTone (const juce::File&, bool baseOnly)
         const auto a = measure (rendt (J, -1.f, key, 80), fhf), b = measure (rendt (J, 1.f, key, 80), fhf);
         const auto ts = organics_debug::lastTone();
         const double r = b.cen / std::max (1.0, a.cen);
+        // C7 at +1, the Tone stages on vs off (the tilt alone): what the exciter adds over 16 kHz (tp108b: the flute's trimmed
+        // top keys pushed −33 dB — a breathy onset through the shaper)
+        const double c7on = measure (rendt (J, 1.f, 96, 80), 16000.0).top;
+        organics_debug::setToneStages (false);
+        const double c7off = measure (rendt (J, 1.f, 96, 80), 16000.0).top;
+        organics_debug::setToneStages (true);
+        const bool hot = c7on > std::max (c7off + 6.0, -60.0);
+        if (hot) ++hotN;
+        if (c7on - std::max (c7off + 6.0, -60.0) > worstC7) { worstC7 = c7on - std::max (c7off + 6.0, -60.0); worstC7Id = fmtt ("%s %+.1f dB (tilt alone %+.1f)", id.toRawUTF8(), c7on, c7off); }
+        if (hot) std::printf ("HOT   %-36s C7 +1: > 16 kHz %+.1f dB re the note, the tilt alone %+.1f\n", id.toRawUTF8(), c7on, c7off);
         ++n; if (r < 1.3) ++lowN;
         if (r < lowR) { lowR = r; lowId = id.toStdString(); }
         std::printf ("%s  %-36s k%-3d  −1 %6.0f  0 %6.0f  +1 %6.0f Hz  ×%.2f   HF %+.1f dB   (swing %.2f · f_rms %.2f · sparse %.2f · f_dom %.0f · offline 43ms %.2f 170ms %.2f)\n", r >= 1.3 ? "    " : "LOW ",
@@ -228,6 +241,7 @@ int runTone (const juce::File&, bool baseOnly)
         J.reset(); org::drainDeferredReleases();
     }
     bar (lowN == 0 && n > 0, fmtt ("the whole library: Tone ×1.3 on %d/%d instruments (lowest ×%.2f, %s)", n - lowN, n, lowR, lowId.c_str()));
+    bar (hotN == 0 && n > 0, fmtt ("the whole library: C7 at +1, energy > 16 kHz ≤ max(tilt alone + 6, −60) dB on %d/%d instruments (closest: %s)", n - hotN, n, worstC7Id.c_str()));
     std::printf ("══ %s — tone audit: %d/%d bars pass ══\n", fails ? "FAIL" : "PASS", bars - fails, bars);
     return fails ? 1 : 0;
 }
