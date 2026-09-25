@@ -239,9 +239,12 @@ def main():
     ap.add_argument("--no-engine", action="store_true", help="skip the closure through the runtime")
     a = ap.parse_args()
     ids = a.ids or sorted(e["id"] for e in json.load(open(os.path.join(a.lib, "index.json"))))
-    if not a.no_engine and not os.path.exists(AUDIT):
-        print(f"the closure needs {AUDIT}: run Tests/organics_audit.sh calib once to build it (or pass --no-engine)")
-        return 1
+    if not a.no_engine:
+        import peaktrim
+        why = peaktrim.ensure_audit()        # builds the audit binary against the current sources
+        if why:
+            print(f"the closure needs the audit binary: {why} (or pass --no-engine)")
+            return 1
     with ProcessPoolExecutor(a.jobs) as ex:
         for iid, summ, msg in ex.map(retune_one, [(a.lib, i, a.dry_run, not a.no_engine) for i in ids]):
             print(f"{iid:40s} {msg}")
