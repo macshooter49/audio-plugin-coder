@@ -8,6 +8,10 @@
 #    Tests/organics_audit.sh loops [idFilter]    every sustain loop: pump ≤ 4 dB (Tremolo/Vibrato 6 dB; recipes with "loopMotionWhy" exempt), no seam click
 #    Tests/organics_audit.sh knobs               every knob 0→100 % (perceptual metrics) + live turns
 #    Tests/organics_audit.sh null <file> [check] the Organics render null (write before a CPU-only change, check after)
+#    Tests/organics_audit.sh calib [idFilter]    the calibration point through the engine (Tools/organics/engine_calibrate.py)
+#    Tests/organics_audit.sh peaks [idFilter] [vels]  tp108: every key's v127 peak, every RR take (Tools/organics/peaktrim.py;
+#                                                ORG_PEAK_NOISE=0.5 = the Noise knob's default); last line PEAKSUMMARY
+#    Tests/organics_audit.sh pitchdump <dir> <id> [vels]  the renders Tests/organics_pitch_check.py / retune.py measure
 #  ORG_AUDIT_TSV=<file> (lib) writes one row per rendered note.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 set -u
@@ -45,7 +49,9 @@ case "$MODE" in
   loops) exec "$OUT/organics_audit" --loops "$ROOT" "${1:-}" ;;
   knobs) exec "$OUT/organics_audit" --knobs "$ROOT" ;;
   calib) exec "$OUT/organics_audit" --calib "$ROOT" "${1:-}" ;;
+  peaks) exec "$OUT/organics_audit" --peaks "$ROOT" "${1:-}" "${2:-}" ;;
+  pitchdump) exec "$OUT/organics_audit" --pitchdump "$ROOT" "$@" ;;
   note)  exec "$OUT/organics_audit" --note  "$ROOT" "$@" ;;
   null)  exec "$OUT/organics_audit" --null  "$ROOT" "$1" "${2:-}" ;;
-  *) echo "usage: $0 lib|loops|knobs|null"; exit 2 ;;
+  *) echo "usage: $0 lib|loops|knobs|calib|peaks|pitchdump|note|null"; exit 2 ;;
 esac

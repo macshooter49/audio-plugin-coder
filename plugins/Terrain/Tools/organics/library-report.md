@@ -158,3 +158,11 @@ vsco2.woodwinds.clarinet               28.8MB L3/RR2 keys[50, 90] att97 rel0 nz2
 vsco2.woodwinds.flute                  34.0MB L4/RR2 keys[60, 96] att94 rel0 nz525 | loud -28.2→-24.0 pk-12.2 lim0.0 | tfix Vibrato:+4.3@96/2u Non-Vibrat:+11.4@60/1u Expressive:+2.4@96/1u Staccato:+10.7@81/17u | rr{'seqCloned': 0, 'randWidened': 0} silent0/0 |  | drop {}
 vsco2.woodwinds.oboe                   30.4MB L3/RR2 keys[58, 89] att88 rel0 nz387 | loud -23.6→-24.0 pk-13.5 lim0.0 | tfix Vibrato:-6.6@82/1u Non-Vibrat:+3.8@70/0u Staccato:+10.6@89/9u | rr{'seqCloned': 0, 'randWidened': 0} silent0/0 |  | drop {}
 ```
+
+
+## tp108 (2026-09-25): per-key v127 peak trim + tuning closure
+
+Pipeline on a compiled library: `retune.py` (tfix, closed through the engine) → `engine_calibrate.py` → `peaktrim.py`.
+Each instrument's `build-report.json` carries `tfix` (per articulation: measured / inherited sources, `engineClosure` passes)
+and `peakTrim` (per-key trim curve in dB, worst v127 peak before/after, regions split, calibration-key limit).
+Narrative, before/after figures and the keys that cannot reach ±5 ¢: `.ideas/organics-library.md` §10.

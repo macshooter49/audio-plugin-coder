@@ -38,6 +38,8 @@
  "tfixMode": {
   "Natural": "stretch"
  },
+ "rootFollow": [["Natural", 107, 108], ["Retuned", 107, 108]],
+ "rootFollowWhy": "Salamander's 'C8' files are a C# (+99 ¢) at every velocity: the layers too soft to measure follow the ones that were root-fixed",
  "releaseCap": 2.5,
  "minLayers": 6,
  "budgetSteps": [

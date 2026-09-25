@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """organics_pitch_check.py — every key of every installed instrument lands on 12-TET at Tuning = Equal (tp106).
 
-The runtime renders each key (velocity 80, Human 0, 1.5 s, Tuning = Equal) through OrganicEngine
-(Tests/organics_audit.sh → organics_audit --pitchdump); each note is measured with the COMPILER'S OWN detector
-(Tools/organics/analyse.measure_f0 — YIN, refined on the fundamental partial), the one that wrote the per-region tfix.
-A key's pitch is its velocity-80 layer on a PERFORMED instrument (strings, winds, brass, voices — every take is corrected
-on its own, torgc PERFORMED_CATEGORIES) and the median of velocities 40 / 80 / 120 on a struck or plucked one (one
-physical tuning per note; the compiler corrects the note, and the detector's per-layer scatter is not the instrument's).
+The runtime renders each key (Human 0, 1.5 s, Tuning = Equal) through OrganicEngine (organics_audit --pitchdump); each
+note is measured with the COMPILER'S OWN detector (tp108: Tools/organics/tuning.measure_pitch — multi-window YIN + MPM,
+the fundamental partial and a harmonic-template fit for short takes; the one that wrote the per-region tfix and that
+Tools/organics/retune.py closes through the engine). On a PERFORMED instrument (strings, winds, brass, voices — every take
+is its own performance) EVERY velocity layer is rendered at its centre (where it plays alone) and the key reads as its
+WORST take; on a struck or plucked one a key is the median of velocities 40 / 80 / 120 (one physical tuning per note).
 A key passes when its measured pitch is within ±5 ¢ of equal temperament (of the articulation's fitted stretch curve for
 "tfixMode": "stretch" — a piano's deliberate stretch tuning is kept by design). Unpitched instruments ("unpitched": true
-in the recipe) and measurements the detector itself calls unreliable (confidence < 0.6, IQR > 12 ¢, < 3 frames, partial
-vs YIN disagreeing > 10 ¢ — vibrato, beating, rotary speakers, a bell's inharmonic strike) are counted, not judged.
+in the recipe) and notes the detector itself calls unreliable (no clear fundamental / harmonic series, period and
+partials disagreeing > 12 ¢ — tremolo, a rotary speaker, a pitch that never settles) are LISTED with the reason, not
+judged.
 
     python3 Tests/organics_pitch_check.py [idFilter]    exit 0 = no measurable key off by > 30 ¢; keys off by > 5 ¢ are
                                                         listed per instrument (FLAG) — the remaining take-to-take
@@ -27,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 
 import numpy as np
 
@@ -35,6 +37,8 @@ TERRAIN = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(TERRAIN, "Tools", "organics"))
 import analyse as an  # noqa: E402
 import torgc  # noqa: E402
+import tuning as tu  # noqa: E402
+import retune  # noqa: E402
 
 SR = 48000
 BAR = 5.0          # the ±5 ¢ target (reported per instrument)
@@ -69,6 +73,7 @@ def main():
     tmp = tempfile.mkdtemp(prefix="orgpitch_")
     tot_keys = tot_rel = tot_fail = tot_gross = 0
     bad_insts = []
+    unmeasured = []
     try:
         for ent in idx:
             iid = ent["id"]
@@ -86,32 +91,39 @@ def main():
             out = os.path.join(tmp, iid)
             env = dict(os.environ, TERRAIN_ORGANICS_DIR=root)
             performed = rec.get("category") in torgc.PERFORMED_CATEGORIES
-            subprocess.run([binary, "--pitchdump", root, out, iid, "80" if performed else "40,80,120"], env=env, capture_output=True)
+            subprocess.run([binary, "--pitchdump", root, out, iid, retune._vels(rec, mp)], env=env, capture_output=True)
             fails, rel, n = [], 0, 0
             per_key = {}
+            why_un = {}
+            inh = tu.pitch_kind(rec.get("category", ""))
             for f in sorted(glob.glob(os.path.join(out, "*.f32"))):
-                a, key, vel = (int(v) for v in os.path.basename(f)[:-4].split("_"))
-                x = np.fromfile(f, dtype=np.float32).astype(np.float64)
+                a, key, vel = (int(v) for v in os.path.basename(f)[:-4].split("_")[:3])
                 per_key.setdefault((a, key), 0)
+                if performed and not retune.on_plateau(mp, a, key, vel):
+                    continue                     # this articulation crossfades two (in-tune) takes here: judged by those
+                x = np.fromfile(f, dtype=np.float32).astype(np.float64)
                 on = an.find_onset(x, 0, len(x))
-                m = an.measure_f0(x, SR, on, len(x), an.midi_hz(key))
-                ok = (m.get("conf", 0) >= 0.6 and m.get("spread", 99) <= 12.0 and m.get("frames", 0) >= 3
-                      and m.get("agree", 0.0) <= 10.0 and m.get("hz", 0) > 0)
+                m = tu.measure_pitch(x, SR, on, len(x), an.midi_hz(key), kind=inh)
+                ok = bool(m.get("ok")) and m.get("hz", 0) > 0
                 sc = stretch_curve(rep, mp["artics"][a])
                 dev = m["cents"] - (sc(key) if sc else 0.0)
-                # the compiler's own rule: a reading far off (> 30 ¢) counts only from a long, steady measurement
-                # (a short staccato / pizzicato take starts sharp and its few YIN frames scatter)
-                if ok and abs(dev) > 30.0 and (m.get("frames", 0) < 5 or m.get("spread", 99) > 8.0):
+                # the compiler's own rule: a reading far off (> 30 ¢) counts only from a strong measurement
+                if ok and abs(dev) > 30.0 and not m.get("strong"):
                     ok = False
                 if ok:
                     per_key.setdefault(("dev", a, key), []).append(dev)
+                else:
+                    why_un.setdefault((a, key), m.get("why") or "far off, weak measurement")
             for (a, key) in [k for k in per_key if k[0] != "dev"]:
                 n += 1
                 devs = per_key.get(("dev", a, key))
                 if not devs:
+                    unmeasured.append((iid, mp["artics"][a], key, why_un.get((a, key), "?")))
                     continue
                 rel += 1
-                dev = float(np.median(devs))
+                # struck / plucked: the median over 40 / 80 / 120 (one physical tuning per note); performed: EVERY take
+                # (each velocity layer heard alone, at its centre) must land — the key reads as its worst take
+                dev = max(devs, key=abs) if performed else float(np.median(devs))
                 if abs(dev) > BAR:
                     fails.append((a, key, dev))
             shutil.rmtree(out, ignore_errors=True)
@@ -128,6 +140,13 @@ def main():
             sys.stdout.flush()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+    if unmeasured:
+        print(f"   {len(unmeasured)} keys the detector cannot read (not judged), per instrument:")
+        per_i = Counter(u[0] for u in unmeasured)
+        for iid, c in per_i.most_common():
+            why = Counter(u[3] for u in unmeasured if u[0] == iid).most_common(2)
+            ks = " ".join(f"{u[1][:6]}:k{u[2]}" for u in unmeasured if u[0] == iid)
+            print(f"     {iid:38s} {c:3d}  {why}  {ks[:200]}")
     print(f"══ {'PASS' if not tot_gross else 'FAIL'} — {tot_gross} measurable keys off by more than {GROSS} ¢ (the gate) · "
           f"{tot_fail} of {tot_rel} off by more than {BAR} ¢ (flagged; {tot_keys} keys rendered, {len(bad_insts)} instruments) ══")
     return 1 if tot_gross else 0
