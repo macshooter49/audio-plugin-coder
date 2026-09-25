@@ -3346,6 +3346,14 @@ void TerrainAudioProcessor::prepareOrganicEnginesIfNeeded()
     orgArmedAny_.store (true, std::memory_order_release);
 }
 
+// tp108 — a user import ("user.<slug>") lives in <root>/User/<id>/, a factory instrument in <root>/<id>/ (mirrors
+// tw::org::instrumentFolder in OrganicsLibrary.cpp; repeated here so the processor needs only OrganicsApi.h).
+static juce::File tiOrganicFolder (const juce::String& id)
+{
+    const auto root = tw::OrganicsLibrary::get().root();
+    return id.startsWith ("user.") ? root.getChildFile ("User").getChildFile (id) : root.getChildFile (id);
+}
+
 // Reads the instrument's header fields (artics / hasNoise / hasRelease) from map.json WITHOUT parsing the region list:
 // the compiler writes them before "regions" (design §4.1), so the first 64 KB closed at that key is a complete object.
 static juce::var tiOrganicMapHeader (const juce::File& mapFile)
@@ -3371,7 +3379,7 @@ void TerrainAudioProcessor::organicsFillMeta (OrgSlot& s, const juce::String& id
             if (e.getProperty ("id", {}).toString() == id)
             { s.name = e.getProperty ("name", {}).toString(); s.family = e.getProperty ("family", {}).toString();
               s.category = e.getProperty ("category", {}).toString(); break; }
-    const juce::var h = tiOrganicMapHeader (lib.root().getChildFile (id).getChildFile ("map.json"));
+    const juce::var h = tiOrganicMapHeader (tiOrganicFolder (id).getChildFile ("map.json"));
     if (h.isObject())
     {
         if (s.name.isEmpty())     s.name     = h.getProperty ("name", {}).toString();
@@ -3453,7 +3461,7 @@ void TerrainAudioProcessor::organicsRequest (int o, const juce::String& id, bool
                     {
                         const juce::String cid = e.getProperty ("id", {}).toString();
                         if (cid == id || e.getProperty ("family", {}).toString() != fam) continue;
-                        if (! tw::OrganicsLibrary::get().root().getChildFile (cid).getChildFile ("map.json").existsAsFile()) continue;
+                        if (! tiOrganicFolder (cid).getChildFile ("map.json").existsAsFile()) continue;
                         sl.wantedId = id; sl.wantedName = sl.name;
                         self->organicsRequest (o, cid, false);
                         return;
@@ -3562,7 +3570,7 @@ juce::String TerrainAudioProcessor::organicsIndexJson()
             if (auto* src = e.getDynamicObject())
                 for (const auto& kv : src->getProperties()) o->setProperty (kv.name, kv.value);
             const juce::String id = e.getProperty ("id", {}).toString();
-            o->setProperty ("installed", id.isNotEmpty() && lib.root().getChildFile (id).getChildFile ("map.json").existsAsFile());
+            o->setProperty ("installed", id.isNotEmpty() && tiOrganicFolder (id).getChildFile ("map.json").existsAsFile());
             out.add (juce::var (o));
         }
     return juce::JSON::toString (juce::var (out), true);
@@ -3591,7 +3599,7 @@ void TerrainAudioProcessor::organicsPreview (const juce::String& id)
 {
     if (id.isEmpty()) { stopPreview(); return; }
     auto& lib = tw::OrganicsLibrary::get(); orgTouchedLibrary_ = true;
-    const juce::File f = lib.root().getChildFile (id).getChildFile ("preview.flac");
+    const juce::File f = tiOrganicFolder (id).getChildFile ("preview.flac");
     if (! f.existsAsFile()) return;
     juce::AudioFormatManager fm; fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (f));
