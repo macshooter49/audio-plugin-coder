@@ -9,6 +9,9 @@
 //   2  IT FITS — no overflow (scrollWidth ≤ clientWidth) and its ink clears the ‹ by ≥ 4 px, with the instrument's name
 //   3  NOTHING MOVES — ‹, the name, ›, [A] and [+] sit where they sat for the first one (≤ 0.01 px), whatever the label
 //   4  THE FULL NAME STAYS — in the pill's tooltip, and as a row of the dropdown
+//   5  tp107 WHITE INSIDE (Max: "always follow the same style as every other button") — every label is painted in the house
+//      header type: the instrument name's colour, weight, size and tracking (9.5 px / 0.8 px, --text-primary), never the dim
+//      grey; bars 1–3 hold in THAT type (the box grew 38 → 40 px and its side padding went 3 → 2 px to fit it)
 //  Writes org-artic-pills.png (a few of them, stacked) into the out-dir.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -40,7 +43,9 @@ const SETS = LIB.concat(COMMON.map((c, i) => ({ id: 'common' + i, name: 'Salaman
       const txt = pill.textContent, rg = document.createRange(); rg.selectNodeContents(pill); const tr = rg.getBoundingClientRect(), nav = d.querySelector('.org-nav[data-dir="-1"]').getBoundingClientRect();
       const P = pos(); if (!base || baseInst !== S.id) { base = P; baseInst = S.id; }   /* the ‹ follows the NAME's width (every engine's corner is right-aligned): compare within one instrument */
       let moved = 0; Object.keys(P).forEach(k => P[k].forEach((v, j) => { if (k !== 'name' || j !== 2) moved = Math.max(moved, Math.abs(v - base[k][j])); }));
-      out.push({ inst: S.id, full, txt, short: window.__orgArticLabels(S.artics.length > 1 ? S.artics : S.artics.concat(['Staccato']))[i], over: pill.scrollWidth - pill.clientWidth, clear: nav.left + (nav.width - 5) / 2 - tr.right, moved,   /* to the ‹'s ink: the chevron is 5 px wide, centred in its box */
+      const cs = getComputedStyle(pill), ns = getComputedStyle(d.querySelector('.org-inst-wrap .preset-display'));
+      const house = ['color', 'fontWeight', 'fontSize', 'letterSpacing'].every(k => cs[k] === ns[k]);
+      out.push({ house, col: cs.color, inst: S.id, full, txt, short: window.__orgArticLabels(S.artics.length > 1 ? S.artics : S.artics.concat(['Staccato']))[i], over: pill.scrollWidth - pill.clientWidth, clear: nav.left + (nav.width - 5) / 2 - tr.right, moved,   /* to the ‹'s ink: the chevron is 5 px wide, centred in its box */
         tip: (pill.parentElement.title || ''), ell: /…|\.\.\./.test(txt) }); }));
     return out; }, SETS);
   const vocab = new Set(await p.evaluate(() => window.__orgArtVocab()));
@@ -53,6 +58,7 @@ const SETS = LIB.concat(COMMON.map((c, i) => ({ id: 'common' + i, name: 'Salaman
   const bad2 = rows.filter(r => r.over > 0.5 || r.clear < 4);
   ok(bad2.length === 0, `[2] every label fits its box and clears the ‹ by ≥ 4 px (worst clearance ${Math.min(...rows.map(r => r.clear)).toFixed(2)} px)`,
      bad2.map(r => `${r.full}→${r.txt} over ${r.over} clear ${r.clear.toFixed(2)}`).join(' · '));
+  const nh = rows.filter(r => !r.house);
   const mv = Math.max(...rows.map(r => r.moved));
   ok(mv <= 0.01, `[3] nothing moves: ‹ name › [A] [+] hold their place across all ${rows.length} labels (max ${mv.toFixed(3)} px)`);
   const menu = await p.evaluate(async () => { window.__orgPaintHead('a', { ok: true, status: 'ok', id: 'x', name: 'Xylophone', family: 'marimba', category: 'Mallets & Bells', artics: ['Medium Mallets', 'Hard Mallets', 'Soft Mallets'], artic: 0 });
@@ -60,6 +66,8 @@ const SETS = LIB.concat(COMMON.map((c, i) => ({ id: 'common' + i, name: 'Salaman
     const tip = document.querySelector('#osc-a-device .org-artic').title; await new Promise(r => setTimeout(r, 30)); document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return { items, tip, closed: !document.querySelector('.org-artic.open') }; });
   ok(rows.every(r => r.tip.indexOf(r.full) >= 0) && menu.items.join('|') === 'Medium Mallets|Hard Mallets|Soft Mallets',
      '[4] the full name stays: in every tooltip, and as the dropdown\'s rows', `Xylophone dropdown: ${menu.items.join(' · ')} · tooltip "${menu.tip}"`);
+  ok(nh.length === 0, `[5] every label wears the house header type — the instrument name's colour/weight/size/tracking (${rows[0] && rows[0].col})`,
+     nh.slice(0, 5).map(r => r.full + ' ' + r.col).join(' · '));
   // the picture: a few pills, stacked
   try { fs.mkdirSync(OUT, { recursive: true }); } catch (e) {}
   const shots = [];

@@ -17,6 +17,10 @@
 //   6  THE TWINS: every family whose single drawing fills < 55 % of the box width is drawn as TWO; the pair is symmetric
 //      about the box centre (outer margins equal ≤ 0.5 px), the gap stays in [6 %, 20 %] of the width, and the pair fills
 //      ≥ 58 % of it; every twin's two halves are different drawings
+//   7  tp107 THE HOUSE STYLE ("WHITE INSIDE", Max): the articulation pill's text wears exactly what the instrument name and
+//      Modal's family/form pills wear (colour, weight, size, tracking) at rest, on hover and open — never the dim grey
+//   8  tp107 PAGE 2 (Attack · Release · Sustain · Velocity · Image) sits on Modal's page-2 ring centres and label line, and
+//      nothing on it moves while the values sweep (Attack 0 → 1, every readout)
 //  Writes org-align.png (red lines through the measured ink) into the out-dir.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const fs = require('fs'), path = require('path');
@@ -139,6 +143,43 @@ const listCss = (c, sc) => c ? c.items.map(q => q.key + (q.txt ? '(' + q.txt.sli
   ok(bxD <= 0.5 && o.rings.every(r => r.kdx != null) && kO <= Math.max(0.5, kM + 0.1) && clearBox,
      `[4] the picture box is Modal's (Δ ${f2(bxD)} px, ${f2(o.box.w)} × ${f2(o.box.h)}) and TRANSPARENT (${bgC.bg}, border ${bgC.bs}, shadow ${bgC.sh}); ring numbers centred: Organics ≤ ${f2(kO)} px (Modal ≤ ${f2(kM)} px)`,
      o.rings.map(r => `"${r.t}" ${f2(r.kdx)},${f2(r.kdy)}`).join(' · ') + ' | modal ' + m.rings.map(r => `"${r.t}" ${f2(r.kdx)},${f2(r.kdy)}`).join(' · '));
+
+  // [7] tp107 — the house style of the header controls (Modal on A, Organics on C with the Violin's pill up)
+  await H.setEngine(p, 'a', 6); await p.evaluate(() => window.__orgSetInstrument('c', 'vsco.violin.section')); await H.sleep(700);
+  const sty = sel => p.evaluate(sel => { const e = document.querySelector(sel); if (!e) return null; const c = getComputedStyle(e);
+    return { color: c.color, weight: c.fontWeight, size: c.fontSize, ls: c.letterSpacing, bg: c.backgroundColor }; }, sel);
+  const hov = async (hoverSel, sel) => { const r = await p.evaluate(s => { const e = document.querySelector(s).getBoundingClientRect(); return { x: e.left + e.width / 2, y: e.top + e.height / 2 }; }, hoverSel);
+    await p.mouse.move(r.x, r.y); await H.sleep(250); const st = await sty(sel); await p.mouse.move(2, 2); await H.sleep(250); return st; };
+  const S7 = { pill: await sty('#osc-c-device .org-artic .samp-sel-disp'), name: await sty('#osc-c-device .org-inst-wrap .preset-display'),
+               fam: await sty('#osc-a-device .md-fam-wrap:not(.md-form) .preset-display'), form: await sty('#osc-a-device .md-fam-wrap.md-form .preset-display') };
+  S7.pillHover = await hov('#osc-c-device .org-artic', '#osc-c-device .org-artic .samp-sel-disp');
+  S7.famHover = await hov('#osc-a-device .md-fam-wrap:not(.md-form)', '#osc-a-device .md-fam-wrap:not(.md-form) .preset-display');
+  await p.evaluate(() => window.__orgOpenArtic('c')); await H.sleep(150); S7.pillOpen = await sty('#osc-c-device .org-artic .samp-sel-disp');
+  await p.evaluate(() => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))); await H.sleep(150);
+  const same = (x, y, ks) => ks.every(k => x && y && x[k] === y[k]);
+  const TXT = ['color', 'weight', 'size', 'ls'];
+  ok(same(S7.pill, S7.name, TXT) && same(S7.pill, S7.fam, TXT) && same(S7.pill, S7.form, TXT) && same(S7.pillHover, S7.famHover, ['color', 'bg']) && same(S7.pillOpen, S7.famHover, ['color', 'bg']),
+     `[7] the articulation pill wears the house header style — ${S7.pill && S7.pill.color} ${S7.pill && S7.pill.weight} ${S7.pill && S7.pill.size} / ${S7.pill && S7.pill.ls}, hover ${S7.pillHover && S7.pillHover.bg}, open ${S7.pillOpen && S7.pillOpen.bg}`,
+     JSON.stringify(S7));
+  // [8] tp107 — page 2 on Modal's page 2, and nothing moves while the values sweep
+  const P2 = await p.evaluate(async () => { const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const dm = document.getElementById('osc-a-device'), dc = document.getElementById('osc-c-device');
+    dm.querySelector('.modal-knob-wrap').classList.add('pg2'); dc.querySelector('.organic-knob-wrap').classList.add('pg2'); await sleep(120);
+    const geo = (d, pg) => { const R = d.getBoundingClientRect(), sc = R.height / d.offsetHeight;
+      return { rings: [...d.querySelectorAll(pg + ' .knob-ring')].map(e => { const r = e.getBoundingClientRect(); return [(r.left + r.width / 2 - R.left) / sc, (r.top + r.height / 2 - R.top) / sc]; }),
+               labels: [...d.querySelectorAll(pg + ' .knob-label')].map(e => { const r = e.getBoundingClientRect(); return (r.top + r.height / 2 - R.top) / sc; }) }; };
+    const m = geo(dm, '.modal-pg2'), o = geo(dc, '.organic-pg2');
+    const all = () => JSON.stringify([...dc.querySelectorAll('.organic-pg2 .knob, .organic-pg2 .knob-ring, .organic-arrow, .org-head, .org-inst-wrap, .org-nav, .osc-letter, .swap-btn')].map(e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(v => v.toFixed(2)); }));
+    const k0 = all(), att = dc.querySelector('.knob[data-syn="SYN_OSC_C_ORG_ATTACK"]'); let worst = k0;
+    const labs = [];
+    for (const v of [0, 0.1, 0.25, 0.5, 0.62, 0.8, 0.97, 1]) { att.__applyFill(v); labs.push(window.__orgFmt('SYN_OSC_C_ORG_ATTACK', v, false)); await sleep(10); if (all() !== k0) worst = all(); }
+    att.__applyFill(0.5);
+    dm.querySelector('.modal-knob-wrap').classList.remove('pg2'); dc.querySelector('.organic-knob-wrap').classList.remove('pg2');
+    return { m, o, still: worst === k0, labs, names: [...dc.querySelectorAll('.organic-pg2 .knob-label')].map(e => e.textContent) }; });
+  const d8 = max(P2.o.rings.map((r, i) => max([Math.abs(r[0] - P2.m.rings[i][0]), Math.abs(r[1] - P2.m.rings[i][1])])));
+  const l8 = max(P2.o.labels.map((l, i) => Math.abs(l - P2.m.labels[i])));
+  ok(P2.o.rings.length === 5 && d8 <= 0.5 && l8 <= 0.5 && P2.still && P2.names.join('·') === 'Attack·Release·Sustain·Velocity·Image',
+     `[8] page 2 (${P2.names.join(' · ')}) sits on Modal's page 2: ring centres Δ ≤ ${f2(d8)} px, labels Δ ≤ ${f2(l8)} px; nothing moves while Attack sweeps (${P2.still})`, P2.labs.join(' · '));
 
   // [5] every engine on osc A
   const SA = await scaleOf(p, 'osc-a-device'), E5 = [];
