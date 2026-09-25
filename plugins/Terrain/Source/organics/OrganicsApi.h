@@ -135,6 +135,7 @@ namespace tw
         constexpr int kDestPerOsc     = 10;     // dest = kDestBase + osc(0..7)·10 + knob(0..9)
         constexpr int kDestEnd        = kDestBase + 8 * kDestPerOsc;   // 5352 = the new NumDests
         constexpr int kMaxRegionsPerOsc = 48;   // players × layers × release, steal-fade beyond
-        // knob order for the dest block AND the page: Dynamics Tone Body Attack Human | Release Noise Sustain Velocity Image
+        // knob order for the dest block AND the page: Dynamics Tone Body Vibrato Human | Release Noise Sustain Velocity Image
+        // (tp105: knob 3 is VIBRATO; ATTACK stays declared + hidden at Natural and is not a dest)
     }
 }

@@ -35,7 +35,7 @@ namespace tw
 {
     namespace
     {
-        std::atomic<int> gLastReaders { 0 }, gLastRegion { -1 }, gLastLive { 0 }, gSteals { 0 };
+        std::atomic<int> gLastReaders { 0 }, gLastRegion { -1 }, gLastLive { 0 }, gSteals { 0 }, gTailRel { 0 };
 
         inline uint32_t mix32 (uint32_t h) noexcept
         {
@@ -289,6 +289,7 @@ namespace tw
     int organics_debug::lastNoteRegion() noexcept    { return gLastRegion.load (std::memory_order_relaxed); }
     int organics_debug::lastLiveReaders() noexcept   { return gLastLive.load (std::memory_order_relaxed); }
     int organics_debug::steals() noexcept            { return gSteals.load (std::memory_order_relaxed); }
+    int organics_debug::tailReleases() noexcept      { return gTailRel.load (std::memory_order_relaxed); }
 
     //==============================================================================================
     struct OrganicEngine::Impl
@@ -312,6 +313,11 @@ namespace tw
             bool tailWrapped = false; int64_t tailAge = 0;
             uint64_t stamp = 0; uint32_t chokeSeen = 0;
             bool relOn = false; float relG = 1.f;     // tp105: the note-off decay (exponential, −60 dB at max(amp release, knob time))
+            // tp105b — THE TAIL RELEASE: the requested release outlives the recording → the region crosses into its compile-time
+            // tail loop and keeps decaying there (level = max(natural, the release curve), both relative to note-off).
+            bool relDecided = false, relTail = false;
+            float relEnvOff = 0.f, relStepDb = 0.f, relLvlDb = 0.f;   // natural level at note-off · the loop steps removed · level re note-off
+            double jumpOff = 0.0; int jumpLen = 0, jumpAt = 0; float jumpKb = 1.f, jumpDb = 0.f;   // a level-matched crossfade into the loop
         };
 
         struct Note
@@ -938,7 +944,16 @@ namespace tw
             {
                 case org::Kind::Attack:
                     g *= rd.layer;
-                    if (r.decaying() && (sSustain > 0.001f || rd.tailWrapped))
+                    if (rd.relTail)
+                    {
+                        // tp105b: the release curve itself, from the note-off level — the recording's own (faster, or truncated)
+                        // decay is compensated away by its envelope table, so −60 dB lands exactly at the requested time
+                        const float es = rd.s->envAt (rd.pos);
+                        const float want = rd.relEnvOff + 20.f * std::log10 (std::max (rd.relG, 1.0e-9f));
+                        compDbOut = std::clamp (want - es, -120.f, 48.f);
+                        g *= dbToLin (compDbOut);
+                    }
+                    else if (r.decaying() && (sSustain > 0.001f || rd.tailWrapped))
                     {
                         // Sustain: the level the note WOULD have (natural decay, continued virtually once the
                         // tail loop has wrapped) with its dB distance below refDb scaled by (1 − s).
@@ -967,14 +982,26 @@ namespace tw
                 && rd.ins->groupEpoch()[r.offByIdx].load (std::memory_order_relaxed) != rd.chokeSeen)
                 startFade (rd, fadeFrames (0.005));                       // choke: always a 5 ms fade
 
-            float compDb = 0.f;
-            float g1 = targetGain (rd, n, compDb);
-            if (rd.relOn)
+            // tp105b — at the note-off (the first released block) decide: does the requested release outlive the audio left?
+            if (rd.relOn && ! rd.relDecided)
             {
-                // exponential, −60 dB after relTime (re-evaluated per block: the knob / its mod / the amp release are live)
-                rd.relG *= std::exp (-6.9077553f * (float) cnt / (relTime (r) * (float) sr));
-                g1 *= rd.relG;
+                rd.relDecided = true;
+                const double xfS = std::min (0.25 * (double) (r.tailLe - r.tailLs), 0.02 * s.sampleRate);
+                const double leftSec = ((double) r.end - rd.pos) / std::max (1.0e-6, rd.ratio) / sr;
+                if (rd.role == org::Kind::Attack && r.decaying() && r.hasTail() && sSustain <= 0.001f && ! rd.tailWrapped
+                    && ! rd.fading && rd.pos + xfS + 16.0 < (double) r.end && (double) relTime (r) > leftSec)
+                {
+                    rd.relTail = true;
+                    gTailRel.fetch_add (1, std::memory_order_relaxed);
+                    rd.relEnvOff = s.envAt (rd.pos);
+                    rd.relStepDb = 0.f;
+                }
             }
+            float compDb = 0.f;
+            if (rd.relOn)   // exponential, −60 dB after relTime (re-evaluated per block: the knob / its mod / the amp release are live)
+                rd.relG *= std::exp (-6.9077553f * (float) cnt / (relTime (r) * (float) sr));
+            float g1 = targetGain (rd, n, compDb);
+            if (rd.relOn && ! rd.relTail) g1 *= rd.relG;
             const float g0 = rd.firstBlock ? g1 : rd.gPrev;
             rd.firstBlock = false;
 
@@ -992,7 +1019,7 @@ namespace tw
 
             // terminal declick (2.5 ms) for regions that play out
             const double endPos = (double) r.end;
-            if (! looping && ! rd.fading)
+            if (! looping && ! rd.fading && ! rd.relTail)
             {
                 const double remOut = (endPos - 1.0 - rd.pos) / rd.ratio;
                 const int endFade = fadeFrames (0.0025);
@@ -1044,6 +1071,73 @@ namespace tw
             const double ratioB = vb != nullptr ? ratio * kVibMaxMul : ratio;   // boundary counts: the plan's fastest rate
             int i = 0;
             bool ended = false;
+            float kbRest = 1.f, dgc = dg;
+            while (i < cnt && rd.relTail)
+            {
+                // ── tp105b TAIL RELEASE: every pass back into the tail loop is a LEVEL-MATCHED crossfade (the lead-in read is
+                //    louder by the decay across the jump; it is scaled down by jumpKb so the sum never steps), equal-gain
+                //    smoothstep (the jump is a whole number of loop lengths: correlated material, the fb204 law) ──
+                const double tLs = (double) r.tailLs, tLe = (double) r.tailLe, tLen = tLe - tLs;
+                const double X = std::max (2.0, std::min (0.25 * tLen, 0.02 * s.sampleRate));
+                if (rd.jumpLen == 0)
+                {
+                    const double jStart = tLe - X;
+                    if (pos < jStart)
+                    {
+                        int m = (int) std::ceil ((jStart - pos) / ratioB);
+                        m = std::clamp (m, 1, cnt - i);
+                        if (vb != nullptr) plainV (d, pos, ratio, m, g, dgc, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i, *vb, i0 + i);
+                        else plain (d, pos, ratio, m, g, dgc, env + i, rd.panL, rd.panR, oL + i0 + i, oR + i0 + i);
+                        i += m;
+                        continue;
+                    }
+                    const double k = std::max (1.0, std::floor ((pos - tLs) / tLen));
+                    rd.jumpOff = k * tLen;
+                    rd.jumpLen = std::max (1, (int) std::ceil (X / ratio));
+                    rd.jumpAt = 0;
+                    const double mid = pos + 0.5 * X;
+                    rd.jumpDb = std::max (0.f, s.envAt (mid - rd.jumpOff) - s.envAt (mid));
+                    rd.jumpKb = dbToLin (-rd.jumpDb);
+                }
+                // the crossfade (scalar; a few percent of the loop period)
+                const int m = std::min (cnt - i, rd.jumpLen - rd.jumpAt);
+                const int sh = vb != nullptr ? vb->segShift : 0, msk = (1 << sh) - 1;
+                for (int k = 0; k < m; ++k)
+                {
+                    const int j = i + k;
+                    float al, ar, bl, br;
+                    const int ip = (int) pos; const double q = pos - rd.jumpOff; const int iq = (int) q;
+                    if (s.channels == 2)
+                    {
+                        if (sinc) { interp<2, true> (d, ip, (float) (pos - ip), al, ar); interp<2, true> (d, iq, (float) (q - iq), bl, br); }
+                        else      { interp<2, false> (d, ip, (float) (pos - ip), al, ar); interp<2, false> (d, iq, (float) (q - iq), bl, br); }
+                    }
+                    else
+                    {
+                        if (sinc) { interp<1, true> (d, ip, (float) (pos - ip), al, ar); interp<1, true> (d, iq, (float) (q - iq), bl, br); }
+                        else      { interp<1, false> (d, ip, (float) (pos - ip), al, ar); interp<1, false> (d, iq, (float) (q - iq), bl, br); }
+                    }
+                    const float w = smooth01 ((float) (rd.jumpAt + k + 1) / (float) rd.jumpLen);
+                    float gg = g; if (needEnv) gg *= env[j];
+                    oL[i0 + j] += (al + (bl * rd.jumpKb - al) * w) * (gg * rd.panL);
+                    oR[i0 + j] += (ar + (br * rd.jumpKb - ar) * w) * (gg * rd.panR);
+                    g += dgc;
+                    double mul = 1.0;
+                    if (vb != nullptr) { const int jj = i0 + j; mul = vb->mul[jj >> sh] + vb->step[jj >> sh] * (double) (jj & msk); }
+                    pos += ratio * mul;
+                }
+                i += m; rd.jumpAt += m;
+                if (rd.jumpAt >= rd.jumpLen)
+                {
+                    // landed in the loop: the lead-in's level is the level now — the gain carries jumpKb from here (this
+                    // block's ramp, and gPrev), and the step leaves the natural level for good (relStepDb), so the next
+                    // block's gain (computed at the new position) continues exactly
+                    pos -= rd.jumpOff;
+                    rd.relStepDb += rd.jumpDb;
+                    rd.jumpLen = 0; rd.tailWrapped = true;
+                    g *= rd.jumpKb; dgc *= rd.jumpKb; kbRest *= rd.jumpKb;
+                }
+            }
             while (i < cnt)
             {
                 double boundary;
@@ -1080,15 +1174,21 @@ namespace tw
                 i += m;
             }
             rd.pos = pos;
-            rd.gPrev = g1;
+            rd.gPrev = g1 * kbRest;   // tp105b — a landed tail crossfade carries its level match into the next block's ramp
             rd.age += cnt;
             if (rd.tailWrapped) rd.tailAge += cnt;
 
             // retire
             if (ended || finishedFade) { rd.active = false; return; }
-            if (rd.relOn && rd.relG < 1.0e-4f && ! rd.fading) startFade (rd, fadeFrames (0.005));   // −80 dB into the release: done
+            if (rd.relTail)
+            {
+                // the tail release is done when its level re the note-off is under −80 dB (whichever curve carried it)
+                const float lvl = s.envAt (rd.pos) + compDb - rd.relEnvOff;
+                if (lvl < -80.f && ! rd.fading) startFade (rd, fadeFrames (0.005));
+            }
+            else if (rd.relOn && rd.relG < 1.0e-4f && ! rd.fading) startFade (rd, fadeFrames (0.005));   // −80 dB into the release: done
             if (rd.role == org::Kind::Attack && g0 <= 0.f && g1 <= 0.f && rd.layer <= 0.f) { rd.active = false; return; }
-            if (! r.looping() && ! (looping && sSustain >= 0.999f))
+            if (! r.looping() && ! (looping && sSustain >= 0.999f) && ! rd.relTail)   // (a tail release retires on its own curve, above)
             {
                 const float lin = g1 * 32768.f * std::max (rd.panL, rd.panR);    // g1 already holds the Sustain comp
                 const float est = rd.s->envAt (rd.pos) + 20.f * std::log10 (lin * (rd.fading ? rd.fadeStart : 1.f) + 1.0e-9f);
