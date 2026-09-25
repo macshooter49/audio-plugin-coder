@@ -7354,18 +7354,16 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 #syn-panel .organic-arrow:hover { opacity: .95; }
 #syn-panel .organic-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
 #syn-panel .organic-arrow.set-prev::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }   /* the ‹ (rs2), re-stated: this block sits after the shared .set-prev rule */
-/* Noise greys when the instrument has no mechanical-noise regions — still usable, does nothing (design §2.4) */
-#syn-panel .organic-knob-wrap .knob.org-na { opacity: .32; }
-/* tp105 — THE BACK PANEL (contract tp105): the selector row becomes Organics' own five pills (Rate · Delay · Curve · Tuning ·
-   Articulation) — the Sample engine's warp modes no longer show here. Same .sel chassis, same row, same height. */
+/* tp105 — THE BACK PANEL (contract tp105): the selector row becomes Organics' own five pills — the Sample engine's warp modes no
+   longer show here. Same .sel chassis, same row, same height. tp107: Rate · Delay · Curve · Tuning · Noise (Noise replaced "Style"). */
 #syn-panel .device .selector-pills.org-pills { display: none; }
 #syn-panel .device.osc.engine-organic.swapped .back-only > .selector-pills:not(.org-pills) { display: none; }
 #syn-panel .device.osc.engine-organic.swapped .back-only > .selector-pills.org-pills { display: flex; }
 #syn-panel .org-pills .org-bv { cursor: ns-resize; }
 #syn-panel .org-pills .org-dd { cursor: pointer; }
-#syn-panel .org-pills .org-dd:hover, #syn-panel .org-pills .org-dd.open { border-color: var(--purple-400); }
+/* tp107 — no hover/open border of its own: the house .sel pills (Phase, Rand, the warp modes) have none, so neither do these */
 #syn-panel .org-pills .org-dv { color: var(--text-primary); line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#syn-panel .org-pills .org-bp.org-na { opacity: .32; }
+#syn-panel .org-pills .org-bp.org-na { opacity: .32; }   /* Noise greys when the instrument has no mechanical-noise regions — still usable, does nothing (design §2.4) */
 /* the back panel: five knobs like Modal (Low/High Cut are wavetable-only) */
 #syn-panel .device.osc.engine-organic .back-only > .osc-knobs { grid-template-columns: repeat(5, 1fr); }
 #syn-panel .device.osc.engine-organic .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
@@ -7379,11 +7377,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 /* tp105 — the pill's box is 38 px and a deliberate word always fits it (Tests/_org_artic_gate.js renders every articulation of every
    installed instrument): 9 px type, 0.4 px tracking, 3 px air each side. Round 1's box held 22 px of text, so "Staccato" showed
    "St…" and "Medium Mallets" showed "Mediu" (Max). The gap before it went 11 → 8 px so its right edge (and the ‹ it must clear) is
-   where it was, +1 px. */
+   where it was, +1 px.
+   tp107 — WHITE INSIDE (Max: "always follow the same style as every other button"). The pill now wears the house header type
+   exactly — the instrument name's and Modal's family/form pills': --text-primary, 300, 9.5 px, 0.8 px tracking, the same purple-tint
+   hover/open box. (It wore .samp-sel-disp's dim --text-secondary at 9 px / 0.4 px.) To hold every short label in that wider type the
+   box grew 38 → 40 px and its side air went 3 → 2 px; the gate's worst clearance to the ‹ is 6.1 px, nothing else moves. */
 #syn-panel .device.osc.engine-organic .org-head .samp-sel-disp {
-  font-size: 9px; font-weight: 300; letter-spacing: 0.4px; padding: 2px 3px; border-radius: 5px; box-sizing: border-box;
+  font-size: 9.5px; font-weight: 300; letter-spacing: 0.8px; padding: 2px 2px; border-radius: 5px; box-sizing: border-box; color: var(--text-primary);
   display: inline-flex; align-items: center; line-height: 1; transition: background .12s ease, color .12s ease;
-  max-width: 38px; overflow: hidden; text-overflow: clip; white-space: nowrap; }   /* the menu and the tooltip carry the full word */
+  max-width: 40px; overflow: hidden; text-overflow: clip; white-space: nowrap; }   /* the menu and the tooltip carry the full word */
 #syn-panel .device.osc.engine-organic .org-head .samp-sel { cursor: pointer; }
 #syn-panel .device.osc.engine-organic .org-head .samp-sel:hover .samp-sel-disp,
 #syn-panel .device.osc.engine-organic .org-head .samp-sel.open .samp-sel-disp { background: rgba(139,92,246,0.15); color: var(--text-primary); }
@@ -9491,13 +9493,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_A_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
+                <div class="knob" data-syn="SYN_OSC_A_ORG_ATTACK" title="Attack — how a note begins: 0 = tight (the air before the onset trimmed, the transient lifted), centre = as recorded, 100 = a slow swell of about 3 s. The amp envelope&#39;s attack always lengthens it"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
               </div>
-              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Release · Noise · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
+              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Attack · Release · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -9600,12 +9602,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               </div>
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
               <div class="selector-pills org-pills">
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_A_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_A_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
-                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_A_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -9861,13 +9864,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_B_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
+                <div class="knob" data-syn="SYN_OSC_B_ORG_ATTACK" title="Attack — how a note begins: 0 = tight (the air before the onset trimmed, the transient lifted), centre = as recorded, 100 = a slow swell of about 3 s. The amp envelope&#39;s attack always lengthens it"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
               </div>
-              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Release · Noise · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
+              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Attack · Release · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -9970,12 +9973,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               </div>
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
               <div class="selector-pills org-pills">
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_B_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_B_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
-                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_B_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -10255,13 +10259,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_C_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
+                <div class="knob" data-syn="SYN_OSC_C_ORG_ATTACK" title="Attack — how a note begins: 0 = tight (the air before the onset trimmed, the transient lifted), centre = as recorded, 100 = a slow swell of about 3 s. The amp envelope&#39;s attack always lengthens it"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
               </div>
-              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Release · Noise · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
+              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Attack · Release · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -10364,12 +10368,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               </div>
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
               <div class="selector-pills org-pills">
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_C_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_C_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
-                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_C_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -10625,13 +10630,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_D_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
+                <div class="knob" data-syn="SYN_OSC_D_ORG_ATTACK" title="Attack — how a note begins: 0 = tight (the air before the onset trimmed, the transient lifted), centre = as recorded, 100 = a slow swell of about 3 s. The amp envelope&#39;s attack always lengthens it"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
               </div>
-              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Release · Noise · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
+              <div class="organic-arrow" role="button" tabindex="0" title="Organics mechanics — Attack · Release · Sustain · Velocity · Image" aria-label="More Organics controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -10734,12 +10739,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               </div>
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
               <div class="selector-pills org-pills">
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_D_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
                 <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_D_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
-                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_D_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -21908,7 +21914,11 @@ setTimeout(function wireSynControls () {
         if (k === 'DYNAMICS') return ring ? String (Math.round (Math.abs (b) * 64)) : sgn (b * 64) + ' vel';
         if (k === 'TONE')     return ring ? String (Math.round (Math.abs (b) * 9))  : sgn (b * 9, 1) + ' dB';
         if (k === 'BODY')     return ring ? String (Math.round (Math.abs (b) * 6))  : sgn (b * 6, 1) + ' st';
-        if (k === 'ATTACK')   { const a = Math.round (Math.abs (b) * 100); return ring ? String (a) : (a === 0 ? 'Natural' : (b < 0 ? 'Gentle ' : 'Tight ') + a); }
+        /* tp107 — Attack (contract tp107): 0 = Tight · 0.5 = Natural (as recorded) · 1 = a ~3 s swell, log through the top half
+           (10 ms → 3 s here, the readout's own reading of that taper); the lower half reads how much tighter */
+        if (k === 'ATTACK')   { if (ring) return String (pct); if (n < 0.005) return 'Tight'; if (Math.abs (n - 0.5) < 0.006) return 'Natural'; if (n > 0.995) return '3 s';
+                                if (n < 0.5) return 'Tighter ' + Math.round ((0.5 - n) * 200);
+                                const t = 0.01 * Math.pow (300, (n - 0.5) / 0.5); return t < 0.995 ? Math.round (t * 1000) + ' ms' : t.toFixed (1) + ' s'; }
         /* tp105 — the back panel's two times read in their units (contract tp105: rate 3..9 Hz, delay 0..2 s) */
         if (k === 'VIBRATE')  return ring ? (3 + 6 * n).toFixed (1) : (3 + 6 * n).toFixed (1) + ' Hz';
         if (k === 'VIBDELAY') return ring ? (2 * n).toFixed (n < 0.5 ? 2 : 1) : (2 * n).toFixed (2) + ' s';
@@ -35797,6 +35807,11 @@ restoreThemeFromBackend();
      Sustain Velocity Image. */
   window.ORGANIC_DEST_BASE=5272;
   ['A','B','C','D','E','F','G','H'].forEach(function(L,o){ ['DYNAMICS','TONE','BODY','VIBRATO','HUMAN','RELEASE','NOISE','SUSTAIN','VELOCITY','IMAGE'].forEach(function(k,i){ KNOBDEST['SYN_OSC_'+L+'_ORG_'+k]=window.ORGANIC_DEST_BASE+o*10+i; }); });
+  /* tp107 — ATTACK is back on page 2 and a mod dest again, in a NEW block appended after the first (contract tp107):
+     ModDest::OrganicAttackBase = 5352, dest = 5352 + osc (0..7, E–H explicit), NumDests 5360. The first block is untouched
+     (knob 3 stays Vibrato, knob 6 stays Noise — Noise now lives on the back panel). */
+  window.ORGANIC_ATTACK_DEST_BASE=5352;
+  ['A','B','C','D','E','F','G','H'].forEach(function(L,o){ KNOBDEST['SYN_OSC_'+L+'_ORG_ATTACK']=window.ORGANIC_ATTACK_DEST_BASE+o; });
   // fb75 — filter knobs are SLOT-AWARE (the 1/2 tab picks the filter) → dest resolved at DROP like the cut emblem.
   var FSLOT_BACK ={ 'Mix':[62,63], 'Drive':[60,61], 'Env':[56,57], 'Vel':[340,341], 'Track':[342,343] };   // fb78 — the WHOLE back row routes now; front RES/DRV/ENV target the runtime .fk-em emblems
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
@@ -42982,6 +42997,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       function mkRow (label, o) { o = o || {}; var d = document.createElement ('div');
         var base = o.dim ? ROWDIM : (o.purple ? PURPLE : DIM);
         d.style.cssText = rowCss + 'color:' + (o.sel ? (o.purple ? PURPLE : WHITE) : base) + ';' + (o.sel ? 'background:rgba(255,255,255,0.07);' : '') + (o.dim ? 'cursor:default;' : '');
+        if (o.tip) d.title = o.tip;   /* tp107 — optional: says in a tooltip what a caller keeps off the row (Organics' "Not installed") */
         // label in its OWN flex-shrink span so long folder/file names truncate with a real … and the count stays visible (Max)
         d.innerHTML = (o.dot ? '<span style="color:#fff;font-size:9px;line-height:1;flex:none;">•</span>' : '')
           + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc (label) + '</span>'
@@ -42991,9 +43007,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           + (o.hint ? '<span style="flex:none;margin-left:6px;max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.22);font-size:8px;letter-spacing:0;">' + esc (o.hint) + '</span>' : '')
           + (o.count != null ? '<span style="flex:none;margin-left:6px;color:rgba(255,255,255,.26);font-size:8px;letter-spacing:0;">' + o.count + '</span>' : '');
         if (o.play) { var pb = document.createElement ('span'); pb.className = 'tpb-play'; pb.title = 'Audition';
-          pb.style.cssText = 'flex:none;width:12px;height:12px;margin-left:6px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.38);cursor:pointer;';
+          pb.style.cssText = 'flex:none;width:12px;height:12px;margin-left:6px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);cursor:pointer;';   /* tp107 — the house browser button: the headphone's / ＋'s dim white at rest, white on hover, never purple */
           pb.innerHTML = '<svg width="7" height="8" viewBox="0 0 7 8"><path d="M1 .9L6.2 4 1 7.1Z" fill="currentColor"/></svg>';
-          pb.onmouseenter = function () { pb.style.color = 'var(--purple-400, #B794FF)'; }; pb.onmouseleave = function () { pb.style.color = 'rgba(255,255,255,.38)'; };
+          pb.onmouseenter = function () { pb.style.color = WHITE; }; pb.onmouseleave = function () { pb.style.color = 'rgba(255,255,255,.5)'; };
           pb.onclick = function (e) { e.stopPropagation (); try { o.play (); } catch (x) {} };
           pb.ondblclick = function (e) { e.stopPropagation (); };
           d.appendChild (pb); }
@@ -43012,7 +43028,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         eachRootCat (function (cat) {
           (cat.items || []).forEach (function (it) {
             if (String (it.name).toLowerCase().indexOf (q) < 0) return;
-            var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub, dim: it.dim, play: it.onPlay });
+            var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub, dim: it.dim, play: it.onPlay, tip: it.tip });
             /* fb563 — a MULTI browser (the modulator picker) toggles and stays open: you add three
                sources in a row without reopening it. Its pick() owns `sel`; the list just repaints. */
             d.onclick = function (ev) {
@@ -43032,7 +43048,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         else renderSearch (q);
       };
       function renderItems (ci) { itemsEl.innerHTML = ''; var cat = CATS[ci]; if (! cat) return;   /* fb606 — CATS is the level being shown, ROOT_CATS is the whole tree */
-        (cat.items || []).forEach (function (it) { var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub, dim: it.dim, play: it.onPlay });
+        (cat.items || []).forEach (function (it) { var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub, dim: it.dim, play: it.onPlay, tip: it.tip });
           if (it.dim) { itemsEl.appendChild (d); return; }   /* tp104 — shown, never picked (Not installed) */
           d.onclick = function (ev) {
             /* fb564 — DOUBLE-CLICK ASSIGNS. Max: "I double-click something, it just closes the menu
@@ -46932,7 +46948,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       try{ window.__orgDicePick(o,aim,capOn); }catch(e){}
       P(X+'ORG_DYNAMICS',between(.25,.75)); P(X+'ORG_TONE',between(.25,.75)); P(X+'ORG_BODY',between(.25,.75)); P(X+'ORG_HUMAN',between(.1,.5)); P(X+'ORG_IMAGE',between(.4,1));
       P(X+'ORG_VIBRATO',rnd()<.6?0:between(.1,.45)); P(X+'ORG_RELEASE',rnd()<.7?.5:between(.3,.8)); P(X+'ORG_NOISE',rnd()<.7?.5:between(.25,.75));
-      P(X+'ORG_SUSTAIN',rnd()<.7?0:between(0,.5)); P(X+'ORG_VELOCITY',rnd()<.7?.75:between(.5,1)); P(X+'ORG_ARTIC',0); }
+      P(X+'ORG_SUSTAIN',rnd()<.7?0:between(0,.5)); P(X+'ORG_VELOCITY',rnd()<.7?.75:between(.5,1)); P(X+'ORG_ARTIC',0);
+      P(X+'ORG_ATTACK',rnd()<.75?.5:between(.3,.7));   /* tp107 — Attack is on page 2 again: a roll sets it (mostly Natural) */
+      try{ if(typeof window!=='undefined'&&window.__orgReadBack) setTimeout(function(){ window.__orgReadBack(o); },300); }catch(e){} }   /* tp107 — the back panel (Noise…) repaints from the rolled params */
     if(samp){ rollSample(X,seng,aim,lvl,P); oneShot(o,aim,function(){
       /* tp29 — no one-shot reached it, so it is not a sampler: put it back on a wavetable rather
          than leave a silent oscillator in the patch. */
@@ -49261,7 +49279,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if (head) { head.classList.toggle ('single', ar.length <= 1);
       var full = ar[(st && st.artic) | 0] || ar[0] || 'Sustain', ad = head.querySelector ('.samp-sel-disp');
       if (ad) { ad.textContent = articLabels (ar)[(st && st.artic) | 0] || shortArtic (full); ad.parentElement.title = 'Articulation — ' + full; } }
-    var nk = dev.querySelector ('.knob[data-syn="' + P (o, 'NOISE') + '"]');
+    var nk = dev.querySelector ('.org-pills .org-bp[data-org="' + P (o, 'NOISE') + '"]');   /* tp107 — Noise is the back panel's fifth pill */
     if (nk) { var na = !!(st && st.ok && st.hasNoise === false); nk.classList.toggle ('org-na', na);
       if (!nk.__tip) nk.__tip = nk.getAttribute ('title') || ''; nk.setAttribute ('title', na ? 'Noise — ' + NOISE_TIP : nk.__tip); }
     var sd = dev.querySelector ('.sample-view .samp-disp');
@@ -49348,7 +49366,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         if (!st.id && why === 'engine') return firstInstalled ('Keys').then (function (e) { if (e) return setInstrument (o, e.id); apply (o, st); });
         apply (o, st); }); }).catch (function () {}); }
   function readKnobs (o) {
-    ['DYNAMICS', 'TONE', 'BODY', 'VIBRATO', 'HUMAN', 'RELEASE', 'NOISE', 'SUSTAIN', 'VELOCITY', 'IMAGE'].forEach (function (k) {
+    ['DYNAMICS', 'TONE', 'BODY', 'VIBRATO', 'HUMAN', 'ATTACK', 'RELEASE', 'SUSTAIN', 'VELOCITY', 'IMAGE'].forEach (function (k) {   /* tp107 — Attack on page 2; Noise is read back with the back panel (readBack) */
       var id = P (o, k); readParam (id).then (function (v) { if (v == null) return;
         var kn = devOf (o) && devOf (o).querySelector ('.knob[data-syn="' + id + '"]'); if (kn && kn.__applyFill) kn.__applyFill (v); }); }); }
   function firstInstalled (cat) { return loadIndex ().then (function (ix) { var a = ix.filter (function (e) { return e.installed !== false; });
@@ -49496,16 +49514,17 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var i = -1, cur = (S[o] || {}).id; for (var k = 0; k < L.length; k++) if (L[k].id === cur) i = k;
     var n = L[(i < 0) ? (dir > 0 ? 0 : L.length - 1) : ((i + dir + L.length) % L.length)]; if (n && n.id !== cur) setInstrument (o, n.id); }); }
   window.__orgStep = function (o, d) { step (String (o), d); };
-  function fmtSize (mb) { mb = +mb || 0; return mb >= 1000 ? (mb / 1024).toFixed (1) + ' GB' : Math.round (mb) + ' MB'; }
   function openBrowser (o, ev) {
     if (!window.openTwoPaneBrowser) return;
     loadIndex (true).then (function (ix) {
       var cur = (S[o] || {}).id, cats = CATS.map (function (c) { return { label: c, items: ix.filter (function (e) { return e.category === c; }).map (function (e) {
         var inst = e.installed !== false;
-        return { name: e.name, sub: inst ? fmtSize (e.sizeMB) + ' · ' + (e.credit || e.licence || '') : 'Not installed', sel: e.id === cur, dim: !inst, id: e.id,
+        /* tp107 — the row is the instrument's NAME and its ▶, nothing else (Max): size and credit stay in the data (index.json /
+           CREDITS.md), never on screen. An instrument that is not installed is dimmed, has no ▶, and says why in its tooltip. */
+        return { name: e.name, tip: inst ? '' : e.name + ' — not installed', sel: e.id === cur, dim: !inst, id: e.id,
                  pick: function () { if (inst) setInstrument (o, e.id); }, onPlay: inst ? function () { call ('organicsPreview', [e.id]).catch (function () {}); } : null }; }) }; });
       var openCat = 0; cats.forEach (function (c, k) { if (c.items.some (function (it) { return it.sel; })) openCat = k; });
-      window.openTwoPaneBrowser (ev, { cats: cats, openCat: openCat, catPurple: true, searchPlaceholder: 'Search instruments',
+      window.openTwoPaneBrowser (ev, { cats: cats, openCat: openCat, searchPlaceholder: 'Search instruments',   /* tp107 — the house grey/white categories (no purple here) */
         onAudition: function () { var id = (S[o] || {}).id; if (id) call ('organicsPreview', [id]).catch (function () {}); } });
     });
   }
@@ -49531,19 +49550,18 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function openArtic (o, anchor) { var st = S[o] || {}, ar = st.artics || []; if (ar.length <= 1) return;
     openMenu (anchor, 'Articulation', ar, st.artic | 0, function (i) { setArtic (o, i); }); }
 
-  /* ═══ tp105 — THE BACK PANEL: Rate · Delay (drag, like Phase) · Curve · Tuning · Articulation (dropdowns) ════════════════
+  /* ═══ tp105 — THE BACK PANEL: Rate · Delay (drag, like Phase) · Curve · Tuning (dropdowns) · tp107: Noise (drag, 0–100) ════════
      A local model per oscillator (BK) written straight to the APVTS (__setSynParam) and read back from it on every switch
      to Organics (state persists). Until the engine declares these IDs the writes land nowhere, harmlessly. */
-  var BK = {}, BACK = { VIBRATE: 0.417, VIBDELAY: 0.175, VCURVE: 0.5, TUNING: 1 };
+  var BK = {}, BACK = { VIBRATE: 0.417, VIBDELAY: 0.175, VCURVE: 0.5, TUNING: 1, NOISE: 0.5 };
+  var DRAG = { VIBRATE: 1, VIBDELAY: 1, NOISE: 1 };   /* the pills that drag like Phase (the rest are dropdowns) */
   var CHOICES = { VCURVE: ['Soft', 'Linear', 'Hard'], TUNING: ['As recorded', 'Equal'] }, PILLWORD = { 'As recorded': 'Natural' };   /* the pill never cuts a word: the menu says it in full */
   function bk (o) { return BK[o] || (BK[o] = Object.assign ({}, BACK)); }
   function paintBack (o) { var dev = devOf (o); if (!dev) return; var b = bk (o), st = S[o] || {};
     dev.querySelectorAll ('.org-pills .org-bp').forEach (function (pill) { var id = pill.getAttribute ('data-org') || '', k = id.slice (id.indexOf ('_ORG_') + 5), v = pill.querySelector ('b'); if (!v) return;
       if (k === 'VIBRATE' || k === 'VIBDELAY') v.textContent = window.__orgFmt ? window.__orgFmt (id, b[k], false) : String (b[k]);
-      else if (CHOICES[k]) { var n = CHOICES[k].length, i = Math.round (b[k] * (n - 1)); v.textContent = PILLWORD[CHOICES[k][i]] || CHOICES[k][i] || ''; pill.title = pill.title.split (' — now:')[0]; }
-      else if (k === 'ARTIC') { var ar = st.artics || [], full = ar[(st.artic | 0)] || ar[0] || 'Sustain'; v.textContent = full; var dv = v.parentElement;   /* the full word when it fits the pill, else the header's own label — never a cut word */
-        if (dv && dv.scrollWidth > dv.clientWidth + 0.5) v.textContent = articLabels (ar)[(st.artic | 0)] || shortArtic (full);
-        pill.classList.toggle ('org-na', ar.length <= 1); } }); }
+      else if (k === 'NOISE') v.textContent = String (Math.round (b[k] * 100));   /* tp107 — a bare 0–100, like the knob it was */
+      else if (CHOICES[k]) { var n = CHOICES[k].length, i = Math.round (b[k] * (n - 1)); v.textContent = PILLWORD[CHOICES[k][i]] || CHOICES[k][i] || ''; pill.title = pill.title.split (' — now:')[0]; } }); void st; }
   /* until the engine declares these IDs, getSynParam answers 0 for every one of them — and all four at 0 (Soft · As recorded · 3 Hz ·
      no delay) is not a state anyone reaches by accident — so four zeros read as "not there yet" and the defaults stay painted */
   function readBack (o) { var ks = Object.keys (BACK);
@@ -49553,15 +49571,15 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     paintBack (o); }
   function setBack (o, k, v) { bk (o)[k] = v; try { if (window.__setSynParam) window.__setSynParam (P (o, k), v); } catch (e) {} paintBack (o); }
   window.__orgBack = function (o) { return Object.assign ({}, bk (String (o))); };
+  window.__orgReadBack = function (o) { readBack (String (o)); };
   var bDrag = null;
   document.addEventListener ('pointerdown', function (e) { if (e.button !== 0) return; var t = e.target; if (!t || !t.closest) return;
     var pill = t.closest ('.org-pills .org-bp'); if (!pill) return; var o = oscOfEl (pill); if (!o) return;
     var id = pill.getAttribute ('data-org') || '', k = id.slice (id.indexOf ('_ORG_') + 5);
     e.preventDefault (); e.stopPropagation ();
-    if (k === 'VIBRATE' || k === 'VIBDELAY') { bDrag = { o: o, k: k, y0: e.clientY, n0: bk (o)[k] };
+    if (DRAG[k]) { bDrag = { o: o, k: k, y0: e.clientY, n0: bk (o)[k] };
       try { pill.setPointerCapture (e.pointerId); } catch (x) {} return; }
     if (pm && pill.classList.contains ('open')) { closePm (); return; }
-    if (k === 'ARTIC') { var st = S[o] || {}; if ((st.artics || []).length > 1) openMenu (pill, 'Articulation', st.artics, st.artic | 0, function (i) { setArtic (o, i); }); return; }
     if (CHOICES[k]) { var n = CHOICES[k].length; openMenu (pill, pill.querySelector ('.ph-label').textContent, CHOICES[k], Math.round (bk (o)[k] * (n - 1)), function (i) { setBack (o, k, i / (n - 1)); }); } }, true);
   document.addEventListener ('pointermove', function (e) { if (!bDrag) return; setBack (bDrag.o, bDrag.k, Math.max (0, Math.min (1, bDrag.n0 + (bDrag.y0 - e.clientY) / 150))); }, true);
   document.addEventListener ('pointerup', function () { bDrag = null; }, true);
