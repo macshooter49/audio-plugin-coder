@@ -28,5 +28,6 @@
    "maxFiles": 3,
    "velPow": 0.4
   }
- ]
+ ],
+ "pitchCheckWhy": "each melody note sounds with its drone courses: the detector locks onto a course, not the melody string"
 }

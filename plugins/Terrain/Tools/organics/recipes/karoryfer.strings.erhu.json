@@ -44,5 +44,6 @@
    "velPow": 1.0,
    "exclude": "pizz|pizzicato|harmonic"
   }
- ]
+ ],
+ "loopMotionWhy": "the SFZ stacks a centre and a unison player on every note (Unison Vol default): the two beat against each other, by design"
 }

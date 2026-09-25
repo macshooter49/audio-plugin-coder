@@ -35,8 +35,9 @@ Region semantics the runtime can rely on (documented for agent B):
   rr        [position 0-based, length] (seq_position/seq_length); rand [lo, hi) (lorand/hirand)
   start/end sample frames (end exclusive); onset absolute frame; ls/le absolute, le exclusive
   loop      "no_loop" | "one_shot" | "continuous" | "sustain"; xf = crossfade frames before le, blended
-            with the frames before ls (equal-power). For decaying regions (no_loop/one_shot) ls=le=0
-            and xf belongs to the tail loop tailLs/tailLe. Looping regions: tailLs/tailLe = ls/le.
+            with the frames before ls. For decaying regions (no_loop/one_shot) ls=le=0 and xf belongs to
+            the tail loop tailLs/tailLe. Looping regions: tailLs/tailLe = ls/le, and since tp106 their
+            crossfade is BAKED into the audio (analyse.polish_loop): xf = 0 and the runtime just wraps.
   pan       −100..100 (SFZ units). cents includes tune + transpose·100. env seconds, s 0..1.
   rtDecay   dB per second held (SFZ rt_decay).
 """
@@ -81,6 +82,7 @@ BUDGET_PIANO_MB = 160.0
 CALIB_RMS_DB = -18.0          # (legacy, pre tp105) 0.5 s plain RMS target
 CALIB_LUFS = -24.0            # tp105: K-weighted loudness of the first 1 s, centre key, velocity 100, Velocity 0.75
 PEAK_CEIL_DB = -1.0           # velocity 127 peak ceiling at the same (centre) key
+PERFORMED_CATEGORIES = ("Strings", "Winds", "Brass", "Choir & Voice")   # tfix per take (the player's intonation), tp106
 VELO_DEFAULT = 0.75           # the runtime's Velocity knob default (velAmp = 1 − velo·(1 − curve))
 PEAK_TARGET = 10 ** (-0.3 / 20)
 TODAY = "2026-09-24"
@@ -738,6 +740,16 @@ def _tpdf(n_shape, bits):
 def job_render_sample(job: dict) -> dict:
     """Trim, loop-search, fade, normalise and write one output FLAC; measure onsets and RMS per region start."""
     x, sr = sf.read(job["src"], dtype="float64", always_2d=True)
+    # tp106: a recording with a DC offset (VCSL tubular bells: −25 dBFS of DC under a 10 s decay) — remove it before
+    # anything is measured (the offset also held the −60 dB end trim open). Causal 2nd-order high-pass at 8 Hz, only
+    # where the file's mean is over 2 % of its RMS: a clean recording is never touched.
+    dc_removed = False
+    if len(x) > sr // 4:
+        mean, rms = np.abs(x.mean(axis=0)), np.sqrt(np.mean(x ** 2, axis=0))
+        if float(np.max(mean / np.maximum(rms, 1e-12))) > 0.02:
+            from scipy.signal import butter, sosfilt
+            x = sosfilt(butter(2, 8.0 / (sr / 2.0), btype="highpass", output="sos"), x - x[0], axis=0)
+            dc_removed = True
     mono = an.to_mono(x)
     start0 = job["start0"]
     n = len(x)
@@ -752,7 +764,7 @@ def job_render_sample(job: dict) -> dict:
     elif cap and mode in ("decay",):
         end = min(end, start0 + int(cap * sr))
     end = max(end, min(n, start0 + int(0.05 * sr)))
-    res = {"src": job["src"], "out": job["out"], "sr": sr, "ch": x.shape[1]}
+    res = {"src": job["src"], "out": job["out"], "sr": sr, "ch": x.shape[1], "dcRemoved": dc_removed}
     loop = None
     tail = None
     first_start = min(job["starts"]) if job["starts"] else start0
@@ -809,8 +821,18 @@ def job_render_sample(job: dict) -> dict:
                 end = len(x)
                 natural_end = end
                 n = len(x)
-    # end fade (never inside a loop)
-    protect = loop[1] if loop else (tail[1] if tail else first_start)
+    clip_src = int(np.sum(np.abs(x[start0:end]) >= 0.999))      # the SOURCE's clipping (before any gain below)
+    # tp106 LOOP POLISH: flatten a repeating swell, choose the cleanest crossfade, bake it into the audio (map xf = 0)
+    if loop and job.get("polish", True):
+        ls_, le_, _xf, info_ = loop
+        x, xf_map, pol = an.polish_loop(x, sr, ls_, le_, int(_xf), onset0, bool(job.get("flatten", True)))
+        loop = (ls_, le_, xf_map, dict(info_, **pol))
+        res["loopPolish"] = pol
+        mono = an.to_mono(x)
+        n = len(x)
+        end = max(end, le_ + an.LOOP_PAD)
+    # end fade (never inside a loop, nor over the baked loop's pad)
+    protect = (loop[1] + an.LOOP_PAD) if loop else (tail[1] if tail else first_start)
     fade = int(0.03 * sr) if loop else int(0.2 * sr)
     fade = min(fade, end - protect)            # never fade inside a loop / tail loop (0 when the loop ends the file)
     data = x[start0:end].copy()
@@ -871,7 +893,7 @@ def job_render_sample(job: dict) -> dict:
     env = an.envelope_db(mono, sr, 0.05)
     pk_src = float(np.abs(mono).max()) if len(mono) else 0.0
     res["floor_rel_db"] = float(env.min() - 20 * math.log10(max(pk_src, 1e-9))) if len(env) else 0.0
-    res["clip"] = int(np.sum(np.abs(x[start0:end]) >= 0.999))
+    res["clip"] = clip_src
     return res
 
 
@@ -1085,7 +1107,10 @@ class Compiler:
                                     if any(r.kind in ("attack", "release") for r in rs)
                                     and not R.get("unpitched") else None),
                        "noise": all(r.kind == "noise" for r in rs),
-                       "extend_s": R.get("extendTail") if any(r.kind == "attack" for r in rs) else None}
+                       "extend_s": R.get("extendTail") if any(r.kind == "attack" for r in rs) else None,
+                       # tp106: sustain loops are polished (baked crossfade); "loopFlatten": false keeps a loop's own
+                       # level motion (an organ's beating ranks, a Leslie, bellows — periodic by nature)
+                       "polish": R.get("loopPolish", True), "flatten": R.get("loopFlatten", True)}
                 if loops:
                     job.update(ls=loops[0].ls, le=loops[0].le, xf_s=loops[0].xf_s, loop_mode=loops[0].loop_mode)
                 jobs.append(job)
@@ -1260,6 +1285,20 @@ class Compiler:
             self.report["seam"] = {"n": len(seams), "median": round(float(np.median(seams)), 3),
                                    "worst": round(float(max(seams)), 3), "over1_5": int(sum(x > 1.5 for x in seams)),
                                    "xfDbMin": round(float(min(xfdb)), 1), "xfDbMax": round(float(max(xfdb)), 1)}
+        dcr = sum(1 for res in results.values() if res.get("dcRemoved"))
+        if dcr:
+            self.report["dcRemovedSamples"] = dcr
+        pol = [res["loopPolish"] for res in results.values() if "loopPolish" in res]
+        if pol:
+            self.report["loopPolish"] = {
+                "n": len(pol), "flattened": int(sum(1 for p_ in pol if "flattenMinDb" in p_)),
+                "pumpBeforeMaxDb": round(max(p_["pumpBeforeDb"] for p_ in pol), 2),
+                "pumpAfterMaxDb": round(max(p_["pumpAfterDb"] for p_ in pol), 2),
+                "seamClickMaxDb": round(max(p_["seamClickDb"] for p_ in pol), 2),
+                "seamLevelMaxDb": round(max(p_["seamLevelDb"] for p_ in pol), 2),
+                "xfBakedMs": sorted({round(1000.0 * p_["xfBaked"] / res["sr"]) for res in results.values()
+                                     for p_ in [res.get("loopPolish")] if p_}),
+                "rhoMedian": round(float(np.median([p_["rho"] for p_ in pol])), 3)}
         if ram > self.budget_mb() * 1.001:
             self.report["overBudget"] = True
             log(f"   !! over budget: {ram:.1f} MB > {self.budget_mb()} MB")
@@ -1271,7 +1310,16 @@ class Compiler:
         IQR over 25 ¢ from vibrato/beating) get 0. Recipe "tfixMode": {artic name: "stretch"} keeps a deliberate
         stretch tuning: a smooth cubic of the measured pitch over the key is fitted per articulation and only the
         per-note deviation from that curve is corrected. Release regions reuse the median tfix of the attack regions
-        with the same root (they are the same string/reed). Noise regions: 0."""
+        with the same root (they are the same string/reed). Noise regions: 0.
+        tp106 — PER REGION on PERFORMED instruments (strings, winds, brass, voices): every velocity layer / take with a
+        reliable measurement is corrected on its own (Tuning = Equal means every key lands on 12-TET at every velocity; a section's layers of one
+        note measured up to 20 ¢ apart — different takes, not physics — and a note-median left them ±10 ¢ off). Struck
+        and plucked notes keep the note-median (one physical tuning; their crossfaded layers must not beat). A layer the
+        detector cannot trust takes its note's median, else the median of its articulation's corrections within ±4 keys (an instrument tuned
+        sharp as a whole). An authored whole-semitone transpose that exactly COMPENSATES the sample's own offset from its
+        root (MTG baritone: a C#2 take mapped to C2 with root 36 and −109 ¢) is a tuning correction, not a transposition:
+        it counts in full, so it is neither mistaken for a mislabelled root nor corrected twice. "As recorded"
+        (Tuning 0) keeps every take's own intonation."""
         R = self.recipe
         modes = R.get("tfixMode", {})
         stats = OrderedDict()
@@ -1287,9 +1335,11 @@ class Compiler:
             # transposes (transpose × 100) are intentional and never corrected
             cf = x["cents"] - 100.0 * math.trunc(x["cents"] / 100.0)
             tot = dev + cf
+            if abs(x["cents"] - cf) >= 100.0 and abs(dev + x["cents"]) <= 25.0:
+                tot = dev + x["cents"]              # the "transpose" compensates the sample's own offset: a tuning fix
             # a sample a whole semitone off its declared root (mislabelled file): move the root, then tune
             n = int(round(tot / 100.0))
-            if (n != 0 and abs(n) == 1 and allow_root_fix and f0.get("conf", 0) >= 0.8 and f0.get("spread", 99) <= 10.0
+            if (n != 0 and abs(n) == 1 and allow_root_fix and f0.get("conf", 0) >= 0.65 and f0.get("spread", 99) <= 10.0
                     and abs(tot - 100.0 * n) <= 25.0):
                 root_fixes.append({"lk": x["lk"], "hk": x["hk"], "root": x["root"], "newRoot": x["root"] + n,
                                    "measuredCents": round(tot, 1), "artic": self.artic_names[x["a"]]})
@@ -1298,7 +1348,7 @@ class Compiler:
             ok = (f0.get("conf", 0) >= 0.6 and abs(tot) <= 60.0 and f0.get("spread", 99) <= 12.0
                   and f0.get("agree", 0.0) <= 10.0 and f0.get("frames", 0) >= 3)
             # a big correction needs a long, steady measurement (short staccato/pizz takes start sharp)
-            if ok and abs(tot) > 30.0 and (f0.get("frames", 0) < 5 or f0.get("spread", 99) > 6.0):
+            if ok and abs(tot) > 30.0 and (f0.get("frames", 0) < 5 or f0.get("spread", 99) > 8.0):
                 ok = False
             meas[i] = (tot, ok)
         for x in recs:
@@ -1322,13 +1372,22 @@ class Compiler:
             # the note centre moves; separate RR recordings (a player's intonation per take) are corrected per take
             def _nk(x):
                 return (x["root"], tuple(x["rr"]), tuple(x["rand"]))
+            # per REGION only where every take is its own performance (bowed, blown, sung — intonation is the player's);
+            # a struck / plucked note has ONE physical tuning, its velocity layers crossfade into each other, and a
+            # per-layer correction would turn the detector's few-cent scatter into beating (glockenspiel G5: 0.1 → 6.5 dB)
+            per_region = R["category"] in PERFORMED_CATEGORIES
             per_note = defaultdict(list)
+            own = {}
             for i in good:
                 tot = meas[i][0]
-                per_note[_nk(recs[i])].append(-(tot - (float(np.polyval(fit, recs[i]["root"])) if fit is not None else 0.0)))
+                own[i] = -(tot - (float(np.polyval(fit, recs[i]["root"])) if fit is not None else 0.0))
+                per_note[_nk(recs[i])].append(own[i])
             vals = []
             for i in idx + [j for j, x in enumerate(recs) if x["a"] == a and x["kind"] == "attack" and j not in meas]:
-                v = per_note.get(_nk(recs[i]))
+                v = [own[i]] if (i in own and per_region) else per_note.get(_nk(recs[i]))
+                if not v:                                   # neighbours within ±4 keys (≥ 2 of them)
+                    nb = [own[j] for j in own if abs(recs[j]["root"] - recs[i]["root"]) <= 4]
+                    v = nb if len(nb) >= 2 else None
                 recs[i]["tfix"] = round(max(-60.0, min(60.0, float(np.median(v)))), 1) if v else 0.0
             for rt, v in per_note.items():
                 vals.append(round(max(-60.0, min(60.0, float(np.median(v)))), 1))
@@ -1344,6 +1403,7 @@ class Compiler:
             stats[name] = st
         if root_fixes:
             stats["rootFixes"] = root_fixes
+
         # releases: the attack correction of the same (artic, root)
         by_root = defaultdict(list)
         for x in recs:
