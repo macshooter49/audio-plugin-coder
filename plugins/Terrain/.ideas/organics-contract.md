@@ -137,3 +137,30 @@ compensates the sample's own offset counts as a tuning correction. A file whose 
 point with the runtime (`Tests/organics_audit.sh calib`) and moves every region of the instrument by one offset (−24 LUFS
 ± 0.05; the v127 peak of that key ≤ −1 dBFS). New recipe keys: `loopFlatten`, `loopMotionWhy` (the loop gate reports that
 instrument's pump instead of failing it), `pitchCheckWhy` (the pitch check does not judge it).
+
+---
+
+## tp107 AMENDMENT (2026-09-25, Max's review) — supersedes the above where they differ
+
+**Page 1** `Dynamics · Tone · Body · Vibrato · Human` (unchanged). **Page 2** `Attack · Release · Sustain · Velocity · Image`
+(Attack comes BACK, next to Release; Noise leaves the front). **Back panel** `Rate · Delay · Curve · Tuning · Noise`
+(Noise replaces "Style"; the articulation keeps its header pill + dropdown).
+
+**Attack** reuses `SYN_OSC_X_ORG_ATTACK` (already declared, saved in sessions): 0 = Tight (air trimmed to onset −1.5 ms +
+transient lift), 0.5 = Natural (as recorded, default), 1 = a slow swell of ~3 s (log taper through the top half; Gentle's
+softer-layer blend rides along). Onset = max(amp-env attack, the knob's fade) — linked to the envelope exactly like Release.
+Attack becomes a mod dest again in a NEW appended block: `OrganicAttackBase = 5352`, dest = 5352 + osc(0..7);
+`NumDests` = 5360. (Knob 3 of the first block stays Vibrato; knob 6 stays Noise.)
+
+**Noise is round-robin, like a player:** each note-on / note-off decides independently whether its mechanical noise sounds,
+rotates through the available noise variants with no immediate repeat, and varies level (±3 dB) and timing (0–8 ms). The knob
+sets both chance and level: 0 = never · 0.5 = authored level on ~2 of 3 notes · 1 = +12 dB on ~9 of 10 notes. Deterministic
+at a fixed seed (tests); Human > 0 adds its own spread.
+
+**Browser:** categories in the house grey/white (no purple here), rows show only the instrument name (+ ▶ audition);
+size/credit stay in the data (index.json / CREDITS.md), never on screen.
+
+**Header:** the articulation pill's text is white like every other header control (not dim).
+
+**Solo / Mute:** the osc right-click menu's Solo and Mute must work on ALL 8 oscillators (A–H) in every view (synth page,
+Patcher canvas incl. adopted E–H), for every engine, audibly, and persist in state.
