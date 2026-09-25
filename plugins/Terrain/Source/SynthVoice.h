@@ -440,6 +440,13 @@ class SynthVoice : public juce::SynthesiserVoice
             // makes a SAMPLE-RATE CHANGE re-prepare: the lines are rate-independent in SIZE but
             // ModalEngine::prepare() also recomputes rate-dependent coefficients.
             modalReady_.store (false, std::memory_order_release);   // MODAL-ENGINE-VOICE
+            // SYNTH-STRETCH — the Sample osc's Signalsmith engines (Tones, Texture) run a 5× STFT overlap like the chop
+            // voice: presetCheaper's 2.5× left a hop-rate tick at every stretch ratio ≠ 1 (Tests/synthstretch_cert.cpp:
+            // a pad stretched 2× at C3 → ~100 HF click events in 4 s, −59 dBFS). On a 150 ms block, not the chop's
+            // 100 ms: that one dropped low partials by up to 20 dB (SignalsmithEngine::prepare). Paid only by a voice
+            // whose osc is WARPING — the engine is allocated on first use and a direct (unstretched) read never runs it.
+            sampleWarpA_.setHighOverlap (true, true); sampleWarpB_.setHighOverlap (true, true);   // 5×, 150 ms block
+            sampleWarpC_.setHighOverlap (true, true); sampleWarpD_.setHighOverlap (true, true);
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
             warpPrime_.setSize (2, juce::jmax (8192, (int) (sampleRate_ * 0.5)), false, true, false);   // fb642 — ≥ any primeLength() at stretch ≥ 1
@@ -852,6 +859,7 @@ class SynthVoice : public juce::SynthesiserVoice
             granBlkC_.setSize   (2, spb, false, false, true);
             granBlkD_.setSize   (2, spb, false, false, true);
             warpSrc_.setSize    (2, spb, false, false, true);
+            sampleXfBuf_.setSize (2, spb, false, false, true);   // SYNTH-STRETCH — the old path's block under a path crossfade
             // HARMONIC/GEODE block buffers — pre-size so the first render never allocates on
             // the audio thread (the in-render setSize stays as an oversized-host fallback)
             harmBlkA_.setSize (2, spb, false, false, true);  harmBlkB_.setSize (2, spb, false, false, true);
@@ -7800,6 +7808,26 @@ class SynthVoice : public juce::SynthesiserVoice
         double sampleKeyOffset_[4]     = { 0.0, 0.0, 0.0, 0.0 };   // AUTO-KEY snap-to-C offset (semitones), per OSC
         juce::AudioBuffer<float> sampleBlkA_, sampleBlkB_, sampleBlkC_, sampleBlkD_, warpSrc_;
         juce::AudioBuffer<float> warpPrime_;   // fb642 — the look-ahead that primes the vocoder (sized in prepare)
+        // SYNTH-STRETCH — PATH CROSSFADE. Mid-note, the Sample osc can change render path three ways: the warp engages
+        // (Stretch/Formant turned up out of the dead zone), disengages (turned back into it), or switches stretch mode.
+        // Each used to be a hard cut between two unrelated waveforms — a click every time the knob crossed the dead
+        // zone (Tests/synthstretch_cert.cpp: −15 dBFS steps). Now the OLD path keeps rendering its own continuation
+        // for kPathXfMs while the new one fades in. `shadow` is a copy of the unison read heads taken at the switch
+        // (SampleEngine is plain data): the old path reads the sample from THERE, so the live heads feed the new
+        // path undisturbed. Untouched (remain == 0, wasWarp == false) by an osc that never warps: bit-identical.
+        struct SamplePathXf
+        {
+            std::array<tw::SampleEngine, kMaxUnison> shadow;
+            int          remain = 0, len = 1;
+            bool         fromWarp = false;              // old path = a warp engine (else the direct read)
+            tw::WarpMode oldMode  = tw::WarpMode::None; // that engine
+            bool         wasWarp  = false;              // the path the last rendered block took
+            tw::WarpMode lastMode = tw::WarpMode::None;
+            bool         live     = false;              // a block of this note has been rendered
+        };
+        SamplePathXf sampleXf_[4];
+        juce::AudioBuffer<float> sampleXfBuf_;          // the old path's block (sized in prepare)
+        static constexpr double kPathXfMs = 20.0;
         const float *sampBlkAL_ = nullptr, *sampBlkAR_ = nullptr, *sampBlkBL_ = nullptr, *sampBlkBR_ = nullptr,
                     *sampBlkCL_ = nullptr, *sampBlkCR_ = nullptr, *sampBlkDL_ = nullptr, *sampBlkDR_ = nullptr;
         bool          sampleNoteOnPending_ = false;
@@ -8062,7 +8090,7 @@ class SynthVoice : public juce::SynthesiserVoice
         tw::filters::DCBlocker spRectDcAL_, spRectDcAR_, spRectDcBL_, spRectDcBR_,
                                spRectDcCL_, spRectDcCR_, spRectDcDL_, spRectDcDR_;
 
-        void renderSampleOsc (std::array<tw::SampleEngine, kMaxUnison>& engs, tw::WarpProcessor& warp,
+        void renderSampleOsc (std::array<tw::SampleEngine, kMaxUnison>& engs, tw::WarpProcessor& warp, SamplePathXf& xf,
                               const SampleEngineParams& p, bool isSamp,
                               int oct, int semi, float cent, double keyOffsetSemis,
                               juce::AudioBuffer<float>& blk,
@@ -8136,7 +8164,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     e.noteOn (ratio, vSpray, vSeed);
                 }
             }
-            if (doNoteOn) warp.noteOnReset();
+            if (doNoteOn) { warp.noteOnReset(); xf.remain = 0; xf.live = false; }
 
             // render — direct (resample) unless STRETCH/FORMANT engage the Warp (Tones) engine.
             // DEAD-ZONE (Max's CPU fix, 2026-07-01): the phase-vocoder is a hard on/off cliff, so a
@@ -8145,16 +8173,12 @@ class SynthVoice : public juce::SynthesiserVoice
             // (~0.03 semitone) are inaudible, so stay on the cheap direct-resample path.
             const bool useWarp = (p.stretch > 0.003f) || (std::fabs (p.formant) > 0.02f);
             if (! useWarp) warp.markUnprimed();   // fb642 — leaving the warp path: engaging it again must re-prime
-            if (useWarp)
+            const tw::WarpMode wm = (p.stretchMode == 1) ? tw::WarpMode::Beats
+                                  : (p.stretchMode == 2) ? tw::WarpMode::Texture
+                                                         : tw::WarpMode::Tones;
+            // FORMANT-MODE — reinterpret the FORMANT knob per creative mode (±2 octave shift).
+            float fmFactor, fmTilt;
             {
-                const tw::WarpMode wm = (p.stretchMode == 1) ? tw::WarpMode::Beats
-                                      : (p.stretchMode == 2) ? tw::WarpMode::Texture
-                                                             : tw::WarpMode::Tones;
-                if (warp.getMode() != wm) { warp.setMode (wm); warp.noteOnReset(); }
-                warp.setStretchRatio   (1.0f + p.stretch * 3.0f);     // 0 → 1x … 1 → 4x (slower; pitch held)
-                warp.setPitchSemitones (0.0f);                        // note pitch already in the resampled read
-                // FORMANT-MODE — reinterpret the FORMANT knob per creative mode (±2 octave shift).
-                float fmFactor, fmTilt;
                 const float fmAmp = 2.0f;
                 switch (p.formantMode)
                 {
@@ -8163,45 +8187,63 @@ class SynthVoice : public juce::SynthesiserVoice
                     case 3:  fmFactor = 1.0f;                                fmTilt =  p.formant; break;
                     default: fmFactor = std::pow (2.0f,  p.formant * fmAmp); fmTilt = 0.f;        break;
                 }
+            }
+            // SYNTH-STRETCH — THE SAMPLE READ, ONE DEFINITION (fb642's warp source): the unison sum the warp is fed, which
+            // for the direct path is exactly its output too. `src` = the live read heads, or a crossfade's shadow copy.
+            auto readSource = [&] (std::array<tw::SampleEngine, kMaxUnison>& src, float* dL, float* dR, int n)
+            {
+                if (N <= 1)
+                {
+                    for (int k = 0; k < n; ++k) src[0].tick (dL[k], dR[k]);
+                }
+                else
+                {
+                    // UNISON can't run 16 FFT phase-vocoders — sum the detuned reads into the warp
+                    // SOURCE (detune + width survive), then warp ONCE. (Serum-class approach.)
+                    juce::FloatVectorOperations::clear (dL, n);
+                    juce::FloatVectorOperations::clear (dR, n);
+                    for (int u = 0; u < N; ++u)
+                    {
+                        auto& e = src[(size_t) u];
+                        // PUNCH ANCHOR (Max: "unison turns shit down"): keep full-level voice(s) for
+                        // the attack, RMS-normalise only the INNER bed — no 1/√N punch loss.
+                        // fb256 — anchor the SYMMETRIC OUTER PAIR (voices 0 AND N-1), not voice 0 alone.
+                        // Voice 0 is the LEFTMOST slot, so anchoring it alone pulled the image LEFT
+                        // (Max's bug on ALL engines). A mirror pair is balanced → punchy AND centered.
+                        const float gu = (u == 0 || u == N - 1) ? 1.0f : uNorm;
+                        const float pl = panL[u] * gu, pr = panR[u] * gu;
+                        for (int k = 0; k < n; ++k)
+                        {
+                            float l, r; e.tick (l, r);
+                            const float m = 0.5f * (l + r);
+                            dL[k] += m * pl; dR[k] += m * pr;
+                        }
+                    }
+                }
+            };
+            // SYNTH-STRETCH — a PATH CHANGE mid-note (the warp in / out / another stretch mode): freeze the read heads for
+            // the old path BEFORE this block moves them, and crossfade the two (see SamplePathXf).
+            if (xf.live && ! doNoteOn
+                && (useWarp != xf.wasWarp || (useWarp && wm != xf.lastMode)))
+            {
+                for (int u = 0; u < N; ++u) xf.shadow[(size_t) u] = engs[(size_t) u];
+                xf.fromWarp = xf.wasWarp;
+                xf.oldMode  = xf.lastMode;
+                xf.len = xf.remain = juce::jmax (1, (int) std::round (kPathXfMs * 0.001 * sampleRate_));
+            }
+            const bool tiltAfterXf = useWarp && xf.remain > 0 && xf.fromWarp;   // mode switch: tilt the MIX (one tilt state)
+            if (useWarp)
+            {
+                // A mid-note mode switch resets only the NEW engine (setMode does) — the old one renders its own tail.
+                if (warp.getMode() != wm) { warp.setMode (wm); if (doNoteOn || ! xf.live) warp.noteOnReset(); }
+                warp.setStretchRatio   (1.0f + p.stretch * 3.0f);     // 0 → 1x … 1 → 4x (slower; pitch held)
+                warp.setPitchSemitones (0.0f);                        // note pitch already in the resampled read
                 warp.setFormantFactor  (fmFactor);
                 const int srcN = juce::jmax (1, warp.sourceSamplesPerBlock (numSamples));
                 if (warpSrc_.getNumChannels() < 2 || warpSrc_.getNumSamples() < srcN)
                     warpSrc_.setSize (2, srcN, false, false, true);
                 float* sL = warpSrc_.getWritePointer (0);
                 float* sR = warpSrc_.getWritePointer (1);
-                // fb642 — THE WARP SOURCE, ONE DEFINITION: the render below and the zero-latency prime read the sample
-                // through the same unison sum, so the primed look-ahead is exactly the audio the vocoder then receives.
-                auto readWarpSource = [&] (float* dL, float* dR, int n)
-                {
-                    if (N <= 1)
-                    {
-                        for (int k = 0; k < n; ++k) engs[0].tick (dL[k], dR[k]);
-                    }
-                    else
-                    {
-                        // UNISON can't run 16 FFT phase-vocoders — sum the detuned reads into the warp
-                        // SOURCE (detune + width survive), then warp ONCE. (Serum-class approach.)
-                        juce::FloatVectorOperations::clear (dL, n);
-                        juce::FloatVectorOperations::clear (dR, n);
-                        for (int u = 0; u < N; ++u)
-                        {
-                            auto& e = engs[(size_t) u];
-                            // PUNCH ANCHOR (Max: "unison turns shit down"): keep full-level voice(s) for
-                            // the attack, RMS-normalise only the INNER bed — no 1/√N punch loss.
-                            // fb256 — anchor the SYMMETRIC OUTER PAIR (voices 0 AND N-1), not voice 0 alone.
-                            // Voice 0 is the LEFTMOST slot, so anchoring it alone pulled the image LEFT
-                            // (Max's bug on ALL engines). A mirror pair is balanced → punchy AND centered.
-                            const float gu = (u == 0 || u == N - 1) ? 1.0f : uNorm;
-                            const float pl = panL[u] * gu, pr = panR[u] * gu;
-                            for (int k = 0; k < n; ++k)
-                            {
-                                float l, r; e.tick (l, r);
-                                const float m = 0.5f * (l + r);
-                                dL[k] += m * pl; dR[k] += m * pr;
-                            }
-                        }
-                    }
-                };
                 // fb642 — ZERO-LATENCY START. Max: "the formant adds latency to the sample … we do not want the formant to add
                 // latency on the sample mode or any other mode." The first render after a note-on, a Tones/Beats/Texture
                 // change, or the warp engaging mid-note (a Formant or Stretch turned up while a note holds) reads
@@ -8217,14 +8259,15 @@ class SynthVoice : public juce::SynthesiserVoice
                             warpPrime_.setSize (2, pn, false, false, true);   // fallback only — prepare sized it for stretch ≥ 1
                         float* pL = warpPrime_.getWritePointer (0);
                         float* pR = warpPrime_.getWritePointer (1);
-                        readWarpSource (pL, pR, pn);
+                        readSource (engs, pL, pR, pn);
                         warp.primeOutput (pL, pR, pn);
                     }
                     else warp.primeOutput (nullptr, nullptr, 0);
                 }
-                readWarpSource (sL, sR, srcN);
+                readSource (engs, sL, sR, srcN);
                 warp.process (sL, sR, wL, wR, numSamples);            // distinct in/out (Signalsmith requires)
-                warp.processTilt (wL, wR, numSamples, fmTilt, sampleRate_);   // FORMANT-MODE — spectral tilt post-process
+                if (! tiltAfterXf)
+                    warp.processTilt (wL, wR, numSamples, fmTilt, sampleRate_);   // FORMANT-MODE — spectral tilt post-process
             }
             else if (N <= 1)
             {
@@ -8252,6 +8295,49 @@ class SynthVoice : public juce::SynthesiserVoice
                     }
                 }
             }
+
+            // SYNTH-STRETCH — the old path's own continuation, under the fade-in of the new one.
+            if (xf.remain > 0)
+            {
+                const int k = juce::jmin (xf.remain, numSamples);
+                if (sampleXfBuf_.getNumChannels() < 2 || sampleXfBuf_.getNumSamples() < k)
+                    sampleXfBuf_.setSize (2, k, false, false, true);   // fallback only — prepare sized it
+                float* oL = sampleXfBuf_.getWritePointer (0);
+                float* oR = sampleXfBuf_.getWritePointer (1);
+                if (! xf.fromWarp)
+                    readSource (xf.shadow, oL, oR, k);                 // the direct read, carried on
+                else
+                {
+                    const int sk = warp.sourceSamplesFor (xf.oldMode, k);
+                    if (warpSrc_.getNumChannels() < 2 || warpSrc_.getNumSamples() < sk)
+                        warpSrc_.setSize (2, sk, false, false, true);
+                    float* sL = warpSrc_.getWritePointer (0);
+                    float* sR = warpSrc_.getWritePointer (1);
+                    readSource (xf.shadow, sL, sR, sk);
+                    warp.processEngine (xf.oldMode, sL, sR, oL, oR, k);
+                    if (! useWarp)                                     // warp OUT: the old path carries the tilt state on
+                        warp.processTilt (oL, oR, k, fmTilt, sampleRate_);
+                }
+                // GAIN LAW (house): the warp engaging is aligned to the direct read it replaces (fb642 zero-latency
+                // prime) — CORRELATED → equal-gain smoothstep. The warp leaving (the direct read resumes a vocoder
+                // latency ahead) and a mode switch (two different algorithms) are different audio → equal-power.
+                const bool correlated = ! xf.fromWarp;
+                for (int i = 0; i < k; ++i)
+                {
+                    const float t = 1.0f - (float) (xf.remain - i) / (float) xf.len;   // 0 → 1
+                    float gN, gO;
+                    if (correlated) { gN = t * t * (3.0f - 2.0f * t); gO = 1.0f - gN; }
+                    else { gN = std::sin (t * juce::MathConstants<float>::halfPi); gO = std::cos (t * juce::MathConstants<float>::halfPi); }
+                    wL[i] = wL[i] * gN + oL[i] * gO;
+                    wR[i] = wR[i] * gN + oR[i] * gO;
+                }
+                xf.remain -= k;
+            }
+            if (tiltAfterXf)
+                warp.processTilt (wL, wR, numSamples, fmTilt, sampleRate_);
+            xf.wasWarp = useWarp;
+            if (useWarp) xf.lastMode = wm;
+            xf.live = true;
         }
 
         // BLEND MODES — Level-0 gate value for a block renderer. Normally the real level; bumped a
@@ -8333,10 +8419,10 @@ class SynthVoice : public juce::SynthesiserVoice
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleKeyOffset_[0], sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, blkGateLevel (0, level_));
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleKeyOffset_[1], sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, blkGateLevel (1, levelB_));
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleKeyOffset_[2], sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, blkGateLevel (2, levelC_));
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleKeyOffset_[3], sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, blkGateLevel (3, levelD_));
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleXf_[0], sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleKeyOffset_[0], sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleXf_[1], sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleKeyOffset_[1], sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleXf_[2], sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleKeyOffset_[2], sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleXf_[3], sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleKeyOffset_[3], sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, blkGateLevel (3, levelD_));
             sampleNoteOnPending_ = false;
         }
 

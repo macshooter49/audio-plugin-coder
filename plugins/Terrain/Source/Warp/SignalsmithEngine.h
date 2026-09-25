@@ -52,11 +52,25 @@ namespace tw
             // 25 ms hop (4× overlap) removes the hop-rate ticks (49 → 2 events, the 2 being the source's
             // own start/end). Transients need a little more: a drum loop stretched 2× still left a splat
             // on every kick at 4× (11 events); a 20 ms hop (5× overlap) takes it to 1. Cost, measured on
-            // an M-series core: 0.56 % → 0.97 % of one core per warped voice. The CHOP voice opts in; the
-            // synth's Sample-oscillator voices keep presetCheaper (all-4-oscs CPU fix) — bit-identical there.
+            // an M-series core: 0.56 % → 0.97 % of one core per warped voice. The CHOP voice opts in, and
+            // (SYNTH-STRETCH) so does the synth's Sample oscillator — measured on the real processor by
+            // Tests/synthstretch_cert.cpp. The cost is only paid while an osc is actually warping.
+            //
+            // 🔇 SYNTH-STRETCH (longWindow) — the synth's Sample osc runs the same 5× overlap on a 150 ms block / 30 ms hop.
+            // The 100 ms / 20 ms pair LOST LOW PARTIALS: Signalsmith's vertical phase smoothing spans fftSize/interval
+            // bins, and at 5× on a 100 ms block that reach swallowed partials under ~130 Hz — measured (the same
+            // band-limited sources as the harnesses): a 49 Hz vocal stretched 1.25× lost 19.5 dB at 100 Hz (44 dB
+            // worst band), a 55 Hz pad at 1.5× lost 15 dB at 100 Hz; notes the synth plays low all the time. The
+            // 150 ms block holds those partials (≤ 2.3 dB worst band, most ≤ 0.5) and is as tick-free (> 7.5 kHz
+            // artefact −94…−135 dB of the signal vs −52…−63 dB at presetCheaper). Same per-second bin work as 100/20
+            // (33 hops/s × 3600 bins vs 50 × 2400); measured on the real processor (synthstretch_cert cpu): 0.54 % →
+            // ~1.1 % of one core per warped Tones voice, Texture 0.41 → 0.74 %. Its latency is longer, though, and the
+            // CHOP voice pays latency on short slices (Tests/chopstretch_gate.sh at 150/30: TONES/short fidelity 2.1 →
+            // 3.4 dB), so the chop keeps 100/20. The synth primes past the latency from the sample's look-ahead (fb642).
+            // Formant-only (ratio 1) needs it as much as a stretch: at presetCheaper it ticked too (337 HF events / 4 notes).
             if (highOverlap)
-                stretcher.configure (channels, (int) std::round (sampleRate * 0.100),
-                                     (int) std::round (sampleRate * 0.020), /*splitComputation*/ true);
+                stretcher.configure (channels, (int) std::round (sampleRate * (longWindow ? 0.150 : 0.100)),
+                                     (int) std::round (sampleRate * (longWindow ? 0.030 : 0.020)), /*splitComputation*/ true);
             else
                 stretcher.presetCheaper (channels, (float) sampleRate);
             stretcher.setFormantFactor (formantFactor);
@@ -68,6 +82,17 @@ namespace tw
                 std::vector<float> z ((size_t) n, 0.0f);
                 const float* in[2] = { z.data(), z.data() };
                 stretcher.outputSeek (in, n);
+                stretcher.reset();
+            }
+            // SYNTH-STRETCH — our outputSeek() renders the output latency into these and discards it (sized here, off
+            // the audio thread); then one run of it so any scratch the seek/process path sizes lazily exists too.
+            discardL.assign ((size_t) juce::jmax (1, stretcher.outputLatency()), 0.0f);
+            discardR.assign ((size_t) juce::jmax (1, stretcher.outputLatency()), 0.0f);
+            {
+                ready = true;
+                const int n = juce::jmax (1, outputSeekLength());
+                std::vector<float> z ((size_t) n, 0.0f);
+                outputSeek (z.data(), z.data(), n);
                 stretcher.reset();
             }
 
@@ -83,9 +108,9 @@ namespace tw
 
         bool isReady() const noexcept { return ready; }
 
-        /** 5× STFT overlap instead of presetCheaper's 2.5× (see prepare). Takes effect at the next
-         *  prepare() — set it BEFORE preparing. Default false = the synth's CPU-lean configuration. */
-        void setHighOverlap (bool b) noexcept { highOverlap = b; }
+        /** 5× STFT overlap instead of presetCheaper's 2.5× (see prepare); longWin = the 150 ms block (the synth's).
+         *  Takes effect at the next prepare() — set it BEFORE preparing. Default false = presetCheaper. */
+        void setHighOverlap (bool b, bool longWin = false) noexcept { highOverlap = b; longWindow = longWin; }
 
         void setStretchRatio (float r) noexcept
         {
@@ -146,9 +171,30 @@ namespace tw
         void outputSeek (const float* primeL, const float* primeR, int numSamples)
         {
             if (! ready || numSamples <= 0) return;
-            const float* inputs[2] = { primeL, channels == 2 ? primeR : primeL };
             stretcher.setTransposeSemitones (pitchSemitones);
-            stretcher.outputSeek (inputs, numSamples);
+            // SYNTH-STRETCH — the SAME alignment as Signalsmith's own outputSeek (the next output = the first primed
+            // sample), built the way the chop's render cache does it (tp101, WarpProcessor::renderFullSlice): seek the
+            // first inputLatency() samples into the analysis history, then RENDER the output latency from the rest and
+            // throw it away. Signalsmith's outputSeek instead synthesises that pre-roll, time-reverses and negates it and
+            // adds it under the first outputs — at any rate ≠ 1 that seam left a broadband tick ~9 ms into every warped
+            // note and every mid-note engage (Tests/synthstretch_cert.cpp: one HF event per note, to −50 dBFS; tp101
+            // measured the same seam as a one-sample d2 spike). Same work: the pre-roll was a process() call too.
+            stretcher.reset();
+            const int inLat = stretcher.inputLatency();
+            const int seekN = juce::jmin (numSamples, inLat);
+            const float rateHint = 1.0f / juce::jmax (0.0001f, stretchRatio);
+            {
+                const float* inputs[2] = { primeL, channels == 2 ? primeR : primeL };
+                stretcher.seek (inputs, seekN, rateHint);
+            }
+            const int rest   = numSamples - seekN;
+            const int outLat = juce::jmin (stretcher.outputLatency(), (int) discardL.size());
+            if (rest > 0 && outLat > 0)
+            {
+                const float* inputs[2]  = { primeL + seekN, (channels == 2 ? primeR : primeL) + seekN };
+                float*       outputs[2] = { discardL.data(), discardR.data() };
+                stretcher.process (inputs, rest, outputs, outLat);
+            }
         }
 
         /** Process numSamples of audio.
@@ -192,12 +238,14 @@ namespace tw
 
     private:
         signalsmith::stretch::SignalsmithStretch<float> stretcher;
+        std::vector<float> discardL, discardR;   // SYNTH-STRETCH — the discarded output latency of outputSeek()
         double sampleRate     = 48000.0;
         int    channels       = 2;
         float  stretchRatio   = 1.0f;
         float  pitchSemitones = 0.0f;
         float  formantFactor  = 1.0f;   // SAMPLE-ENGINE-FORMANT
         bool   ready          = false;
-        bool   highOverlap    = false;  // CHOP-STRETCH — 4× overlap (chop voices)
+        bool   highOverlap    = false;  // CHOP-STRETCH — 5× overlap (chop voices: 100 ms / 20 ms)
+        bool   longWindow     = false;  // SYNTH-STRETCH — with highOverlap: 150 ms / 30 ms (the synth's Sample osc)
     };
 }
