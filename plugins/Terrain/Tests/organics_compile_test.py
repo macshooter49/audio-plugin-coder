@@ -28,6 +28,12 @@
    (segment peak < −50 dBFS, or a static gain 40 dB under the instrument's median);
 6. loudness: every instrument's centre key at velocity 100 (Velocity 0.75) within ±1 dB of the library target
    (K-weighted, first 1 s), velocity-127 peak at that key ≤ −1 dBFS.
+7. tp108: EVERY key's velocity-127 peak ≤ −1 dBFS (build-report peakTrim, written by Tools/organics/peaktrim.py, and —
+   when the audit binary is built — re-measured here through the runtime, every RR take, Noise at its default); the
+   trim curve ≤ 0 dB, ≤ 1.5 dB between adjacent keys, 0 on the calibration key. tfix may reach ±95 ¢ (the runtime clamps
+   ±100) from a strong measurement; unit tests cover tuning.measure_pitch on short takes, the tfix inheritance and the
+   trim envelope.
+    --no-engine skips the runtime re-measure.
 Exit code 0 = all pass.
 """
 from __future__ import annotations
@@ -49,6 +55,8 @@ PLUG = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(PLUG, "Tools", "organics"))
 import analyse as an      # noqa: E402
 import torgc              # noqa: E402
+import tuning             # noqa: E402
+import peaktrim           # noqa: E402
 
 FIX = os.path.join(HERE, "fixtures", "organics")
 SRC_FIX = os.path.join(FIX, "sfz-src")
@@ -161,10 +169,11 @@ def check_tp105(d: str, m: dict, credits_md: str):
     check(not bad_trig, f"{iid}: {len(bad_trig)} noise regions without a valid trig (on|off), e.g. region {bad_trig[:3]}")
     stray = [i for i, r in enumerate(m["regions"]) if r["kind"] != "noise" and "trig" in r]
     check(not stray, f"{iid}: trig on non-noise regions {stray[:3]}")
+    # tp108: up to ±95 ¢ (the runtime clamps to ±100) — beyond ±60 only from a strong measurement (tuning.assign_tfix)
     bad_tfix = [i for i, r in enumerate(m["regions"]) if r["kind"] in ("attack", "release")
                 and not (isinstance(r.get("tfix"), (int, float)) and not isinstance(r.get("tfix"), bool)
-                         and -60.0 <= r["tfix"] <= 60.0)]
-    check(not bad_tfix, f"{iid}: {len(bad_tfix)} pitched regions without tfix in ±60 ¢, e.g. {[m['regions'][i].get('tfix') for i in bad_tfix[:3]]}")
+                         and -tuning.TFIX_MAX <= r["tfix"] <= tuning.TFIX_MAX)]
+    check(not bad_tfix, f"{iid}: {len(bad_tfix)} pitched regions without tfix in ±{tuning.TFIX_MAX:.0f} ¢, e.g. {[m['regions'][i].get('tfix') for i in bad_tfix[:3]]}")
     nz_tfix = [i for i, r in enumerate(m["regions"]) if r["kind"] == "noise" and r.get("tfix", 0.0) != 0.0]
     check(not nz_tfix, f"{iid}: unpitched noise regions carry a tfix {nz_tfix[:3]}")
     # provenance of every sample a noise region plays
@@ -517,11 +526,94 @@ def unit_tfix_and_noise():
     check(sorted(r["rr"][0] for r in recs) == [0, 1, 2] and fx["seqCloned"] == 1, f"repair_rr: {recs}")
 
 
+def unit_tuning():
+    """tp108 tuning.measure_pitch on the notes the old detector could not read (40 ms staccato, a 120 ms pizzicato, a
+    50 ms near-sine, a stiff string, a sample an octave off its root) and tuning.assign_tfix's inheritance."""
+    sr = 48000
+
+    def tone(note, c, dur, decay, nh=8, B=0.0, octave=0):
+        t = np.arange(int(dur * sr)) / sr
+        f = an.midi_hz(note) * 2 ** (c / 1200.0) * 2 ** octave
+        x = sum((0.7 ** (h - 1)) * np.sin(2 * np.pi * h * f * np.sqrt(1 + B * h * h) * t)
+                for h in range(1, nh + 1) if h * f * np.sqrt(1 + B * h * h) < 0.45 * sr)
+        return x * np.minimum(1.0, t / 0.005) * np.exp(-t * decay)
+    for name, note, c, x, kind, want in (
+            ("staccato 40 ms", 84, 9.0, tone(84, 9.0, 0.04, 20), "harmonic", 9.0),
+            ("pizzicato 120 ms", 40, -11.0, tone(40, -11.0, 0.12, 15), "harmonic", -11.0),
+            ("near-sine 50 ms", 96, 6.0, tone(96, 6.0, 0.05, 10, nh=1), "harmonic", 6.0),
+            ("stiff string C7 (f1 = f·√(1+B))", 96, 3.0, tone(96, 3.0, 1.0, 2, nh=6, B=4e-3), "string",
+             3.0 + 1200 * np.log2(np.sqrt(1 + 4e-3))),
+            ("sample an octave over its root", 60, 7.0, tone(60, 7.0, 1.0, 2, octave=1), "harmonic", 7.0)):
+        r = tuning.measure_pitch(x, sr, 0, len(x), an.midi_hz(note), kind=kind)
+        check(r["ok"] and abs(r["cents"] - want) <= 0.6, f"measure_pitch {name}: {r['cents']:+.2f} ¢ (want {want:+.2f}), "
+                                                           f"ok {r['ok']} '{r['why']}'")
+    # inheritance: an unreadable staccato take takes the same key of the sustained (looped) articulation
+    rec = {"category": "Winds"}
+    base = {"kind": "attack", "lk": 60, "hk": 60, "lv": 1, "hv": 127, "root": 60, "cents": 0.0, "rr": [0, 1],
+            "rand": [0.0, 1.0], "tfix": 0.0}
+    recs = [dict(base, a=0, loop="sustain"), dict(base, a=1, loop="no_loop"), dict(base, a=1, loop="no_loop", lk=61,
+                                                                                     hk=61, root=61)]
+    f0s = {0: {"hz": an.midi_hz(60) * 2 ** (12.0 / 1200), "ok": True, "strong": True},
+           1: {"hz": an.midi_hz(60), "ok": False, "why": "short"},
+           2: {"hz": an.midi_hz(61) * 2 ** (-4.0 / 1200), "ok": True, "strong": True}}
+    tuning.assign_tfix(rec, ["Sustain", "Staccato"], recs, f0s)
+    check(recs[0]["tfix"] == -12.0 and recs[1]["tfix"] == -12.0 and recs[1].get("_tfixFrom", "").startswith("sustained")
+          and recs[2]["tfix"] == 4.0, f"assign_tfix inheritance: {[(r['tfix'], r.get('_tfixFrom')) for r in recs]}")
+    # the peak-trim curve: largest curve under the needs with ≤ STEP dB per atom, 0 where nothing is hot
+    t = peaktrim.envelope([0.0, 0.0, 0.0, 0.0, 0.0, -5.0, 0.0], 1.4)
+    check([round(v, 2) for v in t] == [0.0, 0.0, -0.8, -2.2, -3.6, -5.0, -3.6], f"peaktrim.envelope {t}")
+
+
+def check_peak_trim(lib: str, idx: dict, engine: bool):
+    """tp108 (Max): every key's velocity-127 peak ≤ −1 dBFS through the runtime (Human 0, 1 player, every knob at its
+    default), from a per-key trim that is ≤ 0 dB, steps ≤ 1.5 dB key to key and leaves the calibration key alone.
+    build-report → peakTrim is written by Tools/organics/peaktrim.py; with the audit binary built, the peaks are
+    re-measured here through the engine (organics_audit --peaks)."""
+    for iid in idx:
+        rp = os.path.join(lib, iid, "build-report.json")
+        rep = json.load(open(rp)) if os.path.exists(rp) else {}
+        PT = rep.get("peakTrim")
+        if not check(PT is not None, f"{iid}: build-report has no peakTrim (run Tools/organics/peaktrim.py)"):
+            continue
+        check(PT["peak127MaxDb"] <= -1.0, f"{iid}: velocity-127 peak {PT['peak127MaxDb']} dBFS > −1 dBFS")
+        ck = PT.get("calibrationKey")
+        mm = json.load(open(os.path.join(lib, iid, "map.json")))
+        for art, rec in PT.get("artics", {}).items():
+            tk = {int(k): float(v) for k, v in rec.get("trimDb", {}).items()}
+            if not tk:
+                continue
+            check(max(tk.values()) <= 0.0, f"{iid} {art}: a trim above 0 dB {max(tk.values())}")
+            ai = mm["artics"].index(art)
+            # the articulation's playable (authored) key range — past its edge the edge key's own region plays
+            lo = min(r["lk"] for r in mm["regions"] if r["kind"] == "attack" and r["a"] == ai)
+            hi = max(r["hk"] for r in mm["regions"] if r["kind"] == "attack" and r["a"] == ai)
+            curve = [tk.get(k, 0.0) for k in range(lo, hi + 1)]
+            step = max(abs(a - b) for a, b in zip(curve, curve[1:]))
+            check(step <= 1.5 + 1e-6, f"{iid} {art}: the trim steps {step:.2f} dB between adjacent keys (> 1.5)")
+            if art == (json.load(open(os.path.join(lib, iid, "map.json")))["artics"][0]):
+                # the calibration key keeps its level unless its own loudest take is over the bar — then the trim is a
+                # peak limit on the calibration, recorded where the loudness bar reads it (−24 − peakLimitedDb)
+                lim = float((rep.get("loudness") or {}).get("peakLimitedByTrimDb", 0.0))
+                check(abs(tk.get(ck, 0.0) + lim) < 0.02, f"{iid}: the calibration key {ck} is trimmed {tk.get(ck)} dB "
+                                                          f"but the loudness records a {lim} dB peak limit")
+    if engine and os.path.exists(peaktrim.AUDIT):
+        env = dict(os.environ, TERRAIN_ORGANICS_DIR=lib, ORG_PEAK_NOISE=peaktrim.NOISE)
+        p = subprocess.run([peaktrim.AUDIT, "--peaks", lib, "", "127"], env=env, capture_output=True, text=True)
+        rows = [ln.split() for ln in p.stdout.splitlines() if ln.startswith("PEAK ")]
+        hot = [(f[1], f[2], f[3], f[5]) for f in rows if float(f[5]) > -1.0]
+        check(rows and not hot, f"engine: {len(hot)} of {len(rows)} keys peak over −1 dBFS at velocity 127, e.g. {hot[:4]}")
+        if rows:
+            worst = max(rows, key=lambda f: float(f[5]))
+            print(f"   engine peaks: {len(rows)} artic×keys at v127, loudest {float(worst[5]):+.2f} dBFS "
+                  f"({worst[1]} a{worst[2]} k{worst[3]}), {len(hot)} over −1 dBFS")
+
+
 # ---------------------------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--lib", default=DEFAULT_LIB)
     ap.add_argument("--quick", action="store_true", help="seam-check at most 40 loops per instrument")
+    ap.add_argument("--no-engine", action="store_true", help="skip the v127 peak re-measure through the runtime")
     a = ap.parse_args()
     credits_md = open(os.path.join(RES, "CREDITS.md")).read() if os.path.exists(os.path.join(RES, "CREDITS.md")) else ""
     print("== round trip (fixture SFZ → .torg)")
@@ -534,6 +626,8 @@ def main():
     check_rr_audible(d, m)
     print("== unit: measure_f0 / inject_noise / repair_rr")
     unit_tfix_and_noise()
+    print("== unit: tuning.measure_pitch / assign_tfix inheritance / peaktrim.envelope (tp108)")
+    unit_tuning()
     print("== round trip (generated SF2 → .torg)")
     d2, m2 = sf2_round_trip()
     frames = check_schema(d2, m2, None)
@@ -563,6 +657,7 @@ def main():
             print(f"   {'ok ' if len(FAILS) == f0 else 'FAIL'} {iid:44s} {ram:6.1f} MB  loops {n:4d} worst seam {worst:.2f}")
         check_ids(a.lib)
         check_loudness(a.lib, idx)
+        check_peak_trim(a.lib, idx, not a.no_engine)
     else:
         print(f"== no library at {a.lib}; only the round trip ran")
     print(f"\n{PASSES[0]} checks passed, {len(FAILS)} failed")

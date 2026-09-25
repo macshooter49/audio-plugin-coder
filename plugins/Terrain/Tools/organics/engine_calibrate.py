@@ -26,7 +26,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 TERRAIN = os.path.normpath(os.path.join(HERE, "..", ".."))
 CALIB_LUFS = -24.0
-PEAK_CEIL_DB = -1.0
+PEAK_CEIL_DB = -1.3          # tp108: = peaktrim.TARGET_DB (the −1 dBFS bar less the trim's 0.3 dB margin), so a
+                             # calibrate → trim → calibrate cycle is idempotent on a peak-limited instrument
 
 
 def measure(root: str, ids):
@@ -62,7 +63,12 @@ def main():
         if not os.path.exists(mp):
             print(f"  skip {iid}: not in {a.lib}")
             continue
-        off = CALIB_LUFS - m["lufs"]
+        # tp108: a per-key peak trim on the calibration key itself (Tools/organics/peaktrim.py) is a peak limit — the
+        # key's loudest take at v127 may not pass −1 dBFS — so the target stays that much under −24 LUFS
+        by_trim = 0.0
+        if os.path.exists(rp):
+            by_trim = float((json.load(open(rp)).get("loudness") or {}).get("peakLimitedByTrimDb", 0.0))
+        off = CALIB_LUFS - by_trim - m["lufs"]
         limited = 0.0
         if m["peak127"] + off > PEAK_CEIL_DB:
             limited = m["peak127"] + off - PEAK_CEIL_DB
@@ -84,7 +90,7 @@ def main():
             L["engine"] = {"measuredLufs": round(m["lufs"], 2), "offsetDb": round(off, 2),
                            "achievedLufs": round(m["lufs"] + off, 2), "peak127Db": round(m["peak127"] + off, 2),
                            "key": m["key"]}
-            L["peakLimitedDb"] = round(limited, 2)
+            L["peakLimitedDb"] = round(limited + float(L.get("peakLimitedByTrimDb", 0.0)), 2)
             R["calibrationDb"] = round(R.get("calibrationDb", 0.0) + off, 2)
             with open(rp, "w") as f:
                 json.dump(R, f, indent=1)

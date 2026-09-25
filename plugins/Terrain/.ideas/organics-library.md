@@ -3,6 +3,7 @@
 **Product:** Terrain (Waves Crate). This library feeds the Organics SF2/SFZ multi-sampler engine.
 **Owner:** Max. **Compiled:** 2026-09-24. Every licence was checked on that date.
 **Clearance pass (2026-09-24, "no emails" rule):** nothing in the factory library may depend on a permission request. The MTG saxes were cleared sound by sound (R2 closed); the Greg Sullivan EPs were removed (R4: no licence from the author); Karoryfer Weresax (CC0 alto) was added. See §8 for the cleared-status table.
+**tp108 (2026-09-25):** per-key velocity-127 peak trim and the short-take tuning pass, §10.
 **Round 2 (tp105, 2026-09-24):** 74 instruments. EPs are back as Waves Crate physical models (no cleared real EP exists; §9.1), 10 new cleared instruments (§9.2), a shared mechanical-noise library mapped onto 54 instruments (§9.3), measured tuning corrections `tfix` (§9.4), K-weighted loudness normalisation (§9.5) and a round-robin/audibility audit (§9.6). §8 is the cleared-status table.
 **Local root:** `/Users/macshooter/Developer/VST-Plugins/organics-library/`. It lives outside the git repo. Paths below are relative to `raw/`.
 **Downloaded:** **9.6 GB** (9,880 MiB on disk) from 6 sources: VCSL, VSCO 2 CE, sfzinstruments/Karoryfer, FreePats, Versilian Etherealwinds and OLPC/Berklee.
@@ -553,3 +554,58 @@ Every instrument is calibrated so its centre key (middle C when playable) at vel
 
 ### 9.6 Round-robin and audibility audit (Max's xylophone report)
 The compiler now drops RR steps whose own segment never rises above −50 dBFS and completes every RR set (`repair_rr`: missing sequential positions cloned from a sibling, random slots widened to cover [0, 1)). The test checks all 127 velocities × every key × every articulation. Result: 0 silent regions anywhere; 3 missing sequential positions repaired in the Yamaha upright; random-slot gaps closed in French horn (5), trombone (7) and solo violin (12). **`vcsl.mallets.xylophone` has no round robins at all** (1 region per zone and layer, every sample audible), so its "every other press is silent" cannot come from the data. The likely cause is the runtime's fake-RR neighbour borrowing near the range edge, which is Agent E's area.
+
+
+## 10. tp108 (2026-09-25): per-key peak trim and short-take tuning
+
+**Pipeline order for a compiled library** (each step closes through the real runtime, `organics_audit`):
+`torgc.py` → `retune.py` (tfix, closed through the engine) → `engine_calibrate.py` (−24 LUFS) → `peaktrim.py`
+(v127 peaks). A tfix change moves the calibration a little (two crossfaded takes beat differently), so the calibration
+always follows the retune, and the trim always comes last.
+
+### 10.1 Velocity-127 peaks: `Tools/organics/peaktrim.py`
+Before: through the engine, measured at every round-robin take and with Noise at its default 0.5, **421 keys in 34
+articulations of 24 instruments** peaked over −1 dBFS at v127 (flute top +9.6, Jazz Pizz Bass +9.1, mbira +8.9, VSCO horn
+staccato +8.6, balafon +5.2, dan tranh +4.7, Hollowbody Guitars +4.3). After: **0 of 6,410 articulation × keys over
+−1 dBFS**; the loudest key in the library is −1.01 dBFS (the EP Clav, untouched).
+- The trim is per KEY and per articulation, only where a key is hot: the need is `min(0, −1.3 − peak)` (0.3 dB margin),
+  and the curve is the largest one under every need that steps ≤ 1.4 dB from key to key (a ramp into the hot keys, the
+  rest of the register untouched). Release and mechanical-noise regions move with their key. Never a limiter or a clipper.
+- A region whose keys need different trims is split into one region per run of equal trim (same sample): 12,993 →
+  15,851 regions in the library. Side effect: on a split zone with no round robins, Human's fake-RR borrow can pick the
+  same sample (a twin) instead of a neighbour zone for that press.
+- The calibration key keeps −24 LUFS unless its own loudest take is over the bar: then the trim is a peak limit on the
+  calibration, recorded as `loudness.peakLimitedDb` (+ `peakLimitedByTrimDb`) exactly like engine_calibrate's own limit.
+  Seven instruments are now under −24 by it (engine-measured, each within 0.05 dB of its recorded target): mbira 3.64 dB
+  (its register is ±7 dB uneven: key 60 −6.5 dBFS, key 66 +8.9; the ≤ 1.5 dB step rule cannot ramp that away), Clean
+  Electric 1.82 (1.53 of it from before), Kalimba 1.42, Ganjo 1.34, Hungarian zither 0.95, water glasses 0.56, timpani 0.33.
+- Recorded in build-report `peakTrim` (curve per articulation, worst before/after, regions split). Bars:
+  `organics_compile_test.py` §7 (curve ≤ 0 dB, ≤ 1.5 dB key to key, calibration key consistent, and the peaks re-measured
+  through the engine) and `organics_audit.sh lib` (a hot key is now a FAIL, no longer a FLAG); `organics_audit.sh peaks`.
+
+### 10.2 Tuning: `Tools/organics/tuning.py` + `retune.py`
+`tuning.measure_pitch` replaces `analyse.measure_f0` in the compiler: multi-window YIN + MPM over the steady part after
+the attack, the fundamental partial and a harmonic-template fit (stiff-string B on struck / plucked) for 40 ms takes,
+searches confined to ±150 ¢ (no octave jumps; a sample an octave off its root still measures its cents). Performed
+notes use one continuous blended estimate that leans on the settled half of a scooping take. `tuning.assign_tfix` keeps
+the tp106 rules and adds the inheritance: a take the detector still cannot trust takes its note's other takes, else the
+same key (≤ 3 keys) of a sustained (looped) articulation of the same session (`"tfixSession"` in a recipe splits
+sessions), else its measured neighbours. tfix may reach ±95 ¢ (the runtime clamps ±100) from a strong reading only — the
+old player piano's A0–B0 sound 60–70 ¢ flat. A semitone-mislabelled sample moves its whole note (Salamander C8, every layer: recipe `"rootFollow"`); an authored fine tune that already takes back most of the offset (Kawai A0: +81 ¢ on a file 113 ¢ flat) is a correction, not a mislabel.
+`retune.py` re-measures a compiled library and then CLOSES THROUGH THE ENGINE: every key rendered (struck: 40/80/120;
+performed: every layer at its centre) and each region moved by the residual of the notes it played.
+
+Pitch check (`Tests/organics_pitch_check.py`, now judging every performed take at its layer centre, not only v80):
+before **188 of 4,875** measurable keys off by > 5 ¢ (1,317 keys unreadable); after **93 of 5,921** (1.6 %), **0 over
+30 ¢**, 271 unreadable (each listed with its reason by the check). What remains, and why it cannot reach ±5 ¢ with one
+correction per sample:
+- the same take reads differently at two velocities or across the keys of its zone (a pitch that moves inside the note:
+  tremolo, pizzicato, staccato, a player's scoop): VSCO strings tremolo / pizzicato (cello section 6, contrabass 8, solo
+  violin 8, viola 4, violin section 3), Meatbass 10 (up to −27.2 ¢ at pizzicato k66), VSCO woodwind / brass staccato
+  (clarinet 3, oboe 4, horn 1, trumpet 2, tuba 2), Bear Sax staccato 6, recorder / ocarina vibrato 1 each, erhu 1;
+- beating ensembles and reed pairs: the accordion's musette reeds 24 (k0–17 are its lowest sample repitched down
+  several octaves), the synth choir's chorus 5 (−7.1 ¢ on k98–102 of a zone that reads in tune at k103–108);
+- plucked / struck notes whose pitch glides with the strike: dan tranh vibrato 2, Hollowbody 1,
+  Yamaha upright 1 (k33, a bass string whose fundamental is 20 dB down).
+Unreadable (not judged): mostly Jazz Pizz Bass (50: no clear fundamental on the low pizzicato), string tremolo/sustain
+with period and partials disagreeing, and short breathy takes. Salamander "Natural" keeps its fitted stretch (§9.4).

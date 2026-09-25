@@ -9,6 +9,10 @@
 #    Tests/organics_audit.sh knobs               every knob 0→100 % (perceptual metrics) + live turns
 #    Tests/organics_audit.sh tone [base]         Tone: pure tones ≥ ×1.8, rich ones within ±15 % of today, C7 >16 kHz, whole library ≥ ×1.3
 #    Tests/organics_audit.sh null <file> [check] the Organics render null (write before a CPU-only change, check after)
+#    Tests/organics_audit.sh calib [idFilter]    the calibration point through the engine (Tools/organics/engine_calibrate.py)
+#    Tests/organics_audit.sh peaks [idFilter] [vels]  tp108: every key's v127 peak, every RR take (Tools/organics/peaktrim.py;
+#                                                ORG_PEAK_NOISE=0.5 = the Noise knob's default); last line PEAKSUMMARY
+#    Tests/organics_audit.sh pitchdump <dir> <id> [vels]  the renders Tests/organics_pitch_check.py / retune.py measure
 #  ORG_AUDIT_TSV=<file> (lib) writes one row per rendered note.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 set -u
@@ -47,7 +51,9 @@ case "$MODE" in
   knobs) exec "$OUT/organics_audit" --knobs "$ROOT" ;;
   tone)  exec "$OUT/organics_audit" --tone  "$ROOT" "${1:-}" ;;
   calib) exec "$OUT/organics_audit" --calib "$ROOT" "${1:-}" ;;
+  peaks) exec "$OUT/organics_audit" --peaks "$ROOT" "${1:-}" "${2:-}" ;;
+  pitchdump) exec "$OUT/organics_audit" --pitchdump "$ROOT" "$@" ;;
   note)  exec "$OUT/organics_audit" --note  "$ROOT" "$@" ;;
   null)  exec "$OUT/organics_audit" --null  "$ROOT" "$1" "${2:-}" ;;
-  *) echo "usage: $0 lib|loops|knobs|tone|null"; exit 2 ;;
+  *) echo "usage: $0 lib|loops|knobs|tone|calib|peaks|pitchdump|note|null"; exit 2 ;;
 esac

@@ -17,8 +17,9 @@
 // --lib bars (FAIL = exit 1): silence · non-finite · denormals · clicks (HP(8k) residual > 20 dB over its ±10 ms
 // neighbourhood RMS, > 6 dB over every other HF peak within ±25 ms, > −45 dB re the local signal AND over −90 dBFS, outside
 // the note's own first 30 ms) · DC (the note's mean over −50 dBFS and within 20 dB of its RMS) · centre-key loudness ±1 dB of −24 LUFS (less any peak limit the calibration reports) ·
-// adjacent-velocity jump ≤ 6 dB · the per-engine reader cap. FLAG (reported, not failing): peaks over −1 dBFS at
-// velocity 127 (the lifeguard law — never clipped, never limited).
+// adjacent-velocity jump ≤ 6 dB · the per-engine reader cap · tp108: every key's velocity-127 peak ≤ −1 dBFS (the library
+// trims the recording per key — Tools/organics/peaktrim.py — never a clipper, never a limiter).
+//   organics_audit --peaks <root> [idFilter] [vels]  every key's v127 peak, every RR take (Tools/organics/peaktrim.py)
 #include "../Source/organics/OrganicEngine.h"
 #include "../Source/organics/OrganicsLibrary.h"
 
@@ -361,7 +362,8 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
             if (dcN)     fails.push_back (fmt ("%s: DC on %d notes (worst %.1f dBFS %s)", an_.c_str(), dcN, worstDc, dcWhere.c_str()));
             if (capN)    fails.push_back (fmt ("%s: reader cap exceeded on %d notes", an_.c_str(), capN));
             if (srcN)    flags.push_back (fmt ("%s: %d notes carry an isolated HF transient that is IN THE RECORDING (not the engine)", an_.c_str(), srcN));
-            if (hotN)    flags.push_back (fmt ("%s: %d keys over -1 dBFS at vel 127 (first %s)", an_.c_str(), hotN, hotWhere.c_str()));
+            // tp108: a BAR, no longer a flag — the library trims every key (Tools/organics/peaktrim.py), never a limiter
+            if (hotN)    fails.push_back (fmt ("%s: %d keys over -1 dBFS at vel 127 (first %s)", an_.c_str(), hotN, hotWhere.c_str()));
             info += fmt (" [%s k%d-%d pk127 %.1f dc %.0f]", an_.c_str(), lo, hi, peak127, worstDc);
 
             // ── C. loudness (artic 0: the compiler's calibration point) + velocity response ──
@@ -720,13 +722,80 @@ static int runPitchDump (const juce::File& out, const juce::String& id, const ju
                 OrganicParams p; p.human = 0.f; p.artic = a; p.noise = 0.f; p.tuning = 1;
                 auto nt = renderNote (I, p, key, vel, 1.5, 0.0);
                 const auto m = mono (nt);
-                juce::FileOutputStream os (out.getChildFile (juce::String (a) + "_" + juce::String (key) + "_" + juce::String (vel) + ".f32"));
+                // tp108: + the region the note played (its top attack region) — Tools/organics/retune.py closes each
+                // region's tuning on the notes that actually played it
+                juce::FileOutputStream os (out.getChildFile (juce::String (a) + "_" + juce::String (key) + "_" + juce::String (vel)
+                                                             + "_" + juce::String (nt.region) + ".f32"));
                 if (os.openedOk()) { os.setPosition (0); os.truncate(); os.write (m.data(), m.size() * sizeof (float)); ++n; }
             }
     }
     std::printf ("dumped %d notes of %s\n", n, id.toRawUTF8());
     I.reset(); org::drainDeferredReleases();
     return 0;
+}
+
+//==================================================================================================
+//  --peaks <root> [idFilter] [vels] : tp108 — the velocity-127 peak of EVERY key of every articulation through the engine
+//  (Human 0, 1 player, every knob at its default, Noise 0 unless ORG_PEAK_NOISE is set), the loudest of every round-robin
+//  take / random slot the key can play (one press per candidate region at v127, ×2 for random slots, ≤ 12, seeds varied,
+//  the performance state carried between presses like a player's). One line per key:
+//      PEAK <id> <artic> <key> <vel> <peakDb> <presses>
+//  Tools/organics/peaktrim.py reads it (the per-key trim) and Tests/organics_compile_test.py holds the bar (≤ −1 dBFS).
+//==================================================================================================
+static int runPeaks (const juce::String& filter, const juce::String& velList)
+{
+    juce::StringArray vs; vs.addTokens (velList.isEmpty() ? juce::String ("127") : velList, ",", "");
+    const auto idx = OrganicsLibrary::get().index();
+    const char* nzEnv = std::getenv ("ORG_PEAK_NOISE");
+    int worstBad = 0;
+    for (auto& ent : *idx.getArray())
+    {
+        const juce::String id = ent["id"].toString();
+        if (filter.isNotEmpty() && ! id.contains (filter)) continue;
+        auto I = load (id);
+        if (! I) { std::printf ("PEAKMISSING %s\n", id.toRawUTF8()); continue; }
+        I->resetPerformanceState();
+        for (int a = 0; a < I->numArtics; ++a)
+        {
+            int lo = 128, hi = -1;
+            for (auto& r : I->regions) if (r.artic == a && r.kind == org::Kind::Attack) { lo = std::min (lo, r.lk); hi = std::max (hi, r.hk); }
+            if (hi < 0) continue;
+            OrganicParams p; p.human = 0.f; p.artic = a; p.noise = nzEnv ? (float) std::atof (nzEnv) : 0.f;
+            for (int key = lo; key <= hi; ++key)
+                for (auto& vstr : vs)
+                {
+                    const int vel = juce::jlimit (1, 127, vstr.getIntValue());
+                    const auto& sp = I->span (a, org::Kind::Attack, I->mappedKey (a, key), vel);
+                    bool rnd = false; int cand = 0;
+                    for (uint32_t i = 0; i < sp.count; ++i) { const auto& r = I->regions[I->list (sp)[i]]; ++cand; rnd |= (r.randLo > 0.f || r.randHi < 1.f); }
+                    const int presses = std::clamp (rnd ? 2 * cand : cand, 1, 12);
+                    double pk = -200.0;
+                    for (int k = 0; k < presses; ++k)
+                    {
+                        OrganicEngine e; e.prepare (gSR, 256); e.setInstrument (I);
+                        e.noteOn (key, (float) vel / 127.f, 1, kNoDet, 0x9e3779b9u + 7919u * (uint32_t) k);
+                        Buf l (256), r (256);
+                        const int64_t hold = (int64_t) (0.6 * gSR), total = hold + (int64_t) (1.5 * gSR);
+                        bool off = false;
+                        for (int64_t t = 0; t < total; t += 256)
+                        {
+                            if (! off && t >= hold) { e.noteOff (false); off = true; }
+                            std::fill (l.begin(), l.end(), 0.f); std::fill (r.begin(), r.end(), 0.f);
+                            e.render (p, 0.f, l.data(), r.data(), 256);
+                            for (int i = 0; i < 256; ++i) pk = std::max (pk, db (std::max (std::abs ((double) l[(size_t) i]), std::abs ((double) r[(size_t) i]))));
+                            if (off && ! e.isActive()) break;
+                        }
+                        e.kill(); e.setInstrument (nullptr);
+                    }
+                    if (pk > -1.0) ++worstBad;
+                    std::printf ("PEAK %s %d %d %d %.3f %d\n", id.toRawUTF8(), a, key, vel, pk, presses);
+                }
+        }
+        std::fflush (stdout);
+        I.reset(); org::drainDeferredReleases();
+    }
+    std::printf ("PEAKSUMMARY %d keys over -1 dBFS — %s\n", worstBad, worstBad ? "FAIL" : "PASS");
+    return worstBad ? 1 : 0;
 }
 
 int runKnobs (const juce::File& root);   // organics_audit_knobs.cpp
@@ -751,6 +820,7 @@ int main (int argc, char** argv)
     if (mode == "--knobs") return runKnobs (root);
     if (mode == "--tone")  return runTone (root, argc >= 4 && std::string (argv[3]) == "base");
     if (mode == "--calib") return runCalib (argc >= 4 ? juce::String (argv[3]) : juce::String());
+    if (mode == "--peaks") return runPeaks (argc >= 4 ? juce::String (argv[3]) : juce::String(), argc >= 5 ? juce::String (argv[4]) : juce::String());
     if (mode == "--pitchdump" && argc >= 5) return runPitchDump (juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]), argv[4], argc >= 6 ? juce::String (argv[5]) : juce::String());
     if (mode == "--note" && argc >= 7) return runNote (argv[3], std::atoi (argv[4]), std::atoi (argv[5]), std::atoi (argv[6]), argc >= 8 ? std::atof (argv[7]) : 0.6,
                                                        argc >= 9 ? std::atof (argv[8]) : 0.5, argc >= 10 ? juce::File::getCurrentWorkingDirectory().getChildFile (argv[9]) : juce::File());

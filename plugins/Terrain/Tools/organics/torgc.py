@@ -67,6 +67,7 @@ sys.path.insert(0, HERE)
 import sfz as sfzmod          # noqa: E402
 import sf2 as sf2mod          # noqa: E402
 import analyse as an          # noqa: E402
+import tuning as tu           # noqa: E402
 
 DEFAULT_RAW = os.path.expanduser("~/Developer/VST-Plugins/organics-library/raw")
 DEFAULT_OUT = os.path.expanduser("~/Developer/VST-Plugins/organics-library/compiled")
@@ -863,7 +864,8 @@ def job_render_sample(job: dict) -> dict:
     sf.write(job["out"], y.astype(np.float64), sr, subtype="PCM_24" if bits == 24 else "PCM_16", format="FLAC")
     # pitch of the sustained part (tfix) — measured on the source, from the first region's onset
     if job.get("f_expect"):
-        res["f0"] = an.measure_f0(an.to_mono(x), sr, onset0, min(end, len(x)), float(job["f_expect"]))
+        res["f0"] = tu.measure_pitch(an.to_mono(x), sr, onset0, min(end, len(x)), float(job["f_expect"]),
+                                     kind=job.get("pitchKind", "harmonic"))           # tp108 (tuning.py)
     # shared-library noise: the K-weighted loudness of its loudest 100 ms (for the authored relative level)
     if job.get("noise"):
         ym = y if y.ndim == 2 else y[:, None]
@@ -1107,6 +1109,7 @@ class Compiler:
                                     if any(r.kind in ("attack", "release") for r in rs)
                                     and not R.get("unpitched") else None),
                        "noise": all(r.kind == "noise" for r in rs),
+                       "pitchKind": tu.pitch_kind(R["category"]),
                        "extend_s": R.get("extendTail") if any(r.kind == "attack" for r in rs) else None,
                        # tp106: sustain loops are polished (baked crossfade); "loopFlatten": false keeps a loop's own
                        # level motion (an organ's beating ranks, a Leslie, bellows — periodic by nature)
@@ -1304,115 +1307,22 @@ class Compiler:
             log(f"   !! over budget: {ram:.1f} MB > {self.budget_mb()} MB")
 
     def compute_tfix(self, recs: List[dict]) -> dict:
-        """tfix = −(measured deviation of the sample from ET at its root + the fractional part of the authored cents),
-        so root-relative pitch + cents + tfix = equal temperament. Transposes (whole-semitone cents) are intentional
-        and never corrected. Unreliable measurements (no periodicity, confidence < 0.6, |correction| > 60 ¢, or an
-        IQR over 25 ¢ from vibrato/beating) get 0. Recipe "tfixMode": {artic name: "stretch"} keeps a deliberate
-        stretch tuning: a smooth cubic of the measured pitch over the key is fitted per articulation and only the
-        per-note deviation from that curve is corrected. Release regions reuse the median tfix of the attack regions
-        with the same root (they are the same string/reed). Noise regions: 0.
-        tp106 — PER REGION on PERFORMED instruments (strings, winds, brass, voices): every velocity layer / take with a
-        reliable measurement is corrected on its own (Tuning = Equal means every key lands on 12-TET at every velocity; a section's layers of one
-        note measured up to 20 ¢ apart — different takes, not physics — and a note-median left them ±10 ¢ off). Struck
-        and plucked notes keep the note-median (one physical tuning; their crossfaded layers must not beat). A layer the
-        detector cannot trust takes its note's median, else the median of its articulation's corrections within ±4 keys (an instrument tuned
-        sharp as a whole). An authored whole-semitone transpose that exactly COMPENSATES the sample's own offset from its
-        root (MTG baritone: a C#2 take mapped to C2 with root 36 and −109 ¢) is a tuning correction, not a transposition:
-        it counts in full, so it is neither mistaken for a mislabelled root nor corrected twice. "As recorded"
-        (Tuning 0) keeps every take's own intonation."""
-        R = self.recipe
-        modes = R.get("tfixMode", {})
-        stats = OrderedDict()
-        meas = {}
-        root_fixes = []
-        allow_root_fix = R.get("rootFix", R["category"] not in ("Mallets & Bells", "Percussion"))
+        """tfix = −(the sample's measured deviation from ET at its root + the fractional part of the authored cents), so
+        root-relative pitch + cents + tfix = equal temperament ("As recorded", Tuning 0, keeps every take's own intonation).
+        tp108: the measurement is tuning.measure_pitch (multi-window YIN + MPM, a harmonic-template fit for short takes,
+        octave-safe) and the rules are tuning.assign_tfix — the tp106 rules (per take on performed instruments, per note
+        on struck / plucked ones, a deliberate stretch kept, whole-semitone transposes never corrected, a mislabelled root
+        moved) plus the INHERITANCE: a take the detector cannot trust takes its note's other takes, else the same key of a
+        sustained articulation of the same player session, else its measured neighbours. Tools/organics/retune.py re-runs
+        exactly this on a compiled library and then closes it through the runtime."""
+        f0s = {}
         for i, x in enumerate(recs):
             f0 = x.pop("_f0", None)
-            if x["kind"] != "attack" or R.get("unpitched") or not f0 or f0.get("hz", 0) <= 0:
-                continue
-            dev = 1200.0 * math.log2(f0["hz"] / an.midi_hz(x["root"]))
-            # the authored fine tune (SFZ tune, |tune| < 100) is a pitch correction and counts; whole-semitone
-            # transposes (transpose × 100) are intentional and never corrected
-            cf = x["cents"] - 100.0 * math.trunc(x["cents"] / 100.0)
-            tot = dev + cf
-            if abs(x["cents"] - cf) >= 100.0 and abs(dev + x["cents"]) <= 25.0:
-                tot = dev + x["cents"]              # the "transpose" compensates the sample's own offset: a tuning fix
-            # a sample a whole semitone off its declared root (mislabelled file): move the root, then tune
-            n = int(round(tot / 100.0))
-            if (n != 0 and abs(n) == 1 and allow_root_fix and f0.get("conf", 0) >= 0.65 and f0.get("spread", 99) <= 10.0
-                    and abs(tot - 100.0 * n) <= 25.0):
-                root_fixes.append({"lk": x["lk"], "hk": x["hk"], "root": x["root"], "newRoot": x["root"] + n,
-                                   "measuredCents": round(tot, 1), "artic": self.artic_names[x["a"]]})
-                x["root"] += n
-                tot -= 100.0 * n
-            ok = (f0.get("conf", 0) >= 0.6 and abs(tot) <= 60.0 and f0.get("spread", 99) <= 12.0
-                  and f0.get("agree", 0.0) <= 10.0 and f0.get("frames", 0) >= 3)
-            # a big correction needs a long, steady measurement (short staccato/pizz takes start sharp)
-            if ok and abs(tot) > 30.0 and (f0.get("frames", 0) < 5 or f0.get("spread", 99) > 8.0):
-                ok = False
-            meas[i] = (tot, ok)
+            if f0:
+                f0s[i] = f0
+        stats = tu.assign_tfix(self.recipe, self.artic_names, recs, f0s)
         for x in recs:
-            x.pop("_f0", None)
-        for a, name in enumerate(self.artic_names):
-            idx = [i for i in meas if recs[i]["a"] == a]
-            good = [i for i in idx if meas[i][1]]
-            fit = None
-            if modes.get(name) == "stretch" and len(good) >= 8:
-                ks = np.array([recs[i]["root"] for i in good], float)
-                ts = np.array([meas[i][0] for i in good], float)
-                c = np.polyfit(ks, ts, 3)
-                for _ in range(2):                           # robust re-fits without outliers
-                    resid = ts - np.polyval(c, ks)
-                    keep = np.abs(resid) <= max(3.0, 2.5 * np.median(np.abs(resid)))
-                    if keep.sum() >= 8:
-                        c = np.polyfit(ks[keep], ts[keep], 3)
-                fit = c
-            # one correction per NOTE and round-robin slot (artic, root, rr, rand): the median over its velocity
-            # layers, so the natural velocity-dependent pitch (a hard-struck string starts sharp) is kept and only
-            # the note centre moves; separate RR recordings (a player's intonation per take) are corrected per take
-            def _nk(x):
-                return (x["root"], tuple(x["rr"]), tuple(x["rand"]))
-            # per REGION only where every take is its own performance (bowed, blown, sung — intonation is the player's);
-            # a struck / plucked note has ONE physical tuning, its velocity layers crossfade into each other, and a
-            # per-layer correction would turn the detector's few-cent scatter into beating (glockenspiel G5: 0.1 → 6.5 dB)
-            per_region = R["category"] in PERFORMED_CATEGORIES
-            per_note = defaultdict(list)
-            own = {}
-            for i in good:
-                tot = meas[i][0]
-                own[i] = -(tot - (float(np.polyval(fit, recs[i]["root"])) if fit is not None else 0.0))
-                per_note[_nk(recs[i])].append(own[i])
-            vals = []
-            for i in idx + [j for j, x in enumerate(recs) if x["a"] == a and x["kind"] == "attack" and j not in meas]:
-                v = [own[i]] if (i in own and per_region) else per_note.get(_nk(recs[i]))
-                if not v:                                   # neighbours within ±4 keys (≥ 2 of them)
-                    nb = [own[j] for j in own if abs(recs[j]["root"] - recs[i]["root"]) <= 4]
-                    v = nb if len(nb) >= 2 else None
-                recs[i]["tfix"] = round(max(-60.0, min(60.0, float(np.median(v)))), 1) if v else 0.0
-            for rt, v in per_note.items():
-                vals.append(round(max(-60.0, min(60.0, float(np.median(v)))), 1))
-            st = OrderedDict(measuredRegions=len(good), unreliableRegions=len(idx) - len(good), notes=len(per_note),
-                             mode="stretch" if fit is not None else "equal")
-            if vals:
-                w = max(vals, key=abs)
-                wr = [rt[0] for rt, v in per_note.items() if round(max(-60.0, min(60.0, float(np.median(v)))), 1) == w][0]
-                st.update(worst=w, worstRoot=int(wr), medianAbs=round(float(np.median(np.abs(vals))), 1),
-                          over10=int(sum(1 for v in vals if abs(v) > 10)))
-            if fit is not None:
-                st["stretchCurveCents"] = {str(k): round(float(np.polyval(fit, k)), 1) for k in (21, 36, 48, 60, 72, 84, 96, 108)}
-            stats[name] = st
-        if root_fixes:
-            stats["rootFixes"] = root_fixes
-
-        # releases: the attack correction of the same (artic, root)
-        by_root = defaultdict(list)
-        for x in recs:
-            if x["kind"] == "attack" and x["tfix"] != 0.0:
-                by_root[(x["a"], x["root"])].append(x["tfix"])
-        for x in recs:
-            if x["kind"] == "release":
-                v = by_root.get((x["a"], x["root"]))
-                x["tfix"] = round(float(np.median(v)), 1) if v else 0.0
+            x.pop("_tfixFrom", None)
         return stats
 
     def _write_map(self):
