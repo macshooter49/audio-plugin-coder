@@ -585,6 +585,7 @@ static int runSweep (const juce::File& root, int margin)
     for (auto& ent : *idx.getArray())
     {
         const juce::String id = ent["id"].toString();
+        if (const char* only = std::getenv ("ORG_SWEEP_ONLY")) if (id != juce::String (only)) continue;   // test-only: sweep one instrument
         auto I = load (id);
         ++insts;
         if (! I) { std::printf ("FAIL  %-40s does not load\n", id.toRawUTF8()); ++instFail; continue; }
@@ -606,7 +607,7 @@ static int runSweep (const juce::File& root, int margin)
                     for (int press = 0; press < 8; ++press)
                     {
                         e.noteOn (key, (float) v / 127.f, 1, kNoDet, 0x1234567u + (uint32_t) (key * 131 + v * 7 + press * 7919));
-                        float pk = 0.f; int64_t t = 0, win = (int64_t) ((0.031 + 0.012 * human) * kSR); bool winSet = false;   // + the Human timing (12 ms × h)
+                        float pk = 0.f; int64_t t = 0, win = (int64_t) ((0.031 + 0.012 * human + (std::getenv ("ORG_SWEEP_EXTRA_MS") ? std::atof (std::getenv ("ORG_SWEEP_EXTRA_MS")) / 1000.0 : 0.0)) * kSR); bool winSet = false;   // + the Human timing (12 ms × h)
                         for (int guard = 0; guard < 400 && t < win; ++guard)
                         {
                             std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
