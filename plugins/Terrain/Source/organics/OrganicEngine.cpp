@@ -36,6 +36,7 @@ namespace tw
     namespace
     {
         std::atomic<int> gLastReaders { 0 }, gLastRegion { -1 }, gLastLive { 0 }, gSteals { 0 }, gTailRel { 0 };
+        std::atomic<int> gNzDecisions { 0 }, gNzHits { 0 }, gNzVar { -1 }, gNzVarN { 0 }, gNzDelay { 0 }; std::atomic<float> gNzDb { 0.f };   // tp107
 
         inline uint32_t mix32 (uint32_t h) noexcept
         {
@@ -57,6 +58,14 @@ namespace tw
         inline float knobLevel (float v) noexcept { v = clamp01 (v); return v <= 0.5f ? 2.f * v : dbToLin (6.f * (2.f * v - 1.f)); }
         /** tp105 Noise knob: 0 = silent, 0.5 = authored (0 dB), 1 = +12 dB (Max: "noise that you can hear"). */
         inline float noiseLevel (float v) noexcept { v = clamp01 (v); return v <= 0.5f ? 2.f * v : dbToLin (12.f * (2.f * v - 1.f)); }
+        /** tp107 ROUND-ROBIN NOISE — the knob is also the CHANCE that a note-on / note-off makes its noise, like a player whose
+            thumps and clicks come and go: 0 never · 0.25 one in three · 0.5 two in three (authored level) · 1 nine in ten
+            (+12 dB). Linear in each half; every event decides independently. */
+        inline float noiseChance (float v) noexcept { v = clamp01 (v); return v <= 0.5f ? (4.f / 3.f) * v : (2.f / 3.f) + (0.9f - 2.f / 3.f) * (2.f * v - 1.f); }
+        /** tp107 ATTACK — the swell half's fade: g = 2·knob − 1 (knob 0.5..1) → 10 ms · 300^g, a log taper through the top half
+            (the UI's orgFmt ATTACK readout prints this same law): 0.625 → 42 ms, 0.75 → 173 ms, 0.875 → 0.72 s, 1 → 3 s.
+            Exactly 0.5 is Natural (no swell: the 2 ms declick, bit-identical). */
+        inline float swellSec (float g) noexcept { g = clamp01 (g); return 0.010f * std::pow (300.f, g); }
 
         /** tp105 Vibrato depth taper: 0..1 → 0..50 cents peak, v^1.6 (0.25 → 5 ¢, 0.5 → 16.5 ¢ musical; 1 → 50 ¢ wild). */
         inline float vibDepthCents (float v) noexcept { v = clamp01 (v); return v <= 0.f ? 0.f : 50.f * std::pow (v, 1.6f); }
@@ -290,6 +299,12 @@ namespace tw
     int organics_debug::lastLiveReaders() noexcept   { return gLastLive.load (std::memory_order_relaxed); }
     int organics_debug::steals() noexcept            { return gSteals.load (std::memory_order_relaxed); }
     int organics_debug::tailReleases() noexcept      { return gTailRel.load (std::memory_order_relaxed); }
+    int   organics_debug::noiseDecisions() noexcept        { return gNzDecisions.load (std::memory_order_relaxed); }
+    int   organics_debug::noiseHits() noexcept             { return gNzHits.load (std::memory_order_relaxed); }
+    int   organics_debug::lastNoiseVariant() noexcept      { return gNzVar.load (std::memory_order_relaxed); }
+    int   organics_debug::lastNoiseVariantCount() noexcept { return gNzVarN.load (std::memory_order_relaxed); }
+    float organics_debug::lastNoiseDb() noexcept           { return gNzDb.load (std::memory_order_relaxed); }
+    int   organics_debug::lastNoiseDelay() noexcept        { return gNzDelay.load (std::memory_order_relaxed); }
 
     //==============================================================================================
     struct OrganicEngine::Impl
@@ -313,6 +328,7 @@ namespace tw
             bool tailWrapped = false; int64_t tailAge = 0;
             uint64_t stamp = 0; uint32_t chokeSeen = 0;
             bool relOn = false; float relG = 1.f;     // tp105: the note-off decay (exponential, −60 dB at max(amp release, knob time))
+            int  wait = 0;                            // tp107: frames of silence before this reader starts (the noise round-robin's timing)
             // tp105b — THE TAIL RELEASE: the requested release outlives the recording → the region crosses into its compile-time
             // tail loop and keeps decaying there (level = max(natural, the release curve), both relative to note-off).
             bool relDecided = false, relTail = false;
@@ -329,6 +345,8 @@ namespace tw
             uint32_t rrIdx = 0;
             int64_t age = 0; float heldSec = 0.f;
             float vL = 64.f, vSoft = 64.f, gentle = 0.f, lastVL = -1.f, lastBody = -99.f, attack = 0.f;
+            int64_t gLen = 0;                                                 // tp107: the softer-layer blend's length (60 ms .. half the swell)
+            uint32_t nzSeed = 0;                                              // tp107: this player's noise round-robin draws
             int rd[kPerNote]; int nrd = 0;
             uint64_t gen = 0;
             int mapKey = 60;                                                  // tp105 NO-SILENCE: the key the lookups use
@@ -674,7 +692,14 @@ namespace tw
             int fin = fadeFrames (0.002);
             if (role == org::Kind::Attack && atk > 0.f)
                 fin = std::clamp ((int) (((double) r.onset - pStart) / ratio), fadeFrames (0.0005), fin);
-            if (role == org::Kind::Attack && atk < 0.f) fin = std::max (fin, fadeFrames (-atk * 0.150));
+            // tp107 THE SWELL: knob 0.5..1 → a log-tapered fade 2 ms … 3 s. LINKED TO THE AMP ENVELOPE like Release: the onset
+            // is max(amp-env attack, the knob's fade) — while the amp attack is the longer one the voice's VCA ramp is the
+            // onset and the engine keeps its 2 ms declick (no double fade); past it, the engine's fade is the onset.
+            if (role == org::Kind::Attack && atk < 0.f)
+            {
+                const float kf = swellSec (-atk);
+                if (kf > ampAttSec) fin = std::max (fin, fadeFrames (kf));
+            }
             rd.fadeInLen = fin;
             if (role == org::Kind::Attack && atk > 0.f) { rd.liftExtra = dbToLin (4.f * atk) - 1.f; rd.liftLen = fadeFrames (0.012); }
             if (atStart) rd.firstBlock = true;
@@ -759,6 +784,7 @@ namespace tw
                 n.delay = (int) std::lround (((double) uTime * 0.012 * h + (double) k * 0.007 * D) * sr);
                 n.rrIdx = seqBase + (uint32_t) k;
                 n.detC = pend.det[k];
+                n.nzSeed = mix32 (pend.seed ^ 0x6E6F6973u ^ (0x85EBCA6Bu * (uint32_t) (k + 1)));   // tp107: its own stream (the draws above are untouched)
                 // tp105 Ensemble vibrato: every player its own rate (±3 %, golden-angle spread) and phase (golden-ratio
                 // spread), plus Human-scaled randomness — a section shimmers instead of beating in lockstep. Player 0
                 // starts at the zero crossing. Deterministic at Human 0 (the spread is k-indexed, not random).
@@ -829,6 +855,8 @@ namespace tw
                 {
                     n.gentle = -attackP;
                     n.vSoft = std::max (1.f, std::min (I.regions[(size_t) t].fiLo, (float) I.regions[(size_t) t].lv) - 1.f);
+                    // tp107: the softer-layer blend rides along with the swell — 60 ms, or half the swell when that is longer
+                    n.gLen = (int64_t) (std::max (0.06, 0.5 * (double) swellSec (-attackP)) * sr);
                 }
             }
             updateTargets (idx, pitchCents, true);
@@ -857,6 +885,7 @@ namespace tw
             if (spp->count == 0) spp = &I.span (n.artic, kind, n.mapKey, n.vIdx);   // out of range → the edge zone's
             const auto& sp = *spp;
             const uint16_t* L = I.list (sp);
+            if (kind == org::Kind::Noise) { spawnNoise (idx, sp, L, onNoise, pitchCents); return; }
             for (uint32_t i = 0; i < sp.count; ++i)
             {
                 const auto& r = I.regions[L[i]];
@@ -868,12 +897,83 @@ namespace tw
             }
         }
 
+        /** tp107 THE NOISE ROUND-ROBIN (contract tp107: "like a player"). One DECISION per note-on and per note-off:
+              · chance = noiseChance(knob) (0 never · 0.5 two notes in three · 1 nine in ten), drawn from this player's own
+                stream (nzSeed → deterministic at a fixed seed; independent of every other draw of the note);
+              · the variants = the cell's noise regions grouped by their RR slot / random range (the compiler's takes);
+                regions with neither play with every variant. The variant is a no-repeat draw (the last one per artic ×
+                trig × key lives on the instrument, like rrLast, so a repeated key never thumps the same take twice running);
+              · level ±3 dB, start 0–8 ms late; Human adds ±2·h dB and up to 4·h ms more. */
+        void spawnNoise (int idx, const org::Span& sp, const uint16_t* L, bool onNoise, float pitchCents) noexcept
+        {
+            auto& n = notes[idx];
+            const auto& I = *inst;
+            int cand[kPerNote]; int nc = 0;
+            for (uint32_t i = 0; i < sp.count && nc < kPerNote; ++i)
+                if (I.regions[L[i]].trigOn == onNoise) cand[nc++] = L[i];
+            if (nc == 0) return;
+            gNzDecisions.fetch_add (1, std::memory_order_relaxed);
+            Rng rng (n.nzSeed ^ (onNoise ? 0x0Fu : 0xF0u));
+            const float uHit = rng.next(), uVar = rng.next(), uLvl = rng.next(), uTime = rng.next();
+            if (uHit >= noiseChance (sNoise)) return;
+            // variants: distinct (RR slot, random range) keys among the conditional regions, in a stable order
+            auto keyOf = [] (const org::Region& r) -> int {
+                const bool rr = r.rrLen > 1, rnd = r.randLo > 0.f || r.randHi < 1.f;
+                if (! rr && ! rnd) return -1;                                           // plays with every variant
+                return (rr ? r.rrPos + 1 : 0) * 4096 + (rnd ? 1 + (int) std::lround (r.randLo * 4000.f) : 0);
+            };
+            int keys[kPerNote]; int nk = 0;
+            for (int c = 0; c < nc; ++c)
+            {
+                const int k = keyOf (I.regions[(size_t) cand[c]]); if (k < 0) continue;
+                bool seen = false; for (int q = 0; q < nk; ++q) seen |= keys[q] == k;
+                if (! seen) keys[nk++] = k;
+            }
+            std::sort (keys, keys + nk);
+            int pick = -1;
+            if (nk == 1) pick = 0;
+            else if (nk > 1)
+            {
+                auto& last = I.noiseLast()[((size_t) n.artic * 2 + (onNoise ? 1u : 0u)) * 128 + (size_t) n.key];
+                const int prev = last.load (std::memory_order_relaxed);
+                pick = std::min (nk - 2, (int) (uVar * (float) (nk - 1)));
+                if (prev >= 0 && prev < nk && pick >= prev) ++pick;
+                if (prev < 0 || prev >= nk) pick = std::min (nk - 1, (int) (uVar * (float) nk));   // the first event: any take
+                last.store (pick, std::memory_order_relaxed);
+            }
+            const float h = n.human;
+            const float db = (2.f * uLvl - 1.f) * (3.f + 2.f * h);
+            const int wait = (int) std::lround ((double) uTime * (0.008 + 0.004 * (double) h) * sr);
+            bool any = false;
+            for (int c = 0; c < nc; ++c)
+            {
+                const auto& r = I.regions[(size_t) cand[c]];
+                const int k = keyOf (r);
+                if (k >= 0 && (pick < 0 || k != keys[pick])) continue;
+                const int before = n.nrd;
+                spawn (idx, cand[c], org::Kind::Noise, true, 1.f, pitchCents);
+                if (n.nrd > before)
+                {
+                    auto& rd = readers[n.rd[n.nrd - 1]];
+                    rd.rtAtt = (onNoise ? 1.f : dbToLin (-r.rtDecay * n.heldSec)) * dbToLin (db);
+                    rd.wait = wait;
+                    any = true;
+                }
+            }
+            if (any)
+            {
+                gNzHits.fetch_add (1, std::memory_order_relaxed);
+                gNzVar.store (pick, std::memory_order_relaxed); gNzVarN.store (nk, std::memory_order_relaxed);
+                gNzDb.store (db, std::memory_order_relaxed); gNzDelay.store (wait, std::memory_order_relaxed);
+            }
+        }
+
         void updateTargets (int idx, float pitchCents, bool atStart) noexcept
         {
             auto& n = notes[idx];
             const float vT = std::clamp ((float) n.vIdx + 63.f * sDyn, 1.f, 127.f);
             n.vL = atStart ? vT : n.vL + aDynNote * (vT - n.vL);
-            const int64_t gLen = (int64_t) (0.06 * sr);
+            const int64_t gLen = n.gLen > 0 ? n.gLen : (int64_t) (0.06 * sr);
             const bool gentleLive = n.gentle > 0.f && n.age < gLen;
             if (! atStart && ! gentleLive && std::abs (n.vL - n.lastVL) < 0.02f && std::abs (sBody - n.lastBody) < 1.0e-4f) return;
             n.lastVL = n.vL; n.lastBody = sBody;
@@ -977,6 +1077,12 @@ namespace tw
         void renderReader (Reader& rd, const Note& n, float pitchCents, float* oL, float* oR, int i0, int nEnd,
                            const Vibrato::Block* vb = nullptr) noexcept
         {
+            if (rd.wait > 0)   // tp107: a late noise — silent (and not advancing) until its start
+            {
+                const int skip = std::min (rd.wait, nEnd - i0);
+                rd.wait -= skip; i0 += skip;
+                if (i0 >= nEnd) return;
+            }
             const auto& r = *rd.r;
             const auto& s = *rd.s;
             const int cnt = nEnd - i0;

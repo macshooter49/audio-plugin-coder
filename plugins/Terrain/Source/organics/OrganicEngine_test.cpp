@@ -306,6 +306,33 @@ namespace gen
                 "tp105. All keys, root 57: a 220 Hz sine, loop continuous (whole cycles), authored env release 0.5 s, tfix +25 cents. "
                 "Noise regions (root 60): trig \"on\" = 100 ms 3 kHz burst with the note; no trig (= \"off\") = 100 ms 5 kHz burst at note-off.");
         }
+        // ── tp107 test.rrnoise: the noise ROUND-ROBIN — a looped 220 Hz sine, FOUR "on" noise takes (random ranges) and THREE
+        //    "off" takes (a sequential RR of 3), each a 60 ms burst at its own frequency so the take is audible in the output ──
+        {
+            std::vector<Smp> S; juce::Array<juce::var> R;
+            {
+                const double f0 = 220.0; const int64_t ls = 4800, le = ls + wholeCycles (f0, 1.0), n = le + 64;
+                S.push_back (tone (f0, n, [] (double t, int) { return (float) (0.5 * std::min (1.0, t / 0.002)); }, 1));
+                auto r = region ("attack", 0, 0, 127, 1, 127, 57, n); setLoop (r, "continuous", ls, le, 0); R.add (r);
+            }
+            auto burst = [] (double f) { return tone (f, 2880, [] (double t, int) { return (float) (0.2 * std::min (1.0, t / 0.002) * std::min (1.0, (0.06 - t) / 0.005)); }, 1); };
+            const double onF[4] = { 2000.0, 2500.0, 3000.0, 3500.0 }, offF[3] = { 5000.0, 6000.0, 7000.0 };
+            for (int v = 0; v < 4; ++v)
+            {
+                S.push_back (burst (onF[v]));
+                auto r = region ("noise", (int) S.size() - 1, 0, 127, 1, 127, 60, 2880); auto* o = r.getDynamicObject();
+                o->setProperty ("trig", "on"); o->setProperty ("rand", juce::Array<juce::var> { 0.25 * v, 0.25 * (v + 1) }); R.add (r);
+            }
+            for (int v = 0; v < 3; ++v)
+            {
+                S.push_back (burst (offF[v]));
+                auto r = region ("noise", (int) S.size() - 1, 0, 127, 1, 127, 60, 2880);
+                r.getDynamicObject()->setProperty ("rr", juce::Array<juce::var> { v, 3 }); R.add (r);
+            }
+            writeInstrument (root, "test.rrnoise", "Test Round-Robin Noise", "violin", S, R, true, false,
+                "tp107. All keys, root 57: a 220 Hz sine, loop continuous. Noise (root 60, play key 60): four trig \"on\" takes by random "
+                "range (60 ms bursts at 2 / 2.5 / 3 / 3.5 kHz) and three note-off takes by a sequential RR of 3 (5 / 6 / 7 kHz).");
+        }
     }
 }
 
@@ -617,6 +644,131 @@ static int runSweep (const juce::File& root, int margin)
     std::printf ("══ %s — %lld silent of %lld presses · %d/%d instruments clean ══\n", totalFail == 0 ? "PASS" : "FAIL",
                  (long long) totalFail, (long long) totalPress, insts - instFail, insts);
     return totalFail == 0 && instFail == 0 ? 0 : 1;
+}
+
+//==================================================================================================
+//  tp107 — ATTACK comes back (0 Tight · 0.5 Natural · 1 a ~3 s swell) and NOISE becomes a round-robin, like a player
+//==================================================================================================
+static void tp107Bars (const std::shared_ptr<const OrganicInstrument>& noisy, const std::shared_ptr<const OrganicInstrument>& piano)
+{
+    std::printf ("── tp107: Attack · round-robin Noise ──\n");
+    const float knobs[5] = { 0.f, 0.25f, 0.5f, 0.75f, 1.f };
+    auto atkOf = [] (float knob) { return 1.f - 2.f * knob; };          // the processor's mapping (PluginProcessor gather)
+    // ── ATTACK: onset time vs the knob. Sustained sine (test.noisy, looped): time until the 5 ms RMS reaches −1 dB of the
+    //    steady level; piano (test.piano: 20 ms of air, then the transient): the transient's arrival (−24 dB of the peak). ──
+    {
+        auto sineOnset = [&] (float atk, float ampAtt, double* clickDb = nullptr) {
+            OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (noisy);
+            auto p = P0(); p.tuning = 0; p.noise = 0.f; p.attack = atk; p.ampAttack = ampAtt;
+            e.noteOn (57, 0.8f, 1, kNoDet, 5u);
+            Rec r; run (e, p, r, (int64_t) (4.5 * kSR), 256);
+            const auto x = mono (r);
+            const double ref = an::rms (x, (int64_t) (4.0 * kSR), 24000);
+            int64_t k = 0; const int64_t W = 240;
+            while (k + W < (int64_t) x.size() && an::rms (x, k, W) < ref * 0.891) k += 48;
+            if (clickDb) { const auto c = an::clicks (x); *clickDb = c.localRatio <= 1.5 ? -200.0 : c.relDb; }
+            return 1000.0 * (double) (k + W / 2) / kSR;
+        };
+        auto pianoOnset = [&] (float atk) {
+            OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (piano);
+            auto p = P0(); p.attack = atk; p.noise = 0.f;
+            e.noteOn (43, 0.8f, 1, kNoDet, 3u);
+            Rec r; run (e, p, r, 24000, 64);
+            const auto m = mono (r); const double thr = 0.063 * an::peak (m, 0, 24000);
+            int64_t k = 0; while (k < (int64_t) m.size() && std::abs (m[(size_t) k]) < thr) ++k;
+            return std::make_pair (1000.0 * (double) k / kSR, an::db (an::rms (m, 0, 576)));
+        };
+        double so[5], po[5], pe[5], ck[5];
+        std::string tbl;
+        for (int i = 0; i < 5; ++i)
+        {
+            so[i] = sineOnset (atkOf (knobs[i]), 0.f, &ck[i]);
+            const auto pp = pianoOnset (atkOf (knobs[i])); po[i] = pp.first; pe[i] = pp.second;
+            tbl += fmt ("%.0f%%: sine %.1f ms · piano transient %.1f ms (first 12 ms %.1f dB) · click %s\n        ", 100 * knobs[i], so[i], po[i], pe[i],
+                        ck[i] < -150 ? "none" : fmt ("%.0f dB", ck[i]).c_str());
+        }
+        std::printf ("  Attack onset table (knob → onset):\n        %s\n", tbl.c_str());
+        bar ("Attack: 0 Tight earlier + hotter than 0.5 Natural (piano)", po[0] < po[1] && po[1] < po[2] && pe[0] > pe[2] + 1.0,
+             fmt ("transient %.1f / %.1f / %.1f ms · first-12ms %.1f / %.1f / %.1f dB (0 / 25 / 50 %%)", po[0], po[1], po[2], pe[0], pe[1], pe[2]));
+        bar ("Attack: 0.5 → 1 a log-tapered swell reaching ~3 s", so[2] < 5.0 && so[3] > 100.0 && so[3] < 250.0 && so[4] > 2000.0 && so[4] < 3200.0 && so[3] > so[2],
+             fmt ("sine −1 dB onset %.1f ms (50 %%) · %.0f ms (75 %%) · %.0f ms (100 %%)", so[2], so[3], so[4]));
+        bool noCk = true; for (int i = 0; i < 5; ++i) noCk &= ck[i] < -60.0;
+        bar ("Attack: every setting starts click-free (HP 8 kHz residual)", noCk,
+             fmt ("residual %s / %s / %s / %s / %s", ck[0] < -150 ? "—" : fmt ("%.0f", ck[0]).c_str(), ck[1] < -150 ? "—" : fmt ("%.0f", ck[1]).c_str(),
+                  ck[2] < -150 ? "—" : fmt ("%.0f", ck[2]).c_str(), ck[3] < -150 ? "—" : fmt ("%.0f", ck[3]).c_str(), ck[4] < -150 ? "—" : fmt ("%.0f", ck[4]).c_str()));
+        // the amp-envelope link: the engine fades only when its fade is the LONGER one (else the voice's VCA ramp is the onset)
+        const double l75 = sineOnset (atkOf (0.75f), 1.0f), l100 = sineOnset (atkOf (1.f), 1.0f), l50 = sineOnset (0.f, 1.0f);
+        bar ("Attack = max(amp-env attack, knob): the engine yields to a longer amp attack", std::abs (l75 - so[2]) < 1.0 && std::abs (l50 - so[2]) < 0.01 && std::abs (l100 - so[4]) < 1.0,
+             fmt ("amp attack 1 s: engine onset %.1f ms at 75 %% (its 173 ms fade yields to the VCA) · %.1f ms at 50 %% · %.0f ms at 100 %% (3 s > 1 s: the engine's)", l75, l50, l100));
+    }
+    // ── NOISE ROUND-ROBIN: 300 notes at 0.25 / 0.5 / 1 on test.rrnoise (4 on-takes, 3 off-takes), fixed seeds ──
+    {
+        auto rr = load ("test.rrnoise");
+        bar ("tp107 fixture test.rrnoise loads", rr != nullptr, fmt ("rrnoise=%d", !! rr));
+        if (rr == nullptr) return;
+        const double onF[4] = { 2000.0, 2500.0, 3000.0, 3500.0 }, offF[3] = { 5000.0, 6000.0, 7000.0 };
+        struct Run { int onHits = 0, offHits = 0, onRep = 0, offRep = 0, decisions = 0; double dbMin = 99, dbMax = -99, dbSd = 0, audSd = 0, audMean = 0;
+                     int delayMax = 0; std::vector<int> onSeq, offSeq; std::vector<float> dbs; };
+        auto go = [&] (float knob, float human) {
+            rr->resetPerformanceState();
+            Run R;
+            OrganicEngine e; e.prepare (kSR, 480); e.setInstrument (rr);
+            auto p = P0(); p.tuning = 0; p.noise = knob; p.human = human; p.release = 0.f;
+            std::vector<double> aud;
+            int lastOn = -1, lastOff = -1;
+            for (int i = 0; i < 300; ++i)
+            {
+                const int d0 = organics_debug::noiseDecisions(), h0 = organics_debug::noiseHits();
+                e.noteOn (60, 0.8f, 1, kNoDet, 0x9E3779B9u * (uint32_t) (i + 1));
+                Rec r; run (e, p, r, 4800, 480);
+                const int h1 = organics_debug::noiseHits();
+                const bool hitOn = h1 > h0; if (hitOn) { R.dbs.push_back (organics_debug::lastNoiseDb()); R.delayMax = std::max (R.delayMax, organics_debug::lastNoiseDelay()); }
+                e.noteOff (false); run (e, p, r, 4800, 480);
+                const int h2 = organics_debug::noiseHits();
+                const bool hitOff = h2 > h1; if (hitOff) { R.dbs.push_back (organics_debug::lastNoiseDb()); R.delayMax = std::max (R.delayMax, organics_debug::lastNoiseDelay()); }
+                R.decisions += organics_debug::noiseDecisions() - d0;
+                const auto x = mono (r);
+                // the take, heard: the loudest burst frequency in each 90 ms window (a miss = nothing over −70 dBFS)
+                int vo = -1; double bo = 3e-4; for (int v = 0; v < 4; ++v) { const double a = an::amp (x, 0, 4320, onF[v]); if (a > bo) { bo = a; vo = v; } }
+                int vf = -1; double bf = 3e-4; for (int v = 0; v < 3; ++v) { const double a = an::amp (x, 4800, 4320, offF[v]); if (a > bf) { bf = a; vf = v; } }
+                if ((vo >= 0) != hitOn || (vf >= 0) != hitOff) { R.onRep += 1000; }            // audio and hook disagree: flagged
+                if (vo >= 0) { R.onHits++; R.onSeq.push_back (vo); if (vo == lastOn) R.onRep++; lastOn = vo; aud.push_back (an::db (bo)); }
+                if (vf >= 0) { R.offHits++; R.offSeq.push_back (vf); if (vf == lastOff) R.offRep++; lastOff = vf; }
+            }
+            double m = 0; for (float d : R.dbs) { m += d; R.dbMin = std::min (R.dbMin, (double) d); R.dbMax = std::max (R.dbMax, (double) d); }
+            m /= std::max<size_t> (1, R.dbs.size()); for (float d : R.dbs) R.dbSd += (d - m) * (d - m); R.dbSd = std::sqrt (R.dbSd / std::max<size_t> (1, R.dbs.size()));
+            double am = 0; for (double a : aud) am += a; am /= std::max<size_t> (1, aud.size()); for (double a : aud) R.audSd += (a - am) * (a - am);
+            R.audSd = std::sqrt (R.audSd / std::max<size_t> (1, aud.size())); R.audMean = am;
+            return R;
+        };
+        const Run r25 = go (0.25f, 0.f), r50 = go (0.5f, 0.f), r100 = go (1.f, 0.f), r0 = go (0.f, 0.f), r50b = go (0.5f, 0.f), r50h = go (0.5f, 1.f);
+        auto line = [&] (const char* k, const Run& R) {
+            return fmt ("%s: on %d/300 (%.0f %%) · off %d/300 (%.0f %%) · level offset %+.1f..%+.1f dB (SD %.2f) · heard %.1f dBFS (SD %.2f) · delay ≤ %.1f ms · back-to-back repeats %d / %d",
+                        k, R.onHits, R.onHits / 3.0, R.offHits, R.offHits / 3.0, R.dbMin, R.dbMax, R.dbSd, R.audMean, R.audSd, 1000.0 * R.delayMax / kSR, R.onRep, R.offRep);
+        };
+        std::printf ("  Noise round-robin over 300 notes (test.rrnoise: 4 on-takes, 3 off-takes):\n        %s\n        %s\n        %s\n        %s\n        %s\n",
+                     line ("  0 %", r0).c_str(), line (" 25 %", r25).c_str(), line (" 50 %", r50).c_str(), line ("100 %", r100).c_str(), line (" 50 % Human 1", r50h).c_str());
+        auto near = [] (int hits, double want) { return std::abs (hits / 300.0 - want) <= 0.07; };
+        bar ("Noise RR: chance 0 never · 25 % ≈ 1/3 · 50 % ≈ 2/3 · 100 % ≈ 9/10 (on AND off, independent)",
+             r0.onHits == 0 && r0.offHits == 0 && r0.decisions == 0 && near (r25.onHits, 1 / 3.0) && near (r25.offHits, 1 / 3.0) && near (r50.onHits, 2 / 3.0)
+             && near (r50.offHits, 2 / 3.0) && near (r100.onHits, 0.9) && near (r100.offHits, 0.9),
+             fmt ("on %.0f / %.0f / %.0f %% · off %.0f / %.0f / %.0f %% (25 / 50 / 100)", r25.onHits / 3.0, r50.onHits / 3.0, r100.onHits / 3.0, r25.offHits / 3.0, r50.offHits / 3.0, r100.offHits / 3.0));
+        bar ("Noise RR: the take never repeats back to back (4 on-takes, 3 off-takes), audio = hook",
+             r25.onRep + r25.offRep + r50.onRep + r50.offRep + r100.onRep + r100.offRep + r50h.onRep + r50h.offRep == 0,
+             fmt ("repeats %d / %d / %d / %d (a value ≥ 1000 = the heard take and the hook disagree)", r25.onRep + r25.offRep, r50.onRep + r50.offRep, r100.onRep + r100.offRep, r50h.onRep + r50h.offRep));
+        int used[4] = {}; for (int v : r50.onSeq) used[v]++;
+        bar ("Noise RR: every take is used", used[0] > 20 && used[1] > 20 && used[2] > 20 && used[3] > 20, fmt ("on-takes at 50 %%: %d / %d / %d / %d", used[0], used[1], used[2], used[3]));
+        bar ("Noise RR: level ±3 dB, timing 0–8 ms (Human 1: ±5 dB, 0–12 ms)",
+             r50.dbMin >= -3.0 && r50.dbMax <= 3.0 && r50.dbMax - r50.dbMin > 5.0 && r50.delayMax <= (int) (0.008 * kSR) + 1 && r50.delayMax > (int) (0.006 * kSR)
+             && r50h.dbMax - r50h.dbMin > 8.0 && r50h.dbMax <= 5.0 && r50h.delayMax <= (int) (0.012 * kSR) + 1,
+             fmt ("%.1f..%+.1f dB (heard SD %.2f dB) · ≤ %.1f ms · Human 1: %.1f..%+.1f dB, ≤ %.1f ms", r50.dbMin, r50.dbMax, r50.audSd, 1000.0 * r50.delayMax / kSR,
+                  r50h.dbMin, r50h.dbMax, 1000.0 * r50h.delayMax / kSR));
+        bar ("Noise RR: knob 1 is +12 dB over 0.5 (the heard mean)", std::abs ((r100.audMean - r50.audMean) - 12.0) <= 1.0,
+             fmt ("heard burst mean %.1f vs %.1f dBFS → %+.2f dB", r100.audMean, r50.audMean, r100.audMean - r50.audMean));
+        bar ("Noise RR: deterministic at a fixed seed (two runs, same sequence)", r50.onSeq == r50b.onSeq && r50.offSeq == r50b.offSeq && r50.dbs == r50b.dbs,
+             fmt ("run 1 %zu + %zu takes, run 2 %zu + %zu: %s", r50.onSeq.size(), r50.offSeq.size(), r50b.onSeq.size(), r50b.offSeq.size(),
+                  (r50.onSeq == r50b.onSeq && r50.dbs == r50b.dbs) ? "identical" : "DIFFERENT"));
+    }
 }
 
 //==================================================================================================
@@ -1178,8 +1330,8 @@ int main (int argc, char** argv)
                 late2 = an::amp (m, 9600, 4096, 5 * mtof (48)); late3 = an::amp (m, 9600, 4096, 7 * mtof (48));
             };
             double ne, nl, n3, ge, gl, g3;
-            at (0.f, ne, nl, n3); at (-1.f, ge, gl, g3);
-            bar ("Attack Gentle: first 60 ms from the softer layer", ge > 0.5 && ne < 0.01 && gl < 1e-3 && std::abs (an::db (g3 / n3)) < 0.1,
+            at (0.f, ne, nl, n3); at (-0.45f, ge, gl, g3);   // tp107: −1 is now the 3 s swell; −0.45 (knob 72.5 %) = a 0.13 s fade, a 65 ms blend
+            bar ("Attack swell: the start leans on the softer layer", ge > 0.5 && ne < 0.01 && gl < 1e-3 && std::abs (an::db (g3 / n3)) < 0.1,
                  fmt ("L2/L3 marker ratio 5-40 ms: Natural %.3f, Gentle %.2f · after 200 ms: L2 %.5f, L3 %+.2f dB re Natural", ne, ge, gl, an::db (g3 / n3)));
         }
         // Tone key tracking above C6: the same region at the same pitch, key 96 vs key 84 + 1200 cents
@@ -1608,6 +1760,7 @@ int main (int argc, char** argv)
             bar ("Velocity curve: Soft > Linear > Hard (vel 64)", s0 == l0 && s2 == l2 && d0 > 2.0 && d2 < -3.0,
                  fmt ("Soft %+.2f dB · Hard %+.2f dB re Linear · each = Linear at v^0.55 / v^1.8: %s / %s", d0, d2, s0 == l0 ? "identical" : "DIFFERENT", s2 == l2 ? "identical" : "DIFFERENT"));
         }
+        tp107Bars (noisy, piano);
     }
     if (argc >= 3 && juce::File (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2])).isDirectory())
     {

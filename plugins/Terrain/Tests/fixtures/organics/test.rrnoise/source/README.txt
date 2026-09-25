@@ -1,0 +1,1 @@
+tp107. All keys, root 57: a 220 Hz sine, loop continuous. Noise (root 60, play key 60): four trig "on" takes by random range (60 ms bursts at 2 / 2.5 / 3 / 3.5 kHz) and three note-off takes by a sequential RR of 3 (5 / 6 / 7 kHz).

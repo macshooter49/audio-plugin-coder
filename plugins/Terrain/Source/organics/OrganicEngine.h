@@ -32,5 +32,14 @@ namespace tw
         int steals() noexcept;
         /** tp105b: total note-offs that took the TAIL release (the requested release outlived the recording). */
         int tailReleases() noexcept;
+        /** tp107 round-robin noise: every note-on / note-off noise DECISION (a knob > 0 and an instrument with noise for that
+            event), the ones that sounded, and the last sounding event's variant index (−1 = the cell has no variants), level
+            offset (dB) and start delay (frames). Process-wide counters (tests only). */
+        int   noiseDecisions() noexcept;
+        int   noiseHits() noexcept;
+        int   lastNoiseVariant() noexcept;
+        int   lastNoiseVariantCount() noexcept;
+        float lastNoiseDb() noexcept;
+        int   lastNoiseDelay() noexcept;
     }
 }

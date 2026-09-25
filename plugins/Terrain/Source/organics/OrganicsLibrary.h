@@ -128,6 +128,9 @@ namespace tw
         std::atomic<uint32_t>* rrSeq() const noexcept      { return rrSeq_.get(); }      // [artic*128 + key]
         std::atomic<int32_t>*  rrLast() const noexcept     { return rrLast_.get(); }     // last random pick (region)
         std::atomic<int32_t>*  fakeLast() const noexcept   { return fakeLast_.get(); }   // last fake-RR choice per key
+        /** tp107: the last noise VARIANT per [(artic·2 + trigOn)·128 + key] (−1 = none yet) — the round-robin's no-repeat memory,
+            on the instrument like rrLast (a repeated note alternates its noise even when another voice plays it). */
+        std::atomic<int32_t>*  noiseLast() const noexcept  { return noiseLast_.get(); }
         std::atomic<uint32_t>* groupEpoch() const noexcept { return groupEpoch_.get(); } // choke-group trigger count
         /** Back to the loaded state (the determinism gate; a preset reload). Not for the audio thread mid-note. */
         void resetPerformanceState() const noexcept;
@@ -141,7 +144,7 @@ namespace tw
         std::vector<uint8_t>    nearKey;        // [artic*128 + key] → nearest key with an attack region (tp105)
     private:
         std::unique_ptr<std::atomic<uint32_t>[]> rrSeq_, groupEpoch_;
-        std::unique_ptr<std::atomic<int32_t>[]>  rrLast_, fakeLast_;
+        std::unique_ptr<std::atomic<int32_t>[]>  rrLast_, fakeLast_, noiseLast_;
         friend struct OrganicLoader;
     };
 

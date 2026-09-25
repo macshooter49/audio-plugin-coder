@@ -12074,6 +12074,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         ceilNotes = juce::jmax (1, getVoiceCeiling() / juce::jmax (1, weight));
     }
+    // tp107 — one solo state for all eight oscillators (see anySolo in the gather)
+    bool anySoloAll = false;
+    for (int o = 0; o < ParameterIDs::kOscCount; ++o) anySoloAll = anySoloAll || *rawParam (ParameterIDs::kOsc_SOLO[o]) > 0.5f;
     for (int bank = 0; bank < nBanks; ++bank)
     {
         const bool   isB = bank == 1;
@@ -12667,7 +12670,12 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const bool soloC = *rpar (ParameterIDs::SYN_OSC_C_SOLO) > 0.5f;
         const bool muteD = *rpar (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
         const bool soloD = *rpar (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
-        const bool anySolo = soloA || soloB || soloC || soloD;
+        // tp107 — SOLO IS GLOBAL ACROSS BOTH BANKS (Max: "solo doesn't work on EFGH oscillators on the Patcher"). This gather
+        //  runs once per bank, and anySolo used to be `soloA || soloB || soloC || soloD` through rpar — i.e. THIS bank's four:
+        //  soloing E silenced F–H but A–D never heard of it, and soloing A left E–H playing. anySoloAll is read once per block
+        //  over all eight SOLO params (above the bank loop), so a solo anywhere silences every un-soloed oscillator in both
+        //  banks, and several solos combine. With no solo set it is false exactly as before (bit-identical).
+        const bool anySolo = anySoloAll;
         // OSC ENABLE — the real per-osc ON/OFF (the white OSC letters in the UI). Rides the
         // same click-free gate one-pole as solo/mute; once the gate settles at silence the
         // voice SKIPS the osc's whole render path (engines included), so OFF costs ~nothing —
@@ -13033,8 +13041,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 q.dyn     = 2.0f * kn (ParameterIDs::kOsc_ORG_DYNAMICS, 0) - 1.0f;
                 q.tone    = 2.0f * kn (ParameterIDs::kOsc_ORG_TONE,     1) - 1.0f;
                 q.body    = 2.0f * kn (ParameterIDs::kOsc_ORG_BODY,     2) - 1.0f;
-                q.attack  = 0.0f;   // tp105: ATTACK left the panel (the amp envelope owns attack) — declared + hidden, played at Natural
-                                    //   whatever an old session stored (a control nobody can see must not change the sound)
+                // tp107: ATTACK is back (page 2, next to Release) with its own mod dest (OrganicAttackBase + o; destForBank rebased E–H
+                //   onto this bank's slots). Knob 0 = Tight (+1), 0.5 = Natural (0: bit-identical to the tp105/106 forced value),
+                //   1 = the ~3 s swell (−1). The onset fade is max(amp-env attack, the knob's fade) — see OrganicEngine::spawn.
+                q.attack  = 1.0f - 2.0f * ownM (*rpar (ParameterIDs::kOsc_ORG_ATTACK[o]), wc::organicAttackDest (o), 0.0f, 1.0f);
                 q.vibrato =        kn (ParameterIDs::kOsc_ORG_VIBRATO,  3);                  // tp105: dest knob 3 = Vibrato
                 q.human   =        kn (ParameterIDs::kOsc_ORG_HUMAN,    4);
                 q.release =        kn (ParameterIDs::kOsc_ORG_RELEASE,  5);

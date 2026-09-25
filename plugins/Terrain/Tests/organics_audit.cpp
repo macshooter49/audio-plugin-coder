@@ -601,6 +601,7 @@ static int runHash (const juce::File&, const juce::File& file, bool check)
             if (variant == 2) { p.release = 1.f; p.sustain = 0.6f; }
             if (variant == 3) { p.vibrato = 0.7f; p.tone = 0.5f; p.body = -0.4f; }
             if (variant == 4) { p.dyn = 0.6f; p.image = 0.3f; p.noise = 1.f; p.velo = 0.2f; }
+            if (std::getenv ("ORG_NULL_NOISE0")) p.noise = 0.f;   // tp107: the round-robin noise changed its law — null everything else
             const bool sinc = variant == 5;
             uint64_t h = 1469598103934665603ull;
             std::vector<std::unique_ptr<OrganicEngine>> v;

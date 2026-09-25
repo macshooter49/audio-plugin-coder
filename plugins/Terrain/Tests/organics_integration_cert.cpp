@@ -41,6 +41,9 @@
 //   [23] LFO 1 → each of the ten Organics destinations moves its perceptual feature > 3× the unrouted note.
 //   [24] the Ensemble on the INSTALLED violin section (skipped without it): loudness vs players 1 → 16 is a gentle law,
 //        2 players do not phase, 16 players × 8 notes render in under half the block's real-time budget.
+//   tp107:
+//   [25] ATTACK is back: onset vs the knob (0 … 1), onset = max(amp attack, knob), LFO 1 → the Attack dest 5352 + osc (A, and E
+//        through bank B's rebase).
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -899,7 +902,10 @@ int main()
                 if (d.feature >= 4)
                 {   // a knob read at the note's start or end: eight presses at different LFO phases
                     std::vector<double> lv;
-                    for (int k = 0; k < 8; ++k)
+                    // tp107: the noise is a round-robin now (a take sounds on ~2 notes in 3 at the knob's 0.5, ±3 dB): the feature is
+                    //   the spread of the SOUNDING presses' level over 16 presses (a miss has no level to spread)
+                    const int nPress = d.feature == 6 ? 16 : 8;
+                    for (int k = 0; k < nPress; ++k)
                     {
                         const size_t s = a.L.size();
                         a.block ({ { d.note, 1 } }); a.run (0.23);
@@ -909,12 +915,14 @@ int main()
                                                           + 0.25 * centsOff (a.L, s + (size_t) (0.02 * SR), 8192, 440.0));
                         else if (d.feature == 6)
                         {
-                            std::vector<float> seg (a.L.begin() + (long) s, a.L.begin() + (long) (s + (size_t) (0.1 * SR)));
-                            const auto h = highpassOf (seg, 4000.0);
-                            lv.push_back (dbOf (rmsOf (h, 0, h.size())));
+                            // the on-burst's own 3 kHz (Goertzel): the HP-4k window also caught the previous press's 5 kHz off-burst,
+                            // which now comes and goes too
+                            const double l = partialDb (a.L, s, (size_t) (0.1 * SR), 3000.0);
+                            if (l > -80.0) lv.push_back (l);
                         }
                         else lv.push_back (dbOf (rmsOf (a.L, off + (size_t) (0.05 * SR), off + (size_t) (0.4 * SR))));
                     }
+                    if (lv.size() < 2) return 0.0;
                     double m = 0; for (double v : lv) m += v; m /= (double) lv.size();
                     double q = 0; for (double v : lv) q += (v - m) * (v - m); return std::sqrt (q / (double) lv.size());
                 }
@@ -984,6 +992,64 @@ int main()
             }
             setenv ("TERRAIN_ORGANICS_DIR", envWas.toRawUTF8(), 1); tw::OrganicsLibrary::get().rescan();
         }
+    }
+
+    // ═══ [25] tp107 — ATTACK IS BACK: the knob, the amp envelope's attack (onset = the max), and a mod route to 5352 + osc ═══
+    std::printf ("\n[25] tp107 Attack: onset vs the knob and the amp attack (the max), LFO 1 → the Attack dest (A and bank B's E)\n");
+    if (want (25))
+    {
+        // onset = time until the 5 ms RMS first reaches −1 dB of the held level (3.6..4.0 s), on the looped test.sine, note 69
+        auto onsetOf = [] (const std::vector<float>& x, size_t s0) {
+            const size_t W = 240; double ref = rmsOf (x, s0 + (size_t) (3.6 * SR), s0 + (size_t) (4.0 * SR));
+            size_t k = s0; while (k + W < x.size() && rmsOf (x, k, k + W) < ref * 0.891) k += 48;
+            return 1000.0 * (double) (k + W / 2 - s0) / SR;
+        };
+        auto press = [&] (int osc, float knob, float ampAttMs) {
+            Inst a;
+            if (osc != 0) { setP (*a.p, ParameterIDs::SYN_OSC_A_ENABLE, 0.f); a.tick (4); }
+            useOrganic (a, osc, "test.sine"); a.waitLoaded (osc);
+            setP (*a.p, ParameterIDs::kOsc_ORG_HUMAN[osc], 0.f);
+            setP (*a.p, ParameterIDs::kOsc_ORG_ATTACK[osc], knob);
+            setP (*a.p, ParameterIDs::SYN_ENV_AMP_A, ampAttMs);
+            a.run (0.05); a.clear();
+            a.block ({ { 69, 1 } }); a.run (4.1);
+            return onsetOf (a.L, 0);
+        };
+        const float ks[5] = { 0.f, 0.25f, 0.5f, 0.75f, 1.f };
+        double o1[5], o1000[5]; std::string t;
+        for (int i = 0; i < 5; ++i) { o1[i] = press (0, ks[i], 1.f); o1000[i] = press (0, ks[i], 1000.f); t += fmt ("%.0f%%: %.1f / %.0f ms · ", 100 * ks[i], o1[i], o1000[i]); }
+        std::printf ("        onset (amp attack 1 ms / 1000 ms): %s\n", t.c_str());
+        chk (o1[2] < 10.0 && o1[3] > 100.0 && o1[3] < 260.0 && o1[4] > 1800.0 && o1[4] < 3200.0,
+             "25a the knob: Natural fast, 75 % ≈ 0.17 s, 100 % ≈ 3 s (log taper through the top half)", t);
+        // (the amp envelope's own attack curve reaches −1 dB at ~0.23 of its time: 1 s → ≈ 230 ms; the point is the MAX)
+        chk (std::abs (o1000[2] - o1000[3]) < 5.0 && o1000[2] > 20.0 * o1[2] && std::abs (o1000[0] - o1000[2]) < 5.0 && std::abs (o1000[4] - o1[4]) < 50.0,
+             "25b onset = max(amp attack, knob): a 1 s amp attack lengthens 0–75 % to the envelope's own onset; 100 % (3 s) stays the knob's", t);
+        // LFO 1 (0.4 Hz) → Attack of A (5352) and E (5356, bank B rebased): eight presses at different LFO phases → onset spread
+        auto spread = [&] (int osc, bool routed) {
+            Inst a;
+            if (osc != 0) { setP (*a.p, ParameterIDs::SYN_OSC_A_ENABLE, 0.f); a.tick (4); }
+            useOrganic (a, osc, "test.sine"); a.waitLoaded (osc);
+            setP (*a.p, ParameterIDs::kOsc_ORG_HUMAN[osc], 0.f);
+            setP (*a.p, ParameterIDs::kOsc_ORG_ATTACK[osc], 0.75f);
+            setP (*a.p, ParameterIDs::LFO1_RATE, 0.4f);
+            if (routed) a.p->setSynthModMatrix ("[{\"s\":0,\"d\":" + juce::String (wc::organicAttackDest (osc)) + ",\"v\":0.5}]");
+            a.run (0.05); a.clear();
+            std::vector<double> on;
+            for (int k = 0; k < 8; ++k)
+            {
+                const size_t s = a.L.size();
+                a.block ({ { 69, 1 } }); a.run (0.9);
+                const double ref = rmsOf (a.L, s + (size_t) (0.75 * SR), s + (size_t) (0.85 * SR));
+                size_t q = s; while (q + 240 < a.L.size() && rmsOf (a.L, q, q + 240) < ref * 0.5) q += 48;
+                on.push_back (1000.0 * (double) (q - s) / SR);
+                a.block ({ { 69, 0 } }); a.run (0.35);
+            }
+            double m = 0; for (double v : on) m += v; m /= 8; double sd = 0; for (double v : on) sd += (v - m) * (v - m);
+            return std::sqrt (sd / 8);
+        };
+        const double sA0 = spread (0, false), sA1 = spread (0, true), sE0 = spread (4, false), sE1 = spread (4, true);
+        chk (sA1 > 3.0 * sA0 + 5.0 && sE1 > 3.0 * sE0 + 5.0, "25c LFO 1 → the Attack dest moves the onset (osc A 5352, osc E 5356 through bank B's rebase)",
+             fmt ("onset (−6 dB) SD over 8 presses: A %.1f → %.1f ms · E %.1f → %.1f ms (unrouted → routed)", sA0, sA1, sE0, sE1));
     }
 
     std::printf ("\norganics_integration_cert: %d PASS · %d FAIL · %d SKIP\n", npass, nfail, nskip);
