@@ -1162,7 +1162,7 @@ int main (int argc, char** argv)
                  fmt ("onset %.1f / %.1f / %.1f ms · first-12ms RMS %.1f / %.1f / %.1f dB (Gentle/Natural/Tight)",
                       onset[0], onset[1], onset[2], an::db (e12[0]), an::db (e12[1]), an::db (e12[2])));
         }
-        // Human: per-note spread matches the ranges (detune ±4¢, level ±1.5 dB, timing 0..12 ms, tone ±1.5 dB).
+        // Human: per-note spread matches the ranges (detune ±4¢, level 0 … +3 dB (tp107b), timing 0..12 ms, tone ±1.5 dB).
         // test.layers vel 60 = one zone, one layer, no RR (fake RR finds no neighbour): fundamental 130.8 Hz + marker
         // k5 at 654 Hz ≈ the 700 Hz tilt pivot → level = the marker, tone = marker/fundamental (the tilt's LF side).
         {
@@ -1190,7 +1190,7 @@ int main (int argc, char** argv)
             }
             auto mm = [] (const std::vector<double>& v, double& lo, double& hi) { lo = *std::min_element (v.begin(), v.end()); hi = *std::max_element (v.begin(), v.end()); };
             double dl, dh, ll, lh, tl, th, ol, oh; mm (det, dl, dh); mm (lvl, ll, lh); mm (tim, tl, th); mm (ton, ol, oh);
-            const bool ok = zeroSame && dl >= -4.2 && dh <= 4.2 && dh - dl > 5.0 && ll >= -1.7 && lh <= 1.7 && lh - ll > 2.0
+            const bool ok = zeroSame && dl >= -4.2 && dh <= 4.2 && dh - dl > 5.0 && ll >= -0.2 && lh <= 3.2 && lh - ll > 2.0
                             && tl >= -0.5 && th <= 12.5 && th > 8.0 && ol >= -1.7 && oh <= 1.7 && oh - ol > 1.5;
             bar ("Human 1: per-note spread within ranges (60 notes)", ok,
                  fmt ("detune [%+.2f,%+.2f]¢ · level [%+.2f,%+.2f] dB · timing [%.1f,%.1f] ms · tone [%+.2f,%+.2f] dB · Human 0 identical %s",
