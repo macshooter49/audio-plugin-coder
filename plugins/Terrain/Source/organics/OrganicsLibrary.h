@@ -155,5 +155,11 @@ namespace tw
         bool deferRelease (std::shared_ptr<const OrganicInstrument>& p) noexcept;
         /** Library thread / tests: destroy everything queued. */
         void drainDeferredReleases();
+
+        /** tp108 — user imports. A user instrument's id is "user.<slug>"; it lives in <root>/User/<id>/ (the factory
+            folders stay <root>/<id>/). index() merges <root>/User/user-index.json (category "User"), idToIndex() /
+            indexToId() merge <root>/User/user-ids.json (numbers from 2048). Factory files are never written. */
+        bool       isUserId (const juce::String& id) noexcept;
+        juce::File instrumentFolder (const juce::String& id);
     }
 }

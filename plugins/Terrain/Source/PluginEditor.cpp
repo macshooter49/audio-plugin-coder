@@ -27,6 +27,10 @@ void  tiDisarmPeerRescue (void* peerHwnd, void* token);
 //  native into TerrainSettingsNatives.cpp; the three tp100 natives below still answer from here.
 #include "TerrainSettingsNatives.h"
 #include "TerrainGlobalPrefs.h"
+#if TERRAIN_ORG_IMPORT
+ #include "organics/OrganicsImport.h"    // tp108 — the user SoundFont import (natives in withOrganics)
+ #include "organics/OrganicsLibrary.h"
+#endif
 
 // fb602 — ONE data root for everything this TU writes. JUCE resolves
 // userApplicationDataDirectory to "~/Library" on macOS (juce_Files_mac.mm:209) and to
@@ -15796,7 +15800,8 @@ bool TerrainUiCore::isInterestedInFileDrag (const juce::StringArray& files)
     const auto ext = juce::File (files[0]).getFileExtension().toLowerCase();
     return ext == ".wav" || ext == ".aif" || ext == ".aiff"
         || ext == ".flac" || ext == ".mp3"
-        || ext == ".terrain" || ext == ".terrainpack";
+        || ext == ".terrain" || ext == ".terrainpack"
+        || ext == ".sfz" || ext == ".sf2" || ext == ".sf3";   // tp108 — a SoundFont dropped on the Organics display imports
 }
 
 void TerrainUiCore::fileDragEnter (const juce::StringArray&, int, int)
@@ -15822,6 +15827,14 @@ void TerrainUiCore::filesDropped (const juce::StringArray& files, int, int)
 
     if (ext == ".terrain")     { loadPatch (f);          return; }
     if (ext == ".terrainpack") { importTerrainPack (f);  return; }
+    // tp108 — a SoundFont: the page decides (it imports only when the drop landed on an Organics display — the WebView's own
+    // drop event carries no path, this OS-level one does). The path goes into JS as a JSON string literal.
+    if (ext == ".sfz" || ext == ".sf2" || ext == ".sf3")
+    {
+        if (webView != nullptr)
+            webView->evaluateJavascript ("if (window.__orgFileDropped) window.__orgFileDropped(" + juce::JSON::toString (juce::var (f.getFullPathName())) + ");", nullptr);
+        return;
+    }
 
     // PEROSC-DRAGGUARD — on the synth page, an oscillator waveform drop is handled in JS
     // (the .samp-disp 'drop' listener → loadSampleForOsc → that osc's own buffer). The OS-level
@@ -17253,14 +17266,132 @@ juce::WebBrowserComponent::Options TerrainUiCore::withOrganics (juce::WebBrowser
     return o
         // organicsIndex() → index.json as a JSON string, each entry + "installed": the instrument's folder is on disk
         .withNativeFunction ("organicsIndex", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
-        { complete (juce::var (audioProcessor.organicsIndexJson())); })
+        { complete (juce::var (organicsUserPatch (audioProcessor.organicsIndexJson(), true))); })
         // organicsSetInstrument(osc 0..7, id) → {ok,id,name,family,category,artics,hasNoise,hasRelease,status}; also ORG_INST
         .withNativeFunction ("organicsSetInstrument", [this, oscArg] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
-        { complete (juce::var (audioProcessor.organicsSetInstrument (oscArg (a), a.size() > 1 ? a[1].toString() : juce::String()))); })
+        { complete (juce::var (organicsUserPatch (audioProcessor.organicsSetInstrument (oscArg (a), a.size() > 1 ? a[1].toString() : juce::String()), false))); })
         // organicsGetState(osc) → the same JSON for the osc's current instrument (the page reads back on open)
         .withNativeFunction ("organicsGetState", [this, oscArg] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
-        { complete (juce::var (audioProcessor.organicsStateJson (oscArg (a)))); })
+        { complete (juce::var (organicsUserPatch (audioProcessor.organicsStateJson (oscArg (a)), false))); })
         // organicsPreview(id) → preview.flac through the browser-preview player (no synth voice); "" stops
         .withNativeFunction ("organicsPreview", [this] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
-        { audioProcessor.organicsPreview (a.size() > 0 ? a[0].toString() : juce::String()); complete (juce::var ("ok")); });
+        { audioProcessor.organicsPreview (a.size() > 0 ? a[0].toString() : juce::String()); complete (juce::var ("ok")); })
+       #if TERRAIN_ORG_IMPORT
+        // ── tp108 — THE USER SOUNDFONT IMPORT (contract tp108). Every conversion runs on the import job thread
+        //    (OrganicsImport.cpp); these natives only queue, list, delete and pick, and the progress comes back as events.
+        // organicsImport(path[, preset[, allowLarge]]) → {"job": n} (n > 0), or {"job": 0, "error": "…"} for a bad argument.
+        //   preset: SF2/SF3 phdr index (0-based) · -1 the first preset · -2 or "all" = "Import all presets" (one instrument each).
+        //   Then events "organicImport" {job, pct, stage, done:false} (≤ 10/s) and ONE {job, pct:100, done:true, ok, id, ids, name,
+        //   names, error, warning, needConfirm, mb}. needConfirm = over 500 MB of decoded audio: ask, then call again with allowLarge.
+        .withNativeFunction ("organicsImport", [this] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        {
+            const juce::String path = a.size() > 0 ? a[0].toString() : juce::String();
+            auto* o = new juce::DynamicObject();
+            if (path.isEmpty() || ! juce::File::isAbsolutePath (path)) { o->setProperty ("job", 0); o->setProperty ("error", "No file"); complete (juce::var (o)); return; }
+            tw::orgimport::Request rq;
+            rq.source = juce::File (path);
+            rq.preset = a.size() > 1 && (a[1].isInt() || a[1].isDouble() || a[1].isInt64()) ? (int) a[1] : tw::orgimport::kFirstPreset;
+            if (a.size() > 1 && a[1].toString() == "all") rq.preset = tw::orgimport::kAllPresets;
+            rq.allowLarge = a.size() > 2 && (bool) a[2];
+            auto safe = juce::Component::SafePointer<TerrainUiCore> (this);
+            const int job = tw::orgimport::startImport (rq, [safe] (const tw::orgimport::JobEvent& ev)
+            {
+                if (safe == nullptr || safe->webView == nullptr) return;       // the editor closed: the import still finishes
+                auto* e = new juce::DynamicObject();
+                e->setProperty ("job", ev.job); e->setProperty ("pct", (double) ev.pct); e->setProperty ("stage", ev.stage);
+                e->setProperty ("done", ev.done);
+                if (ev.done)
+                {
+                    const auto& r = ev.result;
+                    e->setProperty ("ok", r.ok);
+                    e->setProperty ("id", r.ids.isEmpty() ? juce::String() : r.ids[0]);
+                    e->setProperty ("name", r.names.isEmpty() ? juce::String() : r.names[0]);
+                    juce::Array<juce::var> ids, names; for (auto& x : r.ids) ids.add (x); for (auto& x : r.names) names.add (x);
+                    e->setProperty ("ids", ids); e->setProperty ("names", names);
+                    e->setProperty ("error", r.error); e->setProperty ("warning", r.warning);
+                    e->setProperty ("needConfirm", r.needConfirm); e->setProperty ("mb", r.mb);
+                }
+                safe->webView->emitEventIfBrowserIsVisible (juce::Identifier ("organicImport"), juce::var (e));
+            });
+            o->setProperty ("job", job);
+            complete (juce::var (o));
+        })
+        // organicsListSf2Presets(path) → {"ok": bool, "presets": ["name", …], "error": "…"} (phdr order; the pick is the index)
+        .withNativeFunction ("organicsListSf2Presets", [] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        {
+            juce::String err;
+            const auto names = tw::orgimport::listSf2Presets (juce::File (a.size() > 0 ? a[0].toString() : juce::String()), &err);
+            auto* o = new juce::DynamicObject();
+            juce::Array<juce::var> arr; for (auto& n : names) arr.add (n);
+            o->setProperty ("ok", err.isEmpty()); o->setProperty ("presets", arr); o->setProperty ("error", err);
+            complete (juce::var (o));
+        })
+        // organicsDeleteUser(id) → {"ok": bool, "error": "…"}: the folder + its user-index.json entry go (its number stays reserved)
+        .withNativeFunction ("organicsDeleteUser", [] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        {
+            juce::String err;
+            const bool ok = tw::orgimport::deleteUserInstrument (tw::OrganicsLibrary::get().root(), a.size() > 0 ? a[0].toString() : juce::String(), &err);
+            if (ok) tw::OrganicsLibrary::get().rescan();
+            auto* o = new juce::DynamicObject(); o->setProperty ("ok", ok); o->setProperty ("error", err);
+            complete (juce::var (o));
+        })
+        // organicsChooseSoundFont() → the native file chooser (.sfz / .sf2 / .sf3); completes with the absolute path, "" = cancelled
+        .withNativeFunction ("organicsChooseSoundFont", [] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+        {
+            auto chooser = std::make_shared<juce::FileChooser> ("Import SoundFont", juce::File(), "*.sfz;*.sf2;*.sf3");
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                                  [chooser, complete] (const juce::FileChooser& fc)
+            {
+                const auto f = fc.getResult();
+                complete (juce::var (f.existsAsFile() && tw::orgimport::isSoundFontFile (f) ? f.getFullPathName() : juce::String()));
+            });
+        })
+       #endif
+        ;
+}
+
+// tp108 — USER INSTRUMENTS IN THE PROCESSOR'S JSON. The processor resolves an instrument's folder as <root>/<id>; a user import
+//  lives in <root>/User/<id> (contract tp108). So the three natives' JSON is corrected here, on the way to the page: an index
+//  entry's "installed" and, for a user id, the map header fields the processor could not read (artics / hasNoise / hasRelease).
+//  Factory entries pass through untouched. (The loading itself goes through OrganicsLibrary::request, which knows the folder.)
+juce::String TerrainUiCore::organicsUserPatch (const juce::String& js, bool isIndex)
+{
+   #if TERRAIN_ORG_IMPORT
+    if (! js.contains ("\"user.")) return js;
+    juce::var v = juce::JSON::parse (js);
+    auto header = [] (const juce::String& id) -> juce::var
+    {
+        const auto f = tw::org::instrumentFolder (id).getChildFile ("map.json");
+        juce::FileInputStream in (f);
+        if (! in.openedOk()) return {};
+        juce::MemoryBlock mb; in.readIntoMemoryBlock (mb, 65536);
+        juce::String head = mb.toString();
+        const int r = head.indexOf ("\"regions\"");
+        if (r > 0) { head = head.substring (0, r).trimEnd(); while (head.endsWithChar (',')) head = head.dropLastCharacters (1).trimEnd(); head << "}"; }
+        else if ((juce::int64) mb.getSize() >= 65536) head = f.loadFileAsString();
+        return juce::JSON::parse (head);
+    };
+    if (isIndex)
+    {
+        if (auto* arr = v.getArray())
+            for (auto& e : *arr)
+                if (auto* o = e.getDynamicObject(); o != nullptr && tw::org::isUserId (o->getProperty ("id").toString()))
+                    o->setProperty ("installed", tw::org::instrumentFolder (o->getProperty ("id").toString()).getChildFile ("map.json").existsAsFile());
+        return juce::JSON::toString (v, true);
+    }
+    if (auto* o = v.getDynamicObject(); o != nullptr && tw::org::isUserId (o->getProperty ("id").toString()))
+    {
+        const juce::var h = header (o->getProperty ("id").toString());
+        if (h.isObject())
+        {
+            if (h["artics"].isArray() && ! (o->getProperty ("artics").isArray() && o->getProperty ("artics").size() > 0)) o->setProperty ("artics", h["artics"]);
+            o->setProperty ("hasNoise", (bool) h.getProperty ("hasNoise", false));
+            o->setProperty ("hasRelease", (bool) h.getProperty ("hasRelease", false));
+        }
+        return juce::JSON::toString (v, true);
+    }
+   #else
+    juce::ignoreUnused (isIndex);
+   #endif
+    return js;
 }
