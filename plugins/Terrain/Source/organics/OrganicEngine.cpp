@@ -778,7 +778,11 @@ namespace tw
                 const float uDet = rng.next(), uLvl = rng.next(), uStart = rng.next(), uTone = rng.next(), uTime = rng.next();
                 n.uRand = rng.next(); n.uFake = rng.next();
                 n.humC = (2.f * uDet - 1.f) * 4.f * h;
-                n.humLvl = dbToLin ((2.f * uLvl - 1.f) * 1.5f * h);
+                // tp107b — Human's level spread (the same 3 dB·h wide) never makes a press QUIETER than its Human-0 self: 0 … +3 dB·h.
+                //  Max: "a press never goes quiet because of randomisation" — the vibraphone's Bowed soft layer sits right at the
+                //  −60 dBFS audibility line for its first 50 ms, and the old ±1.5 dB·h draw dropped presses under it (the --sweep's
+                //  21 at Human 0.41 / 1). Human 0 → 0 dB, bit-identical.
+                n.humLvl = dbToLin (uLvl * 3.f * h);
                 n.humStartSec = uStart * 0.006f * h;
                 n.humToneDb = (2.f * uTone - 1.f) * 1.5f * h;
                 n.delay = (int) std::lround (((double) uTime * 0.012 * h + (double) k * 0.007 * D) * sr);
@@ -838,12 +842,24 @@ namespace tw
                 if (c != 0)
                 {
                     const int base = topRegion (n, key0, n.vL);
+                    // tp107b — A BORROW MUST SOUND AS PROMPTLY AS THE NOTE'S OWN TAKE (Max: "a press never goes quiet because of
+                    //  randomisation"). The onset in OUTPUT time (lead-in frames ÷ the repitch ratio) of the neighbour must be within
+                    //  15 ms of the own region's; otherwise the note plays its own region. The --sweep found the vibraphone's Bowed
+                    //  keys 46/47 (mapped to the 57 zone, 4.5 ms lead-in) borrowing the 64 zone (238 ms of bow before the onset,
+                    //  repitched down 18 st → 0.68 s late: silent in the window). Human 0 never borrows → bit-identical there.
+                    auto onsetOut = [&] (int ri) {
+                        const auto& rg = I.regions[(size_t) ri];
+                        const double ratio = (I.samples[(size_t) rg.smp].sampleRate / sr) * std::exp2 ((double) (n.key - rg.root) / 12.0);
+                        return (double) std::max<int64_t> (0, rg.onset - rg.start) / std::max (1.0e-4, ratio) / sr;
+                    };
+                    const double own = base >= 0 ? onsetOut (base) : 0.0;
                     for (int d = 1; d <= 6; ++d)
                     {
                         const int k2 = key0 + c * d;
                         if (k2 < 0 || k2 > 127) break;
                         const int t = topRegion (n, k2, n.vL);
-                        if (t >= 0 && t != base && n.key - I.regions[(size_t) t].root <= 7) { n.fake = c * d; break; }
+                        if (t >= 0 && t != base && n.key - I.regions[(size_t) t].root <= 7 && std::abs (onsetOut (t) - own) <= 0.015)
+                        { n.fake = c * d; break; }
                     }
                 }
             }
