@@ -5572,7 +5572,7 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
    the header centerline; the font glyph U+00B7 floats up at x-height and can't be centered cleanly). */
 #syn-panel .device.osc .device-label .lbl-sep {
   width: 2px; height: 2px; border-radius: 50%; background: rgba(255,255,255,0.42);   /* LOW-OPACITY dot (Max) — subtle, not solid white; smaller too */
-  display: inline-block; margin-left: 5px; flex: 0 0 auto; position: relative; top: 0.5px;   /* Max: dot DOWN 0.5px off the label centerline (was 1.5px → up 1px) */
+  display: inline-block; margin-left: 5px; flex: 0 0 auto; position: relative; top: 0;   /* tp105 — Max: "everything runs through the middle": the dot's ink centre ON the OSC cap-centre line (measured, Tests/_org_ink.js) */
 }
 
 #syn-panel .swap-btn {
@@ -5694,8 +5694,16 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
 #syn-panel .device.osc .osc-emblems .osc-letter,
 #syn-panel .device.osc .osc-emblems .sn-chip { font-size: 9px; }
 #syn-panel .device.osc .swap-btn { font-size: 12px; }
-#syn-panel .device.osc .swap-btn::before { transform: translateY(0px); }   /* Max: "+" up 1px (was +1px → now 0). The ← (.act) stays at -1px — different glyph, centered independently. */
-#syn-panel .device.osc .swap-btn.act::before { font-size: 11px; transform: translateY(-1px); }   /* ← back arrow: same up-1px centering as the + */
+/* tp105 — THE + AND THE ← ARE DRAWN, NOT TYPED (the centerline law: "text glyphs fail this — use SVG"). The typed "+" sat 1.3 px
+   under the line in every engine (measured on ink, Tests/_org_ink.js). Both are now geometry centred on the box's own centre by
+   the grid, so + ⇄ ← cannot move a pixel: the + = two 1 px bars; the ← = a 1 px shaft (::before) + a rotated corner (::after). */
+#syn-panel .device.osc .swap-btn::before { content: ''; width: 8px; height: 8px; transform: none;
+  background: linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat, linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat; grid-area: 1 / 1; }
+#syn-panel .device.osc .swap-btn.act::before { content: ''; font-size: 0; width: 8px; height: 8px; transform: none;
+  background: linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat; }
+#syn-panel .device.osc .swap-btn::after { content: ''; display: none; grid-area: 1 / 1; }
+#syn-panel .device.osc .swap-btn.act::after { display: block; width: 4.2px; height: 4.2px; box-sizing: border-box; border-left: 1px solid currentColor; border-bottom: 1px solid currentColor;
+  transform: translateX(-1.9px) rotate(45deg); }
 #syn-panel .device.osc .osc-emblems .osc-letter:hover,
 #syn-panel .device.osc .osc-emblems .sn-chip:hover,
 #syn-panel .device.osc .swap-btn:hover { color: #FFFFFF; border-color: var(--purple-400); background: rgba(139,92,246,0.22); box-shadow: 0 0 7px rgba(167,139,250,0.45); text-shadow: none; }
@@ -6143,7 +6151,8 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
 }
 /* mv3 — the padded loop-mode pill makes the LEFT header cluster (Modal · One-Shot) a hair taller,
    so nudge the corner-preset (Grand · Concert · [A] · [+]) down 2px to match → all four centered. */
-#syn-panel .device.osc.engine-modal .device-corner-preset { top: 6px; }
+/* tp105 — the corner's 2 px drop (mv3) is RETIRED: it put [A] [+] 2 px under the text line (Max's red line). The corner sits at
+   top:4px like every engine; the pill cannot make the 16 px row taller (align-items:center, line-height 1). */
 /* mv4 — WKWebView (the plugin's real engine) seats BLOCK text (.preset-display families) lower
    inside its box than INLINE text (.samp-sel-disp loop mode), so the families rendered low even
    though the boxes measured aligned. Flex-CENTER the glyphs in both (engine-independent, no
@@ -6155,7 +6164,7 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
 /* mv5 — measured in the REAL engine (WKWebView, Range/glyph bounds): the family glyphs still land
    1.5px lower than the loop-mode/engine glyphs. Nudge ONLY the family TEXT up so Grand/Concert sit
    on the exact same line as One-Shot · Modal (the [A]/[+] boxes are already aligned, so don't move them). */
-#syn-panel .device.osc.engine-modal .md-fam-wrap .preset-display { position: relative; top: -1.5px; }
+#syn-panel .device.osc.engine-modal .md-fam-wrap .preset-display { position: relative; top: 0; }   /* tp105 — mv5's −1.5 px undid mv3's +2 px corner drop; both retired */
 /* (mv3's Modal-only "drop the loop-mode ▾" override retired in rs2 — the ▾ no longer exists on any engine.) */
 #syn-panel .modal-knob-wrap .modal-knobs { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
 #syn-panel .modal-knob-wrap .modal-pg2 { display: none; }
@@ -6603,7 +6612,7 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
    .hm-mode-wrap rule above (and .hm-sculpt also carries .hm-mode-wrap), so on Table the corner
    carries THREE name-chips where every other engine carries one. That is the collision. */
 #syn-panel .device.osc.engine-harm .device-corner-preset
-  .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) { display: inline-block; }
+  .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap):not(.org-inst-wrap) { display: inline-block; }   /* tp105 — :not(.org-inst-wrap): Organics' "Instrument" chip leaked onto the Harmonic header (found by the ink census) */
 /* fb595 — THE ARROWS. .device-corner-preset is a FLEX container, so a flex item's display is
    BLOCKIFIED: the old `inline-block` here computed to `block` and threw away the align-items /
    justify-content centring that the canonical .wt-nav rule below relies on — the glyph fell to the
@@ -7347,6 +7356,16 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 #syn-panel .organic-arrow.set-prev::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }   /* the ‹ (rs2), re-stated: this block sits after the shared .set-prev rule */
 /* Noise greys when the instrument has no mechanical-noise regions — still usable, does nothing (design §2.4) */
 #syn-panel .organic-knob-wrap .knob.org-na { opacity: .32; }
+/* tp105 — THE BACK PANEL (contract tp105): the selector row becomes Organics' own five pills (Rate · Delay · Curve · Tuning ·
+   Articulation) — the Sample engine's warp modes no longer show here. Same .sel chassis, same row, same height. */
+#syn-panel .device .selector-pills.org-pills { display: none; }
+#syn-panel .device.osc.engine-organic.swapped .back-only > .selector-pills:not(.org-pills) { display: none; }
+#syn-panel .device.osc.engine-organic.swapped .back-only > .selector-pills.org-pills { display: flex; }
+#syn-panel .org-pills .org-bv { cursor: ns-resize; }
+#syn-panel .org-pills .org-dd { cursor: pointer; }
+#syn-panel .org-pills .org-dd:hover, #syn-panel .org-pills .org-dd.open { border-color: var(--purple-400); }
+#syn-panel .org-pills .org-dv { color: var(--text-primary); line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .org-pills .org-bp.org-na { opacity: .32; }
 /* the back panel: five knobs like Modal (Low/High Cut are wavetable-only) */
 #syn-panel .device.osc.engine-organic .back-only > .osc-knobs { grid-template-columns: repeat(5, 1fr); }
 #syn-panel .device.osc.engine-organic .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
@@ -7356,22 +7375,25 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    ALWAYS in the layout (visibility, never display) so an instrument with one articulation and one with five
    put every glyph in exactly the same place (the fixed-position law). ── */
 #syn-panel .device .org-head { display: none; }
-#syn-panel .device.osc.engine-organic .org-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
+#syn-panel .device.osc.engine-organic .org-head { display: inline-flex; align-items: center; gap: 8px; margin-left: 5px; }
+/* tp105 — the pill's box is 38 px and a deliberate word always fits it (Tests/_org_artic_gate.js renders every articulation of every
+   installed instrument): 9 px type, 0.4 px tracking, 3 px air each side. Round 1's box held 22 px of text, so "Staccato" showed
+   "St…" and "Medium Mallets" showed "Mediu" (Max). The gap before it went 11 → 8 px so its right edge (and the ‹ it must clear) is
+   where it was, +1 px. */
 #syn-panel .device.osc.engine-organic .org-head .samp-sel-disp {
-  font-size: 9.5px; font-weight: 300; letter-spacing: 0.8px; padding: 2px 6px; border-radius: 5px;
+  font-size: 9px; font-weight: 300; letter-spacing: 0.4px; padding: 2px 3px; border-radius: 5px; box-sizing: border-box;
   display: inline-flex; align-items: center; line-height: 1; transition: background .12s ease, color .12s ease;
-  max-width: 34px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* the orchestral short form (Sus · Stacc · Pizz · Trem); the menu carries the full word */
+  max-width: 38px; overflow: hidden; text-overflow: clip; white-space: nowrap; }   /* the menu and the tooltip carry the full word */
 #syn-panel .device.osc.engine-organic .org-head .samp-sel { cursor: pointer; }
 #syn-panel .device.osc.engine-organic .org-head .samp-sel:hover .samp-sel-disp,
 #syn-panel .device.osc.engine-organic .org-head .samp-sel.open .samp-sel-disp { background: rgba(139,92,246,0.15); color: var(--text-primary); }
 #syn-panel .device.osc.engine-organic .org-head.single .org-artic { visibility: hidden; pointer-events: none; }
-#syn-panel .device.osc.engine-organic .device-corner-preset { top: 6px; }
 #syn-panel .device.osc.engine-organic .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device-corner-preset .org-inst-wrap { display: none; cursor: pointer; }
 #syn-panel .device.osc.engine-organic .device-corner-preset .org-inst-wrap { display: inline-flex; }
-#syn-panel .device.osc.engine-organic .org-inst-wrap .preset-display { display: inline-flex; align-items: center; line-height: 1; position: relative; top: -1.5px; max-width: 90px; }   /* MEASURED (tp104 align gate): with the widest articulation pill up ("Stacc"), 90 px is what keeps the ‹ clear of it — and it is the same cap with or without the pill, so the name never moves */
+#syn-panel .device.osc.engine-organic .org-inst-wrap .preset-display { display: inline-flex; align-items: center; line-height: 1; position: relative; top: 0; max-width: 90px; }   /* MEASURED (tp104 align gate): with the widest articulation pill up ("Stacc"), 90 px is what keeps the ‹ clear of it — and it is the same cap with or without the pill, so the name never moves */
 #syn-panel .device.osc.engine-organic .org-inst-wrap.missing .preset-display { color: var(--text-muted); }
-#syn-panel .device.osc .org-nav { display: none; align-items: center; justify-content: center; width: 11px; height: 16px; font-size: 11px; line-height: 1; color: rgba(255,255,255,0.4); cursor: pointer; user-select: none; transition: color .12s ease; transform: translateY(-3.05px); }   /* MEASURED: the corner sits at top:6px (Modal's recipe) and the name is lifted 1.5 px, so the ‹ › lift 2.05 px more than .wt-nav's −1 to sit on the name exactly as the wavetable's do */
+#syn-panel .device.osc .org-nav { display: none; align-items: center; justify-content: center; width: 11px; height: 16px; font-size: 11px; line-height: 1; color: rgba(255,255,255,0.4); cursor: pointer; user-select: none; transition: color .12s ease; transform: translateY(-1px); }   /* tp105 — the corner is back at top:4px, so the ‹ › are the wavetable's exactly */
 #syn-panel .device.osc .org-nav:hover { color: var(--purple-400); }
 #syn-panel .device.osc.engine-organic .org-nav { display: inline-flex; }
 #syn-panel .device.osc.engine-organic .wt-nav,
@@ -7385,9 +7407,10 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    stand down (they are siblings in the same box). --org-bg is the box's measured colour, and it is also the
    fill every part of the drawing hides the lines behind it with — the two must match. ── */
 #syn-panel .samp-disp .org-viz, #syn-panel .samp-disp .org-status { display: none; }
-#syn-panel .device.osc.engine-organic .samp-disp { --org-bg: #10101F; background: var(--org-bg); cursor: default; }
+#syn-panel .device.osc.engine-organic .samp-disp { --org-bg: #1A1A2E; background: transparent; border: none; box-shadow: none; outline: none; cursor: default; }   /* tp105 — NO BOX (Max): transparent over the panel like the wavetable view; --org-bg is set from the real ground by paintBg() */
 #syn-panel .device.osc.engine-organic .samp-disp > :not(.org-viz):not(.org-status) { display: none !important; }
-#syn-panel .device.osc.engine-organic .samp-disp .org-viz { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
+#syn-panel .device.osc.engine-organic .samp-disp .org-viz { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; will-change: transform; }
+#syn-panel .device.osc.engine-organic .samp-disp .org-viz.org-fx { will-change: auto; }   /* the overlay paints with the panel: a second layer cost compositing every frame the page moves (measured) */   /* tp105 — its own layer: painted once; the moving copies live in .org-fx above it */
 #syn-panel .device.osc.engine-organic .samp-disp .org-status { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; pointer-events: none;
   font-size: 9px; font-weight: 300; letter-spacing: 1px; color: var(--text-secondary); opacity: 0; transition: opacity .2s ease; }
 #syn-panel .device.osc.engine-organic .samp-disp.org-missing .org-status { opacity: 1; }
@@ -7395,9 +7418,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 #syn-panel .device.osc.engine-organic .samp-disp.org-empty { cursor: pointer; }
 
 /* the line-art (ported from Design/organics/organics-mockup.html — ONE stroke family, no glow anywhere) */
-.org-viz .f { fill: var(--org-bg, #10101F); stroke: none; transition: fill .16s ease; }
-.org-viz .r-key.kw .f { fill: #2A2944; }
-.org-viz .kbf { fill: #05050B; }
+/* tp105 — NO TRANSITIONS: each one repainted the whole drawing at the display's refresh rate for its whole duration (measured in the
+   real WebView's GPU process). A played part is on or off; the only motion is a ringing string at ≤ 30 fps. */
+.org-viz, .org-viz * { transition: none !important; }
+.org-viz .f { fill: var(--org-bg, #1A1A2E); stroke: none; transition: fill .16s ease; }
+.org-viz .r-key.kw .f { fill: var(--org-kw, #2A2944); }
+.org-viz .kbf { fill: var(--org-kbf, #05050B); }
 .org-viz .r-key.kb .m { stroke-opacity: .16; }
 .org-viz .r-key.kb.on .m { stroke-opacity: .9; }
 .org-viz .m { fill: none; stroke: #fff; stroke-opacity: .84; stroke-width: .8; stroke-linejoin: round; stroke-linecap: round; transition: stroke-opacity .2s ease; }
@@ -7407,22 +7433,50 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 .org-viz .b { fill: none; stroke: #fff; stroke-opacity: .84; stroke-width: 1; stroke-linejoin: round; stroke-linecap: round; }
 .org-viz .pt { transition: transform .22s cubic-bezier(.2,.8,.2,1); }
 .org-viz .r-key.on { transform: translateY(.45px); transition-duration: .05s; }
-.org-viz .r-key.on .f { fill: #3A3954; transition-duration: .04s; }
-.org-viz .r-key.kb.on .f, .org-viz .r-key.kb.on .kbf { fill: #4A4966; }
+.org-viz .r-key.on .f { fill: var(--org-kon, #3A3954); transition-duration: .04s; }
+.org-viz .r-key.kb.on .f, .org-viz .r-key.kb.on .kbf { fill: var(--org-kbon, #4A4966); }
 .org-viz .r-key.on .k { stroke-opacity: .95; transition-duration: .04s; }
 .org-viz .r-key.on .h { stroke-opacity: .7; }
-.org-viz .r-bar.on .f, .org-viz .r-pipe.on .f, .org-viz .r-pad.on .f, .org-viz .r-valve.on .f { fill: #34334D; transition-duration: .04s; }
+.org-viz .r-bar.on .f, .org-viz .r-pipe.on .f, .org-viz .r-pad.on .f, .org-viz .r-valve.on .f { fill: var(--org-on, #34334D); transition-duration: .04s; }
 .org-viz .r-bar .f, .org-viz .r-pipe .f, .org-viz .r-pad .f { transition: fill .9s ease; }
 .org-viz .r-bar.on .m, .org-viz .r-pipe.on .m, .org-viz .r-pad.on .m, .org-viz .r-valve.on .m { stroke-opacity: 1; transition-duration: .04s; }
 .org-viz .r-bar.hit { transform: translateY(.5px); transition-duration: .03s; }
 .org-viz .r-valve.on { transform: translateY(.9px); transition-duration: .05s; }
 .org-viz .r-string .vib { transition: stroke-opacity .25s ease; }
 .org-viz .r-string.ring .vib { stroke-opacity: .95; stroke-width: .7; }
-.org-viz .mouth { fill: var(--org-bg, #10101F); stroke: #fff; stroke-opacity: .85; stroke-width: .55; transform-box: fill-box; transform-origin: center; transform: scaleY(0.05); opacity: 0; transition: transform .28s cubic-bezier(.3,.7,.3,1), opacity .2s; }
+.org-viz .mouth { fill: var(--org-bg, #1A1A2E); stroke: #fff; stroke-opacity: .85; stroke-width: .55; transform-box: fill-box; transform-origin: center; transform: scaleY(0.05); opacity: 0; transition: transform .28s cubic-bezier(.3,.7,.3,1), opacity .2s; }
 .org-viz .r-voice.on .mouth { transform: scaleY(1); opacity: 1; }
 .org-viz .r-voice.on .m { stroke-opacity: 1; }
-.org-viz .wave { fill: none; stroke: #fff; stroke-width: .55; stroke-linecap: round; pointer-events: none; }
 
+/* ═══ tp105 — THE HEADER CENTERLINE, ENGINE-INDEPENDENT (Max's red line: "everything needs to run through the middle").
+   Measured on ink (Tests/_org_ink.js) the text line sat 0.3 px ABOVE the [A] [+] boxes in headless Chrome and 0.8 px BELOW them
+   in the plugin's WKWebView: where a font's glyphs land inside a line box is each engine's own rounding of the font's ascent and
+   descent, so no px nudge can hold in both (mv3/mv5's +2 / −1.5 px were exactly such nudges, tuned for one engine). CSS
+   text-box trims every header text to its CAP band (cap top → baseline), and a symmetric calc() padding gives it back the row's
+   16 px — so the middle of the capitals IS the middle of the 16 px box in every engine, the same middle the [A] [+] boxes
+   and the ‹ › boxes have. The padding is rounded (CSS round()) so the BASELINE lands on a whole pixel: WKWebView at 1x
+   snaps a baseline to the pixel grid, and a baseline that already sits on it cannot be snapped two ways (≤ 0.35 px off the
+   exact middle for 9–9.5 px text, the same in every engine). The separator dot rides at half a cap above the baseline.
+   Engines without text-box keep the old recipe (@supports). ═══ */
+@supports (text-box: trim-both cap alphabetic) {
+  #syn-panel .device.osc .device-label-row .device-label,
+  #syn-panel .device.osc .device-label-row .engine-display,
+  #syn-panel .device.osc .device-corner-preset .preset-display {
+    display: block !important; line-height: 1; text-box: trim-both cap alphabetic;
+    padding-top: calc(round(8px + 0.5cap, 1px) - 1cap) !important; padding-bottom: calc(16px - round(8px + 0.5cap, 1px)) !important; position: static; top: auto !important; }
+  #syn-panel .device.osc .device-corner-preset .preset-display { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #syn-panel .device.osc .device-label-row .samp-sel-disp {
+    display: block !important; line-height: 1; text-box: trim-both cap alphabetic;
+    padding-top: calc(round(7px + 0.5cap, 1px) - 1cap) !important; padding-bottom: calc(14px - round(7px + 0.5cap, 1px)) !important; position: static; top: auto !important; }
+  #syn-panel .device.osc .device-label .lbl-sep { position: static; top: auto; vertical-align: calc(0.5cap - 1px); }
+  /* the ‹ › are drawn too (a typed ‹ sits 1 px lower in WKWebView than in Chrome): a 1 px chevron centred in the same 16 px box */
+  #syn-panel .device.osc .device-corner-preset :is(.wt-nav, .org-nav, .samp-nav) { font-size: 0 !important; transform: none !important; }
+  #syn-panel .device.osc .device-corner-preset :is(.wt-nav, .org-nav, .samp-nav)::before {
+    content: ''; width: 5px; height: 8px; background: currentColor;   /* 8 px tall in a 16 px box: whole-pixel top, so no engine can round it two ways */
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 8'%3E%3Cpolyline points='4.2,0.6 0.9,4 4.2,7.4' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") center / 5px 8px no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 8'%3E%3Cpolyline points='4.2,0.6 0.9,4 4.2,7.4' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") center / 5px 8px no-repeat; }
+  #syn-panel .device.osc .device-corner-preset :is(.wt-nav, .org-nav, .samp-nav)[data-dir="1"]::before { transform: scaleX(-1); }
+}
 /* the unison page ("Ensemble" on this engine): the picture stays (fb590), exactly the Modal rules */
 #syn-panel .device.osc.uni-page:not(.swapped).engine-organic .sample-view { display: flex; flex: 0 0 auto !important; }
 #syn-panel .device.osc.uni-page:not(.swapped).engine-organic .front-only { display: flex; order: 1; flex: 0 0 auto !important; }
@@ -9433,12 +9487,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_A_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_ORG_ATTACK" title="Attack — the onset: Gentle (a fade-in and the softer layer) left, Natural in the centre, Tight (the air cut, the transient lifted) right"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_A_ORG_RELEASE" title="Release — release samples and the natural decay after note-off: 0 = off, centre = as recorded, right = +6 dB"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, valve): 0 = off, centre = as recorded, right = louder"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
@@ -9543,6 +9597,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                   <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-a-coarse-val" data-coarse="SYN_OSC_A_COARSE"><b>+0.00</b></div>
                 </div>
+              </div>
+              <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
+                   The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <div class="selector-pills org-pills">
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_A_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_A_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_A_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -9794,12 +9857,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_B_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_ORG_ATTACK" title="Attack — the onset: Gentle (a fade-in and the softer layer) left, Natural in the centre, Tight (the air cut, the transient lifted) right"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_B_ORG_RELEASE" title="Release — release samples and the natural decay after note-off: 0 = off, centre = as recorded, right = +6 dB"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, valve): 0 = off, centre = as recorded, right = louder"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
@@ -9904,6 +9967,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                   <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-b-coarse-val" data-coarse="SYN_OSC_B_COARSE"><b>+0.00</b></div>
                 </div>
+              </div>
+              <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
+                   The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <div class="selector-pills org-pills">
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_B_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_B_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_B_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -10179,12 +10251,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_C_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_ORG_ATTACK" title="Attack — the onset: Gentle (a fade-in and the softer layer) left, Natural in the centre, Tight (the air cut, the transient lifted) right"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_C_ORG_RELEASE" title="Release — release samples and the natural decay after note-off: 0 = off, centre = as recorded, right = +6 dB"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, valve): 0 = off, centre = as recorded, right = louder"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
@@ -10289,6 +10361,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                   <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-c-coarse-val" data-coarse="SYN_OSC_C_COARSE"><b>+0.00</b></div>
                 </div>
+              </div>
+              <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
+                   The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <div class="selector-pills org-pills">
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_C_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_C_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_C_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -10540,12 +10621,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_D_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_ORG_ATTACK" title="Attack — the onset: Gentle (a fade-in and the softer layer) left, Natural in the centre, Tight (the air cut, the transient lifted) right"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_D_ORG_RELEASE" title="Release — release samples and the natural decay after note-off: 0 = off, centre = as recorded, right = +6 dB"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, valve): 0 = off, centre = as recorded, right = louder"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_IMAGE" title="Image — the sample’s own stereo width: 0 = mono, 67 = as recorded, 100 = +50 % side"><div class="knob-ring"></div><div class="knob-label">Image</div></div>
@@ -10650,6 +10731,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                   <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-d-coarse-val" data-coarse="SYN_OSC_D_COARSE"><b>+0.00</b></div>
                 </div>
+              </div>
+              <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
+                   The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
+              <div class="selector-pills org-pills">
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_D_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
+                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_D_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp org-dd org-art" data-org="SYN_OSC_D_ORG_ARTIC" data-n="8" title="Articulation (style of playing) — the same list as the pill in the header"><div class="sel-value ph-label">Style</div><div class="sel-value org-dv"><b>Sus</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
               <div class="osc-knobs">
@@ -20916,6 +21006,7 @@ setTimeout(function wireSynControls () {
         document.addEventListener ('pointerdown', function (e) { if (oscQuickEl && ! oscQuickEl.contains (e.target)) oscQuickEl.classList.remove ('open'); });
         return m;
       }
+      window.__openOscQuick = function (e, L) { return openOscQuick (e, L); };   /* tp105 — Organics' display opens THIS menu (the waveform's), hoisted */
       function openOscQuick (e, oscLetter) {
         var m = buildOscQuickMenu ();
         m.innerHTML = '';
@@ -21712,7 +21803,7 @@ setTimeout(function wireSynControls () {
       };
       /* tp104 — Organics: the contract's defaults (organics-contract.md §4), all eight oscillators */
       ['A','B','C','D','E','F','G','H'].forEach (function (L) {
-        var D = { DYNAMICS: .5, TONE: .5, BODY: .5, ATTACK: .5, HUMAN: .25, RELEASE: .5, NOISE: .5, SUSTAIN: 0, VELOCITY: .75, IMAGE: .667 };
+        var D = { DYNAMICS: .5, TONE: .5, BODY: .5, ATTACK: .5, VIBRATO: 0, HUMAN: .25, RELEASE: .5, NOISE: .5, SUSTAIN: 0, VELOCITY: .75, IMAGE: .667, VIBRATE: .417, VIBDELAY: .175 };   /* tp105 — + Vibrato (rate/delay on the back) */
         Object.keys (D).forEach (function (k) { KNOB_DEFAULTS_NORMALISED['SYN_OSC_' + L + '_ORG_' + k] = D[k]; });
       });
       // Fill EVERY remaining per-OSC knob default so ALL knobs get double-click-to-reset (the general
@@ -21818,8 +21909,14 @@ setTimeout(function wireSynControls () {
         if (k === 'TONE')     return ring ? String (Math.round (Math.abs (b) * 9))  : sgn (b * 9, 1) + ' dB';
         if (k === 'BODY')     return ring ? String (Math.round (Math.abs (b) * 6))  : sgn (b * 6, 1) + ' st';
         if (k === 'ATTACK')   { const a = Math.round (Math.abs (b) * 100); return ring ? String (a) : (a === 0 ? 'Natural' : (b < 0 ? 'Gentle ' : 'Tight ') + a); }
+        /* tp105 — the back panel's two times read in their units (contract tp105: rate 3..9 Hz, delay 0..2 s) */
+        if (k === 'VIBRATE')  return ring ? (3 + 6 * n).toFixed (1) : (3 + 6 * n).toFixed (1) + ' Hz';
+        if (k === 'VIBDELAY') return ring ? (2 * n).toFixed (n < 0.5 ? 2 : 1) : (2 * n).toFixed (2) + ' s';
+        if (k === 'VIBRATO')  { const ct = 50 * Math.pow (n, 1.6); return ring ? String (Math.round (ct)) : (n < 0.005 ? 'Off' : (ct < 9.95 ? ct.toFixed (1) : Math.round (ct)) + ' ct'); }   /* the engine's depth: 50·v^1.6 cents */
         if (ring) return String (pct);
-        if (k === 'RELEASE' || k === 'NOISE') { if (n < 0.005) return 'Off'; const db = n <= 0.5 ? 20 * Math.log10 (2 * n) : (n - 0.5) / 0.5 * 6; return sgn (db, 1) + ' dB'; }
+        /* tp105 — Release is a real release now: 20 ms at 0, the recording's own at the centre, ≥ 12 s at 100, log in both halves (the amp envelope's release always lengthens it) */
+        if (k === 'RELEASE')  { if (n < 0.005) return '20 ms'; if (n > 0.995) return '12 s'; if (Math.abs (n - 0.5) < 0.006) return 'Natural'; return (n < 0.5 ? 'Shorter ' : 'Longer ') + Math.round (Math.abs (n - 0.5) * 200); }
+        if (k === 'NOISE')    { if (n < 0.005) return 'Off'; const db = n <= 0.5 ? 20 * Math.log10 (2 * n) : (n - 0.5) / 0.5 * 12; return sgn (db, 1) + ' dB'; }   /* tp105 — 1 = +12 dB */
         if (k === 'SUSTAIN')  return n < 0.005 ? 'Natural' : (n > 0.995 ? 'Hold' : String (pct));
         if (k === 'IMAGE')    return n < 0.005 ? 'Mono' : (Math.abs (n - 0.667) < 0.006 ? 'As recorded' : (1.5 * n).toFixed (2) + '×');
         return String (pct);   // Human · Velocity
@@ -22025,7 +22122,7 @@ setTimeout(function wireSynControls () {
           // Helper: update the conic-gradient based on normalised value [0..1].
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
           // Bipolar params (Sample SCAN / FORMANT) fill from 12 o'clock toward + or −.
-          const isBipolar = /(_SAMPLE_(SCAN|FORMANT)|_GRAIN_SCAN|_GEODE_(FORMANT|TILT|BEDROCK)|_ORG_(DYNAMICS|TONE|BODY|ATTACK))$/.test (paramId);   /* tp104 — Organics' four centred knobs fill from 12 o'clock */
+          const isBipolar = /(_SAMPLE_(SCAN|FORMANT)|_GRAIN_SCAN|_GEODE_(FORMANT|TILT|BEDROCK)|_ORG_(DYNAMICS|TONE|BODY))$/.test (paramId);   /* tp104 — Organics' four centred knobs fill from 12 o'clock */
           /* fb636 ALT — a WARP amount's arc is bipolar exactly while its slot sits on a centred mode (41 / 44 / 46), so
              it is asked on every paint, off the live mode, never frozen at wiring time. */
           const isWarpAmt = /_WARP_AMOUNT$/.test (paramId);
@@ -35699,7 +35796,7 @@ restoreThemeFromBackend();
      above — which is why this runs after it. Knob order is the contract's: Dynamics Tone Body Attack Human Release Noise
      Sustain Velocity Image. */
   window.ORGANIC_DEST_BASE=5272;
-  ['A','B','C','D','E','F','G','H'].forEach(function(L,o){ ['DYNAMICS','TONE','BODY','ATTACK','HUMAN','RELEASE','NOISE','SUSTAIN','VELOCITY','IMAGE'].forEach(function(k,i){ KNOBDEST['SYN_OSC_'+L+'_ORG_'+k]=window.ORGANIC_DEST_BASE+o*10+i; }); });
+  ['A','B','C','D','E','F','G','H'].forEach(function(L,o){ ['DYNAMICS','TONE','BODY','VIBRATO','HUMAN','RELEASE','NOISE','SUSTAIN','VELOCITY','IMAGE'].forEach(function(k,i){ KNOBDEST['SYN_OSC_'+L+'_ORG_'+k]=window.ORGANIC_DEST_BASE+o*10+i; }); });
   // fb75 — filter knobs are SLOT-AWARE (the 1/2 tab picks the filter) → dest resolved at DROP like the cut emblem.
   var FSLOT_BACK ={ 'Mix':[62,63], 'Drive':[60,61], 'Env':[56,57], 'Vel':[340,341], 'Track':[342,343] };   // fb78 — the WHOLE back row routes now; front RES/DRV/ENV target the runtime .fk-em emblems
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
@@ -42167,7 +42264,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var pdisp = document.getElementById ('osc-' + o + '-preset-display');
       var pw = pdisp ? pdisp.parentElement : null;
       if (pw && pw.parentNode && ! pw._wtArrows) { pw._wtArrows = true;
-        var mkNav = function (glyph, dir) { var s = document.createElement ('span'); s.className = 'wt-nav'; s.innerHTML = glyph;
+        var mkNav = function (glyph, dir) { var s = document.createElement ('span'); s.className = 'wt-nav'; s.innerHTML = glyph; s.setAttribute ('data-dir', String (dir));   /* tp105 — the drawn chevron reads its direction */
           s.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); window.wtStepPreset (o, dir); }); return s; };
         pw.parentNode.insertBefore (mkNav ('&lsaquo;', -1), pw);
         var nx = mkNav ('&rsaquo;', 1); if (pw.nextSibling) pw.parentNode.insertBefore (nx, pw.nextSibling); else pw.parentNode.appendChild (nx);
@@ -42243,7 +42340,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       try { var _dv = document.querySelector ('#osc-' + o + '-device .sample-view'); var _dr = _dv && _dv.querySelector ('.samp-drop');
         if (_dr) _dr.addEventListener ('mousedown', function (e) { if (e.button !== 0 || _dv.classList.contains ('loaded')) return; e.preventDefault (); e.stopPropagation (); window.openSampleBrowser (o, e); }); } catch (eDr) {}
       if (w && w.parentNode && ! w._sampArrows) { w._sampArrows = true;   // fb78 — ‹ › flanking the name (same recipe as wt-nav)
-        var mkNav = function (g, dir) { var sp = document.createElement ('span'); sp.className = 'samp-nav'; sp.innerHTML = g;
+        var mkNav = function (g, dir) { var sp = document.createElement ('span'); sp.className = 'samp-nav'; sp.innerHTML = g; sp.setAttribute ('data-dir', String (dir));
           sp.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); window.sampStepSound (o, dir); }); return sp; };
         w.parentNode.insertBefore (mkNav ('&lsaquo;', -1), w);
         var nx = mkNav ('&rsaquo;', 1); if (w.nextSibling) w.parentNode.insertBefore (nx, w.nextSibling); else w.parentNode.appendChild (nx);
@@ -46834,7 +46931,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(organic){ var capOn=String(layout.cpuCap||'auto')!=='off';   /* tp104 — a random INSTALLED instrument by category; never one over 160 MB while the CPU cap is on */
       try{ window.__orgDicePick(o,aim,capOn); }catch(e){}
       P(X+'ORG_DYNAMICS',between(.25,.75)); P(X+'ORG_TONE',between(.25,.75)); P(X+'ORG_BODY',between(.25,.75)); P(X+'ORG_HUMAN',between(.1,.5)); P(X+'ORG_IMAGE',between(.4,1));
-      P(X+'ORG_ATTACK',rnd()<.7?.5:between(.25,.75)); P(X+'ORG_RELEASE',rnd()<.7?.5:between(.3,.8)); P(X+'ORG_NOISE',rnd()<.7?.5:between(.25,.75));
+      P(X+'ORG_VIBRATO',rnd()<.6?0:between(.1,.45)); P(X+'ORG_RELEASE',rnd()<.7?.5:between(.3,.8)); P(X+'ORG_NOISE',rnd()<.7?.5:between(.25,.75));
       P(X+'ORG_SUSTAIN',rnd()<.7?0:between(0,.5)); P(X+'ORG_VELOCITY',rnd()<.7?.75:between(.5,1)); P(X+'ORG_ARTIC',0); }
     if(samp){ rollSample(X,seng,aim,lvl,P); oneShot(o,aim,function(){
       /* tp29 — no one-shot reached it, so it is not a sampler: put it back on a wavetable rather
@@ -48155,20 +48252,55 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     let d = ''; for (let i = 0; i < p.length; i++) d += (i ? 'L' : 'M') + f2(p[i][0] * s + tx) + ' ' + f2(p[i][1] * s + ty);
     return d + (closed ? 'Z' : '');
   }
-  function render(id, opt) {
-    opt = opt || {}; const W = opt.w || 302, H = opt.h || 65; const fam = FAM[id]; if (!fam) return { svg: '', meta: {} };
+  /* tp105 — build one drawing and measure it (projected units); render() places one, renderTwin() places two */
+  function layout(fam) {
     const K = Kit(fam.yaw != null ? fam.yaw : -32, fam.pitch != null ? fam.pitch : 24);
     const extra = fam.build(K) || {};
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     const acc = q => { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; };
     for (const p of K.parts) { if (p.meta.nofit) continue; p.fills.forEach(f => f.forEach(acc)); p.lines.forEach(l => l.p.forEach(acc)); }
     if (fam.crop) y1 = y0 + (y1 - y0) * fam.crop;   /* tp104 — a CLOSER CAMERA for the tall ones (harp, music box): fit the top of the drawing, fade the rest */
+    return { K, extra, x0, y0, x1, y1, fam };
+  }
+  function render(id, opt) {
+    opt = opt || {}; const W = opt.w || 302, H = opt.h || 65; const fam = FAM[id]; if (!fam) return { svg: '', meta: {} };
+    if (fam.twin && !opt.single) return renderTwin(fam, W, H);
+    const L = layout(fam), { x0, y0, x1, y1 } = L;
     const px = opt.padX != null ? opt.padX : (fam.padX != null ? fam.padX : 8), py = opt.padY != null ? opt.padY : (fam.padY != null ? fam.padY : 5);
     const s = Math.min((W - 2 * px) / (x1 - x0), (H - 2 * py) / (y1 - y0));
     const tx = W / 2 - (x0 + x1) / 2 * s, ty = H / 2 - (y0 + y1) / 2 * s + (fam.dy || 0);
+    const r = emit(L, s, tx, ty);
+    r.meta.box = [x0 * s + tx, (x1 - x0) * s]; r.meta.kind = fam.kind || id;
+    return r;
+  }
+  /* tp105 — TWO different-looking variants of a compact family, left + right (Max: "one on the left, one on the right,
+     scaled across and filling the space like the wavetable does, not too close, not too far"). Each is fitted to the
+     height on its own; if the pair is too wide both shrink together. The pair is centred as ONE ensemble, so the outer
+     margins are equal (symmetric about the display centre) and the gap between them stays in [GAP_MIN, GAP_MAX]. */
+  const TWIN_SPAN = 0.88, GAP_MIN = 0.06, GAP_MAX = 0.2;
+  function renderTwin(fam, W, H) {
+    const specs = [fam, fam.twin], Ls = specs.map(layout), px = 8;
+    const sc = Ls.map((L, i) => { const py = specs[i].padY != null ? specs[i].padY : 5; return (H - 2 * py) / (L.y1 - L.y0); });
+    let w = Ls.map((L, i) => (L.x1 - L.x0) * sc[i]);
+    const avail = W - 2 * px, gMin = W * GAP_MIN;
+    if (w[0] + w[1] + gMin > avail) { const k = (avail - gMin) / (w[0] + w[1]); for (let i = 0; i < 2; i++) { sc[i] *= k; w[i] *= k; } }
+    const g = Math.max(gMin, Math.min(W * GAP_MAX, W * TWIN_SPAN - w[0] - w[1])), left = (W - (w[0] + g + w[1])) / 2;
+    const xs = [left, left + w[0] + g];
+    let out = ''; const metas = [];
+    Ls.forEach((L, i) => {
+      const s = sc[i], tx = xs[i] - L.x0 * s, ty = H / 2 - (L.y0 + L.y1) / 2 * s + (specs[i].dy || 0);
+      const r = emit(L, s, tx, ty); r.meta.box = [xs[i], w[i]]; r.meta.kind = specs[i].kind || fam.kind || fam.id;
+      r.meta.fade = !!specs[i].fade; metas.push(r.meta);
+      const flip = specs[i].mirror ? ` transform="matrix(-1 0 0 1 ${f2(2 * xs[i] + w[i])} 0)"` : '';
+      out += `<g class="twm"${r.meta.fade ? ' data-fade="1"' : ''}><g class="tw tw-${i ? 'r' : 'l'}" data-v="${i}"${flip}>${r.svg}</g></g>`;
+    });
+    return { svg: out, meta: { twin: true, vars: metas, fade: metas.some(m => m.fade), voice: fam.voice || 'key', scale: Math.min(sc[0], sc[1]), gap: g }, fit: null };
+  }
+  function emit(L, s, tx, ty) {
+    const { K, extra, fam } = L;
     const S = q => [f2(q[0] * s + tx), f2(q[1] * s + ty)];
     let out = '';
-    const meta = { strings: [], emit: [], scale: s };
+    const meta = { strings: [], scale: s };
     for (const p of K.parts) {
       const m = p.meta; let cls = 'pt' + (m.role ? ' r-' + m.role : '') + (m.cls ? ' ' + m.cls : '');
       let attrs = ` class="${cls}"` + (m.i != null ? ` data-i="${m.i}"` : '');
@@ -48185,7 +48317,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       }
       out += `<g${attrs}>${g}</g>`;
     }
-    (extra.emit || []).forEach(e => { const a = S(K.cam.P(e.at)); const d = K.cam.P(add(e.at, e.dir || [1, 0, 0])), c0 = K.cam.P(e.at); meta.emit.push({ x: +a[0], y: +a[1], ang: Math.atan2(d[1] - c0[1], d[0] - c0[0]), r: (e.r || 4) * s }); });
+    /* tp105 — no more "sound" arcs out of bells (Max: the sax "noise"): extra.emit is ignored; reactions are the thin moving parts */
     meta.map = extra.map || null; meta.fade = !!fam.fade; meta.voice = fam.voice || 'key';
     return { svg: out, meta, fit: { s, tx, ty } };
   }
@@ -48637,9 +48769,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   } };
 
   /* ── HARP (lever harp, side-on) ── */
-  FAM.harp = { name: 'Harp', cat: 'Plucked', voice: 'string', yaw: -14, pitch: 12, padY: 3, crop: 0.66, fade: true, build(K) {
-    const sb0 = [14, 9], sb1 = [70, 88];
-    const neck = K.spline([[4, 106], [16, 110], [30, 104], [42, 95], [55, 94], [66, 92], [75, 88]], 6);
+  function harpB(p) { return function (K) {
+    const hy = p.hy || 1, n = p.n || 22, st = 57.2 / (n - 1);
+    const sb0 = [14, 9], sb1 = [70, 88 * hy];
+    const neck = K.spline([[4, 106], [16, 110], [30, 104], [42, 95], [55, 94], [66, 92], [75, 88]].map(q => [q[0], q[1] * hy]), 6);
     const neckY = x => { for (let i = 0; i < neck.length - 1; i++) if ((neck[i][0] - x) * (neck[i + 1][0] - x) <= 0) { const t = (x - neck[i][0]) / ((neck[i + 1][0] - neck[i][0]) || 1); return neck[i][1] + t * (neck[i + 1][1] - neck[i][1]); } return 90; };
     const sbY = x => sb0[1] + (x - sb0[0]) * (sb1[1] - sb0[1]) / (sb1[0] - sb0[0]);
     K.part({}, () => {                                                                       // sound box: tapered, diagonal, with a rounded back
@@ -48648,15 +48781,20 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       const o = [sb0[0] + 1, sb0[1] - 1.5, 0]; K.line([K.add(o, K.mul(d, 6)), K.add(o, K.mul(d, Lb - 3))], 'h');
       for (let i = 0; i < 4; i++) K.ring(K.add(K.add(o, K.mul(d, 14 + i * 16)), K.mul(n, -8.01)), n, 1.6 - i * 0.25, 'h', 14);
     });
-    K.part({}, () => K.box(6, 0, -10, 28, 4, 10));
-    for (let i = 0; i < 22; i++) { const x = 16 + i * 2.6; const yb = sbY(x) + 1.6, yt = neckY(x) - 2.6;
+    if (p.pedals) K.part({}, () => { K.box(0, 0, -12, 34, 6, 12); for (let i = 0; i < 7; i++) K.box(3 + i * 4, 1.2, 12, 4.6 + i * 4, 2.2, 16, { w: 'h' }); });   /* the pedal harp's base + its seven pedals */
+    else K.part({}, () => K.box(6, 0, -10, 28, 4, 10));
+    for (let i = 0; i < n; i++) { const x = 16 + i * st; const yb = sbY(x) + 1.6, yt = neckY(x) - 2.6;
       K.part({ role: 'string', i, a: [x, yt, 0], b: [x, yb, 0], w: i % 7 === 3 ? 'm' : 'h' }, () => {}); }
     K.part({}, () => { K.tube(neck.map(q => [q[0], q[1], 0]), t => 2.7 - 0.9 * t, { caps: [false, true] });
-      for (let i = 0; i < 22; i += 1) { const x = 16 + i * 2.6; K.ring([x, neckY(x) - 1.2, 2.6], [0, 0, 1], 0.32, 'h', 6); } });
-    K.part({}, () => { const pil = K.spline([[8, 3, 0], [2.5, 30, 0], [1.2, 60, 0], [2.4, 88, 0], [4, 106, 0]], 6);
-      K.tube(pil, t => 2.0 + 0.5 * Math.sin(t * Math.PI), { caps: [true, true] }); K.sphere([4.2, 108.5, 0], 2.6); });
-    return { map: { type: 'strings', open: Array.from({ length: 22 }, (_, i) => 36 + Math.round(i * 12 / 7)) } };
-  } };
+      for (let i = 0; i < n; i += 1) { const x = 16 + i * st; K.ring([x, neckY(x) - 1.2, 2.6], [0, 0, 1], 0.32, 'h', 6); } });
+    K.part({}, () => { const pil = K.spline([[8, 3, 0], [2.5, 30, 0], [1.2, 60, 0], [2.4, 88, 0], [4, 106, 0]].map(q => [q[0], q[1] * hy, 0]), 6);
+      K.tube(pil, t => (p.pedals ? 2.4 : 2.0) + 0.5 * Math.sin(t * Math.PI), { caps: [true, true] });
+      if (p.pedals) { K.box(-1.5, 106 * hy + 1, -3.5, 10, 106 * hy + 6.5, 3.5); K.box(-0.5, 106 * hy + 6.5, -2.6, 9, 106 * hy + 8, 2.6, { w: 'h' }); }   /* the column's crown */
+      else K.sphere([4.2, 108.5 * hy, 0], 2.6); });
+    return { map: { type: 'strings', open: Array.from({ length: n }, (_, i) => 36 + Math.round(i * 12 / 7 * 21 / (n - 1))) } };
+  }; }
+  FAM.harp = { name: 'Harp', cat: 'Plucked', voice: 'string', yaw: -14, pitch: 12, padY: 3, crop: 0.66, fade: true, build: harpB({}),
+    twin: { kind: 'harp', yaw: 16, pitch: 12, padY: 3, crop: 0.62, fade: true, mirror: true, build: harpB({ hy: 1.22, n: 30, pedals: true }) } };
 
   /* ── GLOCKENSPIEL ── */
   FAM.glock = { name: 'Glockenspiel', cat: 'Mallets', voice: 'bar', yaw: -18, pitch: 34, padY: 5, build(K) {
@@ -48678,24 +48816,28 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   } };
 
   /* ── MARIMBA — rosewood bars over graded resonators ── */
-  FAM.marimba = { name: 'Marimba', cat: 'Mallets', voice: 'bar', yaw: -18, pitch: 24, padY: 4, build(K) {
-    const N = 29, W = 160, bw = W / N, top = 46;
-    const nat = [0, 2, 4, 5, 7, 9, 11];
-    const Lz = k => 34 - k * 0.55, zc = -20;
+  function mallets(p) { return function (K) {
+    const N = p.N, W = p.W, bw = W / N, top = 46, t = p.t || 1.8, d0 = p.deg0 || 0, base = p.low || 48;
+    const nat = [0, 2, 4, 5, 7, 9, 11], noteOf = k => base - nat[d0] + Math.floor((k + d0) / 7) * 12 + nat[(k + d0) % 7];
+    const Lz = k => p.L0 - k * p.Ls, zc = -20;
     const post = (x, z) => K.part({}, () => { K.tube([[x, top - 5, z], [x, 3, z]], 1.1, { caps: [false, false] }); K.ring([x, 1.6, z], [0, 0, 1], 1.4, 'h', 12); });
     const ends = x => { post(x, zc - 16); K.part({}, () => K.box(x - 1.2, top - 8.5, zc - 18, x + 1.2, top - 5, zc + 18)); K.part({}, () => K.box(x - 0.8, 7, zc - 17, x + 0.8, 9, zc + 17, { w: 'h' })); };
     ends(-3);
     K.part({}, () => K.box(-3, top - 5.2, zc - 13.5, W + 3, top - 3.4, zc - 11.5, { w: 'h' }));
-    for (let k = 0; k < N - 1; k++) { const d = k % 7; if (d === 2 || d === 6) continue; const x = (k + 1) * bw - bw * 0.4, L = Lz(k) * 0.72, note = 48 + Math.floor(k / 7) * 12 + nat[d] + 1;
-      K.part({ role: 'bar', i: note }, () => K.box(x, top + 0.2, zc - 16 - L * 0.3, x + bw * 0.8, top + 1.9, zc - 16 + L * 0.7)); }
-    for (let k = 0; k < N; k++) { const x = k * bw + bw / 2, h = 30 - k * 0.85; K.part({}, () => K.tube([[x, top - 4, zc + 4], [x, top - 4 - h, zc + 4]], bw * 0.34, { caps: [false, true] })); }
-    for (let k = 0; k < N; k++) { const x = k * bw + bw * 0.1, L = Lz(k), note = 48 + Math.floor(k / 7) * 12 + nat[k % 7];
-      K.part({ role: 'bar', i: note }, () => K.box(x, top - 3.2, zc + 12 - L * 0.62, x + bw * 0.8, top - 1.4, zc + 12 + L * 0.38)); }
+    for (let k = 0; k < N - 1; k++) { const d = (k + d0) % 7; if (d === 2 || d === 6) continue; const x = (k + 1) * bw - bw * 0.4, L = Lz(k) * 0.72, note = noteOf(k) + 1, ay = top + (p.accY != null ? p.accY : 0.2);
+      K.part({ role: 'bar', i: note }, () => K.box(x, ay, zc - 16 - L * 0.3, x + bw * 0.8, ay + t, zc - 16 + L * 0.7)); }
+    for (let k = 0; k < N; k++) { const x = k * bw + bw / 2, h = p.resH(k); K.part({}, () => K.tube([[x, top - 4, zc + 4], [x, top - 4 - h, zc + 4]], bw * 0.34, { caps: [false, true] })); }
+    if (p.fan) K.part({}, () => { K.tube([[-1, top - 6.5, zc + 4], [W + 1, top - 6.5, zc + 4]], 0.32, { caps: [true, true] }); K.box(W + 1, top - 9, zc + 1, W + 4.5, top - 4, zc + 7, { w: 'm' }); });   /* the vibraphone's fan axle + motor */
+    for (let k = 0; k < N; k++) { const x = k * bw + bw * 0.1, L = Lz(k), note = noteOf(k);
+      K.part({ role: 'bar', i: note }, () => K.box(x, top - 3.2, zc + 12 - L * 0.62, x + bw * 0.8, top - 3.2 + t, zc + 12 + L * 0.38)); }
+    if (p.pedal) K.part({}, () => { K.tube([[W / 2, top - 8, zc + 14], [W / 2, 4, zc + 14]], 0.45, { caps: [false, false] }); K.box(W / 2 - 5, 1, zc + 12, W / 2 + 5, 2.6, zc + 22); });   /* the damper pedal */
     K.part({}, () => K.box(-3, top - 5.2, zc + 16, W + 3, top - 3.4, zc + 18, { w: 'm' }));
     post(-3, zc + 17);
     ends(W + 3); post(W + 3, zc + 17);
     return { map: { type: 'bars' } };
-  } };
+  }; }
+  FAM.marimba = { name: 'Marimba', cat: 'Mallets', voice: 'bar', yaw: -18, pitch: 24, padY: 4, build: mallets({ N: 29, W: 160, L0: 34, Ls: 0.55, resH: k => 30 - k * 0.85 }),
+    twin: { kind: 'vibes', yaw: 18, pitch: 26, padY: 4, build: mallets({ N: 22, W: 118, L0: 26, Ls: 0.42, t: 0.9, accY: -1.0, deg0: 3, low: 53, resH: k => 17 - k * 0.3, fan: true, pedal: true }) } };
 
   /* ── KALIMBA ── */
   FAM.kalimba = { name: 'Kalimba', cat: 'Mallets', voice: 'tine', yaw: -24, pitch: 40, padY: 4, build(K) {
@@ -48791,13 +48933,197 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   } };
 
 
+  /* ═══ tp105 — THE TWINS: the second, different-looking drawing of each compact family ════════════════════════════
+     Max: "two versions of the same instrument — one that looks like one and another variation that looks differently —
+     one on the left, one on the right, filling the space like the wavetable does". Only where ONE drawing fills less than
+     ~58 % of the display width (measured: Tests/_org_align_gate.js [6]); the long ones stay single. Each twin is its own
+     model (a vibraphone next to the marimba, a bell lyra next to the glockenspiel, a pedal harp next to the lever harp …),
+     built with the same kit, camera family and two line weights, so the pair reads as one set. */
+
+  /* GRAND — a baby grand, lid on the short stick, facing the concert grand (mirrored) */
+  FAM.grand.twin = { kind: 'grand', yaw: -66, pitch: 18, padY: 3, fade: true, mirror: true, build: grand(Object.assign({}, GRAND_P, {
+    len: 150, lid: 13, flap: 30, desk: 0, strings: 24, keys: 29, legs: [[9, -12], [141, -14], [38, -134]],
+    bent: GRAND_P.bent.map(q => [q[0], q[1] * 0.77]) })) };
+
+  /* UPRIGHT — a low spinet/console, turned the other way */
+  FAM.upright.twin = { kind: 'upright', yaw: 34, pitch: 16, padY: 3, fade: true, build(K) {
+    const W = 132, T = 98;
+    K.part({ nofit: true }, () => { K.box(0, 0, -50, W, 62, -12); });
+    K.part({}, () => { K.box(0, 62, -50, W, T, -12); K.line([[12, T - 6, -11.99], [W - 12, T - 6, -11.99], [W - 12, 76, -11.99], [12, 76, -11.99]], 'h', true); });
+    K.part({}, () => K.box(-1.5, T, -52, W + 1.5, T + 2.5, -10));
+    K.part({ nofit: true }, () => K.line([[8, 56, -11.99], [W - 8, 56, -11.99]], 'h'));
+    K.part({}, () => K.box(0, 62, -12, W, 69, 7));
+    K.part({}, () => K.box(0, 62, -12, 6, 76, 9));
+    keyboard(K, { x0: 6.4, x1: W - 6.4, y: 72, z0: 6.6, L: 13, nWhite: 33, startNote: 36, h: 2.1 });
+    K.part({}, () => K.box(W - 6, 62, -12, W, 76, 9));
+    K.part({ nofit: true }, () => { [[4, -2], [W - 4, -2]].forEach(([x, z]) => K.tube([[x, 62, z], [x, 2, z + 4]], 1.6, { caps: [false, true] })); });
+    return { map: { type: 'keys' } };
+  } };
+
+  /* ELECTRIC PIANO — a Wurlitzer-style 200: flat sloped lid, chrome legs, speaker grilles */
+  FAM.rhodes.twin = { kind: 'rhodes', yaw: 22, pitch: 24, padY: 4, fade: true, build(K) {
+    const W = 96, D = 44;
+    [[6, -D + 6, -4, -5], [W - 6, -D + 6, 4, -5], [6, -6, -4, 5], [W - 6, -6, 4, 5]].forEach(([x, z, dx, dz]) => K.part({ nofit: true }, () => K.tube([[x, 0, z], [x + dx, -58, z + dz]], 1.1, { caps: [false, true] })));
+    K.part({}, () => {
+      const prof = [[3, 0], [3, 10.5], [-13, 10.5], [-17, 16.5], [-D, 18.5], [-D, 0]];
+      K.prism(prof, W, K.Frame([0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]), { corner: 25 });
+      [W * 0.22, W * 0.78].forEach(x => { K.ring([x, 17.5, -30], [0, 1, 0.08], 5.2, 'h', 28); K.ring([x, 17.5, -30], [0, 1, 0.08], 3.4, 'x', 24); });   /* speaker grilles */
+      K.line([[W / 2 - 10, 14, -14.5], [W / 2 + 10, 14, -14.5]], 'h');
+    });
+    K.part({}, () => K.box(0, 0, -13, 5, 15, 3));
+    keyboard(K, { x0: 5.3, x1: W - 5.3, y: 11.2, z0: 2.4, L: 13, nWhite: 37, startNote: 33, h: 2.0 });
+    K.part({}, () => K.box(W - 5, 0, -13, W, 15, 3));
+    return { map: { type: 'keys' } };
+  } };
+
+  /* CLAVINET — the lid closed, on its four legs */
+  FAM.clav.twin = { kind: 'clav', yaw: 24, pitch: 26, padY: 4, fade: true, build(K) {
+    const W = 92, D = 40;
+    [[5, -D + 5, -3, -4], [W - 5, -D + 5, 3, -4], [5, -5, -3, 4], [W - 5, -5, 3, 4]].forEach(([x, z, dx, dz]) => K.part({ nofit: true }, () => K.tube([[x, 0, z], [x + dx, -54, z + dz]], 1.0, { caps: [false, true] })));
+    K.part({}, () => { K.box(0, 0, -D, W, 9, 2.5); K.line([[2, 4.5, 2.51], [W - 2, 4.5, 2.51]], 'x'); });
+    K.part({}, () => { K.box(0, 9, -D, W, 10.6, -13); K.line([[4, 10.61, -D + 3], [W - 4, 10.61, -D + 3], [W - 4, 10.61, -16], [4, 10.61, -16]], 'h', true);
+      K.line([[W / 2 - 9, 10.62, -20], [W / 2 + 9, 10.62, -20]], 'h'); });
+    K.part({}, () => K.box(0, 0, -13, 7.5, 11.2, 2.5));
+    K.part({}, () => { [1.2, 3.1, 5.0].forEach(z => K.box(1.6, 11.2, -13 + z, 5.8, 11.9, -11.8 + z, { w: 'h' })); });
+    keyboard(K, { x0: 8, x1: W - 1.2, y: 9.6, z0: 2.3, L: 13, nWhite: 35, startNote: 29, h: 2.0 });
+    return { map: { type: 'keys' } };
+  } };
+
+  /* HARPSICHORD — a virginal: a rectangular box, the keyboard in its long side, the lid up */
+  FAM.harpsi.twin = { kind: 'harpsi', yaw: -24, pitch: 22, padY: 3, fade: true, build(K) {
+    const W = 128, D = 44, y0 = 56, Hc = 18, a = 72 * D2R;
+    [[6, -6], [W - 6, -6], [6, -D + 6], [W - 6, -D + 6]].forEach(([x, z]) => K.part({ nofit: true }, () => K.tube([[x, y0, z], [x, 2, z]], 1.8, { caps: [false, true] })));
+    K.part({}, () => K.prism([[0, 0], [W, 0], [W, D], [0, D]], -1.1, K.Frame([0, y0 + Hc + 0.1, -D], [1, 0, 0], [0, Math.sin(a), Math.cos(a)], [0, Math.cos(a), -Math.sin(a)]), { corner: 20 }));
+    K.part({}, () => { K.box(0, y0, -D, W, y0 + Hc, 0); K.line(K.offset2([[0, -D], [W, -D], [W, 0], [0, 0]], 1.6).map(q => [q[0], y0 + Hc + 0.01, q[1]]), 'h', true); });
+    for (let i = 0; i < 20; i++) { const x = 44 + i * 3.8; K.part({ role: 'string', i, a: [x, y0 + Hc - 1.2, -8], b: [x - 34, y0 + Hc - 1.2, -D + 4], w: 'x' }, () => {}); }
+    K.part({}, () => K.box(14, y0 + Hc - 7, -9, 64, y0 + Hc - 5.4, 1.6, { w: 'h' }));
+    keyboard(K, { x0: 15, x1: 63, y: y0 + Hc - 5.4, z0: 1.4, L: 10, nWhite: 24, startNote: 41, h: 1.8 });
+    return { map: { type: 'keys', strings: 20, lo: 41, span: 41 } };
+  } };
+
+  /* TONEWHEEL — a spinet organ: one cabinet to the floor, stepped short manuals, a tab rail, a short pedalboard */
+  FAM.tonewheel.twin = { kind: 'tonewheel', yaw: 30, pitch: 20, padY: 3, fade: true, build(K) {
+    const W = 98;
+    K.part({ nofit: true }, () => { K.box(22, 0, -4, W - 22, 3, 12); for (let i = 0; i < 8; i++) K.line([[25 + i * 6.8, 3.01, 11], [25 + i * 6.8, 3.01, -2]], 'h'); });
+    K.part({}, () => { K.box(0, 0, -40, W, 60, 0); K.line([[5, 6, 0.01], [W - 5, 6, 0.01], [W - 5, 54, 0.01], [5, 54, 0.01]], 'h', true); });
+    K.part({}, () => K.box(0, 60, -40, W, 80, -20));
+    K.part({}, () => { for (let i = 0; i < 16; i++) K.box(12 + i * 4.6, 76, -20, 15 + i * 4.6, 78.4, -18.8, { w: 'h' }); });   /* the stop tabs */
+    keyboard(K, { x0: 8, x1: W - 8, y: 68, z0: -9, L: 11, nWhite: 26, startNote: 53, h: 1.8 });
+    K.part({}, () => K.box(0, 60, -9, W, 64.6, 0, { w: 'm' }));
+    keyboard(K, { x0: 8, x1: W - 8, y: 63, z0: 4, L: 11, nWhite: 26, startNote: 41, h: 1.8 });
+    K.part({}, () => { K.box(0, 60, -40, 6, 72, 6); K.box(W - 6, 60, -40, W, 72, 6); });
+    return { map: { type: 'keys' } };
+  } };
+
+  /* PIPE ORGAN — a chamber (positive) organ: a cabinet, one manual, a flat of pipes between two pillars */
+  FAM.organ.twin = { kind: 'organ', yaw: 16, pitch: 16, padY: 3, build(K) {
+    const W = 64, base = 38;
+    K.part({}, () => { K.box(-W / 2, 0, -18, W / 2, 30, 0); K.line([[-W / 2 + 4, 4, 0.01], [W / 2 - 4, 4, 0.01], [W / 2 - 4, 26, 0.01], [-W / 2 + 4, 26, 0.01]], 'h', true); });
+    K.part({}, () => K.box(-W / 2 - 1, 30, -19, W / 2 + 1, 32.4, 5));
+    keyboard(K, { x0: -W / 2 + 4, x1: W / 2 - 4, y: 33.6, z0: 4.2, L: 6, nWhite: 29, startNote: 48, h: 1.0 });
+    K.part({}, () => K.box(-W / 2, 34, -18, W / 2, base, -8));
+    const pipes = []; for (let i = 0; i < 17; i++) pipes.push({ x: -25.6 + i * 3.2, z: -11, r: 1.25, H: 32 - Math.abs(i - 8) * 1.9 + (i % 2 ? -1.2 : 0) });
+    const byH = pipes.slice().sort((a, b) => b.H - a.H); pipes.forEach(p => p.i = byH.indexOf(p));
+    pipes.forEach(p => K.part({ role: 'pipe', i: p.i }, () => {
+      const y0 = base, yf = base + 2.6, yt = base + p.H;
+      K.tube([[p.x, y0, p.z], [p.x, yf, p.z]], t => p.r * (0.35 + 0.65 * t * t), { caps: [false, false] });
+      K.tube([[p.x, yf, p.z], [p.x, yt, p.z]], p.r, { caps: [false, true] });
+      const m0 = K.add([p.x, yf + 0.2, p.z], [0, 0, p.r]); K.line([K.add(m0, [-p.r * 0.55, 0, 0]), K.add(m0, [0, 1.1 * p.r, 0]), K.add(m0, [p.r * 0.55, 0, 0])], 'h');
+    }));
+    K.part({}, () => { K.box(-W / 2, base, -17, -W / 2 + 4, base + 36, -9); K.box(W / 2 - 4, base, -17, W / 2, base + 36, -9); K.box(-W / 2 - 1.5, base + 36, -18, W / 2 + 1.5, base + 39.5, -8); });
+    return { map: { type: 'pipes', n: pipes.length } };
+  } };
+
+  /* GLOCKENSPIEL — a bell lyra: the bars stacked up a lyre frame on a pole */
+  FAM.glock.twin = { kind: 'glock', yaw: -16, pitch: 10, padY: 4, build(K) {
+    const nat = [0, 2, 4, 5, 7, 9, 11], n = 12;
+    K.part({}, () => K.tube([[0, -2, -1.2], [0, -9, -1.2]], 0.8, { caps: [false, true] }));                           /* the pole's head */
+    [1, -1].forEach(s => K.part({}, () => K.tube(K.spline([[0, -1, -1.4], [s * 9, 2, -1.4], [s * 12.5, 14, -1.4], [s * 10.5, 28, -1.4], [s * 8.5, 36, -1.4], [s * 12, 40.5, -1.4]].map(q => [q[0], q[1], q[2]]), 6), 0.55, { caps: [true, true] })));
+    K.part({}, () => K.tube([[0, -1, -1.2], [0, 36, -1.2]], 0.45, { caps: [false, true] }));                           /* the spine */
+    for (let k = 0; k < n; k++) { const y = 2 + k * 2.75, L = 19 - k * 0.8, note = 67 + Math.floor((k + 4) / 7) * 12 + nat[(k + 4) % 7];
+      K.part({ role: 'bar', i: note }, () => { K.box(-L / 2, y, -0.4, L / 2, y + 1.8, 0.4); K.ring([0, y + 0.9, 0.41], [0, 0, 1], 0.25, 'h', 8); }); }
+    K.part({}, () => { K.tube([[-7.5, 36.2, -1.4], [7.5, 36.2, -1.4]], 0.45, { caps: [true, true] }); K.sphere([0, 38.4, -1.4], 1.3); });
+    return { map: { type: 'bars' } };
+  } };
+
+  /* KALIMBA — a round box kalimba: a drum body, a sound hole, the tines fanned */
+  FAM.kalimba.twin = { kind: 'kalimba', yaw: 20, pitch: 42, padY: 4, build(K) {
+    const out = K.arc2(0, 0, 10, 0, 360, 48).slice(0, 48);
+    K.part({}, () => { K.prism(out, 4.6, K.FLAT(0), { corner: 60 }); K.ring([0, 4.61, 5.0], [0, 1, 0], 1.9, 'm', 24); K.ring([0, 4.62, 0], [0, 1, 0], 8.9, 'x', 48); });
+    K.part({}, () => { K.tube([[-7, 5.2, -3.2], [7, 5.2, -3.2]], 0.45, { caps: [true, true] }); });
+    K.part({}, () => { K.box(-6.8, 4.6, -7.2, 6.8, 5.5, -6.0); });
+    const n = 11;
+    for (let i = 0; i < n; i++) {
+      const x = -5.8 + i * 1.16, c = Math.abs(i - (n - 1) / 2), tip = 5.4 - c * 0.6;
+      K.part({ role: 'string', i, a: [x, 5.8, -3.2], b: [x, 6.0, tip], w: 'm' }, () => K.line([[x, 5.6, -6.6], [x, 5.8, -3.2]], 'm'));
+    }
+    K.part({}, () => { K.tube([[-6.9, 6.1, -5.4], [6.9, 6.1, -5.4]], 0.3, { caps: [true, true] }); });
+    return { map: { type: 'tines', n } };
+  } };
+
+  /* MUSIC BOX — a hand-crank movement on its little plate, the crank big */
+  FAM.musicbox.twin = { kind: 'musicbox', yaw: 28, pitch: 34, padY: 4, build(K) {
+    const H = 0.7;
+    K.part({}, () => { K.box(0.5, 0, -9, 14, H, -0.4); });
+    K.part({}, () => { K.box(3.0, H, -7.2, 3.8, H + 2.9, -4.6, { w: 'h' }); });
+    K.part({ role: 'drum' }, () => { K.tube([[3.8, H + 2.0, -5.9], [10.8, H + 2.0, -5.9]], 1.05, { caps: [true, true] });
+      for (let i = 0; i < 30; i++) { const x = 4.2 + (i * 3.37) % 6.3, ang = ((i * 71) % 170 + 5) * D2R; const p = [x, H + 2.0 + 1.05 * Math.sin(ang), -5.9 + 1.05 * Math.cos(ang)]; if (p[2] > -6.2) K.line([p, K.add(p, [0, 0.16 * Math.sin(ang), 0.16 * Math.cos(ang)])], 'm'); } });
+    K.part({}, () => { K.box(10.8, H, -7.2, 11.6, H + 2.9, -4.6, { w: 'h' }); });
+    K.part({}, () => K.box(3.4, H, -3.6, 11.2, H + 0.8, -2.2));
+    const n = 15;
+    for (let i = 0; i < n; i++) { const x = 3.8 + i * 7.0 / (n - 1); K.part({ role: 'string', i, a: [x, H + 0.8, -3.5], b: [x, H + 0.82, -4.75], w: 'm' }, () => {}); }
+    K.part({}, () => { K.tube([[11.6, H + 2.0, -5.9], [13.6, H + 2.0, -5.9]], 0.22, { caps: [false, false] });
+      K.tube([[13.6, H + 2.0, -5.9], [13.6, H + 6.2, -3.4]], 0.3, { caps: [true, true] });
+      K.tube([[13.6, H + 6.2, -3.4], [16.4, H + 6.2, -3.4]], 0.6, { caps: [false, true] }); });
+    return { map: { type: 'tines', n } };
+  } };
+
+  /* FRENCH HORN — the same horn seen from its bell side */
+  FAM.horn.twin = { kind: 'horn', yaw: 200, pitch: 20, padY: 4, build: FAM.horn.build };
+
+  /* SAX — a straight soprano on a slant next to the curved alto */
+  FAM.sax.twin = { kind: 'sax', yaw: -12, pitch: 22, padY: 4, build(K) {
+    const U = nrm([1, -0.62, -0.35]), P = Pose([0, 0, 0], U, [0.62, 1, 0]);
+    K.part({}, () => { K.tube([P.p([-9.5, 0, 0]), P.p([-6.2, 0, 0])], t => 0.62 + 0.18 * Math.sin(t * Math.PI), { caps: [true, false] }); K.ring(P.p([-7.4, 0, 0]), P.U, 0.86, 'h', 14); });
+    K.part({}, () => K.tube([P.p([-6.3, 0, 0]), P.p([-2.5, 0, 0]), P.p([0.2, 0, 0])], t => 0.5 + 0.12 * t, { caps: [false, false] }));
+    K.part({}, () => K.tube(Array.from({ length: 12 }, (_, i) => P.p([i * 5, 0, 0])), t => 0.64 + 1.25 * t, { caps: [false, false] }));
+    K.part({}, () => K.tube(Array.from({ length: 12 }, (_, i) => P.p([55 + i * 0.95, 0, 0])), t => 1.89 + 3.1 * Math.pow(t, 2.4), { caps: [false, true], open: [false, true], inner: [0, 0.86] }));
+    const cups = [[12, 0.7], [16.5, 0.8], [21, 0.9], [25.5, 1.0], [30, 1.1], [34.5, 1.2], [39, 1.3], [43.5, 1.4], [48, 1.5], [52, 1.6]];
+    K.part({}, () => K.line(cups.map(([x]) => P.p([x, 0.3, 0.64 + 1.25 * x / 55 + 0.8])), 'h'));
+    cups.forEach(([x, r], i) => K.part({ role: 'pad', i }, () => { const R = 0.64 + 1.25 * x / 55;
+      K.tube([P.p([x, 0, R * 0.7]), P.p([x, 0, R + 0.5])], r, { caps: [false, true] }); }));
+    return { map: { type: 'pads', n: cups.length } };
+  } };
+
+  /* CELLO — a second cello from a steeper eye, no bow, facing the first (mirrored) */
+  FAM.cello.twin = { kind: 'cello', yaw: -34, pitch: 44, padY: 3, mirror: true, build: bowed({ body: 75, rib: 13, bridgeK: 1.1, endpin: 26, neckExtra: 4, open: [36, 43, 50, 57] }) };
+
+  /* BELLS — tubular chimes in their frame + a set of hand-bells (tubular / chimes / hand-bells in the library) */
+  FAM.bells = { name: 'Bells', cat: 'Mallets', voice: 'bar', yaw: -16, pitch: 12, padY: 3, build(K) {
+    const n = 12, nat = [0, 2, 4, 5, 7, 9, 11];
+    K.part({}, () => { K.tube([[-3, 0, -2], [-3, 64, -2]], 1.0, { caps: [true, true] }); K.box(-6, 0, -8, 0, 1.6, 4); });
+    for (let k = 0; k < n; k++) { const x = 1.5 + k * 3.6, L = 50 - k * 2.4, note = 60 + Math.floor(k / 7) * 12 + nat[k % 7];
+      K.part({ role: 'bar', i: note }, () => { K.tube([[x, 61, 0], [x, 61 - L, 0]], 1.1, { caps: [true, true] }); K.ring([x, 59.5, 0], [0, 1, 0], 1.3, 'h', 14); }); }
+    K.part({}, () => { K.tube([[-3, 63, -1], [n * 3.6 + 2, 63, -1]], 0.7, { caps: [true, true] }); K.tube([[n * 3.6 + 2, 0, -2], [n * 3.6 + 2, 64, -2]], 1.0, { caps: [true, true] }); K.box(n * 3.6 - 1, 0, -8, n * 3.6 + 5, 1.6, 4); });
+    return { map: { type: 'bars' } };
+  },
+    twin: { kind: 'bells', yaw: 10, pitch: 18, padY: 5, build(K) {
+      const bell = (x, z, s, note, i) => K.part({ role: 'bar', i: note }, () => {
+        K.tube(Array.from({ length: 10 }, (_, j) => [x, (9 - j) * 0.9 * s, z]), t => (1.2 + 2.6 * Math.pow(t, 2.2)) * s, { caps: [true, true], open: [false, true], inner: [0, 0.82] });
+        K.tube([[x, 8.2 * s, z], [x, 13.5 * s, z]], 0.42 * s, { caps: [false, false] });
+        K.tube([[x - 1.6 * s, 13.5 * s, z], [x + 1.6 * s, 13.5 * s, z]], 0.55 * s, { caps: [true, true] }); });
+      bell(0, 0, 1.25, 67, 0); bell(9.5, 3, 1.05, 72, 1); bell(17.5, 0, 0.9, 76, 2); bell(24, 3.5, 0.78, 79, 3);
+      return { map: { type: 'bars' } };
+    } } };
+
   /* standalone SVG (for handing a single drawing to the engine / a designer) */
   const CSS = '.f{fill:#10101F}.m{fill:none;stroke:#fff;stroke-opacity:.84;stroke-width:.8;stroke-linejoin:round;stroke-linecap:round}.h{fill:none;stroke:#fff;stroke-opacity:.4;stroke-width:.55;stroke-linejoin:round;stroke-linecap:round}.x{fill:none;stroke:#fff;stroke-opacity:.18;stroke-width:.5}.k{fill:none;stroke:none}';
   function svgString(id, o) { o = o || {}; const W = o.w || 302.65, H = o.h || 65, r = render(id, { w: W, h: H });
     const fade = r.meta.fade ? `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset=".64" stop-color="#fff"/><stop offset=".98" stop-color="#fff" stop-opacity="0"/></linearGradient><mask id="fm"><rect width="${W}" height="${H}" fill="url(#g)"/></mask></defs>` : '';
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W * 2}" height="${H * 2}"><style>${CSS}</style><rect width="${W}" height="${H}" rx="8" fill="#10101F"/>${fade}<g${r.meta.fade ? ' mask="url(#fm)"' : ''}>${r.svg}</g></svg>`; }
 
-  root.__orgArt = { families: FAM, render, svgString, Kit, keyboard };
+  Object.keys(FAM).forEach(k => { FAM[k].id = k; });
+  root.__orgArt = { families: FAM, render, svgString, Kit, keyboard, TWIN: { span: TWIN_SPAN, gapMin: GAP_MIN, gapMax: GAP_MAX } };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -48826,9 +49152,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     'drawbar-organ': 'tonewheel', drawbar: 'tonewheel', b3: 'tonewheel', 'e-guitar': 'guitar', eguitar: 'guitar', nylon: 'guitar', mandolin: 'guitar',
     banjo: 'guitar', ebass: 'bass', 'electric-bass': 'bass', viola: 'violin', strings: 'violin', 'string-section': 'violin', contrabass: 'bass',
     zither: 'koto', psaltery: 'koto', reed: 'clarinet', oboe: 'clarinet', bassoon: 'clarinet', piccolo: 'flute', recorder: 'flute', ocarina: 'flute',
-    'low-brass': 'horn', trombone: 'horn', tuba: 'horn', 'french-horn': 'horn', bells: 'glock', tubular: 'glock', chimes: 'glock', handbells: 'glock',
+    'low-brass': 'horn', trombone: 'horn', tuba: 'horn', 'french-horn': 'horn', bells: 'bells', tubular: 'bells', chimes: 'bells', handbells: 'bells',
     voice: 'choir', vocal: 'choir', piano: 'grand', 'upright-piano': 'upright', pipes: 'organ', mbira: 'kalimba', drums: 'marimba' };
   function famOf (st) { var f = String ((st && st.family) || '').toLowerCase ();
+    if (FAM.bells && /tubular|chime|hand.?bell|handbell/i.test (String ((st && st.id) || '') + ' ' + String ((st && st.name) || ''))) return 'bells';   /* tp105 — the library files tubular bells / hand chimes under glock; they have their own drawing */
     if (FAM[f]) return f; if (FAM_ALIAS[f] && FAM[FAM_ALIAS[f]]) return FAM_ALIAS[f];
     return CAT_DEF[(st && st.category) || ''] || 'grand'; }
   function oscOfEl (el) { var d = el && el.closest ? el.closest ('.device.osc') : null; var m = d && /^osc-([a-h])-device$/.exec (d.id || ''); return m ? m[1] : null; }
@@ -48896,12 +49223,35 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var V = {};            // letter → { fam, w, h, meta, svg, strings }
   var NOISE_TIP = 'this instrument has no mechanical noise';
   /* the header pill carries the SCORE's short form (a player reads "pizz." at a glance); the dropdown lists the full words */
-  var ART_SHORT = { sustain: 'Sus', sustained: 'Sus', staccato: 'Stacc', staccatissimo: 'Stacc', pizzicato: 'Pizz', pizz: 'Pizz', tremolo: 'Trem', spiccato: 'Spicc',
-    legato: 'Leg', marcato: 'Marc', portato: 'Port', mute: 'Mute', muted: 'Mute', 'con sordino': 'Sord', harmonics: 'Harm', harmonic: 'Harm', 'col legno': 'Legno',
-    trill: 'Trill', vibrato: 'Vib', 'non vibrato': 'NV', 'palm mute': 'P.M.', flutter: 'Flutt', 'flutter tongue': 'Flutt', principal: 'Princ', release: 'Rel' };
-  function shortArtic (w) { var k = String (w || '').toLowerCase ().trim (); if (ART_SHORT[k]) return ART_SHORT[k]; w = String (w || ''); return w.length <= 5 ? w : w.slice (0, 5); }
+  /* tp105 — THE PILL'S WORDS (Max: "Mediu" was cut off; "I don't like how it looks"). A deliberate short-label set: every word
+     is a real player's word or its standard score abbreviation, never a truncation, and every one fits the pill's fixed box
+     (Tests/_org_artic_gate.js renders every articulation of every installed instrument in it). The dropdown and the tooltip
+     keep the full name. Unknown names: the table's words inside the name ("Soft Mallets" → Soft), else the first word if it
+     is short, else its first four letters — a clean stem, never an ellipsis. */
+  var ART_SHORT = {
+    'sustain': 'Sus', 'sustained': 'Sus', 'sus': 'Sus', 'long': 'Long', 'short': 'Short', 'arco': 'Arco', 'normal': 'Norm', 'natural': 'Nat', 'ordinario': 'Ord', 'ord': 'Ord',
+    'staccato': 'Stacc', 'staccatissimo': 'Tight', 'spiccato': 'Spicc', 'marcato': 'Marc', 'legato': 'Leg', 'portato': 'Port', 'tenuto': 'Ten', 'accent': 'Acc',
+    'pizzicato': 'Pizz', 'pizz': 'Pizz', 'tremolo': 'Trem', 'trill': 'Trill', 'harmonics': 'Harm', 'harmonic': 'Harm', 'col legno': 'Legno', 'sul tasto': 'Tasto', 'sul ponticello': 'Pont',
+    'vibrato': 'Vib', 'non-vibrato': 'Plain', 'non vibrato': 'Plain', 'senza vibrato': 'Plain', 'expressive': 'Espr', 'espressivo': 'Espr',
+    'muted': 'Mute', 'mute': 'Mute', 'con sordino': 'Mute', 'straight mute': 'Mute', 'harmon mute': 'Wah', 'cup mute': 'Cup', 'palm mute': 'Palm', 'flutter': 'Flutt', 'flutter tongue': 'Flutt',
+    'growl': 'Growl', 'subtone': 'Sub', 'bowed': 'Bowed', 'struck': 'Struck', 'twang': 'Twang', 'finger': 'Finger', 'nail': 'Nail', 'pad': 'Pad', 'tine': 'Tine', 'reed': 'Reed', 'clavisynth': 'Clav', 'nyamaropa': 'Shona', 'glissando': 'Gliss', 'glissando up': 'Gliss', 'overblown': 'Blown', 'rolled': 'Roll', 'dampened': 'Damp', 'damped': 'Damp', 'plucked': 'Pluck', 'soft': 'Soft', 'medium': 'Med', 'hard': 'Hard', 'soft mallets': 'Soft', 'medium mallets': 'Med', 'hard mallets': 'Hard',
+    'loud': 'Loud', 'quiet': 'Quiet', 'full': 'Full', 'traditional': 'Trad', 'retuned': 'Tuned', 'principal': 'Princ', 'release': 'Rel', 'fm piano': 'FM', 'piano 1': 'Pno 1',
+    'clean': 'Clean', 'acoustic': 'Acous', 'melody': 'Lead', 'aah': 'Aah', 'ooh': 'Ooh', 'choir': 'Choir', 'drawbar': 'Bars', 'rock': 'Rock', 'accordion': 'Accdn', 'kenya': 'Kenya' };
+  var ART_WORDS = ['soft', 'medium', 'hard', 'mute', 'muted', 'vibrato', 'tremolo', 'staccato', 'pizzicato', 'sustain', 'legato', 'bowed', 'harmonics'];
+  function shortArtic (w) { var k = String (w || '').toLowerCase ().replace (/\s+/g, ' ').trim (); if (ART_SHORT[k]) return ART_SHORT[k];
+    var ws = k.split (/[\s\-_\/]+/); for (var i = 0; i < ART_WORDS.length; i++) if (ws.indexOf (ART_WORDS[i]) >= 0) return ART_SHORT[ART_WORDS[i]];
+    var f = String (w || '').trim ().split (/\s+/)[0] || ''; if (ART_SHORT[f.toLowerCase ()]) return ART_SHORT[f.toLowerCase ()];
+    return f.length <= 5 ? f : f.slice (0, 4); }
+  /* one instrument's labels, never two alike: "Green Twang / Black Twang / Green Staccato / Black Staccato" would all say
+     Twang or Stacc, so a clash takes its qualifier's initial and a four-letter stem — G Twan · B Twan · G Stac · B Stac */
+  function articLabels (ar) { var L = (ar || []).map (shortArtic), seen = {};
+    L.forEach (function (l) { seen[l] = (seen[l] || 0) + 1; });
+    return L.map (function (l, i) { if (seen[l] < 2) return l; var ws = String (ar[i]).trim ().split (/[\s\-_]+/); if (ws.length < 2) return l;
+      return ws[0].charAt (0).toUpperCase () + ' ' + shortArtic (ws.slice (1).join (' ')).slice (0, 4); }); }
+  window.__orgShortArtic = shortArtic; window.__orgArticLabels = articLabels;
+  window.__orgArtVocab = function () { return Object.keys (ART_SHORT).map (function (k) { return ART_SHORT[k]; }); };
   function paintHead (o, st) {
-    var dev = devOf (o); if (!dev) return;
+    var dev = devOf (o); if (!dev) return; try { paintBack (o); } catch (e) {}
     var disp = document.getElementById ('osc-' + o + '-orginst-display'), wrap = disp ? disp.parentElement : null;
     var name = (st && st.name) || (st && st.id) || '';
     if (disp) { disp.textContent = name || 'Choose instrument'; disp.title = name; }
@@ -48910,7 +49260,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var head = dev.querySelector ('.org-head'), ar = (st && st.artics) || [];
     if (head) { head.classList.toggle ('single', ar.length <= 1);
       var full = ar[(st && st.artic) | 0] || ar[0] || 'Sustain', ad = head.querySelector ('.samp-sel-disp');
-      if (ad) { ad.textContent = shortArtic (full); ad.parentElement.title = 'Articulation — ' + full; } }
+      if (ad) { ad.textContent = articLabels (ar)[(st && st.artic) | 0] || shortArtic (full); ad.parentElement.title = 'Articulation — ' + full; } }
     var nk = dev.querySelector ('.knob[data-syn="' + P (o, 'NOISE') + '"]');
     if (nk) { var na = !!(st && st.ok && st.hasNoise === false); nk.classList.toggle ('org-na', na);
       if (!nk.__tip) nk.__tip = nk.getAttribute ('title') || ''; nk.setAttribute ('title', na ? 'Noise — ' + NOISE_TIP : nk.__tip); }
@@ -48925,21 +49275,60 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     return (w > 20 && h > 20) ? { w: w, h: h } : { w: 302.65, h: 65 }; }
   window.__orgBuildMs = [];
   function build (o, force) {
-    var dev = devOf (o), svg = dev && dev.querySelector ('.org-viz'); if (!svg) return;
+    var dev = devOf (o), svg = dev && dev.querySelector ('.org-viz:not(.org-fx)'); if (!svg) return;
     var st = S[o] || {}, fam = famOf (st), b = boxOf (o), v = V[o];
     if (!force && v && v.fam === fam && Math.abs (v.w - b.w) < 0.75 && Math.abs (v.h - b.h) < 0.75 && svg.firstChild) return;
     var t0 = performance.now ();
     var key = fam + '@' + b.w.toFixed (1) + 'x' + b.h.toFixed (1), r = CACHE[key] || (CACHE[key] = ART.render (fam, { w: b.w, h: b.h }));
     var W = b.w.toFixed (2), H = b.h.toFixed (2), mid = 'org-m-' + o;
+    paintBg (o);
     svg.setAttribute ('viewBox', '0 0 ' + W + ' ' + H);
-    svg.innerHTML = (r.meta.fade ? '<defs><linearGradient id="' + mid + 'g" x1="0" y1="0" x2="0" y2="1"><stop offset=".64" stop-color="#fff"/><stop offset=".98" stop-color="#fff" stop-opacity="0"/></linearGradient><mask id="' + mid + '"><rect width="' + W + '" height="' + H + '" fill="url(#' + mid + 'g)"/></mask></defs><g mask="url(#' + mid + ')">' : '<g>') + r.svg + '</g><g class="fx"></g>';
-    svg.querySelectorAll ('.r-mouth').forEach (function (m) { var vv = svg.querySelector ('.r-voice[data-i="' + m.getAttribute ('data-i') + '"]'); if (!vv) return;
-      var e = document.createElementNS ('http://www.w3.org/2000/svg', 'ellipse'); e.setAttribute ('class', 'mouth'); e.setAttribute ('cx', m.getAttribute ('data-x')); e.setAttribute ('cy', m.getAttribute ('data-y'));
-      e.setAttribute ('rx', (0.85 * r.meta.scale).toFixed (2)); e.setAttribute ('ry', (0.75 * r.meta.scale).toFixed (2)); vv.appendChild (e); });
-    V[o] = { fam: fam, w: b.w, h: b.h, meta: r.meta, svg: svg, strings: [].slice.call (svg.querySelectorAll ('.r-string')) };
+    var defs = r.meta.fade ? '<defs><linearGradient id="' + mid + 'g" x1="0" y1="0" x2="0" y2="1"><stop offset=".64" stop-color="#fff"/><stop offset=".98" stop-color="#fff" stop-opacity="0"/></linearGradient><mask id="' + mid + '"><rect width="' + W + '" height="' + H + '" fill="url(#' + mid + 'g)"/></mask></defs>' : '';
+    /* a single drawing: one group (masked when it fades); a twin: each variant's own wrapper carries the mask only if IT fades */
+    svg.innerHTML = defs + (r.meta.twin ? '<g>' + r.svg + '</g>' : '<g class="tw" data-v="0"' + (r.meta.fade ? ' mask="url(#' + mid + ')"' : '') + '>' + r.svg + '</g>');
+    if (r.meta.twin) svg.querySelectorAll ('.twm[data-fade]').forEach (function (g) { g.setAttribute ('mask', 'url(#' + mid + ')'); });
+    var metas = r.meta.twin ? r.meta.vars : [r.meta], vars = [];
+    [].slice.call (svg.querySelectorAll ('.tw')).forEach (function (g, i) { var mm = metas[i] || metas[0];
+      g.querySelectorAll ('.r-mouth').forEach (function (m) { var vv = g.querySelector ('.r-voice[data-i="' + m.getAttribute ('data-i') + '"]'); if (!vv) return;
+        var e = document.createElementNS ('http://www.w3.org/2000/svg', 'ellipse'); e.setAttribute ('class', 'mouth'); e.setAttribute ('cx', m.getAttribute ('data-x')); e.setAttribute ('cy', m.getAttribute ('data-y'));
+        e.setAttribute ('rx', (0.85 * mm.scale).toFixed (2)); e.setAttribute ('ry', (0.75 * mm.scale).toFixed (2)); vv.appendChild (e); });
+      vars.push (varOf (g, mm)); });
+    /* the overlay layer (tp105): one empty group per variant, carrying the variant's own transform */
+    var fx = svg.nextElementSibling; if (!fx || !fx.classList || !fx.classList.contains ('org-fx')) { fx = document.createElementNS ('http://www.w3.org/2000/svg', 'svg');
+      fx.setAttribute ('class', 'org-viz org-fx'); fx.setAttribute ('aria-hidden', 'true'); fx.setAttribute ('preserveAspectRatio', svg.getAttribute ('preserveAspectRatio') || 'xMidYMid meet'); svg.parentNode.insertBefore (fx, svg.nextSibling); }
+    fx.setAttribute ('viewBox', '0 0 ' + W + ' ' + H);
+    /* no fade mask on the overlay: a masked group is re-composited whole on every change (measured on the grand's run); a lit
+       key low in the fade simply shows at full strength */
+    fx.innerHTML = vars.map (function (w) { var tf = w.g.getAttribute ('transform');
+      return '<g><g class="twfx"' + (tf ? ' transform="' + tf + '"' : '') + '></g></g>'; }).join ('');
+    [].slice.call (fx.querySelectorAll ('.twfx')).forEach (function (gx, i) { if (vars[i]) vars[i].fx = gx; });
+    V[o] = { fam: fam, w: b.w, h: b.h, meta: r.meta, svg: svg, fx: fx, vars: vars, split: splitOf (vars) };
     dropAnim (o);
     window.__orgBuildMs.push (+(performance.now () - t0).toFixed (3)); if (window.__orgBuildMs.length > 64) window.__orgBuildMs.shift ();
   }
+  /* tp105 — THE BOX IS GONE (Max: "transparent, same colour as everything else", like the wavetable view). The drawing
+     hides its back lines by filling each part with the colour BEHIND it, so that colour is read from the first painted
+     ancestor (the synth panel, or a Patcher node) on every build, and the few tints (a white key, a lit key, a struck bar)
+     are mixed from it — the picture matches whatever ground it lands on. */
+  function rgbOf (s) { var m = /rgba?\(([^)]+)\)/.exec (s || ''); if (!m) return null; var p = m[1].split (',').map (function (x) { return parseFloat (x); });
+    return (p.length > 3 && p[3] < 0.5) ? null : [p[0], p[1], p[2]]; }
+  function mixW (c, k) { return 'rgb(' + c.map (function (v) { return Math.round (v + (255 - v) * k); }).join (',') + ')'; }
+  function mixB (c, k) { return 'rgb(' + c.map (function (v) { return Math.round (v * (1 - k)); }).join (',') + ')'; }
+  var BG = {};
+  function paintBg (o) { var dev = devOf (o), sd = dev && dev.querySelector ('.sample-view .samp-disp'); if (!sd) return;
+    var c = null, e = sd.parentElement; while (e && !c) { try { c = rgbOf (getComputedStyle (e).backgroundColor); } catch (x) {} e = e.parentElement; }
+    c = c || [26, 26, 46]; var k = c.join (','); if (BG[o] === k && sd.style.getPropertyValue ('--org-bg')) return; BG[o] = k;
+    sd.style.setProperty ('--org-bg', 'rgb(' + k + ')'); sd.style.setProperty ('--org-kw', mixW (c, 0.075)); sd.style.setProperty ('--org-kon', mixW (c, 0.15));
+    sd.style.setProperty ('--org-kbf', mixB (c, 0.72)); sd.style.setProperty ('--org-kbon', mixW (c, 0.2)); sd.style.setProperty ('--org-on', mixW (c, 0.11)); }
+  /* one variant of the picture (a twin has two): its group, its meta, the notes it answers */
+  function rangeOf (g, m) { var map = (m && m.map) || {}, t = map.type || 'keys', ns = [];
+    if (t === 'keys' || t === 'bars') ns = [].slice.call (g.querySelectorAll (t === 'keys' ? '.r-key' : '.r-bar')).map (function (e) { return +e.getAttribute ('data-i'); });
+    else if (t === 'strings' && map.open && map.open.length) ns = [Math.min.apply (null, map.open), Math.max.apply (null, map.open) + 19];
+    if (!ns.length) ns = [48, 84];
+    return [Math.min.apply (null, ns), Math.max.apply (null, ns)]; }
+  function varOf (g, m) { var rg = rangeOf (g, m); return { g: g, meta: m, kind: m.kind, strings: [].slice.call (g.querySelectorAll ('.r-string')), lo: rg[0], hi: rg[1] }; }
+  /* low notes to the left drawing, high notes to the right (Max's rule): the split is the middle of the pair's range */
+  function splitOf (vars) { if (vars.length < 2) return null; return Math.round ((Math.min (vars[0].lo, vars[1].lo) + Math.max (vars[0].hi, vars[1].hi)) / 2); }
   function isOrg (o) { var d = devOf (o); return !!(d && d.classList.contains ('engine-organic')); }
   function apply (o, st) {
     if (!st) return; if (st.artic == null && S[o] && S[o].id === st.id) st.artic = S[o].artic;
@@ -48959,7 +49348,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         if (!st.id && why === 'engine') return firstInstalled ('Keys').then (function (e) { if (e) return setInstrument (o, e.id); apply (o, st); });
         apply (o, st); }); }).catch (function () {}); }
   function readKnobs (o) {
-    ['DYNAMICS', 'TONE', 'BODY', 'ATTACK', 'HUMAN', 'RELEASE', 'NOISE', 'SUSTAIN', 'VELOCITY', 'IMAGE'].forEach (function (k) {
+    ['DYNAMICS', 'TONE', 'BODY', 'VIBRATO', 'HUMAN', 'RELEASE', 'NOISE', 'SUSTAIN', 'VELOCITY', 'IMAGE'].forEach (function (k) {
       var id = P (o, k); readParam (id).then (function (v) { if (v == null) return;
         var kn = devOf (o) && devOf (o).querySelector ('.knob[data-syn="' + id + '"]'); if (kn && kn.__applyFill) kn.__applyFill (v); }); }); }
   function firstInstalled (cat) { return loadIndex ().then (function (ix) { var a = ix.filter (function (e) { return e.installed !== false; });
@@ -48976,8 +49365,12 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   window.__orgSetInstrument = function (o, id) { return setInstrument (String (o), id); };
   window.__orgSetArtic = function (o, i) { setArtic (String (o), i | 0); };
   window.__orgState = function (o) { return S[o] || null; };
+  window.__orgPaintHead = function (o, st) { o = String (o); S[o] = st; paintHead (o, st); };   /* the gates' bench: paint a header state without a native round trip */
   window.__orgView = function (o) { return V[o] ? { fam: V[o].fam, w: V[o].w, h: V[o].h, parts: V[o].svg.querySelectorAll ('.pt').length } : null; };
   window.__orgFamOf = famOf;
+  /* the gates' / shots' bench: draw family `fam` in oscillator o's box without an instrument change */
+  window.__orgForceFam = function (o, fam) { o = String (o); S[o] = Object.assign ({}, S[o] || {}, { family: fam }); build (o, true); return V[o] ? V[o].vars.length : 0; };
+  window.__orgVars = function (o) { var v = V[String (o)]; return v ? { split: v.split, vars: v.vars.map (function (w) { return { kind: w.kind, lo: w.lo, hi: w.hi, box: w.meta.box }; }), gap: v.meta.gap || 0 } : null; };
 
   /* the engine selector calls this on every paint (index.html, SYN-engine-select) */
   var ens = {};
@@ -48986,7 +49379,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var vl = dev.querySelector ('.uni-voices .knob-label'); if (vl) vl.textContent = on ? 'Players' : 'Voices';   /* §2.5 — on this engine the unison page is an ENSEMBLE: each voice is a player */
     var ua = dev.querySelector ('.organic-knob-wrap'); void ua;
     if (!on) { ens[o] = false; releaseAll (o); return; }
-    if (!ens[o] || Date.now () - (readAt[o] || 0) > 400) { ens[o] = true; refresh (o, 'engine'); readKnobs (o); }
+    if (!ens[o] || Date.now () - (readAt[o] || 0) > 400) { ens[o] = true; refresh (o, 'engine'); readKnobs (o); readBack (o); }
   };
   window.__orgHeal = function (o) { if (isOrg (o)) build (o); };
   window.__orgRefresh = function (o) { return refresh (String (o), 'read'); };
@@ -49000,99 +49393,92 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* ═══ 3 · THE PLAY REACTION (ported from the approved mockup) ═══════════════════════════════════════════════════
      Class flips (CSS transitions on fill / stroke-opacity / transform) plus the few paths that ring. The loop runs only
      while something rings or breathes, at ≤ 30 fps (a timer arms each rAF), and parks itself the moment nothing does. */
-  var A = { ringing: new Map (), held: {}, arcs: [], raf: 0, tmr: 0, last: 0, frames: 0, cost: 0, stamps: [] };
+  /* tp105 — WHAT THE REACTION COSTS (measured in the real WKWebView, Tests/_org_real.js): the picture is hundreds of paths,
+     and every class flip inside it — plus every frame of a CSS transition, at the display's refresh rate — re-painted the
+     WHOLE drawing in WebKit's GPU process. So the drawing is now painted ONCE, in its own layer (.org-viz, will-change),
+     and a played note lifts a COPY of just the part that moves (a key, a bar, a pad, a pipe, a valve, a string) — with the
+     few later parts that overlap it, so the stacking stays true — into a second, nearly empty layer on top (.org-fx).
+     Only that small layer repaints; no transitions anywhere (a state is on or off); a ringing string rewrites one path
+     at ≤ 30 fps, nothing else moves. */
+  var A = { ringing: new Map (), held: {}, raf: 0, tmr: 0, last: 0, frames: 0, cost: 0, stamps: [], off: false };
   window.__orgAnim = A;
   function heldOf (o) { return A.held[o] || (A.held[o] = new Map ()); }
-  function anyBreath () { for (var o in A.held) { var it = A.held[o].values (), n; while (!(n = it.next ()).done) if (n.value.breath) return true; } return false; }
-  function alive () { return A.ringing.size > 0 || A.arcs.length > 0 || anyBreath (); }
-  function kick () { if (A.raf || A.tmr) return; var wait = Math.max (0, 24 - (performance.now () - A.last));   /* + the next vsync ≈ 33 ms: 30 fps at the top, never more */
-    A.tmr = setTimeout (function () { A.tmr = 0; A.raf = requestAnimationFrame (tick); }, wait); }
-  function tick () {
-    A.raf = 0; var t0 = performance.now (), t = t0; A.last = t0; A.frames++; A.stamps.push (t0); if (A.stamps.length > 240) A.stamps.shift ();
-    A.ringing.forEach (function (st, s) {
-      var age = Math.max (0, (t - st.t0) / 1000), held = st.sustain && heldOf (st.o).has (st.note);
-      if (!held && st.rel == null) st.rel = age;
-      /* after its note is RELEASED a string settles fast (τ ≤ 0.12 s): the picture follows the feed, and the feed ends ≤300 ms
-         after the last note — so the painter is parked well inside 500 ms of the last event */
-      var tau = st.off ? Math.min (st.tau, 0.12) : st.tau;
-      var env = held ? Math.min (1, age * 8) : Math.exp (-(age - (st.rel || 0)) / tau) * (st.sustain ? 1 : Math.min (1, age * 40));
-      var Am = st.amp * env * (0.82 + 0.18 * Math.sin (age * 38)), path = s.querySelector ('.vib');
-      var ax = +s.getAttribute ('data-ax'), ay = +s.getAttribute ('data-ay'), bx = +s.getAttribute ('data-bx'), by = +s.getAttribute ('data-by'),
-          dx = bx - ax, dy = by - ay, L = Math.hypot (dx, dy) || 1, nx = -dy / L, ny = dx / L;
-      if (!path) { A.ringing.delete (s); return; }
-      if ((Am < 0.04 && age > 0.12) || !s.isConnected) { path.setAttribute ('d', 'M' + ax + ' ' + ay + 'L' + bx + ' ' + by); s.classList.remove ('ring'); A.ringing.delete (s); return; }
-      var mx = (ax + bx) / 2, my = (ay + by) / 2;
-      if (st.tine) { var ex = bx + nx * Am * 0.8, ey = by + ny * Am * 0.8, fx = bx - nx * Am * 0.8, fy = by - ny * Am * 0.8;
-        path.setAttribute ('d', 'M' + ax + ' ' + ay + 'Q' + (mx + nx * Am * 0.35).toFixed (2) + ' ' + (my + ny * Am * 0.35).toFixed (2) + ' ' + ex.toFixed (2) + ' ' + ey.toFixed (2)
-          + 'M' + ax + ' ' + ay + 'Q' + (mx - nx * Am * 0.35).toFixed (2) + ' ' + (my - ny * Am * 0.35).toFixed (2) + ' ' + fx.toFixed (2) + ' ' + fy.toFixed (2)); }
-      else path.setAttribute ('d', 'M' + ax + ' ' + ay + 'Q' + (mx + nx * Am * 2).toFixed (2) + ' ' + (my + ny * Am * 2).toFixed (2) + ' ' + bx + ' ' + by
-          + 'Q' + (mx - nx * Am * 2).toFixed (2) + ' ' + (my - ny * Am * 2).toFixed (2) + ' ' + ax + ' ' + ay);
-    });
-    for (var o in A.held) A.held[o].forEach (function (st) { if (st.breath && t - st.last > 430) { st.last = t; st.breath (); } });
-    /* the breath arcs: scale + fade, driven HERE at the painter's rate (not WAAPI, which would run at the panel's 60+) */
-    A.arcs = A.arcs.filter (function (a) { var k = a.cut ? a.kc + (1 - a.kc) * (t - a.cut) / 350 : (t - a.t0) / 1100; if (k >= 1 || !a.el.isConnected) { if (a.el.parentNode) a.el.parentNode.removeChild (a.el); return false; }
-      var e = 1 - Math.pow (1 - k, 2.2); a.el.setAttribute ('transform', 'translate(' + a.x + ' ' + a.y + ') scale(' + (1 + (a.grow - 1) * e).toFixed (3) + ') translate(' + (-a.x) + ' ' + (-a.y) + ')');
-      a.el.style.opacity = (a.op * (1 - k)).toFixed (3); return true; });
-    A.cost += performance.now () - t0;
-    if (alive ()) kick ();
-  }
-  function ring (o, s, note, opt) { s.classList.add ('ring'); A.ringing.set (s, Object.assign ({ o: o, t0: performance.now (), note: note, amp: 1.1, tau: 0.9 }, opt)); kick (); }
-  function emitWave (o, e, strength) {
-    var v = V[o]; if (!v) return; var g = v.svg.querySelector ('.fx'); if (!g) return;
-    var a0 = e.ang - 0.62, a1 = e.ang + 0.62, R = Math.max (2.2, e.r * 0.9);
-    var p = document.createElementNS ('http://www.w3.org/2000/svg', 'path');
-    p.setAttribute ('d', 'M' + (e.x + R * Math.cos (a0)).toFixed (2) + ' ' + (e.y + R * Math.sin (a0)).toFixed (2) + 'A' + R.toFixed (2) + ' ' + R.toFixed (2) + ' 0 0 1 ' + (e.x + R * Math.cos (a1)).toFixed (2) + ' ' + (e.y + R * Math.sin (a1)).toFixed (2));
-    p.setAttribute ('class', 'wave'); p.style.opacity = (0.55 * strength).toFixed (3); g.appendChild (p);
-    A.arcs.push ({ o: o, el: p, t0: performance.now (), x: e.x, y: e.y, grow: 1 + 22 / R, op: 0.55 * strength }); kick (); }
+  /* tp105 — NO PER-FRAME PAINTER. A string used to wobble at 30 fps: measured in the real WebView that cost +11 % of a core
+     (WebKit's GPU process) on a fast piano run, for a hairline. Max: "if it takes up a lot we don't need that". A sounding
+     string now LIGHTS (a brighter, heavier copy on the overlay) and goes out when it would have settled — events only, at
+     the feed's rate; __orgAnim.frames stays 0 (the gates hold it there). */
+  /* the overlay: lift a copy of part e (lit or not) and the later parts that overlap it into variant w's overlay group */
+  function bbOf (e) { if (e.__bb !== undefined) return e.__bb; var b = null; try { var q = e.getBBox (); b = { x: q.x, y: q.y, w: q.width, h: q.height }; } catch (x) {} return (e.__bb = b); }
+  function coverOf (e) { if (e.__cov) return e.__cov; var bb = bbOf (e), out = [];
+    /* the later parts that overlap it — at most 6, the nearest first in paint order (a key's black neighbours, a bar's neighbours): a
+       long tail of covers made every lift a big repaint for a sliver of stacking truth */
+    if (bb) for (var n = e.nextElementSibling; n && out.length < 6; n = n.nextElementSibling) { if (!n.classList || !n.classList.contains ('pt')) continue; var b2 = bbOf (n);
+      if (b2 && b2.x < bb.x + bb.w && bb.x < b2.x + b2.w && b2.y < bb.y + bb.h && bb.y < b2.y + b2.h) out.push (n); }
+    return (e.__cov = out); }
+  function lift (w, e, cls, bare) { if (!w.fx || !e) return []; var c = e.cloneNode (true); (cls || []).forEach (function (k) { c.classList.add (k); }); w.fx.appendChild (c); var out = [c];
+    if (!bare) coverOf (e).forEach (function (k) { var cc = k.cloneNode (true); cc.classList.remove ('on'); cc.classList.remove ('ring'); w.fx.appendChild (cc); out.push (cc); }); return out; }
+  function drop (arr) { (arr || []).forEach (function (x) { if (x.parentNode) x.parentNode.removeChild (x); }); }
+  var FLASH = 450;
+  function ring (o, w, s, note, opt) { opt = opt || {}; var old = A.ringing.get (s); if (old) unring (s, old);
+    var up = lift (w, s, ['ring'], true), sv = s.querySelector ('.vib'); if (!up.length) return;   /* bare: nothing covers a lit string */
+    if (sv) sv.style.visibility = 'hidden';   /* the still string steps aside while its lit copy shows (one flip per note) */
+    var st = { o: o, note: note, up: up, sv: sv, hold: !!(opt.sustain || opt.damp) }; A.ringing.set (s, st);
+    st.tm = setTimeout (function () { unring (s, st); }, opt.sustain ? 600 : Math.round (Math.min (0.9, opt.tau || 0.9) * 1000)); }   /* a plucked string ≤ 0.9 s, a bowed one 0.6 s, then out */
+  function unring (s, st) { clearTimeout (st.tm); drop (st.up); if (st.sv) st.sv.style.visibility = ''; if (A.ringing.get (s) === st) A.ringing.delete (s); }
   function nearestIn (els, note) { var best = null, bd = 1e9; els.forEach (function (e) { var n = +e.getAttribute ('data-i'), d = Math.abs (n - note);
     for (var k = -48; k <= 48; k += 12) d = Math.min (d, Math.abs (n - (note + k)) + Math.abs (k) * 0.01); if (d < bd) { bd = d; best = e; } }); return best; }
   function foldInto (els, note) { if (!els.length) return null; var ns = els.map (function (e) { return +e.getAttribute ('data-i'); }), lo = Math.min.apply (null, ns), hi = Math.max.apply (null, ns), n = note;
     while (n < lo) n += 12; while (n > hi) n -= 12; for (var i = 0; i < els.length; i++) if (ns[i] === n) return els[i]; return nearestIn (els, n); }
   var VALVES = [[1,1,1],[1,0,1],[0,1,1],[1,1,0],[1,0,0],[0,1,0],[0,0,0],[1,1,1],[1,0,1],[0,1,1],[1,1,0],[1,0,0]];
-  function all (svg, sel) { return [].slice.call (svg.querySelectorAll (sel)); }
+  function all (g, sel) { return [].slice.call (g.querySelectorAll (sel)); }
+  function byI (els, i) { for (var k = 0; k < els.length; k++) if (+els[k].getAttribute ('data-i') === i) return els[k]; return null; }
+  /* which drawing answers a note: a twin sends low notes left, high notes right */
+  function varFor (v, note) { if (v.vars.length < 2 || v.split == null) return v.vars[0]; return v.vars[note < v.split ? 0 : 1]; }
   function noteOn (o, note, vel) {
-    var v = V[o]; if (!v) return; var svg = v.svg, m = v.meta, fam = v.fam; vel = vel == null ? 0.8 : vel;
+    var v = V[o]; if (!v || A.off) return; vel = vel == null ? 0.8 : vel;
+    if (window.__tiMotionOn && !window.__tiMotionOn ()) return;   /* Settings › Motion Off (tp62): the instrument rests as a still drawing — zero reaction cost */
     var H = heldOf (o); if (H.has (note)) return;
-    var st = { on: [], breath: null, last: performance.now () }; H.set (note, st);
+    var st = { up: [] }; H.set (note, st);
+    var w = varFor (v, note); if (!w) return; var g = w.g, m = w.meta, fam = w.kind;
     var type = (m.map && m.map.type) || 'keys';
-    var flash = function (els) { els.forEach (function (e) { if (e) { e.classList.add ('on'); st.on.push (e); } }); };
-    if (type === 'keys') { flash ([foldInto (all (svg, '.r-key'), note)]);
-      if (m.map.strings && v.strings.length) { var n = v.strings.length, k = Math.max (0, Math.min (n - 1, Math.round ((note - m.map.lo) / m.map.span * (n - 1))));
-        var s = v.strings.filter (function (x) { return +x.getAttribute ('data-i') === k; })[0]; if (s) ring (o, s, note, { amp: 0.45 + vel * 0.4, tau: fam === 'grand' ? 1.5 : 0.6 }); } }
+    /* a STRIKE: the part lights for FLASH ms and goes out on its own, held or not — a held chord costs nothing after that (measured:
+       a lit copy that stayed lit re-painted with everything else the page animates while notes sound, ~1 % of a core) */
+    var flash = function (els) { var up = []; els.forEach (function (e) { if (e) up = up.concat (lift (w, e, ['on'])); }); st.up = st.up.concat (up);
+      if (up.length) setTimeout (function () { drop (up); }, FLASH); };
+    if (type === 'keys') flash ([foldInto (all (g, '.r-key'), note)]);   /* tp105 — the key lights; its string no longer does (a lit piano string on a fast run cost +10 % of a core in WebKit's GPU process: a long diagonal repaint per note) */
     else if (type === 'strings') {
       var open = m.map.open, id2 = 0;
       if (open.length > 8) id2 = open.reduce (function (b, q, i) { return Math.abs (q - note) < Math.abs (open[b] - note) ? i : b; }, 0);
       else { for (var i = 0; i < open.length; i++) if (note >= open[i]) id2 = i; }
-      var s2 = v.strings.filter (function (x) { return +x.getAttribute ('data-i') === id2; })[0], bowed = (fam === 'violin' || fam === 'cello' || fam === 'bass');
-      if (s2) ring (o, s2, note, bowed ? { sustain: true, amp: 0.55 + vel * 0.35, tau: 0.35 } : { amp: 0.7 + vel * 0.8, tau: fam === 'harp' ? 1.4 : 0.9 }); }
-    else if (type === 'tines') { var L = v.strings.length; if (L) { var want = fam === 'kalimba' ? [8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2][((note % 12) + 12) % 12] : ((note % L) + L) % L;
-      var s3 = v.strings.filter (function (x) { return +x.getAttribute ('data-i') === want; })[0]; if (s3) ring (o, s3, note, { tine: true, amp: 0.7 + vel * 0.6, tau: fam === 'musicbox' ? 0.7 : 1.3 }); } }
-    else if (type === 'bars') { var b = foldInto (all (svg, '.r-bar'), note); if (b) { b.classList.add ('on'); b.classList.add ('hit');
-      setTimeout (function () { b.classList.remove ('hit'); }, 70); setTimeout (function () { b.classList.remove ('on'); }, fam === 'glock' ? 1600 : 700); } }
-    else if (type === 'pipes') { var ps = all (svg, '.r-pipe'), np = ps.length; if (np) { var ip = ((np - 1 - ((note - 36) % np)) % np + np) % np; flash ([ps.filter (function (q) { return +q.getAttribute ('data-i') === ip; })[0]]); } }
-    else if (type === 'voices') { var vs = all (svg, '.r-voice'), nv = vs.length; if (nv) { var va = ((note * 7) % nv + nv) % nv, vb = (va + Math.floor (nv / 2)) % nv;
-      flash ([vs.filter (function (q) { return +q.getAttribute ('data-i') === va; })[0], vs.filter (function (q) { return +q.getAttribute ('data-i') === vb; })[0]]); } }
-    else if (type === 'pads') { var pads = all (svg, '.r-pad').sort (function (a, c) { return a.getAttribute ('data-i') - c.getAttribute ('data-i'); });
+      var s2 = byI (w.strings, id2), bowed = (fam === 'violin' || fam === 'cello' || fam === 'bass');
+      if (s2) ring (o, w, s2, note, bowed ? { sustain: true, amp: 0.55 + vel * 0.35, tau: 0.35 } : { amp: 0.7 + vel * 0.8, tau: fam === 'harp' ? 1.4 : 0.9 }); }
+    else if (type === 'tines') { var L = w.strings.length; if (L) { var want = fam === 'kalimba' ? [8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2][((note % 12) + 12) % 12] % L : ((note % L) + L) % L;
+      var s3 = byI (w.strings, want); if (s3) ring (o, w, s3, note, { tine: true, amp: 0.7 + vel * 0.6, tau: fam === 'musicbox' ? 0.7 : 1.3 }); } }
+    else if (type === 'bars') { var b = foldInto (all (g, '.r-bar'), note); if (b) { var bu = lift (w, b, ['on', 'hit']);
+      setTimeout (function () { if (bu[0]) bu[0].classList.remove ('hit'); }, 70); setTimeout (function () { drop (bu); }, fam === 'glock' ? 900 : 600); } }
+    else if (type === 'pipes') { var ps = all (g, '.r-pipe'), np = ps.length; if (np) { var ip = ((np - 1 - ((note - 36) % np)) % np + np) % np; flash ([byI (ps, ip)]); } }
+    else if (type === 'voices') { var vs = all (g, '.r-voice'), nv = vs.length; if (nv) { var va = ((note * 7) % nv + nv) % nv, vb = (va + Math.floor (nv / 2)) % nv;
+      flash ([byI (vs, va), byI (vs, vb)]); } }
+    else if (type === 'pads') { var pads = all (g, '.r-pad').sort (function (a, c) { return a.getAttribute ('data-i') - c.getAttribute ('data-i'); });
       flash (pads.slice (0, Math.max (0, Math.min (pads.length, Math.round ((72 - note) / 24 * pads.length))))); }
-    else if (type === 'valves') { var vv = VALVES[((note % 12) + 12) % 12]; flash (all (svg, '.r-valve').filter (function (x) { return vv[+x.getAttribute ('data-i') % 3]; })); }
-    if (m.voice === 'wind' || m.voice === 'brass') { var go = function () { (m.emit || []).forEach (function (e, i) { emitWave (o, e, i ? 0.7 : 1); }); }; go (); st.breath = go; kick (); }
+    else if (type === 'valves') { var vv = VALVES[((note % 12) + 12) % 12]; flash (all (g, '.r-valve').filter (function (x) { return vv[+x.getAttribute ('data-i') % 3]; })); }
   }
   function noteOff (o, note) { var H = heldOf (o), st = H.get (note); if (!st) return; H.delete (note);
-    st.on.forEach (function (e) { if (!e.classList.contains ('r-bar')) e.classList.remove ('on'); });
-    var now = performance.now ();
-    A.ringing.forEach (function (r) { if (r.o === o && r.note === note) r.off = true; });
-    if (!H.size) A.arcs.forEach (function (a) { if (a.o === o && !a.cut) { a.kc = Math.min (1, (now - a.t0) / 1100); a.cut = now; } }); }
+    drop (st.up);
+    A.ringing.forEach (function (r, s) { if (r.o === o && r.note === note && r.hold) unring (s, r); }); }   /* a bowed string stops with its bow, a piano string with its damper; a plucked one rings out */
   function releaseAll (o) { var H = heldOf (o); [].concat (Array.from (H.keys ())).forEach (function (n) { noteOff (o, n); }); PREV[o] = {}; }
-  function dropAnim (o) { var H = heldOf (o); H.clear (); A.ringing.forEach (function (st, s) { if (st.o === o) A.ringing.delete (s); }); PREV[o] = {}; }
+  function dropAnim (o) { var H = heldOf (o); H.forEach (function (st) { drop (st.up); }); H.clear (); A.ringing.forEach (function (st, s) { if (st.o === o) unring (s, st); }); PREV[o] = {}; }
   window.__orgNoteOn = function (o, n, v) { noteOn (String (o), n | 0, v); };
   window.__orgNoteOff = function (o, n) { noteOff (String (o), n | 0); };
+  window.__orgRelease = function (o) { dropAnim (String (o)); };   /* the CPU harness: the reaction off, cleanly, mid-chord */
 
   /* the organicViz feed (contract §6): a SNAPSHOT of the sounding notes, ≤15 Hz, only while notes sound or 300 ms after.
      Diff against the previous snapshot → note-on / note-off. A feed that goes quiet with notes still "held" releases them
      after 700 ms (the lane's own gone-rule, tp46). */
   var PREV = {}, gone = {};
+  window.__orgVizN = 0;
   window.__orgVizIn = function (payload) {
-    var d = parse (payload); if (!d) return; var oi = d.osc | 0, o = LET.charAt (oi); if (!o) return;
+    var d = parse (payload); if (!d) return; window.__orgVizN++; var oi = d.osc | 0, o = LET.charAt (oi); if (!o) return;
     var now = {}; (d.notes || []).forEach (function (q) { if (q && q.n != null) now[q.n | 0] = +q.lvl || 0.8; });
     var was = PREV[o] || {}; PREV[o] = now;
     if (!isOrg (o) || !V[o]) return;
@@ -49127,20 +49513,61 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* the articulation dropdown — the house .pmenu glass (bullet on the current row), clamped to the window */
   var pm = null;
   function closePm () { if (pm) { try { pm.remove (); } catch (e) {} pm = null; document.removeEventListener ('pointerdown', pmOut, true);
-    document.querySelectorAll ('.org-artic.open').forEach (function (x) { x.classList.remove ('open'); }); } }
+    document.querySelectorAll ('.org-artic.open, .org-dd.open').forEach (function (x) { x.classList.remove ('open'); }); } }
   function pmOut (e) { if (pm && !pm.contains (e.target)) closePm (); }
-  function openArtic (o, anchor) { closePm (); var st = S[o] || {}, ar = st.artics || []; if (ar.length <= 1) return;
+  /* one house dropdown for every Organics choice (the header's articulation pill and the back panel's three) */
+  function openMenu (anchor, title, items, cur, onPick) { closePm (); if (!items || !items.length) return;
     var m = document.createElement ('div'); m.className = 'pmenu org-artic-menu';
-    var h = document.createElement ('div'); h.className = 'ps'; h.textContent = 'Articulation'; m.appendChild (h);
-    ar.forEach (function (a, i) { var pi = document.createElement ('div'); pi.className = 'pi' + (i === (st.artic | 0) ? ' cur' : '');
+    var h = document.createElement ('div'); h.className = 'ps'; h.textContent = title; m.appendChild (h);
+    items.forEach (function (a, i) { var pi = document.createElement ('div'); pi.className = 'pi' + (i === cur ? ' cur' : '');
       var nm = document.createElement ('span'); nm.className = 'nm'; nm.textContent = a; pi.appendChild (nm);
-      pi.addEventListener ('click', function (ev) { ev.stopPropagation (); setArtic (o, i); closePm (); }); m.appendChild (pi); });
+      pi.addEventListener ('click', function (ev) { ev.stopPropagation (); onPick (i); closePm (); }); m.appendChild (pi); });
     document.body.appendChild (m); pm = m; anchor.classList.add ('open');
     var r = anchor.getBoundingClientRect (), w = m.offsetWidth, hh = m.offsetHeight;
     var vw = window.__vw ? window.__vw () : window.innerWidth, vh = window.__vh ? window.__vh () : window.innerHeight;
     m.style.left = Math.max (6, Math.min (vw - w - 6, r.left)) + 'px';
-    m.style.top = Math.max (6, Math.min (vh - hh - 6, r.bottom + 4)) + 'px';
+    m.style.top = Math.max (6, Math.min (vh - hh - 6, r.bottom + 4)) + 'px';   /* a menu at the bottom edge flips up (never cut off) */
     setTimeout (function () { document.addEventListener ('pointerdown', pmOut, true); }, 0); }
+  function openArtic (o, anchor) { var st = S[o] || {}, ar = st.artics || []; if (ar.length <= 1) return;
+    openMenu (anchor, 'Articulation', ar, st.artic | 0, function (i) { setArtic (o, i); }); }
+
+  /* ═══ tp105 — THE BACK PANEL: Rate · Delay (drag, like Phase) · Curve · Tuning · Articulation (dropdowns) ════════════════
+     A local model per oscillator (BK) written straight to the APVTS (__setSynParam) and read back from it on every switch
+     to Organics (state persists). Until the engine declares these IDs the writes land nowhere, harmlessly. */
+  var BK = {}, BACK = { VIBRATE: 0.417, VIBDELAY: 0.175, VCURVE: 0.5, TUNING: 1 };
+  var CHOICES = { VCURVE: ['Soft', 'Linear', 'Hard'], TUNING: ['As recorded', 'Equal'] }, PILLWORD = { 'As recorded': 'Natural' };   /* the pill never cuts a word: the menu says it in full */
+  function bk (o) { return BK[o] || (BK[o] = Object.assign ({}, BACK)); }
+  function paintBack (o) { var dev = devOf (o); if (!dev) return; var b = bk (o), st = S[o] || {};
+    dev.querySelectorAll ('.org-pills .org-bp').forEach (function (pill) { var id = pill.getAttribute ('data-org') || '', k = id.slice (id.indexOf ('_ORG_') + 5), v = pill.querySelector ('b'); if (!v) return;
+      if (k === 'VIBRATE' || k === 'VIBDELAY') v.textContent = window.__orgFmt ? window.__orgFmt (id, b[k], false) : String (b[k]);
+      else if (CHOICES[k]) { var n = CHOICES[k].length, i = Math.round (b[k] * (n - 1)); v.textContent = PILLWORD[CHOICES[k][i]] || CHOICES[k][i] || ''; pill.title = pill.title.split (' — now:')[0]; }
+      else if (k === 'ARTIC') { var ar = st.artics || [], full = ar[(st.artic | 0)] || ar[0] || 'Sustain'; v.textContent = full; var dv = v.parentElement;   /* the full word when it fits the pill, else the header's own label — never a cut word */
+        if (dv && dv.scrollWidth > dv.clientWidth + 0.5) v.textContent = articLabels (ar)[(st.artic | 0)] || shortArtic (full);
+        pill.classList.toggle ('org-na', ar.length <= 1); } }); }
+  /* until the engine declares these IDs, getSynParam answers 0 for every one of them — and all four at 0 (Soft · As recorded · 3 Hz ·
+     no delay) is not a state anyone reaches by accident — so four zeros read as "not there yet" and the defaults stay painted */
+  function readBack (o) { var ks = Object.keys (BACK);
+    Promise.all (ks.map (function (k) { return readParam (P (o, k)); })).then (function (vs) {
+      if (vs.every (function (v) { return v == null || v === 0; })) { paintBack (o); return; }
+      ks.forEach (function (k, i) { if (vs[i] != null) bk (o)[k] = vs[i]; }); paintBack (o); });
+    paintBack (o); }
+  function setBack (o, k, v) { bk (o)[k] = v; try { if (window.__setSynParam) window.__setSynParam (P (o, k), v); } catch (e) {} paintBack (o); }
+  window.__orgBack = function (o) { return Object.assign ({}, bk (String (o))); };
+  var bDrag = null;
+  document.addEventListener ('pointerdown', function (e) { if (e.button !== 0) return; var t = e.target; if (!t || !t.closest) return;
+    var pill = t.closest ('.org-pills .org-bp'); if (!pill) return; var o = oscOfEl (pill); if (!o) return;
+    var id = pill.getAttribute ('data-org') || '', k = id.slice (id.indexOf ('_ORG_') + 5);
+    e.preventDefault (); e.stopPropagation ();
+    if (k === 'VIBRATE' || k === 'VIBDELAY') { bDrag = { o: o, k: k, y0: e.clientY, n0: bk (o)[k] };
+      try { pill.setPointerCapture (e.pointerId); } catch (x) {} return; }
+    if (pm && pill.classList.contains ('open')) { closePm (); return; }
+    if (k === 'ARTIC') { var st = S[o] || {}; if ((st.artics || []).length > 1) openMenu (pill, 'Articulation', st.artics, st.artic | 0, function (i) { setArtic (o, i); }); return; }
+    if (CHOICES[k]) { var n = CHOICES[k].length; openMenu (pill, pill.querySelector ('.ph-label').textContent, CHOICES[k], Math.round (bk (o)[k] * (n - 1)), function (i) { setBack (o, k, i / (n - 1)); }); } }, true);
+  document.addEventListener ('pointermove', function (e) { if (!bDrag) return; setBack (bDrag.o, bDrag.k, Math.max (0, Math.min (1, bDrag.n0 + (bDrag.y0 - e.clientY) / 150))); }, true);
+  document.addEventListener ('pointerup', function () { bDrag = null; }, true);
+  document.addEventListener ('dblclick', function (e) { var t = e.target; if (!t || !t.closest) return; var pill = t.closest ('.org-pills .org-bp:not(.org-dd)'); if (!pill) return;
+    var o = oscOfEl (pill); if (!o) return; var id = pill.getAttribute ('data-org') || '', k = id.slice (id.indexOf ('_ORG_') + 5);
+    e.preventDefault (); e.stopPropagation (); setBack (o, k, BACK[k]); }, true);
   window.__orgOpenArtic = function (o) { var d = devOf (String (o)), a = d && d.querySelector ('.org-artic'); if (a) openArtic (String (o), a); return !!pm; };
   document.addEventListener ('mousedown', function (e) {
     if (e.button !== 0) return; var t = e.target; if (!t || !t.closest) return;
@@ -49162,9 +49589,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     wAcc += (e.deltaY || 0); var now = Date.now ();
     if (Math.abs (wAcc) >= 24 && now - wAt > 110) { step (o, wAcc > 0 ? 1 : -1); wAcc = 0; wAt = now; }
   }, { capture: true, passive: false });
-  /* the sample family's right-click menu belongs to samples: on Organics the display offers nothing but the browser */
+  /* tp105 — THE RIGHT-CLICK MENU (Max: "I can't right-click it and mute it, turn it down, solo it — like the waveform"). The
+     Organics picture sits in the sample family's display box, whose own listener opens the SAMPLE menu (trim, normalize…),
+     so tp104 swallowed the event and nothing opened. Now the display opens the menu every oscillator's waveform opens —
+     Solo · Mute · Volume · Pan · Semitone · copy/paste the oscillator — the same function, delegated from the document so the
+     Patcher-adopted E–H get it too. */
   document.addEventListener ('contextmenu', function (e) { var t = e.target; if (!t || !t.closest) return;
-    if (t.closest ('.engine-organic .samp-disp')) { e.preventDefault (); e.stopPropagation (); } }, true);
+    var sd = t.closest ('.engine-organic .samp-disp'); if (!sd) return; e.preventDefault (); e.stopPropagation ();
+    var o = oscOfEl (sd); if (o && window.__openOscQuick) window.__openOscQuick (e, o); }, true);
 
   /* ═══ 5 · THE DICE (design §7.6) ═══════════════════════════════════════════════════════════════════════════════ */
   var AIM_CATS = { keys: ['Keys', 'Organs', 'Mallets & Bells'], plucks: ['Plucked', 'Mallets & Bells'], pads: ['Strings', 'Choir & Voice', 'Winds', 'Organs'],
@@ -49178,11 +49610,11 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     setInstrument (String (o), e.id); return e.id; };
 
   /* ═══ 6 · BOOT: the index, then every oscillator already on Organics reads its state back ═════════════════════════ */
-  function boot () { loadIndex ().then (function () { for (var i = 0; i < 8; i++) { var o = LET.charAt (i); if (isOrg (o)) { ens[o] = true; refresh (o, 'boot'); readKnobs (o); } } }); }
+  function boot () { loadIndex ().then (function () { for (var i = 0; i < 8; i++) { var o = LET.charAt (i); if (isOrg (o)) { ens[o] = true; refresh (o, 'boot'); readKnobs (o); readBack (o); } } }); }
   if (document.readyState === 'loading') document.addEventListener ('DOMContentLoaded', boot); else boot ();
   [600, 1800].forEach (function (ms) { setTimeout (function () { for (var i = 0; i < 8; i++) { var o = LET.charAt (i); if (isOrg (o) && !S[o]) refresh (o, 'boot'); } }, ms); });
   /* the gates' bench: one UNCACHED build of a family into oscillator o's box (render + DOM), in ms */
-  window.__orgBench = function (o, fam) { o = String (o); var b = boxOf (o), dev = devOf (o), svg = dev && dev.querySelector ('.org-viz'); if (!svg) return -1;
+  window.__orgBench = function (o, fam) { o = String (o); var b = boxOf (o), dev = devOf (o), svg = dev && dev.querySelector ('.org-viz:not(.org-fx)'); if (!svg) return -1;
     var t0 = performance.now (), r = ART.render (fam, { w: b.w, h: b.h }); svg.innerHTML = '<g>' + r.svg + '</g><g class="fx"></g>'; svg.getBBox && svg.getBBox ();
     var ms = performance.now () - t0; V[o] = null; build (o, true); return ms; };
   window.__orgDbg = function () { return { S: S, V: Object.keys (V), frames: A.frames, ringing: A.ringing.size, index: (INDEX || []).length, native: hasNative ('organicsIndex') }; };

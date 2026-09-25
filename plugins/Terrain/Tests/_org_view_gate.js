@@ -15,12 +15,14 @@
 //   6  NOISE GREYS (with its tooltip) when the instrument has no mechanical noise
 //   7  STATE READ-BACK — a fresh page paints the saved instrument, articulation and picture; a missing one says so
 //   8  ENGINE AWAY AND BACK keeps the instrument (no re-set, no default)
+//  10  tp105 THE BACK PANEL: Organics' own row (Rate · Delay · Curve · Tuning · Style) replaces the Sample warp row
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const H = require('./_org_harness.js');
 const PAGE = process.argv[2] || H.PAGE_DEFAULT;
 let pass = 0, fail = 0;
 const ok = (c, name, detail) => { c ? ++pass : ++fail; console.log(`  ${c ? 'PASS' : 'FAIL'}  ${name}${detail ? '\n        ' + detail : ''}`); };
-const KN = ['DYNAMICS', 'TONE', 'BODY', 'ATTACK', 'HUMAN', 'RELEASE', 'NOISE', 'SUSTAIN', 'VELOCITY', 'IMAGE'];
+const KN = ['DYNAMICS', 'TONE', 'BODY', 'VIBRATO', 'HUMAN',   /* tp105 — Vibrato replaced Attack on page 1 (dest knob 3) */
+             'RELEASE', 'NOISE', 'SUSTAIN', 'VELOCITY', 'IMAGE'];
 const realErrs = errs => errs.filter(e => !/formatOutput/.test(e));   // formatOutput: a pre-existing stub artefact (also on HEAD, any engine)
 
 (async () => {
@@ -160,6 +162,36 @@ const realErrs = errs => errs.filter(e => !/formatOutput/.test(e));   // formatO
       out.push({ id, dest, rings: [...el.querySelectorAll('circle.sm-ring')].filter(c => getComputedStyle(c).display !== 'none').length, ul, name: window.__destShortName ? window.__destShortName(dest) : '' }); }
     return out; });
   ok(mod.every(m => m.rings === 1 && m.ul), '[9] a modulated Organics knob shows the house mod ring and underline (routes to dest 5273 / 5274)', JSON.stringify(mod));
+  // [10] tp105 — the back panel: Organics' own row (Rate · Delay · Curve · Tuning · Style), the Sample warp row gone
+  const bk = await p.evaluate(async () => { const sleep = ms => new Promise(r => setTimeout(r, ms));
+    await window.__orgSetInstrument('a', 'vsco.violin.section'); await sleep(200);
+    const d = document.getElementById('osc-a-device'); if (!d.classList.contains('swapped')) d.querySelector('.swap-btn').click(); await sleep(300);
+    const vis = e => !!(e && e.getClientRects().length && getComputedStyle(e).display !== 'none');
+    const rows = [...d.querySelectorAll('.back-only > .selector-pills')], org = d.querySelector('.org-pills'), std = rows.find(r => !r.classList.contains('org-pills'));
+    const out = { orgShown: vis(org), stdShown: vis(std), labels: [...org.querySelectorAll('.ph-label')].map(e => e.textContent), values: [...org.querySelectorAll('.org-bp b')].map(e => e.textContent) };
+    // drag Rate up 75 px → +0.5
+    const rate = org.querySelector('[data-org$="_VIBRATE"]'), rr = rate.getBoundingClientRect(); window.__natLog.length = 0;
+    rate.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientX: rr.left + 10, clientY: rr.top + 10, pointerId: 3 }));
+    document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rr.left + 10, clientY: rr.top + 10 - 75, pointerId: 3 }));
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 3 }));
+    out.rateWrite = (window.__natLog.filter(q => q[0] === 'SYN_OSC_A_ORG_VIBRATE').pop() || [])[1]; out.rateText = rate.querySelector('b').textContent;
+    rate.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })); out.rateReset = rate.querySelector('b').textContent;
+    // Curve → Hard, Tuning → As recorded, Style → Pizzicato: real dropdowns (the house .pmenu)
+    const pick = async (sel, label) => { const pl = org.querySelector(sel); pl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })); await sleep(50);
+      const m = document.querySelector('.org-artic-menu'); const items = m ? [...m.querySelectorAll('.pi .nm')].map(e => e.textContent) : []; const it = m && [...m.querySelectorAll('.pi')].find(e => e.textContent === label); if (it) it.click(); await sleep(50);
+      const dv = pl.querySelector('b').parentElement; return { items, shown: pl.querySelector('b').textContent, over: dv.scrollWidth > dv.clientWidth + 0.5 }; };
+    window.__natLog.length = 0;
+    out.curve = await pick('[data-org$="_VCURVE"]', 'Hard'); out.tuning = await pick('[data-org$="_TUNING"]', 'As recorded'); out.style = await pick('[data-org$="_ARTIC"]', 'Pizzicato');
+    out.writes = window.__natLog.filter(q => /_ORG_(VCURVE|TUNING|ARTIC)$/.test(q[0])).map(q => q[0].replace('SYN_OSC_A_ORG_', '') + '=' + (+q[1]).toFixed(3));
+    out.headPill = d.querySelector('.org-artic .samp-sel-disp').textContent;
+    // another engine: the Organics row is gone, the standard row is back
+    d.querySelector('.swap-btn').click(); await sleep(200);
+    return out; });
+  const bkOk = bk.orgShown && !bk.stdShown && bk.labels.join('|') === 'Rate|Delay|Curve|Tuning|Style' && Math.abs(bk.rateWrite - 0.917) < 0.01 && /^8\.5 Hz$/.test(bk.rateText) && bk.rateReset === '5.5 Hz'
+    && bk.curve.items.join('|') === 'Soft|Linear|Hard' && bk.curve.shown === 'Hard' && bk.tuning.items.join('|') === 'As recorded|Equal' && bk.tuning.shown === 'Natural'
+    && bk.style.items.indexOf('Pizzicato') >= 0 && (bk.style.shown === 'Pizzicato' || bk.style.shown === 'Pizz') && !bk.style.over && bk.headPill === 'Pizz'
+    && bk.writes.indexOf('VCURVE=1.000') >= 0 && bk.writes.indexOf('TUNING=0.000') >= 0 && bk.writes.some(w => /^ARTIC=/.test(w));
+  ok(bkOk, '[10] the back panel: Rate · Delay · Curve · Tuning · Style (the Sample warp row hidden); Rate drags (3–9 Hz) and resets, the three are dropdowns that write their params, Style follows the header pill', JSON.stringify(bk));
   ok(realErrs(errs).length === 0, '[—] run 1: no page errors', realErrs(errs).join(' | '));
   await b.close();
 
