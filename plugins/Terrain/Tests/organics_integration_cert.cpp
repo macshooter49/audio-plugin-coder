@@ -30,6 +30,17 @@
 //        than with a short one (0.05 s) — the amp envelope lengthens the Organics release — and the voice ends after both.
 //   [13] the tp105 parameters exist for A–H (VIBRATO / VIBRATE / VIBDELAY / VCURVE / TUNING), and a mod route to dest knob 3
 //        (5272 + o·10 + 3) moves the VIBRATO (pitch wobble on osc A), not Attack.
+//   tp106 (the final overpass):
+//   [14] host sample rates 44.1 / 96 kHz: pitch ±3 ¢ and 3 s through the loop seams without a click (HP-residual metric).
+//   [15] offline bounce (non-realtime → the sinc reader): same pitch, level within 0.5 dB of realtime, no click.
+//   [16] Settings A4 = 432 Hz retunes Organics.   [17] MPE: a per-note bend moves only its own Organics note.
+//   [18] switching the instrument under a held note, [19] switching the engine Organics → WT → Organics: faded
+//        through the osc's own 4 ms gate (SynthVoice::requestEngine), click-free.
+//   [20] a preset load in the middle of a 12 s Organics release: flushed (faded), no click, nothing bleeds after.
+//   [21] a truncated map.json and [22] a missing library folder: status "missing", silence, no crash.
+//   [23] LFO 1 → each of the ten Organics destinations moves its perceptual feature > 3× the unrouted note.
+//   [24] the Ensemble on the INSTALLED violin section (skipped without it): loudness vs players 1 → 16 is a gentle law,
+//        2 players do not phase, 16 players × 8 notes render in under half the block's real-time budget.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -95,12 +106,13 @@ struct Inst
 {
     std::unique_ptr<TerrainAudioProcessor> p; juce::AudioBuffer<float> buf { 2, BLK };
     std::vector<float> L, R;
-    Inst()
+    double fs = SR;
+    explicit Inst (double sampleRate = SR, bool nonRealtime = false) : fs (sampleRate)
     {
         p = std::make_unique<TerrainAudioProcessor>();
-        p->setPlayConfigDetails (0, 2, SR, BLK);
-        p->prepareToPlay (SR, BLK);
-        if (std::getenv ("ORG_NONRT")) p->setNonRealtime (true);   // the offline-bounce path (8-tap sinc)
+        if (nonRealtime || std::getenv ("ORG_NONRT")) p->setNonRealtime (true);   // the offline-bounce path (8-tap sinc)
+        p->setPlayConfigDetails (0, 2, fs, BLK);
+        p->prepareToPlay (fs, BLK);
     }
     void block (std::initializer_list<std::pair<int,int>> ev = {}, const juce::MidiBuffer* extra = nullptr)
     {
@@ -114,7 +126,7 @@ struct Inst
     // the message thread's share: the library callbacks (callAsync) and the processor's 60 Hz timer
     void tick (int n = 1) { for (int i = 0; i < n; ++i) { CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.002, false); p->timerCallback(); } }
     // render `sec` seconds, ticking the timer every other block (~47 Hz)
-    void run (double sec) { const int n = (int) std::ceil (sec * SR / BLK); for (int b = 0; b < n; ++b) { block(); if (b & 1) tick(); } }
+    void run (double sec) { const int n = (int) std::ceil (sec * fs / BLK); for (int b = 0; b < n; ++b) { block(); if (b & 1) tick(); } }
     // wait for the osc's instrument to land (status leaves "loading"), rendering meanwhile
     juce::String waitLoaded (int osc, double maxSec = 5.0)
     {
@@ -137,14 +149,14 @@ static double rmsOf (const std::vector<float>& x, size_t a, size_t b)
 static double dbOf (double r) { return 20.0 * std::log10 (std::max (1e-12, r)); }
 
 // the frequency with the most energy within ±60 cents of `nominal` (a fine Goertzel scan, Hann window) → cents error
-static double centsOff (const std::vector<float>& x, size_t a, size_t n, double nominal, double* peakHz = nullptr)
+static double centsOff (const std::vector<float>& x, size_t a, size_t n, double nominal, double* peakHz = nullptr, double fs = SR)
 {
     if (a + n > x.size()) n = x.size() > a ? x.size() - a : 0;
     if (n < 4096) return 1e9;
     double best = 0, bestF = nominal;
     for (double c = -60.0; c <= 60.0; c += 0.25)
     {
-        const double f = nominal * std::pow (2.0, c / 1200.0), w = 2.0 * juce::MathConstants<double>::pi * f / SR;
+        const double f = nominal * std::pow (2.0, c / 1200.0), w = 2.0 * juce::MathConstants<double>::pi * f / fs;
         double re = 0, im = 0;
         for (size_t i = 0; i < n; ++i)
         {
@@ -219,6 +231,115 @@ static void setN (TerrainAudioProcessor& p, const char* name, float norm)
     std::printf ("!! no parameter named '%s'\n", name); std::exit (2);
 }
 static double rmsWin (const std::vector<float>& x, size_t a, size_t n) { return rmsOf (x, a, a + n); }
+
+// ── tp106 helpers ──────────────────────────────────────────────────────────────────────────────────────────────
+// THE CLICK METRIC (Tests/organics_audit.cpp): a sample whose HP(8 kHz) residual stands > 20 dB over the RMS of its
+// ±10 ms neighbourhood AND > 6 dB over every other HF peak within ±25 ms (a spiky periodic waveform repeats its peak;
+// a discontinuity does not) AND is audible (> −45 dB re the local signal, over −90 dBFS).
+struct ClickHit { bool hit = false; double ex = -200, rel = -200; size_t at = 0; };
+static ClickHit clickScan (const std::vector<float>& x, size_t a, size_t b, double fs)
+{
+    ClickHit out;
+    const size_t N = x.size(); b = std::min (b, N);
+    if (N < 4096 || b <= a) return out;
+    std::vector<double> h (x.begin(), x.end());
+    for (double q : { 0.5411961, 1.3065630 })
+    {
+        const double w0 = 2 * juce::MathConstants<double>::pi * 8000.0 / fs, al = std::sin (w0) / (2 * q), c = std::cos (w0);
+        const double b0 = (1 + c) / 2, b1 = -(1 + c), b2 = (1 + c) / 2, a0 = 1 + al, a1 = -2 * c, a2 = 1 - al;
+        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        for (auto& v : h) { const double in = v, o = (b0 * in + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0; x2 = x1; x1 = in; y2 = y1; y1 = o; v = o; }
+    }
+    std::vector<double> ph (N + 1, 0.0), px (N + 1, 0.0);
+    for (size_t i = 0; i < N; ++i) { ph[i + 1] = ph[i] + h[i] * h[i]; px[i + 1] = px[i] + (double) x[i] * x[i]; }
+    const size_t W = (size_t) (0.010 * fs), C = (size_t) (0.0005 * fs), R = (size_t) (0.025 * fs);
+    double best = -1e9;
+    for (size_t i = std::max<size_t> (a, 256); i < b; ++i)
+    {
+        const double v = std::abs (h[i]); if (v < 1e-7) continue;
+        const size_t a0 = i > W ? i - W : 0, a1 = std::min (N, i + W), c0 = i > C ? i - C : 0, c1 = std::min (N, i + C);
+        const double rl = std::sqrt (std::max (0.0, (ph[a1] - ph[a0]) - (ph[c1] - ph[c0])) / (double) ((a1 - a0) - (c1 - c0))) + 1e-12;
+        const double sl = std::sqrt ((px[a1] - px[a0]) / (double) (a1 - a0)) + 1e-12;
+        if (sl < 1e-5) continue;
+        const double ex = dbOf (v / rl), rel = dbOf (v / sl);
+        bool hit = ex > 20.0 && rel > -45.0 && v > 3.16e-5;   // (under −90 dBFS: below the 16-bit floor)
+        if (hit)
+        {
+            double ring = 1e-12;
+            for (size_t j = i > R ? i - R : 0; j < std::min (N, i + R); ++j) if (j + C < i || j >= i + C) ring = std::max (ring, std::abs (h[j]));
+            hit = dbOf (v / ring) > 6.0;
+        }
+        const double score = (hit ? 1000.0 : 0.0) + std::min (ex, 60.0) + 0.5 * rel;
+        if (score > best) { best = score; out.hit = hit; out.ex = ex; out.rel = rel; out.at = i; }
+    }
+    return out;
+}
+
+static std::vector<float> highpassOf (const std::vector<float>& x, double fc)
+{
+    std::vector<float> y = x;
+    for (double q : { 0.5411961, 1.3065630 })
+    {
+        const double w0 = 2 * juce::MathConstants<double>::pi * fc / SR, al = std::sin (w0) / (2 * q), c = std::cos (w0);
+        const double b0 = (1 + c) / 2, b1 = -(1 + c), b2 = (1 + c) / 2, a0 = 1 + al, a1 = -2 * c, a2 = 1 - al;
+        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        for (auto& v : y) { const double in = v, o = (b0 * in + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0; x2 = x1; x1 = in; y2 = y1; y1 = o; v = (float) o; }
+    }
+    return y;
+}
+
+/** How much one perceptual feature MOVES over [s0, s1): the detrended standard deviation of — 0 the spectral centroid
+    (% of its mean) · 1 the level (dB) · 2 the per-cycle pitch (¢, zero crossings) · 3 the side/mid ratio (dB).
+    1024-frame windows, hop 512. */
+static double featureWobble (const std::vector<float>& L, const std::vector<float>& Rr, size_t s0, size_t s1, int feature, int note)
+{
+    std::vector<double> v;
+    s1 = std::min (s1, L.size());
+    if (feature == 2)
+    {
+        const double ref = 440.0 * std::pow (2.0, (note - 69) / 12.0); double last = -1;
+        for (size_t i = std::max<size_t> (1, s0); i < s1; ++i)
+            if (L[i - 1] < 0.f && L[i] >= 0.f)
+            {
+                const double t = (double) (i - 1) + (double) (-L[i - 1]) / (double) (L[i] - L[i - 1]);
+                if (last >= 0) v.push_back (1200.0 * std::log2 ((SR / (t - last)) / ref));
+                last = t;
+            }
+    }
+    else
+    {
+        juce::dsp::FFT fft (10);
+        std::vector<float> w (2048);
+        for (size_t s = s0; s + 1024 <= s1; s += 512)
+        {
+            if (feature == 0)
+            {
+                std::fill (w.begin(), w.end(), 0.f);
+                for (int i = 0; i < 1024; ++i) w[(size_t) i] = 0.5f * (L[s + (size_t) i] + Rr[s + (size_t) i]) * (0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * (float) i / 1023.f));
+                fft.performFrequencyOnlyForwardTransform (w.data());
+                double num = 0, den = 0; for (int k = 1; k < 512; ++k) { num += (double) k * w[(size_t) k]; den += w[(size_t) k]; }
+                v.push_back (den > 0 ? num / den : 0);
+            }
+            else if (feature == 3)
+            {
+                double m = 0, d = 0; for (size_t i = s; i < s + 1024; ++i) { const double a = 0.5 * (L[i] + Rr[i]), b = 0.5 * (L[i] - Rr[i]); m += a * a; d += b * b; }
+                v.push_back (10.0 * std::log10 ((d + 1e-20) / (m + 1e-20)));
+            }
+            else
+            {
+                v.push_back (dbOf (std::sqrt ((rmsOf (L, s, s + 1024) * rmsOf (L, s, s + 1024) + rmsOf (Rr, s, s + 1024) * rmsOf (Rr, s, s + 1024)) / 2.0)));
+            }
+        }
+    }
+    if (v.size() < 4) return 0.0;
+    const double n = (double) v.size();
+    double mx = 0, my = 0; for (size_t i = 0; i < v.size(); ++i) { mx += (double) i; my += v[i]; } mx /= n; my /= n;
+    double sxy = 0, sxx = 0; for (size_t i = 0; i < v.size(); ++i) { sxy += ((double) i - mx) * (v[i] - my); sxx += ((double) i - mx) * ((double) i - mx); }
+    const double sl = sxx > 0 ? sxy / sxx : 0; double q = 0;
+    for (size_t i = 0; i < v.size(); ++i) { const double r = v[i] - my - sl * ((double) i - mx); q += r * r; }
+    const double sd = std::sqrt (q / n);
+    return feature == 0 ? 100.0 * sd / std::max (1e-9, std::abs (my)) : sd;
+}
 
 int main()
 {
@@ -573,6 +694,298 @@ int main()
         chk (w0 < 2.0 && w1 > 20.0, "13b mod wheel → dest 5275 (osc A knob 3) = VIBRATO: the pitch wobbles, and not at depth 0",
              fmt ("per-cycle pitch spread (test.sine's marker partial jitters the zero crossings ~1 ¢): route depth 0 ±%.2f cents · depth 1 ±%.1f cents", w0, w1));
     }
+    // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
+    //  tp106 — THE FINAL OVERPASS: robustness on the shipping processor
+    // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+    // ═══ [14] HOST SAMPLE RATES ═══
+    std::printf ("\n[14] Host sample rates 44.1 / 96 kHz (the fixture is 48 kHz): pitch exact, the held loop clean\n");
+    if (want (14))
+        for (double fs : { 44100.0, 96000.0 })
+        {
+            Inst a (fs); useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+            setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+            a.clear(); a.block ({ {69,1} }); a.run (3.0);
+            double hz = 0; const double c = centsOff (a.L, (size_t) (0.3 * fs), 16384, 440.0, &hz, fs);
+            const auto k = clickScan (a.L, (size_t) (0.06 * fs), a.L.size(), fs);
+            chk (std::fabs (c) <= 3.0 && ! k.hit && rmsOf (a.L, (size_t) (0.3 * fs), (size_t) (2.9 * fs)) > 1e-3,
+                 fs < 48000 ? "14a 44.1 kHz host: note 69 at 440 Hz (±3 ¢), 3 s through the loop seams without a click"
+                            : "14b 96 kHz host: note 69 at 440 Hz (±3 ¢), 3 s through the loop seams without a click",
+                 fmt ("%+.2f cents · worst HP excess %.1f dB (%.1f dB re local)", c, k.ex, k.rel));
+        }
+
+    // ═══ [15] OFFLINE BOUNCE ═══
+    std::printf ("\n[15] Offline bounce (non-realtime → the 8-tap sinc reader): the same note, the same level, clean\n");
+    if (want (15))
+    {
+        auto render = [] (bool offline, double& cents, double& rms, ClickHit& k) {
+            Inst a (SR, offline); useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+            setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+            a.clear(); a.block ({ {69,1} }); a.run (2.0); a.block ({ {69,0} }); a.run (1.0);
+            cents = centsOff (a.L, (size_t) (0.3 * SR), 16384, 440.0);
+            rms = rmsOf (a.L, (size_t) (0.3 * SR), (size_t) (1.9 * SR));
+            k = clickScan (a.L, (size_t) (0.06 * SR), a.L.size(), SR);
+        };
+        double cR = 0, rR = 0, cO = 0, rO = 0; ClickHit kR, kO;
+        render (false, cR, rR, kR); render (true, cO, rO, kO);
+        chk (std::fabs (cO) <= 3.0 && std::fabs (dbOf (rO) - dbOf (rR)) < 0.5 && ! kO.hit,
+             "15 bounce: pitch ±3 ¢, level within 0.5 dB of the realtime render, no click (hold, loop, release)",
+             fmt ("offline %+.2f ¢ %.2f dBFS · realtime %+.2f ¢ %.2f dBFS · offline worst HP excess %.1f dB", cO, dbOf (rO), cR, dbOf (rR)) + fmt (" (realtime %.1f)", kR.ex));
+    }
+
+    // ═══ [16] A4 = 432 ═══
+    std::printf ("\n[16] Settings: A4 = 432 Hz retunes Organics like every engine\n");
+    if (want (16))
+    {
+        Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+        setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+        a.p->setTuningA4 (432.f, false);
+        a.clear(); a.block ({ {69,1} }); a.run (0.8);
+        double hz = 0; const double c = centsOff (a.L, (size_t) (0.25 * SR), 16384, 432.0, &hz);
+        a.p->setTuningA4 (440.f, false);
+        chk (std::fabs (c) <= 3.0, "16 A4 432: note 69 sounds at 432 Hz (±3 ¢)", fmt ("peak %.2f Hz = %+.2f cents re 432", hz, c));
+    }
+
+    // ═══ [17] MPE PER-NOTE BEND ═══
+    std::printf ("\n[17] MPE: a per-note bend moves only its own Organics note\n");
+    if (want (17))
+    {
+        Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+        setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+        a.p->setMpeOn (true, 48.f, false);
+        juce::MidiBuffer on; on.addEvent (juce::MidiMessage::noteOn (2, 60, (juce::uint8) 100), 0); on.addEvent (juce::MidiMessage::noteOn (3, 67, (juce::uint8) 100), 0);
+        a.clear(); a.block ({}, &on); a.run (0.4);
+        juce::MidiBuffer bend; bend.addEvent (juce::MidiMessage::pitchWheel (2, 8192 + 8192 * 2 / 48), 0);   // +2 st on ch 2
+        a.block ({}, &bend); a.run (0.8);
+        const size_t s0 = a.L.size() - (size_t) (0.5 * SR);
+        const double f60 = 440.0 * std::pow (2.0, (60 - 69) / 12.0), f62 = 440.0 * std::pow (2.0, (62 - 69) / 12.0), f67 = 440.0 * std::pow (2.0, (67 - 69) / 12.0);
+        const double d60 = partialDb (a.L, s0, 16384, f60), d62 = partialDb (a.L, s0, 16384, f62), d67 = partialDb (a.L, s0, 16384, f67);
+        const double c62 = centsOff (a.L, s0, 16384, f62);
+        a.p->setMpeOn (false, 48.f, false);
+        chk (d62 > -40.0 && d67 > -40.0 && d60 < d62 - 30.0 && std::fabs (c62) <= 3.0,
+             "17 ch-2 bend +2 st: its note moves 60 → 62 (±3 ¢), the ch-3 note (67) stays",
+             fmt ("partial 62 %.1f dBFS (%+.2f ¢) · 67 %.1f dBFS · 60 %.1f dBFS", d62, c62, d67, d60));
+    }
+
+    // ═══ [18] SWITCH THE INSTRUMENT UNDER A HELD NOTE ═══
+    std::printf ("\n[18] Switch the instrument while a note sounds: the old note fades (5 ms), no click\n");
+    if (want (18))
+    {
+        Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+        a.clear(); a.block ({ {69,1} }); a.run (0.5);
+        const size_t at = a.L.size();
+        a.p->organicsSetInstrument (0, "test.piano");
+        const auto st = a.waitLoaded (0);
+        a.run (0.5);
+        const auto k = clickScan (a.L, at - (size_t) (0.02 * SR), a.L.size(), SR);
+        chk (st == "ok" && ! k.hit, "18 test.sine → test.piano under a held note: loads, and the swap is click-free",
+             ("status " + st + " · ").toStdString() + fmt ("worst HP excess %.1f dB (%.1f dB re local) after the swap", k.ex, k.rel));
+    }
+
+    // ═══ [19] SWITCH THE ENGINE UNDER A HELD NOTE ═══
+    std::printf ("\n[19] Switch osc A's engine Organics → Wavetable (and back) while a note sounds: faded, no click\n");
+    if (want (19))
+    {
+        Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+        a.clear(); a.block ({ {69,1} }); a.run (0.5);
+        const size_t at = a.L.size();
+        setP (*a.p, ParameterIDs::kOsc_ENGINE[0], 0.f); a.run (0.5);
+        const size_t back = a.L.size();
+        setP (*a.p, ParameterIDs::kOsc_ENGINE[0], 7.f); a.run (0.5);
+        // → WT: the osc fades out through its 4 ms gate, switches at silence, and the Wavetable fades in
+        const auto k1 = clickScan (a.L, at - (size_t) (0.02 * SR), back, SR);
+        // → Organics: the held note resumes from silence (the osc was faded out): the fade-in must be a ramp, never a
+        //   step (its first millisecond ≥ 20 dB under the level 20 ms on), and nothing clicks once it is in
+        size_t i0 = back, quiet = 0;                                     // the resume = the first sound after the silent gap
+        for (; i0 < a.L.size(); ++i0) { if (std::fabs (a.L[i0]) < 1.0e-6f) ++quiet; else if (quiet >= (size_t) (0.005 * SR)) break; else quiet = 0; }
+        double pk0 = 0, pk1 = 0;
+        for (size_t i = i0; i < std::min (a.L.size(), i0 + (size_t) (0.001 * SR)); ++i) pk0 = std::max (pk0, (double) std::fabs (a.L[i]));
+        for (size_t i = i0 + (size_t) (0.02 * SR); i < std::min (a.L.size(), i0 + (size_t) (0.04 * SR)); ++i) pk1 = std::max (pk1, (double) std::fabs (a.L[i]));
+        const auto k2 = clickScan (a.L, std::min (a.L.size(), i0 + (size_t) (0.01 * SR)), a.L.size(), SR);
+        // (a sampler engine switched in under a held note may also stay silent until the next note — that is not a click)
+        const bool resumed = i0 < a.L.size();
+        chk (! k1.hit && ! k2.hit && (! resumed || dbOf (pk0) < dbOf (pk1) - 20.0),
+             "19 Organics → WT → Organics under a held note: faded both ways, no click",
+             fmt ("→ WT worst HP excess %.1f dB (%.1f re local) · → Organics: first ms %.1f dB under the level 20 ms on, worst HP excess after %.1f dB",
+                  k1.ex, k1.rel, dbOf (pk1) - dbOf (pk0), k2.ex)
+               + (resumed ? fmt (" · resumes %.1f ms after the switch", 1000.0 * ((double) i0 - (double) back) / SR)
+                          : std::string (" · Organics waits for the next note (the held one was the Wavetable's)")));
+    }
+
+    // ═══ [20] A PRESET LOAD DURING A LONG ORGANICS RELEASE ═══
+    std::printf ("\n[20] A preset load in the middle of a 12 s Organics release: the tail is flushed (faded), no click, no bleed\n");
+    if (want (20))
+    {
+        juce::MemoryBlock fresh; { Inst z; z.p->getStateInformation (fresh); }
+        Inst a; useOrganic (a, 0, "test.piano"); a.waitLoaded (0);
+        setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_RELEASE, 1.f);
+        a.clear(); a.block ({ {60,1} }); a.run (0.5); a.block ({ {60,0} }); a.run (0.6);
+        const double tailDb = dbOf (rmsOf (a.L, a.L.size() - (size_t) (0.1 * SR), a.L.size()));
+        // the host's way: the audio thread keeps calling processBlock while the MESSAGE thread restores the state (the
+        // load waits for the audio thread's 10 ms fade + hold before it touches anything — ScopedLoadMute)
+        const size_t at = a.L.size();
+        std::atomic<bool> go { true };
+        std::thread audio ([&] { while (go.load()) a.block(); });
+        std::this_thread::sleep_for (std::chrono::milliseconds (40));
+        a.p->setStateInformation (fresh.getData(), (int) fresh.getSize());
+        std::this_thread::sleep_for (std::chrono::milliseconds (120));
+        go = false; audio.join();
+        a.run (0.4);
+        const auto k = clickScan (a.L, at - (size_t) (0.02 * SR), a.L.size(), SR);
+        const double afterDb = dbOf (rmsOf (a.L, a.L.size() - (size_t) (0.3 * SR), a.L.size()));
+        chk (tailDb > -60.0 && afterDb < -90.0 && ! k.hit, "20 the release was still ringing, the load silences it (faded) and nothing bleeds after",
+             fmt ("tail before the load %.1f dBFS · after it %.1f dBFS · worst HP excess %.1f dB (%.1f re local)", tailDb, afterDb, k.ex, k.rel));
+    }
+
+    // ═══ [21] / [22] A CORRUPT map.json · A MISSING LIBRARY FOLDER ═══
+    std::printf ("\n[21] A corrupt map.json and [22] a missing library folder: silent, reported, no crash\n");
+    if (want (21) || want (22))
+    {
+        const juce::String envWas = std::getenv ("TERRAIN_ORGANICS_DIR") ? std::getenv ("TERRAIN_ORGANICS_DIR") : "";
+        const auto fixRoot = juce::File (envWas);
+        const auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("tp106_org_corrupt");
+        tmp.deleteRecursively(); tmp.createDirectory();
+        fixRoot.getChildFile ("index.json").copyFileTo (tmp.getChildFile ("index.json"));
+        fixRoot.getChildFile ("ids.json").copyFileTo (tmp.getChildFile ("ids.json"));
+        fixRoot.getChildFile ("test.sine").copyDirectoryTo (tmp.getChildFile ("test.broken"));
+        tmp.getChildFile ("test.broken").getChildFile ("map.json").replaceWithText ("{ \"regions\": [ { \"kind\": \"attack\", \"smp\": ");
+        auto probe = [] (const char* id, juce::String& status) {
+            Inst a; useOrganic (a, 0, id); status = a.waitLoaded (0);
+            a.clear(); a.block ({ {69,1} }); a.run (0.4); a.block ({ {69,0} }); a.run (0.2);
+            return dbOf (rmsOf (a.L, 0, a.L.size()));
+        };
+        if (want (21))
+        {
+            setenv ("TERRAIN_ORGANICS_DIR", tmp.getFullPathName().toRawUTF8(), 1); tw::OrganicsLibrary::get().rescan();
+            juce::String st; const double lv = probe ("test.broken", st);
+            chk (st == "missing" && lv < -90.0, "21 a truncated map.json: the load fails cleanly → status \"missing\", silence, no crash",
+                 ("status " + st + " · ").toStdString() + fmt ("%.1f dBFS", lv));
+        }
+        if (want (22))
+        {
+            setenv ("TERRAIN_ORGANICS_DIR", tmp.getChildFile ("no_such_folder").getFullPathName().toRawUTF8(), 1); tw::OrganicsLibrary::get().rescan();
+            Inst z; const auto idx = z.p->organicsIndexJson();
+            juce::String st; const double lv = probe ("test.rr", st);    // never loaded in this process (the RAM cache would answer)
+            chk (st == "missing" && lv < -90.0 && idx.removeCharacters (" \n").startsWith ("[]"),
+                 "22 the library folder is gone: an empty index, the instrument \"missing\", silence, no crash",
+                 ("index " + idx.substring (0, 24) + " · status " + st + " · ").toStdString() + fmt ("%.1f dBFS", lv));
+        }
+        setenv ("TERRAIN_ORGANICS_DIR", envWas.toRawUTF8(), 1); tw::OrganicsLibrary::get().rescan();
+        tmp.deleteRecursively();
+    }
+
+    // ═══ [23] LFO → EVERY ORGANICS DESTINATION ═══
+    std::printf ("\n[23] The mod matrix: LFO 1 → each of the ten Organics knobs moves the sound (vs the same note unrouted)\n");
+    if (want (23))
+    {
+        // feature: 0 centroid · 1 level · 2 pitch · 3 side/mid (held notes, detrended wobble) — or, for the knobs a note
+        // reads at its start or its end, the spread over eight presses at different LFO phases: 4 level + pitch (Human, drawn
+        // at note-on) · 6 the HF level of the note-on noise (Noise; the fixture's noise is 100 ms) · 7 the tail energy
+        // after the note-off (Release)
+        struct D { int knob; const char* name; const char* inst; int note; int feature; };
+        const D ds[10] = { { 0, "Dynamics", "test.layers", 60, 0 }, { 1, "Tone", "test.sine", 69, 0 }, { 2, "Body", "test.sine", 57, 0 },
+                           { 3, "Vibrato", "test.sine", 69, 2 }, { 4, "Human", "test.sine", 69, 4 }, { 5, "Release", "test.piano", 60, 7 },
+                           { 6, "Noise", "test.noisy", 60, 6 }, { 7, "Sustain", "test.piano", 60, 1 }, { 8, "Velocity", "test.sine", 69, 1 },
+                           { 9, "Image", "test.norr", 60, 3 } };
+        int ok = 0; std::string rows;
+        for (const auto& d : ds)
+        {
+            auto measure = [&] (bool routed) {
+                Inst a; useOrganic (a, 0, d.inst); a.waitLoaded (0);
+                setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+                setP (*a.p, ParameterIDs::LFO1_RATE, 3.0f);
+                if (routed) a.p->setSynthModMatrix ("[{\"s\":0,\"d\":" + juce::String (wc::organicDest (0, d.knob)) + ",\"v\":1}]");
+                a.run (0.05); a.clear();
+                if (d.feature >= 4)
+                {   // a knob read at the note's start or end: eight presses at different LFO phases
+                    std::vector<double> lv;
+                    for (int k = 0; k < 8; ++k)
+                    {
+                        const size_t s = a.L.size();
+                        a.block ({ { d.note, 1 } }); a.run (0.23);
+                        const size_t off = a.L.size();
+                        a.block ({ { d.note, 0 } }); a.run (d.feature == 7 ? 0.45 : 0.1);
+                        if (d.feature == 4) lv.push_back (dbOf (rmsOf (a.L, s + (size_t) (0.05 * SR), s + (size_t) (0.2 * SR)))
+                                                          + 0.25 * centsOff (a.L, s + (size_t) (0.02 * SR), 8192, 440.0));
+                        else if (d.feature == 6)
+                        {
+                            std::vector<float> seg (a.L.begin() + (long) s, a.L.begin() + (long) (s + (size_t) (0.1 * SR)));
+                            const auto h = highpassOf (seg, 4000.0);
+                            lv.push_back (dbOf (rmsOf (h, 0, h.size())));
+                        }
+                        else lv.push_back (dbOf (rmsOf (a.L, off + (size_t) (0.05 * SR), off + (size_t) (0.4 * SR))));
+                    }
+                    double m = 0; for (double v : lv) m += v; m /= (double) lv.size();
+                    double q = 0; for (double v : lv) q += (v - m) * (v - m); return std::sqrt (q / (double) lv.size());
+                }
+                a.block ({ { d.note, 1 } }); a.run (2.0);
+                return featureWobble (a.L, a.R, (size_t) (0.3 * SR), a.L.size(), d.feature, d.note);
+            };
+            const double base = measure (false), mod = measure (true);
+            const bool pass = mod > 3.0 * base + 0.05;
+            ok += pass ? 1 : 0;
+            rows += std::string (d.name) + fmt (" %.2f→%.2f", base, mod) + (pass ? " · " : " ✗ · ");
+        }
+        chk (ok == 10, "23 LFO 1 → Dynamics, Tone, Body, Vibrato, Human, Release, Noise, Sustain, Velocity, Image: each moves its feature > 3× the unrouted note",
+             rows + "(feature wobble, unrouted → routed)");
+    }
+
+    // ═══ [24] THE ENSEMBLE: loudness vs players, 2-player phasiness, 16 players × 8 notes CPU ═══
+    std::printf ("\n[24] Ensemble (unison = players) on the installed violin section: a gentle loudness law, no phasing at 2, CPU at 16 × 8\n");
+    if (want (24))
+    {
+        const juce::String envWas = std::getenv ("TERRAIN_ORGANICS_DIR") ? std::getenv ("TERRAIN_ORGANICS_DIR") : "";
+        juce::File lib ("~/Library/WavesCrate/TerrainInstrument/Organics");
+        if (! lib.getChildFile ("vsco2.strings.violin-section").isDirectory()) lib = juce::File ("~/Library/WavesCrate/Terrain/Organics");
+        if (! lib.getChildFile ("vsco2.strings.violin-section").isDirectory())
+            skip ("24 the ensemble law", "the installed library has no vsco2.strings.violin-section");
+        else
+        {
+            setenv ("TERRAIN_ORGANICS_DIR", lib.getFullPathName().toRawUTF8(), 1); tw::OrganicsLibrary::get().rescan();
+            const int ns[8] = { 1, 2, 3, 4, 6, 8, 12, 16 };
+            double lv[8] = {}, rip[8] = {};
+            for (int i = 0; i < 8; ++i)
+            {
+                Inst a; useOrganic (a, 0, "vsco2.strings.violin-section"); a.waitLoaded (0, 10.0);
+                setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.25f);
+                setN (*a.p, "Synth OSC A Unison", (float) (ns[i] - 1) / 15.0f);
+                a.run (0.05); a.clear();
+                a.block ({ {67,1} }); a.run (3.0);
+                const size_t s0 = (size_t) (1.0 * SR), s1 = a.L.size();
+                double e = 0; for (size_t k = s0; k < s1; ++k) e += 0.5 * ((double) a.L[k] * a.L[k] + (double) a.R[k] * a.R[k]);
+                lv[i] = 10.0 * std::log10 (e / (double) (s1 - s0) + 1e-20);
+                rip[i] = featureWobble (a.L, a.R, s0, s1, 1, 67);
+            }
+            double worstStep = 0, rise = 0;
+            std::string law;
+            for (int i = 0; i < 8; ++i)
+            {
+                law += fmt ("%.0f:%+.1f ", ns[i], lv[i] - lv[0]);
+                if (i > 0) { worstStep = std::max (worstStep, std::abs (lv[i] - lv[i - 1])); rise = std::max (rise, lv[i] - lv[0]); }
+            }
+            const double drop16 = lv[0] - lv[7];
+            chk (worstStep <= 1.5 && rise <= 2.0 && drop16 <= 6.0,
+                 "24a loudness vs players 1 → 16: a gentle law (no step > 1.5 dB, never louder by > 2 dB, 16 players ≤ 6 dB quieter)",
+                 law + fmt ("dB · worst step %.2f dB", worstStep));
+            chk (rip[1] <= rip[0] + 1.5, "24b 2 players do not phase: the 21 ms level wobble stays within 1.5 dB of 1 player's",
+                 fmt ("level wobble (detrended SD, dB): 1 player %.2f · 2 players %.2f · 16 players %.2f", rip[0], rip[1], rip[7]));
+            {
+                Inst a; useOrganic (a, 0, "vsco2.strings.violin-section"); a.waitLoaded (0, 10.0);
+                setN (*a.p, "Synth OSC A Unison", 1.0f);
+                a.run (0.05);
+                a.block ({ {55,1},{59,1},{62,1},{66,1},{67,1},{71,1},{74,1},{79,1} });
+                a.run (0.3);
+                const int nb = 200; const double t0 = juce::Time::getMillisecondCounterHiRes();
+                for (int b = 0; b < nb; ++b) a.block();
+                const double us = 1000.0 * (juce::Time::getMillisecondCounterHiRes() - t0) / nb;
+                const int live = tw::organics_debug::lastLiveReaders != nullptr ? tw::organics_debug::lastLiveReaders() : -1;
+                chk (us < 0.5 * 1.0e6 * BLK / SR, "24c 16 players × 8 notes: the block renders in under half its real-time budget",
+                     fmt ("%.0f µs per %.0f-frame block (%.1f %% of %.0f µs) · live readers in the last engine %.0f", us, BLK, 100.0 * us / (1.0e6 * BLK / SR), 1.0e6 * BLK / SR) + fmt (" %.0f", live));
+            }
+            setenv ("TERRAIN_ORGANICS_DIR", envWas.toRawUTF8(), 1); tw::OrganicsLibrary::get().rescan();
+        }
+    }
+
     std::printf ("\norganics_integration_cert: %d PASS · %d FAIL · %d SKIP\n", npass, nfail, nskip);
     return nfail ? 1 : 0;
 }

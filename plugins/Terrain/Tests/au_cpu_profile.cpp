@@ -29,6 +29,7 @@
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <mach/mach_time.h>
+#include <mach/mach.h>
 #include <dlfcn.h>
 #include <cstdio>
 #include <cstdlib>
@@ -125,7 +126,9 @@ struct Au
     void close() { if (au) { AudioUnitUninitialize (au); AudioComponentInstanceDispose (au); au = nullptr; } }
     // tp104 — splice <ORGANICS><OSC slot="0" id="…" rev="1"/></ORGANICS> into the plugin's own state (JUCE's binary XML:
     //   u32 magic 0x21324356, u32 byte count, UTF-8 XML + NUL) and hand it back through ClassInfo, like a host restore.
-    bool injectOrganic (const std::string& id)
+    bool injectOrganic (const std::string& id) { return injectOrganics ({ { 0, id } }); }
+    // tp106 — several slots at once: <ORGANICS><OSC slot="k" id="…" rev="1"/>…</ORGANICS>
+    bool injectOrganics (const std::vector<std::pair<int, std::string>>& slots)
     {
         CFPropertyListRef dict = nullptr; UInt32 sz = sizeof dict;
         if (AudioUnitGetProperty (au, kAudioUnitProperty_ClassInfo, kAudioUnitScope_Global, 0, &dict, &sz) != noErr || dict == nullptr) return false;
@@ -137,7 +140,9 @@ struct Au
         const size_t close = xml.rfind ("</");
         if (close == std::string::npos) { CFRelease (dict); return false; }
         if (getenv ("ORG_DEBUG")) printf ("    [inject] %zu bytes of state XML, tail: %s\n", xml.size(), xml.substr (xml.size() > 80 ? xml.size() - 80 : 0).c_str());
-        xml.insert (close, "<ORGANICS><OSC slot=\"0\" id=\"" + id + "\" rev=\"1\"/></ORGANICS>");
+        std::string org = "<ORGANICS>";
+        for (auto& sl : slots) org += "<OSC slot=\"" + std::to_string (sl.first) + "\" id=\"" + sl.second + "\" rev=\"1\"/>";
+        xml.insert (close, org + "</ORGANICS>");
         std::vector<UInt8> out (8 + xml.size() + 1, 0);
         const uint32_t magic = 0x21324356u, len = (uint32_t) (xml.size() + 1);
         std::memcpy (out.data(), &magic, 4); std::memcpy (out.data() + 4, &len, 4); std::memcpy (out.data() + 8, xml.data(), xml.size());
@@ -389,6 +394,90 @@ int main (int argc, char** argv)
         return 0;
     }
 
+
+    // ── tp106 — orgcap [secs]: the final overpass's CPU table, each against the same gesture on Wavetable:
+    //    (1) Salamander, sustain pedal down, a 16-note chord struck at once and left ringing · (2) the violin section at
+    //    unison 7 holding an 8-note chord · (3) a glockenspiel run of 16 notes with its authored 15 s release ·
+    //    (4) all EIGHT oscillators on Organics, eight different instruments, a 4-note chord (+ the process's resident
+    //    memory, the eight instruments loaded).  mean / p95 µs per 512 block and the meter quotient (µs / budget).
+    if (argc > 1 && ! std::strcmp (argv[1], "orgcap"))
+    {
+        const double secs = argc > 2 ? atof (argv[2]) : 6.0;
+        auto rssMB = [] { mach_task_basic_info_data_t info {}; mach_msg_type_number_t n = MACH_TASK_BASIC_INFO_COUNT;
+                          task_info (mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t) &info, &n); return (double) info.resident_size / 1048576.0; };
+        const char* L[8] = { "A", "B", "C", "D", "E", "F", "G", "H" };
+        const char* eight[8] = { "salamander.grand.v3", "vsco2.strings.violin-section", "vsco2.woodwinds.flute", "vcsl.mallets.vibraphone",
+                                 "karoryfer.sax.bear", "vsco2.brass.french-horn", "freepats.organ.drawbar", "vcsl.plucked.concert-harp" };
+        printf ("\n== tp106 - ORGANICS CPU TABLE ==   %.0f s of wall time per line, %d-frame blocks (%.0f us budget)%s\n\n",
+                secs, BLK, budgetUs(), getenv ("TERRAIN_AU_BUNDLE") ? "  [bundle under test]" : "  [installed AU]");
+        for (int sc = 0; sc < 4; ++sc)
+            for (int eng : { 7, 0 })
+            {
+                Au a; if (! a.open()) { printf ("no AU\n"); return 2; }
+                const double rss0 = rssMB();
+                const int nOsc = sc == 3 ? 8 : 1;
+                for (int o = 0; o < nOsc; ++o)
+                {
+                    a.set ((std::string ("Osc ") + L[o] + " Enable").c_str(), 1.0f, false);
+                    a.setIdx ((std::string ("Synth OSC ") + L[o] + " Engine").c_str(), eng);
+                }
+                if (sc == 1) a.set ("Synth OSC A Unison", 6.0f / 15.0f);
+                a.pump (0.3);
+                if (eng == 7)
+                {
+                    std::vector<std::pair<int, std::string>> slots;
+                    if (sc == 0) slots = { { 0, "salamander.grand.v3" } };
+                    if (sc == 1) slots = { { 0, "vsco2.strings.violin-section" } };
+                    if (sc == 2) slots = { { 0, "vcsl.mallets.glockenspiel" } };
+                    if (sc == 3) for (int o = 0; o < 8; ++o) slots.push_back ({ o, eight[o] });
+                    a.injectOrganics (slots);
+                    a.pump (sc == 3 ? 6.0 : 2.5);
+                }
+                a.set ("Synth Amp Release", 0.35f, false);
+                a.pump (0.3); a.render (6, nullptr);
+                const double rssLoaded = rssMB();
+                std::vector<double> t; a.peak = 0.0f;
+                const double t0 = CFAbsoluteTimeGetCurrent();
+                long reps = 0;
+                while (CFAbsoluteTimeGetCurrent() - t0 < secs)
+                {
+                    ++reps;
+                    if (sc == 0)
+                    {
+                        a.cc (64, 127);
+                        for (int k = 0; k < 16; ++k) a.note (36 + k * 3, 90);
+                        a.render (90, &t);
+                        for (int k = 0; k < 16; ++k) a.note (36 + k * 3, 0);
+                        a.render (180, &t);
+                        a.cc (64, 0); a.render (60, &t);
+                    }
+                    else if (sc == 1 || sc == 3)
+                    {
+                        const std::vector<int> ch = sc == 1 ? std::vector<int> { 55, 59, 62, 66, 67, 71, 74, 79 } : std::vector<int> { 60, 64, 67, 71 };
+                        for (int n : ch) a.note (n, 90);
+                        a.render (180, &t);
+                        for (int n : ch) a.note (n, 0);
+                        a.render (100, &t);
+                    }
+                    else
+                    {
+                        for (int k = 0; k < 16; ++k) { const int n = 79 + (k * 5) % 29; a.note (n, 100); a.render (3, &t); a.note (n, 0); a.render (3, &t); }
+                        a.render (240, &t);
+                    }
+                }
+                const float pk = a.peak;
+                a.close();
+                double mean = 0; for (double x : t) mean += x; mean /= (double) std::max<size_t> (1, t.size());
+                auto srt = t; std::sort (srt.begin(), srt.end());
+                const double p95 = srt.empty() ? 0 : srt[(size_t) (0.95 * (double) (srt.size() - 1))];
+                const char* nm[4] = { "Salamander, pedal, 16-note chord ringing", "violin section, unison 7, 8 held", "glockenspiel run, 16 notes, 15 s release", "8 oscs on Organics, 8 instruments, 4 notes" };
+                printf ("  %-44s %-8s mean %6.0f us (%5.2f %%) · p95 %6.0f us (%5.2f %%) · %ld reps · peak %.1f dBFS%s\n", nm[sc], eng == 7 ? "ORGANIC" : "WT",
+                        mean, mean / budgetUs() * 100.0, p95, p95 / budgetUs() * 100.0, reps, pk > 1e-9f ? 20.0 * std::log10 ((double) pk) : -240.0,
+                        (sc == 3 && eng == 7) ? (" · resident +" + std::to_string ((int) (rssLoaded - rss0)) + " MB").c_str() : "");
+            }
+        printf ("\n");
+        return 0;
+    }
 
     // ── tp105 — orgreal [secs]: Organics as Max plays it. Each gesture is replayed for `secs` of WALL time so the plugin's
     //    own probe (TERRAIN_CPU_PROBE → terrain-cpu.txt, ~5 s windows) sees it: "DSP x% [gather | voices | fx+master]" and
