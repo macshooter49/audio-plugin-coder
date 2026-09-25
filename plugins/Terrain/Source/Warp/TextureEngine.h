@@ -87,7 +87,7 @@ namespace tw
         bool isReady() const noexcept { return ready && inner.isReady(); }
 
         /** CHOP-STRETCH — 5× STFT overlap on the inner Signalsmith (see SignalsmithEngine). Before prepare(). */
-        void setHighOverlap (bool b) noexcept { inner.setHighOverlap (b); }
+        void setHighOverlap (bool b, bool longWin = false) noexcept { inner.setHighOverlap (b, longWin); }
 
         void setStretchRatio (float r) noexcept
         {

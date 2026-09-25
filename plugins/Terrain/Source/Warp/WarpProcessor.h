@@ -50,13 +50,14 @@ namespace tw
 
         /** CHOP-STRETCH — the chop voice (SamplerVoice) asks for 5× STFT overlap on the Signalsmith-backed
          *  engines (Tones, Texture): presetCheaper's 2.5× leaves a hop-rate tick at every ratio ≠ 1. Call
-         *  BEFORE prepare(); engines already allocated are re-prepared by that prepare(). Default false —
-         *  the synth's Sample-oscillator voices are untouched. */
-        void setHighOverlap (bool b) noexcept
+         *  BEFORE prepare(); engines already allocated are re-prepared by that prepare(). Default false.
+         *  SYNTH-STRETCH — the synth's Sample-oscillator voices ask for it too now, with longWin = true (a 150 ms block:
+         *  the 100 ms one lost low partials — SignalsmithEngine::prepare). */
+        void setHighOverlap (bool b, bool longWin = false) noexcept
         {
-            highOverlap = b;
-            if (signalsmithEngine) signalsmithEngine->setHighOverlap (b);
-            if (textureEngine)     textureEngine    ->setHighOverlap (b);
+            highOverlap = b; longWindow = longWin;
+            if (signalsmithEngine) signalsmithEngine->setHighOverlap (b, longWin);
+            if (textureEngine)     textureEngine    ->setHighOverlap (b, longWin);
         }
 
         /** Source samples the active engine consumes per OUTPUT sample, unrounded (the per-block
@@ -80,7 +81,7 @@ namespace tw
                 if (! signalsmithEngine)
                 {
                     signalsmithEngine = std::make_unique<SignalsmithEngine>();
-                    signalsmithEngine->setHighOverlap (highOverlap);
+                    signalsmithEngine->setHighOverlap (highOverlap, longWindow);
                     if (prepared)
                         signalsmithEngine->prepare (sampleRate, channels, blockMax);
                 }
@@ -109,7 +110,7 @@ namespace tw
                 if (! textureEngine)
                 {
                     textureEngine = std::make_unique<TextureEngine>();
-                    textureEngine->setHighOverlap (highOverlap);
+                    textureEngine->setHighOverlap (highOverlap, longWindow);
                     if (prepared)
                         textureEngine->prepare (sampleRate, channels, blockMax);
                 }
@@ -274,9 +275,13 @@ namespace tw
         }
         void primeOutput (const float* primeL, const float* primeR, int numSamples)
         {
+            // SYNTH-STRETCH — a prime STARTS the engine: reset it first. After a note-on / setMode it already is (a no-op
+            // then), but the warp RE-engaging mid-note (the Sample osc's stretch knob back out of its dead zone) found
+            // Beats still holding its old grain anchors (the prime was appended behind them → the read resumed in stale
+            // history) and Texture its old scatter ring. Signalsmith's own outputSeek resets (Tones, Texture's inner).
             if (mode == WarpMode::Tones)        { if (signalsmithEngine) signalsmithEngine->outputSeek (primeL, primeR, numSamples); }
-            else if (mode == WarpMode::Texture) { if (textureEngine)     textureEngine->outputSeek (primeL, primeR, numSamples); }
-            else if (mode == WarpMode::Beats)   { if (beatsEngine)       beatsEngine->seek (primeL, primeR, numSamples); }
+            else if (mode == WarpMode::Texture) { if (textureEngine)   { textureEngine->reset(); textureEngine->outputSeek (primeL, primeR, numSamples); } }
+            else if (mode == WarpMode::Beats)   { if (beatsEngine)     { beatsEngine->reset();   beatsEngine->seek (primeL, primeR, numSamples); } }
             primed_ = true;
         }
         bool isPrimed() const noexcept   { return primed_; }
@@ -323,6 +328,29 @@ namespace tw
                 return juce::jmax (1, (int) std::round ((double) numSamples * pr / sr));
             }
             return juce::jmax (1, (int) std::round ((double) numSamples / sr));
+        }
+
+        /** SYNTH-STRETCH — run ONE mode's engine regardless of the active mode (a mid-note mode switch: the OLD
+         *  engine keeps rendering its own continuation under the crossfade while the new one takes over — each
+         *  mode owns its own engine instance, so the old one's state is untouched by setMode). Silence if that
+         *  engine was never allocated. */
+        void processEngine (WarpMode m, const float* inL, const float* inR, float* outL, float* outR, int numSamples)
+        {
+            if      (m == WarpMode::Beats   && beatsEngine)       beatsEngine      ->process (inL, inR, outL, outR, numSamples);
+            else if (m == WarpMode::Texture && textureEngine)     textureEngine    ->process (inL, inR, outL, outR, numSamples);
+            else if (m == WarpMode::Tones   && signalsmithEngine) signalsmithEngine->process (inL, inR, outL, outR, numSamples);
+            else
+            {
+                std::memset (outL, 0, sizeof (float) * (size_t) numSamples);
+                std::memset (outR, 0, sizeof (float) * (size_t) numSamples);
+            }
+        }
+        /** SYNTH-STRETCH — sourceSamplesPerBlock() for a given mode (the old engine's feed during a mode crossfade). */
+        int sourceSamplesFor (WarpMode m, int numSamples) const noexcept
+        {
+            const double sr = juce::jmax (0.0001, (double) stretchRatio);
+            const double pr = (m == WarpMode::Beats) ? std::pow (2.0, juce::jlimit (-24.0, 24.0, (double) pitchSemitones) / 12.0) : 1.0;
+            return juce::jmax (1, (int) std::round ((double) numSamples * pr / sr));
         }
 
         void process (const float* inL, const float* inR,
@@ -492,7 +520,8 @@ namespace tw
         int    channels   = 2;
         int    blockMax   = 512;
         bool   prepared   = false;
-        bool   highOverlap = false;   // CHOP-STRETCH — 5× STFT overlap (chop voices only)
+        bool   highOverlap = false;   // CHOP-STRETCH — 5× STFT overlap (chop voices + the synth's Sample osc)
+        bool   longWindow  = false;   // SYNTH-STRETCH — …on the 150 ms block (the synth's Sample osc; see SignalsmithEngine)
 
         std::unique_ptr<SignalsmithEngine> signalsmithEngine;
         std::unique_ptr<BeatsEngine>       beatsEngine;
