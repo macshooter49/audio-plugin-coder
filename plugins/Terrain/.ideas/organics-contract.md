@@ -164,3 +164,16 @@ size/credit stay in the data (index.json / CREDITS.md), never on screen.
 
 **Solo / Mute:** the osc right-click menu's Solo and Mute must work on ALL 8 oscillators (A–H) in every view (synth page,
 Patcher canvas incl. adopted E–H), for every engine, audibly, and persist in state.
+
+---
+
+## tp108 AMENDMENT (2026-09-25) — user SoundFont import + polish
+
+**User import.** "Import SoundFont…" (SFZ with its samples folder, SF2, SF3) converts IN THE PLUGIN (C++, no Python) into a
+.torg instrument under `<library root>/User/<id>/` (map.json + samples/*.flac + source/ original files), id = `user.<slug>`
+(unique; suffix -2, -3 on clash). User ids live in `<library root>/User/user-ids.json`, append-only, numbered from **2048**
+(factory ids stay < 2048; `ORG_INST` 0..4095 covers both). `index()` merges the factory index.json with `User/user-index.json`
+(category **"User"**, family guessed from the name/GM program, else the category default). Factory files are never written
+(the factory ids.json / index.json may be symlinks into the compiled library). Import never blocks the audio or message thread
+(background job + progress), and a bad file reports why and imports nothing. A preset referencing a user instrument that's
+missing falls back like any missing instrument.
