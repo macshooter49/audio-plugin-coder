@@ -10,6 +10,11 @@
 //  track), the pitch wheel, CHANNEL pressure (routed to cutoff and to Osc A level), the mod wheel, CC 74,
 //  the sustain pedal, and a 12-note cluster past the Voices knob (the steal path), with Osc A unison 3.
 //  Poly aftertouch is left out ON PURPOSE: reaching only its own voice is the one intended change.
+//
+//    Tests/expression_midi.sh null <out.f32> press  — tp109: the PRESSURE sequence (pressure curve / start / ceiling at
+//  their neutral defaults must be bit-identical to the build before them). MPE on (setMpeOn, tp103): per-note channel
+//  pressure ramps on members 2 and 3 + master-channel pressure; then MPE off: poly aftertouch ramps on two keys and
+//  channel pressure on channel 1. Every value 0..127 is visited. Uses only APIs that existed at tp103.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -73,6 +78,9 @@ int main (int argc, char** argv)
                           "{\"s\":232,\"d\":" + juce::String ((int) wc::ModDest::Frame)  + ",\"v\":0.3},"
                           "{\"s\":230,\"d\":" + juce::String ((int) wc::ModDest::Warp)   + ",\"v\":0.4}]");
 
+    const bool press = argc >= 3 && std::strcmp (argv[2], "press") == 0;
+    if (press) p.setMpeOn (true, 48.0f, false);
+
     std::vector<float> out; out.reserve ((size_t) (NBLK * BLK * 2));
     juce::AudioBuffer<float> buf (2, BLK);
     for (int b = 0; b < NBLK; ++b)
@@ -81,6 +89,23 @@ int main (int argc, char** argv)
         juce::MidiBuffer m;
         auto on  = [&] (int ch, int n, int v, int pos = 0) { m.addEvent (juce::MidiMessage::noteOn  (ch, n, (juce::uint8) v), pos); };
         auto off = [&] (int ch, int n, int pos = 0)        { m.addEvent (juce::MidiMessage::noteOff (ch, n), pos); };
+        if (press)
+        {   // blocks 0..259: MPE members · 260..519: MPE off, poly AT + channel pressure
+            if (b == 2)  { on (2, 60, 100); on (3, 67, 90, 33); }
+            if (b >= 10 && b < 138)  m.addEvent (juce::MidiMessage::channelPressureChange (2, b - 10), 64);          // 0..127 up
+            if (b >= 30 && b < 158)  m.addEvent (juce::MidiMessage::channelPressureChange (3, 127 - (b - 30)), 300); // 127..0 down
+            if (b >= 170 && b < 200) m.addEvent (juce::MidiMessage::channelPressureChange (1, (b - 170) * 4), 10);   // the master
+            if (b == 230) { off (2, 60); off (3, 67, 9); }
+            if (b == 250) p.setMpeOn (false, 48.0f, false);
+            if (b == 262) { on (1, 60, 100); on (1, 64, 90, 17); }
+            if (b >= 270 && b < 398) m.addEvent (juce::MidiMessage::aftertouchChange (1, 64, b - 270), 128);
+            if (b >= 280 && b < 408) m.addEvent (juce::MidiMessage::aftertouchChange (1, 60, 127 - (b - 280)), 7);
+            if (b >= 420 && b < 480) m.addEvent (juce::MidiMessage::channelPressureChange (1, ((b - 420) * 9) % 128), 200);
+            if (b == 500) { off (1, 60); off (1, 64); }
+            p.processBlock (buf, m);
+            for (int i = 0; i < BLK; ++i) { out.push_back (buf.getSample (0, i)); out.push_back (buf.getSample (1, i)); }
+            continue;
+        }
         if (b == 2)  { on (1, 60, 100); on (1, 64, 90, 17); on (1, 67, 80, 301); }
         if (b == 10) on (3, 72, 110, 40);
         if (b >= 20 && b < 60)  m.addEvent (juce::MidiMessage::pitchWheel (1, 8192 + (b - 20) * 180), 100);

@@ -1391,6 +1391,7 @@ public:
     float mpeRangeRt_ = 48.0f, mpeRangeSeen_ = -1.0f;                   // runtime member bend range (RPN 0 may move it)
     int   lastMpeCh_ = 0;                                               // the newest MPE note's channel (the rack's Slide view)
     uint32_t mpeMaskLast_ = 0;
+    std::atomic<float> pressInView_ { 0.0f };                          // tp109 — the loudest RAW pressure (the page's dot)
     juce::MidiBuffer midiFiltScratch_;                                  // the channel filter's kept events (reserved in prepareToPlay)
     uint32_t mpeMemberMaskFor() const noexcept;                         // audio thread: the member channels right now
 public:
@@ -1398,11 +1399,15 @@ public:
     void  setMidiChannelFilter (int ch, bool persist);
     void  setTuningA4 (float hz, bool persist);
     void  setVoiceCeiling (int voices, bool persist);
+    void  setPressureShape (float curve, float start, float ceiling, bool persist);   // tp109 — every instance
+    float getPressureIn() const noexcept { return pressInView_.load (std::memory_order_relaxed); }   // tp109 — raw 0..1, the live dot
     static int  getVoiceCeiling() noexcept;
     juce::String getMidiSettingsJson() const;
     static juce::File midiPrefsFile();
     void  loadMidiPrefs();                           // constructor: the process-wide values + new-instance defaults
     void  saveMidiPrefs() const;
+    juce::String midiPrefsJson() const;              // tp109 — the file's text (saveMidiPrefs writes it)
+    void  applyMidiPrefsJson (const juce::String&);  // tp109 — and back (loadMidiPrefs reads it)
     struct ScopedKeepInstanceMidi
     {
         TerrainAudioProcessor& p;

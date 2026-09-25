@@ -8000,6 +8000,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
     driver:'CoreAudio', out:'System output', outCh:'1 + 2', inDev:'None', inCh:'Off', sr:48000, buf:256, testCh:'Both',
     ports:{}, qwerty:true, tempo:120,
     chan:'Omni', vcurve:0, vmode:'Curve', bend:2, mpe:'Off', mpeBend:48, mpeArmed:0, pickup:'Hook', pc:'Off', mapFromPreset:'Off', a4:440,
+    pressCurve:0, pressStart:0, pressCeil:100,   /* tp109 — pressure sensitivity (the processor owns them; read back by getMidiSettings) */
     cc:[{cc:1,p:'Mod Wheel',fixed:true}],
     onStart:'Init', autoVer:'Off', scan:'On',
     theme:'Dark', size:100, motion:'On', hover:'On', values:'On', drag:'Vertical', sens:.5, wheel:'On', dbl:'Reset', openOn:'Last used',
@@ -8111,6 +8112,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      ctl:{t:'num',key:'mpeBend',min:1,max:96,step:1,unit:'ST',reset:48,fmt:function(v){ return v.toFixed(0); }},dim:function(){ return S.mpe!=='On'; }},
    {p:'control',g:'Expression',id:'polyat',label:'Poly aftertouch',help:'Always on. Key pressure (poly aftertouch) moves only the note you press — an Arturia PolyBrute on Aftertouch Poly or any FullTouch mode sends it. Channel (mono) pressure moves every note. Route Aftertouch in the mod matrix to hear it.',where:'Every host',
      ctl:{t:'info',get:function(){ return 'Per key — each note follows its own pressure'; }}},
+   /* tp109 — PRESSURE SENSITIVITY: the curve, where it starts, where it tops out. Applied to the pressure itself (MPE per-note,
+      poly and channel aftertouch) before any route, in the processor; every instance (MidiSettings.json). */
+   {p:'control',g:'Expression',id:'press',blk:'press',label:'Pressure curve',help:'How hard you have to press to reach the top, for any MPE or poly-aftertouch controller (per-note pressure, poly aftertouch and channel aftertouch alike). Linear passes your controller through untouched. Drag the curve down (Hard) and a normal press stays low: you reach 100 % only when you really lean in. Drag it up (Soft) to get more from a lighter touch. It shapes the pressure before the mod matrix, so every Aftertouch route follows. Press your controller: the dot shows where you land. If your controller has its own aftertouch curve, it acts first.',where:'Every host · every instance'},
+   {p:'control',g:'Expression',id:'pressStart',label:'Pressure start',help:'Ignores the first part of the key travel, so fingers resting on the keys modulate nothing. Pressure below it reads 0; above it the curve starts from 0. Drag the number, double-click for 0 %.',where:'Every host · every instance',
+     ctl:{t:'num',key:'pressStart',min:0,max:50,step:1,unit:'%',reset:0,fmt:function(v){ return v.toFixed(0); }}},
+   {p:'control',g:'Expression',id:'pressCeil',label:'Pressure ceiling',help:'Pressure reaches 100 % here, before the end of the travel. Lower it when your controller’s top is too hard to reach. Drag the number, double-click for 100 %.',where:'Every host · every instance',
+     ctl:{t:'num',key:'pressCeil',min:50,max:100,step:1,unit:'%',reset:100,fmt:function(v){ return v.toFixed(0); }}},
    {p:'control',g:'Controllers',id:'ccmap',blk:'ccmap',label:'MIDI learn',help:'Right-click any knob → MIDI Learn, then move a control. Or press Learn here and turn a knob on your controller. Mod wheel is always CC 1.',where:'Saved with the instance'},
    {p:'control',g:'Controllers',id:'pickup',label:'Knob pickup',help:'When a hardware knob and Terrain disagree: Jump snaps at once, Hook waits until you pass the current value, Scale glides the rest of the way.',where:'Every host',ctl:chips(['Jump','Hook','Scale'],'pickup')},
    {p:'control',g:'Controllers',id:'mapFromPreset',label:'Presets carry their MIDI map',help:'On: loading a preset also loads the CC map it was saved with. Off: your map stays put whatever you load.',where:'Every host',ctl:onoff('mapFromPreset')},
@@ -8186,6 +8194,9 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
       case 'fps': try{ window.__UI_FPS = (+S.fps===30) ? 30 : null; }catch(e){} break;
       case 'size': if(S.sizeSet) callN('setBootWidth', Math.round(820*S.size/100)); break;   /* tp103 — only a pick resizes; applyAll never calls it */
       case 'mpe': case 'mpeBend': midiCall('setMpeOn', S.mpe==='On'?1:0, S.mpeBend); break;
+      case 'press': case 'pressStart': case 'pressCeil':   /* tp109 — the three travel together; the page keeps them >= 10 % apart as the processor does */
+        if(id==='pressCeil') S.pressStart=Math.min(S.pressStart,S.pressCeil-10); else S.pressCeil=Math.max(S.pressCeil,Math.min(100,S.pressStart+10));
+        midiCall('setPressureShape', S.pressCurve, S.pressStart/100, S.pressCeil/100); if(RID.press.paint) RID.press.paint(); break;
       case 'openOn': callN('setOpenOnPage', String(S.openOn)); break;
       case 'cpu': paintHeaderCpu(); break;
       case 'sleep': callN('setSleepWhenSilent', S.sleep==='On'?1:0); break;
@@ -8224,11 +8235,12 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      writes only when the user changes one; it never pushes its own copy over them on open — a project that was
      saved with MPE on must open with MPE on. Every setter answers with the processor's real state. */
   function takeMidi(txt){ try{ var j=typeof txt==='string'?JSON.parse(txt):txt; if(!j) return;
-      var was=[S.mpe,S.mpeBend,S.mpeArmed,S.chan,S.a4,S.voices].join('|');
+      var was=[S.mpe,S.mpeBend,S.mpeArmed,S.chan,S.a4,S.voices,S.pressCurve,S.pressStart,S.pressCeil].join('|');
       if(j.mpe!=null) S.mpe=(+j.mpe||+j.mpeArmed)?'On':'Off'; if(j.mpeBend!=null) S.mpeBend=Math.round(+j.mpeBend); S.mpeArmed=+j.mpeArmed||0;
       if(j.chan!=null) S.chan=(+j.chan>=1&&+j.chan<=16)?('Channel '+(+j.chan)):'Omni';
       if(j.a4!=null) S.a4=Math.round(+j.a4); if(j.voices!=null) S.voices=+j.voices;
-      if(was===[S.mpe,S.mpeBend,S.mpeArmed,S.chan,S.a4,S.voices].join('|')) return;   /* the echo of a drag: nothing to repaint (a repaint would drop the grip) */
+      if(j.pressCurve!=null) S.pressCurve=Math.round(+j.pressCurve*100)/100; if(j.pressStart!=null) S.pressStart=Math.round(+j.pressStart*100); if(j.pressCeil!=null) S.pressCeil=Math.round(+j.pressCeil*100);   /* tp109 */
+      if(was===[S.mpe,S.mpeBend,S.mpeArmed,S.chan,S.a4,S.voices,S.pressCurve,S.pressStart,S.pressCeil].join('|')) return;   /* the echo of a drag: nothing to repaint (a repaint would drop the grip) */
       save(); if(!q&&(cur==='control'||cur==='perf')&&$('st-overlay').classList.contains('on')) paintPage(); }catch(e){} }
   function midiCall(){ var a=Array.prototype.slice.call(arguments), f=nfn(a[0]); if(!f) return; try{ Promise.resolve(f.apply(null,a.slice(1))).then(takeMidi,function(){}); }catch(e){} }
   function pullMidi(){ var f=nfn('getMidiSettings'); if(!f) return; try{ Promise.resolve(f()).then(takeMidi,function(){}); }catch(e){} }
@@ -8295,6 +8307,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
      owner wires them with a real build. Velocity curve + CPU meter ARE wired (setVelCurve/getDspLoad). */
   var NEED={ driver:'setAudioSetup', out:'setAudioSetup', outCh:'setAudioSetup', inDev:'setAudioSetup', inCh:'setAudioSetup', sr:'setAudioSetup', buf:'setAudioSetup',
     tempo:'setStandaloneBpm', chan:'setMidiChannel', a4:'setA4', mpe:'setMpeOn', mpeBend:'setMpeOn',
+    press:'setPressureShape', pressStart:'setPressureShape', pressCeil:'setPressureShape',   /* tp109 */
     voices:'setVoiceCeiling', rtQ:'setRtQuality', offQ:'setRtQuality', presetQ:'setRtQuality', sleep:'setSleepWhenSilent', tails:'setCutTailsOnStop', size:'setBootWidth',
     scan:'getLibraryInfo', devscan:'rescanAudioDevices' };
   /* tp100 — a "Standalone app only" row inside a DAW is not "coming soon": the DAW owns the sound card. */
@@ -8352,6 +8365,31 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
        f.addEventListener('pointerdown',function(e){ var rc=f.getBoundingClientRect(); var v=C01(1-(e.clientY-rc.top)/rc.height)*.94+.06; f.classList.add('on'); noteOn(60+k,v,'mouse'); try{ f.setPointerCapture(e.pointerId); }catch(_){} });
        function up(){ f.classList.remove('on'); noteOff(60+k); } f.addEventListener('pointerup',up); f.addEventListener('pointercancel',up); keys.appendChild(f); })(k); }
      hoverable(b,r); velEl=b; setTimeout(paintVel,0); return b; },
+   /* tp109 — PRESSURE CURVE: the Velocity curve's box and grip (drag up = softer, down = harder, double-click = straight),
+      drawn through the start (flat 0) and the ceiling (flat 100 %). The dot is the pressure arriving now (getPressureIn). */
+   press:function(r){ var soon=isSoon(r);
+     var b=el('<div class="blk'+(soon?' soon':'')+'" data-row="press"><div class="sr" style="padding:0;margin-bottom:6px"><div class="lbl"><span class="t">Pressure curve</span>'+(soon?soonTag(r):'')+'</div><div class="lane"><span class="val dim" id="prs-rd"></span></div></div>'
+       +'<div class="vel"><div class="left"><div class="crv" title="Drag up/down to bend · double-click = straight"><svg viewBox="0 0 150 92" preserveAspectRatio="none"><g class="grid"></g><rect class="prs-lo" y="0" height="92" style="fill:rgba(255,255,255,.05)"/><rect class="prs-hi" y="0" height="92" style="fill:rgba(255,255,255,.05)"/><path class="mv-stroke"/><circle class="dt" r="2.4" cx="-9" cy="-9"/></svg></div></div>'
+       +'<div class="right"><div class="cap" style="margin-top:0">Press harder or softer on your controller: the dot shows where your pressure lands. Hard needs a firm press to reach the top; the shaded edges are the start and the ceiling.</div><div class="cap prs-live" style="font-variant-numeric:tabular-nums">Nothing pressed</div><div class="rd"></div></div></div></div>');
+     var g=b.querySelector('.grid'), gl=''; for(var i=1;i<4;i++){ gl+='<line x1="'+(i*37.5)+'" y1="0" x2="'+(i*37.5)+'" y2="92"/><line x1="0" y1="'+(i*23)+'" x2="150" y2="'+(i*23)+'"/>'; } g.innerHTML=gl;
+     function f(u){ var s0=S.pressStart/100, s1=S.pressCeil/100; u=C01(u); if(s0>0||s1<1) u=C01((u-s0)/(s1-s0)); return crvF(u,S.pressCurve); }   /* the processor's law (TerrainPressure.h) */
+     var PRE=[['Soft',-.45],['Linear',0],['Hard',.45],['Harder',.8]];
+     r.paint=function(){ if(!document.body.contains(b)) return; var p='', n=120; for(var k=0;k<=n;k++){ var u=k/n; p+=(k?'L':'M')+(u*150).toFixed(2)+' '+(90-f(u)*88).toFixed(2); }
+       b.querySelector('.mv-stroke').setAttribute('d',p);
+       var lo=b.querySelector('.prs-lo'), hi=b.querySelector('.prs-hi'); lo.setAttribute('x',0); lo.setAttribute('width',(S.pressStart*1.5).toFixed(2)); hi.setAttribute('x',(S.pressCeil*1.5).toFixed(2)); hi.setAttribute('width',((100-S.pressCeil)*1.5).toFixed(2));
+       b.querySelectorAll('.rd .tp-chip').forEach(function(c){ c.classList.toggle('active', PRE.some(function(o){ return o[0]===c.dataset.v && o[1]===S.pressCurve; })); });
+       var rd=b.querySelector('#prs-rd'); if(rd) rd.textContent=(S.pressCurve===0?'linear':(S.pressCurve<0?'softer ':'harder ')+Math.abs(Math.round(S.pressCurve*100))+' %')+(S.pressStart>0||S.pressCeil<100?'  ·  '+S.pressStart+'–'+S.pressCeil+' %':'');
+       ['pressStart','pressCeil'].forEach(function(k){ var nb=document.querySelector('#st-overlay [data-row="'+k+'"] .num b'); if(nb) nb.textContent=String(S[k]); }); };
+     if(!soon){ dragify(b.querySelector('.crv'),{get:function(){ return (1-S.pressCurve)/2; },set:function(u){ S.pressCurve=Math.round((1-u*2)*100)/100; save(); applyRow('press'); paintInsp(); },span:150,reset:.5});
+       PRE.forEach(function(o){ var c=el('<button class="tp-chip">'+o[0]+'</button>'); c.dataset.v=o[0];
+         c.onclick=function(){ S.pressCurve=o[1]; save(); applyRow('press'); paintInsp(); }; b.querySelector('.rd').appendChild(c); }); }
+     else b.querySelector('.vel').style.opacity='.35';
+     (function live(){ var fn=nfn('getPressureIn'); if(!fn||soon) return; var busy=false;
+       var t=setInterval(function(){ if(!document.body.contains(b)){ clearInterval(t); return; } if(busy) return; busy=true;
+         Promise.resolve(fn()).then(function(v){ busy=false; v=C01(+v||0); var d=b.querySelector('.dt'), lv=b.querySelector('.prs-live');
+           if(v<=0){ d.setAttribute('cx',-9); d.setAttribute('cy',-9); lv.textContent='Nothing pressed'; return; }
+           var y=f(v); d.setAttribute('cx',(v*150).toFixed(2)); d.setAttribute('cy',(90-y*88).toFixed(2)); lv.textContent='Pressing '+Math.round(v*100)+' %  →  '+Math.round(y*100)+' %'; },function(){ busy=false; }); },60); })();
+     hoverable(b,r); setTimeout(r.paint,0); return b; },
    ccmap:function(r){ var b=el('<div class="blk" data-row="ccmap"><div class="lst"></div><div class="acts"></div></div>'), L=b.querySelector('.lst');
      L.appendChild(el('<div class="r hd"><span class="c1">CC</span><span class="n">Controls</span><span class="c2">Range</span><span class="x"></span></div>'));
      S.cc.forEach(function(m,ix){ var row=el('<div class="r"><span class="c1">'+m.cc+'</span><span class="n"></span><span class="c2">'+(m.fixed?'always':'0 – 100 %')+'</span><span class="x">'+(m.fixed?'':X_SVG)+'</span></div>');

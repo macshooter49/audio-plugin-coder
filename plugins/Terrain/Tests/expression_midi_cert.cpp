@@ -19,6 +19,15 @@
 //    [7] Voice ceiling 8, Voices knob 16, 16 held notes → never more than 8 voices sound; unison 2 → 4 notes;
 //        [7b] the steal is a FADE: D = (ceiling 8) - (ceiling 96) on identical MIDI is the stolen voice alone.
 //    [8] MPE master pedal: CC 64 on ch 1 holds a note released on ch 2.
+//  tp109 — PRESSURE SENSITIVITY (Settings → Expression: Pressure curve · Pressure start · Pressure ceiling)
+//    [9]  every pressure 0..127 through each setting, on the REAL source path (128 poly keys at once, the settled
+//         smoothed value the voices read), against the law computed independently in double; MPE member and
+//         channel pressure spot-checked through the same path; the defaults are the identity bit for bit.
+//    [10] a HARD curve: the lowest pressure that reaches 90 % (want >= 100/127) — and what a medium press gives.
+//    [11] the START threshold, in the audio: a resting press below it moves nothing; above it the route opens.
+//    [12] per-voice isolation survives a hard curve + start + ceiling (MPE member and poly key, as [2] / [4]).
+//    [13] zipper: a slow 1-LSB-at-a-time press, the largest per-block step of the smoothed source per setting.
+//    [14] the setting persists: the MidiSettings.json text one instance writes, a new instance reads back (clamped).
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -60,12 +69,13 @@
 #undef protected
 #include "SampleKeyDetect.h"
 #include "ResonatorNode.h"
+#include "TerrainPressure.h"   // tp109
 
 static constexpr double SR = 48000.0; static constexpr int BLK = 512;
 static int fails = 0, passes = 0;
 static void bar (const char* tag, bool ok, const std::string& text)
 { printf ("  %s [%s] %s\n", ok ? "PASS" : "FAIL", tag, text.c_str()); fflush (stdout); if (ok) ++passes; else ++fails; }
-static std::string fmt (const char* f, ...) { char b[512]; va_list a; va_start (a, f); vsnprintf (b, sizeof b, f, a); va_end (a); return b; }
+static std::string fmt (const char* f, ...) { char b[4096]; va_list a; va_start (a, f); vsnprintf (b, sizeof b, f, a); va_end (a); return b; }
 
 static void setP (TerrainAudioProcessor& p, const char* id, float plain)
 {
@@ -323,6 +333,147 @@ int main()
         const double held = run (true), free = run (false);
         bar ("8 MPE pedal", held > -40.0 && free < held - 30.0,
              fmt ("a note released on member ch 2: %.1f dB 2 s later with CC 64 held on master ch 1, %.1f dB without", held, free));
+    }
+
+    // ══ tp109 — PRESSURE SENSITIVITY ══════════════════════════════════════════════════════════════════════════
+    struct Shape { const char* name; float c, s, e; };
+    const Shape shapes[] = { { "linear (default)", 0.f, 0.f, 1.f }, { "Soft -0.45", -0.45f, 0.f, 1.f }, { "Hard +0.45", 0.45f, 0.f, 1.f },
+                             { "Harder +0.8", 0.8f, 0.f, 1.f }, { "start 20 %", 0.f, 0.2f, 1.f }, { "ceiling 80 %", 0.f, 0.f, 0.8f },
+                             { "Hard, start 10 %, ceiling 90 %", 0.45f, 0.1f, 0.9f } };
+    auto law = [] (int v, const Shape& sh) {   // the published law, in double, written out again (not wc::PressureShape)
+        double u = (double) v / 127.0;
+        if (sh.s > 0.f || sh.e < 1.f) u = (u - (double) sh.s) / ((double) sh.e - (double) sh.s);
+        u = std::clamp (u, 0.0, 1.0);
+        return std::pow (u, std::pow (2.0, 2.6 * (double) sh.c));
+    };
+    auto neutral = [] (TerrainAudioProcessor& p) { p.setPressureShape (0.f, 0.f, 1.f, false); };
+    // the settled source for all 128 values at once: poly key k gets pressure k (MPE off)
+    auto settle128 = [&] (const Shape& sh, std::array<float, 128>& got) {
+        auto pp = fresh(); auto& p = *pp; p.setPressureShape (sh.c, sh.s, sh.e, false);
+        render (p, 80, [&] (int b, juce::MidiBuffer& m) { if (b == 2) for (int k = 0; k < 128; ++k) m.addEvent (juce::MidiMessage::aftertouchChange (1, k, k), 0); });
+        for (int k = 0; k < 128; ++k) got[(size_t) k] = p.globalSrc_.polyAt[k].load();
+        neutral (p);
+    };
+    {   // [9] the map
+        bool allOk = true; std::string rows;
+        for (const auto& sh : shapes)
+        {
+            std::array<float, 128> got {}; settle128 (sh, got);
+            double err = 0; for (int v = 0; v < 128; ++v) err = std::max (err, std::abs ((double) got[(size_t) v] - law (v, sh)));
+            const bool ok = err < 2e-5; allOk = allOk && ok;
+            rows += fmt ("\n        %-32s max |source - law| %.1e · v 16/32/64/96/112/127 -> %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f %%", sh.name, err,
+                         100.0 * got[16], 100.0 * got[32], 100.0 * got[64], 100.0 * got[96], 100.0 * got[112], 100.0 * got[127]);
+        }
+        // the defaults are the IDENTITY bit for bit (the pre-tp109 value v/127, not a near miss)
+        std::array<float, 128> lin {}; settle128 (shapes[0], lin);
+        bool bit = true; for (int v = 0; v < 128; ++v) bit = bit && lin[(size_t) v] == (float) v / 127.0f;
+        wc::PressureShape d; bool idn = true; for (int v = 0; v < 128; ++v) idn = idn && d.apply ((float) v / 127.0f) == (float) v / 127.0f;
+        // the same map on the MPE member path (ch 2..16 pressure) and the channel-pressure path
+        const Shape hs = shapes[6]; double errM = 0, errC = 0;
+        {
+            auto pp = fresh(); auto& p = *pp; p.setMpeOn (true, 48.0f, false); p.setPressureShape (hs.c, hs.s, hs.e, false);
+            const int vals[15] = { 0, 5, 13, 20, 33, 47, 60, 71, 84, 95, 102, 110, 115, 121, 127 };
+            render (p, 80, [&] (int b, juce::MidiBuffer& m) { if (b == 2) for (int c = 2; c <= 16; ++c) m.addEvent (juce::MidiMessage::channelPressureChange (c, vals[c - 2]), 0); });
+            for (int c = 2; c <= 16; ++c) errM = std::max (errM, std::abs ((double) p.globalSrc_.chPress[c].load() - law (vals[c - 2], hs)));
+            neutral (p);
+        }
+        for (int v : { 0, 12, 40, 64, 100, 114, 127 })
+        {
+            auto pp = fresh(); auto& p = *pp; p.setPressureShape (hs.c, hs.s, hs.e, false);
+            render (p, 200, [&] (int b, juce::MidiBuffer& m) { if (b == 2) m.addEvent (juce::MidiMessage::channelPressureChange (1, v), 0); });
+            errC = std::max (errC, std::abs ((double) p.globalSrc_.atChan.load() - law (v, hs)));
+            neutral (p);
+        }
+        bar ("9 pressure map", allOk && bit && idn && errM < 1e-4 && errC < 1e-4,
+             fmt ("0..127 through every setting on the poly-key source path (settled):%s\n        defaults: source == v/127 bit for bit %s, apply() identity %s · "
+                  "MPE member path max err %.1e · channel pressure path max err %.1e", rows.c_str(), bit ? "yes" : "NO", idn ? "yes" : "NO", errM, errC));
+    }
+    {   // [10] hard: the press it takes to reach 90 %
+        auto first90 = [&] (const Shape& sh, std::array<float, 128>& g) { settle128 (sh, g); for (int v = 0; v < 128; ++v) if (g[(size_t) v] >= 0.9f) return v; return 128; };
+        std::array<float, 128> gl {}, gh {}, gh2 {}, gs {};
+        const int L = first90 (shapes[0], gl), H = first90 (shapes[2], gh), H2 = first90 (shapes[3], gh2), S = first90 (shapes[1], gs);
+        bar ("10 hard curve", H >= 100 && H2 >= 100 && L < H && S < L,
+             fmt ("the lowest pressure that reaches 90 %%: Soft %d · linear %d · Hard %d · Harder %d (want Hard >= 100/127) · "
+                  "a medium press (80/127): Soft %.0f %%, linear %.0f %%, Hard %.0f %%, Harder %.0f %%",
+                  S, L, H, H2, 100.0 * gs[80], 100.0 * gl[80], 100.0 * gh[80], 100.0 * gh2[80]));
+    }
+    // audio helper as [4]: two notes on ch 1, route Aftertouch -> Level A, poly pressure `v` on key 67 at block 120
+    auto polyLevel = [&] (const Shape& sh, int v, double& dB67, double& dB60) {
+        auto pp = fresh(); auto& p = *pp; p.setPressureShape (sh.c, sh.s, sh.e, false);
+        setP (p, ParameterIDs::SYN_OSC_A_LEVEL, 0.5f);
+        p.setSynthModMatrix ("[{\"s\":231,\"d\":" + juce::String ((int) wc::ModDest::LevelA) + ",\"v\":0.5}]");
+        auto x = render (p, 260, [&] (int b, juce::MidiBuffer& m) {
+            if (b == 2) { m.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0); m.addEvent (juce::MidiMessage::noteOn (1, 67, (juce::uint8) 100), 0); }
+            if (b == 120) m.addEvent (juce::MidiMessage::aftertouchChange (1, 67, v), 0);
+        });
+        const auto s0 = spectrum (x, at (50), NFFT), s1 = spectrum (x, at (150), NFFT);
+        dB67 = bandDb (s1, 370, 415) - bandDb (s0, 370, 415); dB60 = bandDb (s1, 240, 285) - bandDb (s0, 240, 285);
+        neutral (p);
+    };
+    {   // [11] the start threshold, heard
+        const Shape st { "start 20 %", 0.f, 0.2f, 1.f }, none { "linear", 0.f, 0.f, 1.f };
+        double r0 = 0, r0b = 0, rL = 0, rLb = 0, rUp = 0, rUpb = 0;
+        polyLevel (st, 24, r0, r0b);     // 24/127 = 18.9 % < 20 %: a resting finger
+        polyLevel (none, 24, rL, rLb);   // the same press with no start
+        polyLevel (st, 90, rUp, rUpb);   // well past the start
+        bar ("11 pressure start", std::abs (r0) < 0.01 && rL > 0.3 && rUp > 1.0 && std::abs (r0b) < 0.3 && std::abs (rUpb) < 0.3,
+             fmt ("a resting press of 24/127 on key 67: start 20 %% -> %+.3f dB (nothing), no start -> %+.2f dB · 90/127 with start 20 %% -> %+.2f dB · key 60 %+.3f / %+.3f dB",
+                  r0, rL, rUp, r0b, rUpb));
+    }
+    {   // [12] isolation under a non-neutral shape: MPE member (as [2]) and poly key (as [4])
+        const Shape hs = shapes[6];
+        double d67 = 0, d60 = 0; polyLevel (hs, 127, d67, d60);
+        auto pp = fresh(); auto& p = *pp; p.setMpeOn (true, 48.0f, false); p.setPressureShape (hs.c, hs.s, hs.e, false);
+        setP (p, ParameterIDs::SYN_OSC_A_LEVEL, 0.5f);
+        p.setSynthModMatrix ("[{\"s\":" + juce::String (wc::kAftertouchSrc) + ",\"d\":" + juce::String ((int) wc::ModDest::LevelA) + ",\"v\":0.5}]");
+        auto x = render (p, 260, [&] (int b, juce::MidiBuffer& m) {
+            if (b == 2) { m.addEvent (juce::MidiMessage::noteOn (2, 60, (juce::uint8) 100), 0); m.addEvent (juce::MidiMessage::noteOn (3, 67, (juce::uint8) 100), 0); }
+            if (b == 120) m.addEvent (juce::MidiMessage::channelPressureChange (3, 127), 0);
+        });
+        neutral (p);
+        const auto s0 = spectrum (x, at (50), NFFT), s1 = spectrum (x, at (150), NFFT);
+        const double dA = bandDb (s1, 240, 285) - bandDb (s0, 240, 285), dB = bandDb (s1, 370, 415) - bandDb (s0, 370, 415);
+        bar ("12 isolation", d67 > 4.0 && std::abs (d60) < 0.3 && dB > 4.0 && std::abs (dA) < 0.3,
+             fmt ("%s: poly key 67 at 127 -> 67 %+.2f dB, 60 %+.3f dB · MPE ch 3 at 127 -> 67 %+.2f dB, ch 2's 60 %+.3f dB", hs.name, d67, d60, dB, dA));
+    }
+    {   // [13] zipper: a slow press, one LSB every 4 blocks (42.7 ms), 0 -> 127; the largest per-block step of the source
+        std::string rows; double stepLin = 0, stepHard = 0;
+        const Shape zs[] = { shapes[0], shapes[2], shapes[3], { "Harder, start 20 %, ceiling 60 %", 0.8f, 0.2f, 0.6f } };
+        for (int zi = 0; zi < 4; ++zi)
+        {
+            const auto& sh = zs[zi];
+            auto pp = fresh(); auto& p = *pp; p.setPressureShape (sh.c, sh.s, sh.e, false);
+            float prev = 0.f; double mx = 0, inStep = 0;
+            render (p, 4 * 128 + 40, [&] (int b, juce::MidiBuffer& m) { if (b % 4 == 0 && b / 4 < 128) m.addEvent (juce::MidiMessage::aftertouchChange (1, 64, b / 4), 0); },
+                    [&] (int) { const float v = p.globalSrc_.polyAt[64].load(); mx = std::max (mx, (double) std::abs (v - prev)); prev = v; });
+            for (int v = 1; v < 128; ++v) inStep = std::max (inStep, law (v, sh) - law (v - 1, sh));
+            neutral (p);
+            if (zi == 0) stepLin = mx; else if (zi == 1) stepHard = mx;
+            rows += fmt ("\n        %-32s largest 1-LSB step of the law %.2f %% -> largest per-block step of the source %.2f %%", sh.name, 100.0 * inStep, 100.0 * mx);
+        }
+        bar ("13 zipper", stepLin > 0 && stepHard <= 2.5 * stepLin && stepHard < 0.02,
+             fmt ("512-sample blocks at 48 kHz through the existing 10 ms one-pole:%s", rows.c_str()));
+    }
+    {   // [14] persistence: the text MidiSettings.json holds, written by one instance and read by the next
+        auto a = fresh(); a->setPressureShape (0.6f, 0.12f, 0.85f, false);
+        const auto text = a->midiPrefsJson();
+        neutral (*a);
+        auto b = fresh(); const auto before = wc::pressureShape().load();
+        b->applyMidiPrefsJson (text);
+        const auto got = wc::pressureShape().load();
+        const auto page = juce::JSON::parse (b->getMidiSettingsJson());
+        b->applyMidiPrefsJson ("{\"pressCurve\":7,\"pressStart\":0.9,\"pressCeil\":0.2}");   // a hand-edited file is clamped
+        const auto cl = wc::pressureShape().load();
+        b->applyMidiPrefsJson ("{\"a4\":440}");   // a pre-tp109 file leaves the shape where it is
+        const auto keep = wc::pressureShape().load();
+        neutral (*b);
+        const bool ok = before.neutral() && std::abs (got.curve - 0.6f) < 1e-6f && std::abs (got.start - 0.12f) < 1e-6f && std::abs (got.ceiling - 0.85f) < 1e-6f
+                        && std::abs ((double) page["pressCurve"] - 0.6) < 1e-6 && std::abs ((double) page["pressCeil"] - 0.85) < 1e-6
+                        && cl.curve == 1.0f && cl.start == 0.5f && std::abs (cl.ceiling - 0.6f) < 1e-6f && keep.curve == cl.curve;
+        bar ("14 persist", ok, fmt ("written %s -> a new instance reads curve %.2f start %.2f ceiling %.2f; getMidiSettings shows %.2f / %.2f / %.2f; "
+                                    "a hand-edited 7 / 0.9 / 0.2 is clamped to %.2f / %.2f / %.2f; an old file without them keeps them",
+                                    text.removeCharacters ("\n ").toRawUTF8(), got.curve, got.start, got.ceiling,
+                                    (double) page["pressCurve"], (double) page["pressStart"], (double) page["pressCeil"], cl.curve, cl.start, cl.ceiling));
     }
 
     printf ("expression_midi_cert: %d passed, %d failed -> %s\n", passes, fails, fails == 0 ? "PASS" : "FAIL");
