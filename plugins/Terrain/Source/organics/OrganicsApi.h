@@ -22,11 +22,11 @@ namespace tw
     struct OrganicParams
     {
         float dyn     = 0.0f;    // Dynamics  −1..+1  layer-selection velocity offset (±63), live crossfade
-        float tone    = 0.0f;    // Tone      −1..+1  velocity-aware tilt, pivot 700 Hz, ±9 dB
+        float tone    = 0.0f;    // Tone      −1..+1  velocity-aware tilt, pivot max(700 Hz, f0), ±9 dB
         float body    = 0.0f;    // Body      −1..+1  zone lookup shift ±6 st, repitched back (formant-like)
         float attack  = 0.0f;    // Attack    −1..+1  Gentle (fade + softer layer) … Natural … Tight (air trim + lift)
         float human   = 0.25f;   // Human      0..1   per-note detune/level/start/tone/timing + fake RR
-        float release = 0.5f;    // Release    0..1   tp105: note-off decay TIME 20 ms..10 s (taper) + release-sample level; 1 = ≥10 s
+        float release = 0.5f;    // Release    0..1   note-off decay TIME: 20 ms · authored · max(12 s, 2×authored) + release-sample level
         float noise   = 0.5f;    // Noise      0..1   mechanical-noise regions, trig on|off (0 silent, 0.5 authored, 1 = +12 dB)
         float sustain = 0.0f;    // Sustain    0..1   crossfade into the compile-time tail loop; 1 = holds forever
         float velo    = 0.75f;   // Velocity   0..1   velocity→amplitude depth (and velocity→brightness for Tone)
