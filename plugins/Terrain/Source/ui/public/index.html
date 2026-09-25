@@ -49554,7 +49554,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
          folders only. */
       var users = ix.filter (function (e) { return e.category === 'User'; }).map (function (e) { var inst = e.installed !== false;
         return { name: e.name, tip: inst ? '' : e.name + ' \u2014 not installed', sel: e.id === cur, dim: !inst, id: e.id,
-                 pick: function () { if (inst) setInstrument (o, e.id); }, onPlay: null, onCtx: function (x) { removeMenu (o, e, x, ev); } }; });
+                 pick: function () { if (inst) setInstrument (o, e.id); }, onPlay: inst ? function () { call ('organicsPreview', [e.id]).catch (function () {}); } : null, onCtx: function (x) { removeMenu (o, e, x, ev); } }; });   /* tp108 — the processor now finds User/<id>/preview.flac, so imports audition like factory rows */
       users.push ({ name: 'Import SoundFont\u2026', id: '', pick: function () { closeTpb (); chooseImport (o); } });
       cats.push ({ label: 'User', items: users });
       var openCat = 0; cats.forEach (function (c, k) { if (c.items.some (function (it) { return it.sel; })) openCat = k; });

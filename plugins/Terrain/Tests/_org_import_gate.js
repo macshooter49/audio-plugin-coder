@@ -62,8 +62,8 @@ const ok = (c, name, detail) => { c ? ++pass : ++fail; console.log(`  ${c ? 'PAS
   ok(u1.open && ui > lastFac && lastFac > 0 && (u1.catColors || []).every(c => c !== u1.purple && (c === WHITE || c === GREY)),
      '[1] the browser has a "User" category after the nine factory ones, in the house grey/white', `${(u1.cats || []).join(' / ')}`);
   const rows = u1.rows || [];
-  ok(rows.length === 2 && rows[0].t === 'My Old Piano' && !rows[0].play && rows[0].spans === 1 && rows[1].t === 'Import SoundFont…',
-     '[2] User rows are the name only (no ▶), the last row is "Import SoundFont…"', JSON.stringify(rows));
+  ok(rows.length === 2 && rows[0].t === 'My Old Piano' && rows[0].play && rows[0].spans === 1 && rows[1].t === 'Import SoundFont…',
+     '[2] User rows are the name + ▶ audition (tp108: the processor finds User/<id>/preview.flac), the last row is "Import SoundFont…"', JSON.stringify(rows));
 
   // [3] Import SoundFont… → chooser → import → progress toast → done selects it
   const r3 = await p.evaluate(async () => { const sleep = ms => new Promise(r => setTimeout(r, ms)); const L = window.__impLog; L.calls.length = 0; L.toasts.length = 0;
