@@ -20881,6 +20881,9 @@ setTimeout(function wireSynControls () {
         var s = Math.round (-12 + n * 24); return (s > 0 ? '+' : '') + s + ' st';   // SEMI
       }
       window.__oscqReadout = oscqReadout;
+      /* tp107 — mint E–H's SOLO / MUTE pool states at boot so the pool's poll keeps them in step with the processor
+         (a restored session's muted E reads lit the first time its menu opens; the exclusive-solo sweep sees E–H's truth). */
+      try { ['E','F','G','H'].forEach (function (X) { ['SOLO','MUTE'].forEach (function (s) { window.Juce.getSliderState ('SYN_OSC_' + X + '_' + s); }); }); } catch (e) {}
       function buildOscQuick (oscLetter) {
         var L = (oscLetter || 'a').toUpperCase ();
         var wrap = document.createElement ('div'); wrap.className = 'oscq';
@@ -20894,11 +20897,16 @@ setTimeout(function wireSynControls () {
           function rd () { try { return bs ? (bs.getNormalisedValue () >= 0.5) : false; } catch (e) { return false; } }
           function paint (on) { btn.classList.toggle ('on', !! on); }
           paint (rd ());
+          /* tp107 — E–H ride the pool slider state (no relay). One the pool has not polled yet reads 0 whatever the processor
+             holds (a muted F restored from a session opened unlit, and the click then "muted" it again): ask once, repaint. */
+          if (bs && bs.__id && ! bs.__seen) { try { var gsp = window.Juce.getNativeFunction ('getSynParams');
+            if (gsp) Promise.resolve (gsp (pid)).then (function (v) { var n = parseFloat (v); if (! isNaN (n) && ! bs.__seen) { bs.__v = n; bs.__seen = true; paint (n >= 0.5); } }).catch (function () {}); } catch (e) {} }
           btn.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation ();
             var nv = rd () ? 0 : 1; if (bs) { try { bs.setNormalisedValue (nv); } catch (e) {} }
             // EXCLUSIVE SOLO (Max 2026-07-09): solo FOLLOWS the click — turning solo on here
-            // instantly un-solos the other three oscs. No back-and-forth, no arguments.
-            if (suf === 'SOLO' && nv >= 0.5) {
+            // instantly un-solos the other oscs (all eight: the DSP's solo is global across both banks, tp107).
+            // tp107 — Shift/Cmd-click ADDS to the solo set instead (several solos combine in the DSP).
+            if (suf === 'SOLO' && nv >= 0.5 && ! (ev.shiftKey || ev.metaKey)) {
               ['A','B','C','D','E','F','G','H'].forEach (function (X) {   // tp61 — eight oscillators, not four
 
                 if (X === L) return;

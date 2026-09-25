@@ -291,7 +291,13 @@ enum class ModDest : int
     //    OrganicBase + o·10 + k with o = 0..3. index.html's KNOBDEST mirrors ORGANIC_BASE = 5272.
     OrganicBase = ShaperDepthEnd,
     OrganicEnd  = OrganicBase + 8 * 10,
-    NumDests = OrganicEnd
+    // ── tp107 · ORGANICS ATTACK COMES BACK (contract tp107 amendment): its own appended block, one dest per oscillator
+    //    A–H EXPLICIT (dest = OrganicAttackBase + osc 0..7, like the first block — not the +OscBank2Base mirror).
+    //    destForBank() rebases E–H (−4) onto bank 1's A–D slots, so both banks' gathers read OrganicAttackBase + o, o = 0..3.
+    //    Knob 3 of the first block stays Vibrato. index.html's KNOBDEST mirrors ORGANIC_ATTACK_BASE = 5352.
+    OrganicAttackBase = OrganicEnd,
+    OrganicAttackEnd  = OrganicAttackBase + 8,
+    NumDests = OrganicAttackEnd
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
@@ -318,12 +324,17 @@ static_assert ((int) ModDest::OscBank2Base == 1890 && (int) ModDest::FlowInstBas
     "tp20 - index.html mirrors OSCBANK2_BASE=1890, FLOWINST_BASE=3780, FLOW_SPAN=473; a shift here re-points every saved pool route");
 static_assert ((int) ModDest::LfoRateGlobal == 5199 && (int) ModDest::ShaperDepthBase == 5200 && (int) ModDest::ShaperDepthEnd == 5272,
     "tp37 - index.html mirrors window.__LFO_GLOBAL_DEST=5199 (the global LFO rate, appended after the flow pool); a shift here re-points saved routes");
-static_assert ((int) ModDest::OrganicBase == 5272 && (int) ModDest::OrganicEnd == 5352 && (int) ModDest::NumDests == 5352,
+static_assert ((int) ModDest::OrganicBase == 5272 && (int) ModDest::OrganicEnd == 5352,
     "tp104 - the Organics dests are frozen by OrganicsApi.h (organics::kDestBase 5272 / kDestEnd 5352) and index.html's KNOBDEST ORG_*; a shift re-points saved routes");
+static_assert ((int) ModDest::OrganicAttackBase == 5352 && (int) ModDest::OrganicAttackEnd == 5360 && (int) ModDest::NumDests == 5360,
+    "tp107 - the Organics ATTACK dests (5352 + osc A..H) are frozen by the contract amendment, OrganicsApi.h (organics::kAttackDestBase) and index.html's KNOBDEST ORG_ATTACK; a shift re-points saved routes");
 inline constexpr int kOrganicKnobs = 10;
 /** tp104 — the Organics dest for oscillator o (0..7) and knob k (0..9). */
 inline constexpr int organicDest (int o, int k) noexcept { return (int) ModDest::OrganicBase + o * kOrganicKnobs + k; }
-inline constexpr bool isOrganicDest (int d) noexcept { return d >= (int) ModDest::OrganicBase && d < (int) ModDest::OrganicEnd; }
+inline constexpr bool isOrganicDest (int d) noexcept { return (d >= (int) ModDest::OrganicBase && d < (int) ModDest::OrganicEnd)
+                                                            || (d >= (int) ModDest::OrganicAttackBase && d < (int) ModDest::OrganicAttackEnd); }
+/** tp107 — the Organics ATTACK dest for oscillator o (0..7). */
+inline constexpr int organicAttackDest (int o) noexcept { return (int) ModDest::OrganicAttackBase + o; }
 /** A destination that belongs to ONE oscillator (its letter is in its name). Every such family is
  *  laid out A,B,C,D contiguously, so the ranges below are the families' first A and last D. */
 inline constexpr bool isOscLetteredDest (int d) noexcept
@@ -334,7 +345,8 @@ inline constexpr bool isOscLetteredDest (int d) noexcept
         || in (ModDest::LevelA,       ModDest::PanD)        || in (ModDest::BlendDepthA1, ModDest::HarmFizzD)
         || in (ModDest::SpectralA,    ModDest::UniWidthD)   || in (ModDest::FmRatio1A, ModDest::GrainDirD)
         || in (ModDest::SubRangeA,    ModDest::OscF2SendD)  || in (ModDest::SpecLoA,   ModDest::PhaseAmtD)
-        || (d >= (int) ModDest::OrganicBase && d < (int) ModDest::OrganicEnd);   // tp104 — A–H, each osc's ten contiguous
+        || (d >= (int) ModDest::OrganicBase && d < (int) ModDest::OrganicEnd)   // tp104 — A–H, each osc's ten contiguous
+        || (d >= (int) ModDest::OrganicAttackBase && d < (int) ModDest::OrganicAttackEnd);   // tp107 — Attack A–H
 }
 /** The int a route to oscillator `bank`'s knob stores: bank 0 = the legacy int, bank 1 = the mirror. */
 inline constexpr int oscBankDest (int bank, int legacyDest) noexcept
@@ -349,12 +361,21 @@ inline constexpr int destForBank (int bank, int storedDest) noexcept
         if (! eh) return bank == 0 ? storedDest : -1;                                          // A–D: bank 0's own
         return bank == 1 ? storedDest - 4 * 10 : -1;                                           // E–H: bank 1's A–D slots
     }
+    if (storedDest >= (int) ModDest::OrganicAttackBase && storedDest < (int) ModDest::OrganicAttackEnd)   // tp107 — Attack A–H
+    {
+        const bool eh = storedDest >= (int) ModDest::OrganicAttackBase + 4;                    // oscillators E–H
+        if (! eh) return bank == 0 ? storedDest : -1;
+        return bank == 1 ? storedDest - 4 : -1;
+    }
     if (storedDest >= (int) ModDest::OscBank2Base && storedDest < (int) ModDest::OscBank2End)
         return bank == 1 ? storedDest - (int) ModDest::OscBank2Base : -1;              // the mirror: bank 1's own knobs
     if (storedDest < 0 || storedDest >= (int) ModDest::LegacyDestsEnd) return bank == 0 ? storedDest : -1;   // flow-instance dests: the flow stage reads them by exact int
     if (isOscLetteredDest (storedDest)) return bank == 0 ? storedDest : -1;            // A–D's own knobs
     return storedDest;                                                                   // global: both banks
 }
+static_assert (destForBank (0, 5352) == 5352 && destForBank (1, 5352) == -1 && destForBank (1, 5356) == 5352 && destForBank (0, 5359) == -1
+            && destForBank (1, 5359) == 5355 && isOscLetteredDest (5352) && isOscLetteredDest (5359) && ! isOscLetteredDest (5360),
+    "tp107 - the Attack block rebases like the first Organics block: A-D bank 0's own, E-H onto bank 1's A-D slots");
 /** Flow instance n (0-based) of a legacy flow dest. Instance 0 = the legacy int itself. */
 inline constexpr int flowInstDest (int inst, int legacyDest) noexcept
 {
@@ -1115,6 +1136,8 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     //   the same Linear01 row — the gather reads ORG_VIBRATO through it; ATTACK is no longer a dest). The tp37 law: a dest past the
     //   pool with no row here is scale 0 and an envelope routed to it contributes nothing.
     for (int i = (int) ModDest::OrganicBase; i < (int) ModDest::OrganicEnd; ++i) a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
+    // tp107 — Attack A–H (0..1 travel, Natural at 0.5): the same Linear01 row (without it: scale 0, the tp37 law)
+    for (int i = (int) ModDest::OrganicAttackBase; i < (int) ModDest::OrganicAttackEnd; ++i) a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;
 }
 static constexpr auto kDestInfo = makeDestInfo();

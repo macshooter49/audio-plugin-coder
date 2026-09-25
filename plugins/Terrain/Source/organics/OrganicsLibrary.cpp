@@ -262,6 +262,7 @@ namespace tw
             I.rrSeq_.reset      (new std::atomic<uint32_t>[(size_t) I.numArtics * 128]());
             I.rrLast_.reset     (new std::atomic<int32_t> [(size_t) I.numArtics * 128]());
             I.fakeLast_.reset   (new std::atomic<int32_t> [128]());
+            I.noiseLast_.reset  (new std::atomic<int32_t> [(size_t) I.numArtics * 2 * 128]());   // tp107
             I.groupEpoch_.reset (new std::atomic<uint32_t>[(size_t) std::max (1, I.numGroups)]());
             I.resetPerformanceState();
 
@@ -405,6 +406,7 @@ namespace tw
     {
         for (int i = 0; i < numArtics * 128; ++i) { rrSeq_[(size_t) i].store (0); rrLast_[(size_t) i].store (-1); }
         for (int i = 0; i < 128; ++i) fakeLast_[(size_t) i].store (0);
+        if (noiseLast_ != nullptr) for (int i = 0; i < numArtics * 2 * 128; ++i) noiseLast_[(size_t) i].store (-1);   // tp107
         for (int i = 0; i < std::max (1, numGroups); ++i) groupEpoch_[(size_t) i].store (0);
     }
 

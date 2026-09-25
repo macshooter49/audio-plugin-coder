@@ -24,7 +24,8 @@ namespace tw
         float dyn     = 0.0f;    // Dynamics  −1..+1  layer-selection velocity offset (±63), live crossfade
         float tone    = 0.0f;    // Tone      −1..+1  velocity-aware tilt, pivot max(700 Hz, f0), ±9 dB
         float body    = 0.0f;    // Body      −1..+1  zone lookup shift ±6 st, repitched back (formant-like)
-        float attack  = 0.0f;    // Attack    −1..+1  Gentle (fade + softer layer) … Natural … Tight (air trim + lift)
+        float attack  = 0.0f;    // Attack    −1..+1  +1 Tight (air trim + lift) … 0 Natural … −1 a ~3 s swell (log fade + softer layer)
+                                 //                   tp107: APVTS knob v → 1 − 2v (knob 0 = Tight, 0.5 = Natural, 1 = the swell)
         float human   = 0.25f;   // Human      0..1   per-note detune/level/start/tone/timing + fake RR
         float release = 0.5f;    // Release    0..1   note-off decay TIME: 20 ms · authored · max(12 s, 2×authored) + release-sample level
         float noise   = 0.5f;    // Noise      0..1   mechanical-noise regions, trig on|off (0 silent, 0.5 authored, 1 = +12 dB)
@@ -133,9 +134,10 @@ namespace tw
         constexpr int kEngineChoices  = 12;     // "WT","SAMP","GRAN","SPEC","FM","HARM","MODAL","ORGANIC","R8".."R11"
         constexpr int kDestBase       = 5272;   // ModDest::OrganicBase = the old NumDests (ShaperDepthEnd)
         constexpr int kDestPerOsc     = 10;     // dest = kDestBase + osc(0..7)·10 + knob(0..9)
-        constexpr int kDestEnd        = kDestBase + 8 * kDestPerOsc;   // 5352 = the new NumDests
+        constexpr int kDestEnd        = kDestBase + 8 * kDestPerOsc;   // 5352 (tp104's NumDests)
+        constexpr int kAttackDestBase = kDestEnd;                      // tp107: Attack A–H = 5352 + osc(0..7); NumDests 5360
         constexpr int kMaxRegionsPerOsc = 48;   // players × layers × release, steal-fade beyond
         // knob order for the dest block AND the page: Dynamics Tone Body Vibrato Human | Release Noise Sustain Velocity Image
-        // (tp105: knob 3 is VIBRATO; ATTACK stays declared + hidden at Natural and is not a dest)
+        // (tp105: knob 3 is VIBRATO. tp107: ATTACK is back on page 2 with its OWN dest block, kAttackDestBase + osc)
     }
 }
