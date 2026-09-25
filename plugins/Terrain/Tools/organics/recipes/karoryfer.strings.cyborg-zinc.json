@@ -1,0 +1,36 @@
+{
+ "id": "karoryfer.strings.cyborg-zinc",
+ "name": "Bowed Bass Pad",
+ "family": "bass",
+ "category": "Strings",
+ "tags": [
+  "bowed",
+  "double bass",
+  "pad",
+  "looped",
+  "drone"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer String Cyborgs (Zinc: bowed double bass), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.string-cyborgs",
+ "licenceDir": "sfzinstruments/karoryfer.string-cyborgs",
+ "sustaining": true,
+ "artics": [
+  {
+   "name": "Bowed",
+   "sfz": "sfzinstruments/karoryfer.string-cyborgs/Programs/zinc_one_voice.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "bow-start",
+   "trig": "on",
+   "relDb": -30,
+   "zone": 12,
+   "maxFiles": 4,
+   "velPow": 1.0,
+   "exclude": "pizz|pizzicato|harmonic"
+  }
+ ]
+}

@@ -1,0 +1,1 @@
+tp105. All keys, root 57: a 220 Hz sine, loop continuous (whole cycles), authored env release 0.5 s, tfix +25 cents. Noise regions (root 60): trig "on" = 100 ms 3 kHz burst with the note; no trig (= "off") = 100 ms 5 kHz burst at note-off.

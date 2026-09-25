@@ -1,0 +1,38 @@
+{
+ "id": "vcsl.winds.ocarina",
+ "name": "Ocarina",
+ "family": "flute",
+ "category": "Winds",
+ "tags": [
+  "ocarina",
+  "vessel flute",
+  "breathy",
+  "folk"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "sustaining": true,
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Ocarina, Typical - Sus.sfz"
+  },
+  {
+   "name": "Vibrato",
+   "sfz": "VCSL/Aerophones/Edge-blown Aerophones/Ocarina, Typical - SusVib.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "breath-puff",
+   "trig": "on",
+   "relDb": -30,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.8
+  }
+ ]
+}

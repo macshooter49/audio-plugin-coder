@@ -74,6 +74,8 @@ namespace tw
             bool  offFast = false;
             float envA = 0, envH = 0, envD = 0, envS = 1, envR = 0.25f;
             float rtDecay = 0;
+            bool  trigOn = false;                     // tp105: kind "noise" + "trig":"on" → starts WITH the note (default "off" = at note-off)
+            float tfix = 0;                           // tp105: cents, the compiler's measured deviation from 12-TET (applied when Tuning = Equal)
             float velCurve[128] {};                   // amp_velcurve evaluated at each velocity 0..127
 
             // ── derived at load ──
@@ -109,6 +111,13 @@ namespace tw
         }
         const uint16_t* list (const org::Span& s) const noexcept { return lists.data() + s.first; }
         bool keyHasRR (int artic, int key) const noexcept { return rrKeys[(size_t) artic * 128 + (size_t) key] != 0; }
+        /** tp105 NO-SILENCE law: the nearest key (any velocity) that HAS an attack region in this articulation —
+            the key itself when mapped; outside the authored range the edge zone plays, repitched to the played note. */
+        int  mappedKey (int artic, int key) const noexcept
+        {
+            key = key < 0 ? 0 : (key > 127 ? 127 : key);
+            return nearKey.empty() ? key : (int) nearKey[(size_t) artic * 128 + (size_t) key];
+        }
 
         int64_t bytes = 0;               // RAM held (samples + tables)
         int     numGroups = 0;           // dense choke-group count
@@ -129,6 +138,7 @@ namespace tw
         std::vector<org::Span>  spans;
         std::vector<uint16_t>   lists;
         std::vector<uint8_t>    rrKeys;
+        std::vector<uint8_t>    nearKey;        // [artic*128 + key] → nearest key with an attack region (tp105)
     private:
         std::unique_ptr<std::atomic<uint32_t>[]> rrSeq_, groupEpoch_;
         std::unique_ptr<std::atomic<int32_t>[]>  rrLast_, fakeLast_;

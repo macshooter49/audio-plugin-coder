@@ -1,0 +1,44 @@
+{
+ "id": "vcsl.keys.upright-knight",
+ "name": "Knight Upright",
+ "family": "upright",
+ "category": "Keys",
+ "tags": [
+  "piano",
+  "upright",
+  "acoustic",
+  "warm",
+  "home"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "piano": true,
+ "budgetMB": 96,
+ "capScale": true,
+ "artics": [
+  {
+   "name": "Sustain",
+   "sfz": "VCSL/Chordophones/Zithers/Upright Piano, Knight.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "piano-keydown",
+   "trig": "on",
+   "relDb": -32,
+   "zone": "key",
+   "velPow": 1.2
+  },
+  {
+   "set": "piano-keyup",
+   "trig": "off",
+   "relDb": -30,
+   "zone": "key",
+   "keyStep": 2,
+   "velPow": 0.5
+  }
+ ]
+}

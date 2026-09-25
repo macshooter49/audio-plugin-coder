@@ -26,6 +26,14 @@
 #include "HarmonicEngine.h"       // HARMONIC-ENGINE-VOICE — per-OSC additive bank (Engine::HARM)
 #include "ModalEngine.h"          // MODAL-ENGINE-VOICE — per-OSC physical model (Engine::MODAL)
 #include "organics/OrganicsApi.h" // tp104 — ORGANICS-ENGINE-VOICE — per-OSC multi-sampled instrument (Engine::ORGANIC)
+#include <atomic>
+namespace tw::organics_prof
+{
+    // tp105 — the CPU probe's "ORG core" line: the Organics engines' own render time inside the "voices" share. Armed only
+    //  while the processor's probe is on (TERRAIN_CPU_PROBE / terrain-cpu-on.txt); an Organics-free voice never reads it.
+    inline std::atomic<bool>    on    { false };
+    inline std::atomic<int64_t> ticks { 0 };
+}
 #include "SubOsc.h"               // SUB — voice-anchored sub oscillator (universal osc box)
 #include "Warp/WarpProcessor.h"    // SAMPLE-ENGINE-VOICE — STRETCH + FORMANT (Signalsmith Tones)
 #include <atomic>
@@ -3956,6 +3964,17 @@ class SynthVoice : public juce::SynthesiserVoice
             // matrix needs (zero rewrite when it arrives).
             if (envScratch_.getNumChannels() < 5 || envScratch_.getNumSamples() < numSamples)
                 envScratch_.setSize (5, numSamples, false, true, true);
+            // tp105 — ORGANICS RELEASE LINK. An ORGANIC oscillator's note-off decay is the ENGINE's (max(amp release, the
+            //  Release knob's time), −60 dB exponential), so while the amp envelope releases (or has finished) its VCA holds
+            //  the level the envelope had when the release began; the voice lives until that tail is done (orgTailAlive()).
+            //  Decided per block from the stage at the block's start (a note-off lands between blocks). No ORGANIC osc →
+            //  orgHoldBlk_ stays false and every sample reads the untouched velEnv (bit-identical).
+            {
+                const auto st = ampEnv_.stage();
+                const bool anyOrg = engine_ == Engine::ORGANIC || engineB_ == Engine::ORGANIC
+                                 || engineC_ == Engine::ORGANIC || engineD_ == Engine::ORGANIC;
+                orgHoldBlk_ = anyOrg && (st == terrain::TerrainEnvelope::Stage::Release || st == terrain::TerrainEnvelope::Stage::Idle);
+            }
             {
                 float* eAmp = envScratch_.getWritePointer (0);
                 float* eFlt = envScratch_.getWritePointer (1);
@@ -3990,6 +4009,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     eM1[k]  = tM1  ? (float) mod1EnvT_.tick() : 0.0f;
                     eM2[k]  = tM2  ? (float) mod2EnvT_.tick() : 0.0f;
                 }
+                if (numSamples > 0 && ! orgHoldBlk_) orgHoldLvl_ = eAmp[numSamples - 1];   // tp105 — the level a release starts from
                 if (numSamples > 0)
                 {
                     if (needFlt && ! tFlt) std::fill (eFlt, eFlt + numSamples, (float) fltEnvT_.advance (numSamples));
@@ -6363,10 +6383,14 @@ class SynthVoice : public juce::SynthesiserVoice
                 // into the 3 filter-routing buses. Each osc's full signal = osc-only (sX-subMono)
                 // + its sub (subMono); routed by busCo*_ (F1 bus = scratch, F2 = fltBus2_, dry =
                 // fltDry_). Default (all sources → F1) makes scratch = the old full mix exactly.
-                const float gAL = lvlSmA_ * panL_  * gA * velEnv, gAR = lvlSmA_ * panR_  * gA * velEnv;   // fb180 — glided
-                const float gBL = lvlSmB_ * panLB_ * gB * velEnv, gBR = lvlSmB_ * panRB_ * gB * velEnv;
-                const float gCL = lvlSmC_ * panLC_ * gC * velEnv, gCR = lvlSmC_ * panRC_ * gC * velEnv;
-                const float gDL = lvlSmD_ * panLD_ * gD * velEnv, gDR = lvlSmD_ * panRD_ * gD * velEnv;
+                // tp105 — an ORGANIC osc's VCA holds through the amp release (the engine owns that decay; see orgHoldBlk_)
+                const float veOrg = orgHoldBlk_ ? juce::jmax (0.0f, orgHoldLvl_ * (1.0f + ampMod)) : velEnv;
+                const float veA = engine_  == Engine::ORGANIC ? veOrg : velEnv, veB = engineB_ == Engine::ORGANIC ? veOrg : velEnv;
+                const float veC = engineC_ == Engine::ORGANIC ? veOrg : velEnv, veD = engineD_ == Engine::ORGANIC ? veOrg : velEnv;
+                const float gAL = lvlSmA_ * panL_  * gA * veA, gAR = lvlSmA_ * panR_  * gA * veA;   // fb180 — glided
+                const float gBL = lvlSmB_ * panLB_ * gB * veB, gBR = lvlSmB_ * panRB_ * gB * veB;
+                const float gCL = lvlSmC_ * panLC_ * gC * veC, gCR = lvlSmC_ * panRC_ * gC * veC;
+                const float gDL = lvlSmD_ * panLD_ * gD * veD, gDR = lvlSmD_ * panRD_ * gD * veD;
                 const float oAL = (sA_L - subMono0) * gAL, oAR = (sA_R - subMono0) * gAR;   // osc-only (sub removed)
                 const float oBL = (sB_L - subMono1) * gBL, oBR = (sB_R - subMono1) * gBR;
                 const float oCL = (sC_L - subMono2) * gCL, oCR = (sC_R - subMono2) * gCR;
@@ -6665,7 +6689,8 @@ class SynthVoice : public juce::SynthesiserVoice
                 // viz dot). Every other LFO advances its phase ONCE per block (skipSamples below)
                 // so the per-block mod matrix's peek() stays correct. With nothing routed this
                 // drops 10 sin() calls per sample per voice to 1.
-                unsigned lfoTickMask = 1u;   // L1 always (viz dot)
+                unsigned lfoTickMask = 1u;   // L1 always (viz dot) — tp105: unless NOTHING reads it (below)
+                bool l1Routed = false;       // tp105 — any enabled route with L1 as source or LfoAmt1 as dest
                 bool anyCutRoute = false, anyAmtRoute = false;
                 int  cutRouteIdx[wc::MAX_ASSIGNMENTS]; int nCutRoutes = 0;   // fb636 — enabled Cut1/Cut2 routes, in order
                 int  amtRouteIdx[wc::MAX_ASSIGNMENTS]; int nAmtRoutes = 0;   // tp101 — enabled LFO/env -> LfoAmt routes, in order (the per-sample amt walk)
@@ -6675,6 +6700,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     if (! as.enabled) continue;
                     const int sI = (int) as.source, dI = (int) as.dest;
                     const bool sIsLfo = (sI >= 0 && sI < wc::NUM_LFOS);
+                    if (sI == 0 || dI == (int) wc::ModDest::LfoAmt1) l1Routed = true;
                     // fb568 — a NON-LFO cutoff route (macro/wheel/aftertouch/bend/random/alt/follower/key)
                     //  arms the cut gather too; only an LFO source needs its per-sample tick.
                     if (as.dest == wc::ModDest::Cut1 || as.dest == wc::ModDest::Cut2)
@@ -6685,6 +6711,11 @@ class SynthVoice : public juce::SynthesiserVoice
                         if (sIsLfo || wc::isEnvModSource (sI)) amtRouteIdx[nAmtRoutes++] = a;   // tp101 — exactly the routes the per-sample amt sum reads
                     }
                 }
+                // tp105 CPU — L1 was ticked per SAMPLE in every voice only to feed the editor's LFO dot (a sin() per sample
+                //  per voice: 17 % of an Organics tail voice, sampled). When no route reads L1 at all its audio consumers are
+                //  none, so it takes the per-block skip-advance like every other unrouted LFO and the dot reads peek() once a
+                //  block (the audio is bit-identical: nothing that reaches the output reads L1's state).
+                if (! l1Routed) lfoTickMask &= ~1u;
                 bool laneGlideSettled = false;   // fb636 — see SETTLED GLIDES above the first loop
                 for (int i = 0; i < numSamples; ++i)
                 {
@@ -6723,7 +6754,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     float lfoOut_[wc::NUM_LFOS];
                     for (int L = 0; L < wc::NUM_LFOS; ++L)
                         lfoOut_[L] = (lfoTickMask & (1u << L)) ? synthLfo_[L].processSample() : 0.0f;
-                    lfoVisValue_ = lfoOut_[0];                 // L1 → editor viz dot
+                    if (l1Routed) lfoVisValue_ = lfoOut_[0];   // L1 → editor viz dot (unrouted: peek() after the skip, below)
                     // LFO→LFO amt scales each source before it routes (per-sample).
                     if (anyAmtRoute)
                     {
@@ -7087,6 +7118,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 for (int L = 0; L < wc::NUM_LFOS; ++L)
                     if (! (lfoTickMask & (1u << L)))
                         synthLfo_[L].skipSamples (numSamples);
+                if (! l1Routed) lfoVisValue_ = synthLfo_[0].peek();   // tp105 — the dot, once a block
 
                 // NaN/Inf guard — Pirkle/Stilson note that ZDF ladders can blow
                 // up under pathological coefficient updates. One bad sample
@@ -7134,7 +7166,8 @@ class SynthVoice : public juce::SynthesiserVoice
             // silent by construction, and the slot frees for the pool immediately after.
             const bool releaseInaudible = ampEnv_.stage() == terrain::TerrainEnvelope::Stage::Release
                                           && ampEnv_.level() < 1.0e-4;
-            if ((! ampEnv_.isActive() || releaseInaudible) && ! stealing_ && playing_)
+            if ((! ampEnv_.isActive() || releaseInaudible) && ! stealing_ && playing_ && ! orgTailAlive())   // tp105 — and the Organics tail
+
             {
                 if (! finishing_)
                 {
@@ -7908,6 +7941,11 @@ class SynthVoice : public juce::SynthesiserVoice
         bool orgNoteOnPending_ = false, orgNoteOffPending_ = false, orgKillPending_ = false;
         bool orgNonRt_ = false; int orgNonRtApplied_ = -1;
         int  orgNote_ = 60;
+        // tp105 — the release link: the amp level a release began at (the ORGANIC oscs' VCA holds it while the engine
+        //  decays) and which oscillators' engines are still sounding after this block (rendered, not gated).
+        float orgHoldLvl_ = 0.0f; bool orgHoldBlk_ = false;
+        bool  orgAlive_[4] = { false, false, false, false };
+        bool  orgTailAlive() const noexcept { return orgAlive_[0] || orgAlive_[1] || orgAlive_[2] || orgAlive_[3]; }
 
         // ── BLEND MODES (Serum-2-style cross-osc warp) — per-voice state ──
         struct BlendSlotV { int mode = 0; int src = 0; float depth = 0.f; bool memoValid = false; int memoMode = -1; std::uint32_t memoDcBits = 0;   /* fb636 — setBlendSlot taper memo */ };   // depth = exp-biased target
@@ -8669,6 +8707,7 @@ class SynthVoice : public juce::SynthesiserVoice
                                int uniCount, const float* uDetuneCents, float uNorm, float level) noexcept
         {
             orgBlkL_[o] = orgBlkR_[o] = nullptr;   // null = silence at the consumer
+            orgAlive_[o] = false;
             if (! isOrg) return;
             auto& e = orgV_->eng[o];
             if (orgInstSrc_ != nullptr && orgInstGenSrc_ != nullptr && orgInstSeen_[o] != orgInstGenSrc_[o])
@@ -8710,6 +8749,10 @@ class SynthVoice : public juce::SynthesiserVoice
             if (! e.isActive() && ! doNoteOn) return;   // idle: 0 µs (and the consumer reads null → 0)
             const float pitchCents = (float) ((glideNote_ - (double) orgNote_) * 100.0) + (float) (oct * 1200 + semi * 100) + cent;
             e.render (orgParams_[o], pitchCents, wL, wR, numSamples);
+            // tp105 — keeps the voice alive through the engine's release tail, but only while it is AUDIBLE: the voice's own
+            //  fast-kill law (amp release under −80 dB → the 8 ms declick and the slot is free) applied to the engine's block
+            //  peak, so a ringing tail under −80 dBFS never holds a whole voice chain (filters, envelopes, LFOs) awake.
+            orgAlive_[o] = e.isActive() && e.readLevel() > 1.0e-4f;
             if (uniCount > 1)
             {
                 juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);   // the house unison auto-gain (RMS-constant)
@@ -8722,13 +8765,16 @@ class SynthVoice : public juce::SynthesiserVoice
         {
             if (engine_ != Engine::ORGANIC && engineB_ != Engine::ORGANIC
                 && engineC_ != Engine::ORGANIC && engineD_ != Engine::ORGANIC)
+            {
+                orgAlive_[0] = orgAlive_[1] = orgAlive_[2] = orgAlive_[3] = false;   // tp105 — an osc that left ORGANIC keeps no voice alive
                 return;   // no ORGANIC oscillators → free no-op (the common case, bit-identical)
+            }
             // The arm is also the bounds guard: until prepareOrganicEngines() has published, orgV_ may not exist.
             // Unarmed, every ORGANIC osc reads null (silence) and the pending note events WAIT for the arm (≤ one
             // 60 Hz tick) instead of being dropped, so the first note after selecting the engine still plays.
             if (! orgReady_.load (std::memory_order_acquire))
             {
-                for (int o = 0; o < 4; ++o) { orgBlkL_[o] = orgBlkR_[o] = nullptr; }
+                for (int o = 0; o < 4; ++o) { orgBlkL_[o] = orgBlkR_[o] = nullptr; orgAlive_[o] = false; }
                 return;
             }
             if (orgNonRtApplied_ != (orgNonRt_ ? 1 : 0))
@@ -8737,11 +8783,14 @@ class SynthVoice : public juce::SynthesiserVoice
                 orgNonRtApplied_ = orgNonRt_ ? 1 : 0;
             }
             const bool doOn = orgNoteOnPending_;
+            const bool prof = tw::organics_prof::on.load (std::memory_order_relaxed);
+            const int64_t pt0 = prof ? juce::Time::getHighResolutionTicks() : 0;
             renderOrganicOsc (0, engine_  == Engine::ORGANIC, octOffset_,  semiOffset_,  centsOffset_  + coarseModA_ * 100.f, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
             renderOrganicOsc (1, engineB_ == Engine::ORGANIC, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
             renderOrganicOsc (2, engineC_ == Engine::ORGANIC, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
             renderOrganicOsc (3, engineD_ == Engine::ORGANIC, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
             orgNoteOnPending_ = false; orgNoteOffPending_ = false; orgKillPending_ = false;
+            if (prof) tw::organics_prof::ticks.fetch_add (juce::Time::getHighResolutionTicks() - pt0, std::memory_order_relaxed);
         }
 
         Engine               engine_           = Engine::WT;

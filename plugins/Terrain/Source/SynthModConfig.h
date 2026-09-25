@@ -285,7 +285,7 @@ enum class ModDest : int
     ShaperDepthBase = LfoRateGlobal + 1,
     ShaperDepthEnd  = ShaperDepthBase + 4 * 18,
     // ── tp104 · THE ORGANICS ENGINE'S TEN KNOBS × EIGHT OSCILLATORS (contract §5). Appended at the tail (saved routes
-    //    store ints). dest = OrganicBase + osc(0..7)·10 + knob, knob order Dynamics Tone Body Attack Human | Release Noise
+    //    store ints). dest = OrganicBase + osc(0..7)·10 + knob, knob order Dynamics Tone Body VIBRATO (tp105; was Attack) Human | Release Noise
     //    Sustain Velocity Image. E–H are EXPLICIT here (osc 4..7), not the +OscBank2Base mirror (the mirror only covers the
     //    legacy 1890): destForBank() rebases them onto bank 1's A–D slots (−40), so both banks' gathers read
     //    OrganicBase + o·10 + k with o = 0..3. index.html's KNOBDEST mirrors ORGANIC_BASE = 5272.
@@ -1111,7 +1111,8 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     a[(size_t) ModDest::LfoRateGlobal] = DestInfo { ModDomain::Linear01, 1.0f };
     // tp96 — the Shaper lanes' Depth (0..1 knob travel). Without these rows they would be value-initialised to scale 0.
     for (int i = (int) ModDest::ShaperDepthBase; i < (int) ModDest::ShaperDepthEnd; ++i) a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
-    // tp104 — the Organics knobs (all 0..1 APVTS travel; the bipolar four centre at 0.5). The tp37 law: a dest past the
+    // tp104 — the Organics knobs (all 0..1 APVTS travel; the bipolar three centre at 0.5; tp105: knob 3 is VIBRATO, 0..1 depth,
+    //   the same Linear01 row — the gather reads ORG_VIBRATO through it; ATTACK is no longer a dest). The tp37 law: a dest past the
     //   pool with no row here is scale 0 and an envelope routed to it contributes nothing.
     for (int i = (int) ModDest::OrganicBase; i < (int) ModDest::OrganicEnd; ++i) a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;

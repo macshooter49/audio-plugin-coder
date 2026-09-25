@@ -19,10 +19,17 @@
 //          test): 4-note chord at unison 1 and 8-note chord at unison 7, same patch otherwise. The instrument (default
 //          test.sine, the fixture) is handed over the way a host restores state: <ORGANICS><OSC slot="0" id=…/> in
 //          jucePluginState, then the engine choice set to 7 (ORGANIC), then a pump so the library's load lands.
+//    /tmp/aucpu orgreal [secs]   -> tp105: Organics in REAL use (Max sees 20-25 % on the header meter): Salamander with
+//          the sustain pedal down and 17 notes ringing · a violin section at unison 7 (Ensemble) holding 8 notes · a
+//          glockenspiel run of 16 notes with long tails — each against the SAME gestures on Wavetable (the voice chain's
+//          price), with the plugin's own probe (TERRAIN_CPU_PROBE) splitting gather / voices / fx and the Organics core.
+//    TERRAIN_AU_BUNDLE=<path/Terrain.component> -> load THAT build in-process (AudioComponentRegister on its factory)
+//          instead of the installed one, so a before/after pair needs no install into ~/Library.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <mach/mach_time.h>
+#include <dlfcn.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -47,6 +54,20 @@ struct Au
     {
         setenv ("TERRAIN_DETERMINISTIC", "1", 1);
         AudioComponentDescription d {}; d.componentType = kAudioUnitType_MusicDevice; d.componentSubType = 'Tern'; d.componentManufacturer = 'Wvcr';
+        static AudioComponent reg = nullptr;   // tp105 — TERRAIN_AU_BUNDLE: this build, in-process, no install
+        if (const char* b = getenv ("TERRAIN_AU_BUNDLE"))
+        {
+            if (reg == nullptr)
+            {
+                const std::string bin = std::string (b) + "/Contents/MacOS/Terrain";
+                void* h = dlopen (bin.c_str(), RTLD_NOW | RTLD_LOCAL);
+                auto fac = h ? (AudioComponentFactoryFunction) dlsym (h, "TerrainAUFactory") : nullptr;
+                if (fac == nullptr) { printf ("cannot load %s (%s)\n", bin.c_str(), dlerror()); return false; }
+                AudioComponentDescription rd = d; rd.componentSubType = 'TerX';
+                reg = AudioComponentRegister (&rd, CFSTR ("Waves Crate: Terrain (bundle under test)"), 0x10000, fac);
+            }
+            d.componentSubType = 'TerX';
+        }
         AudioComponent c = AudioComponentFindNext (nullptr, &d); if (! c || AudioComponentInstanceNew (c, &au) != noErr) return false;
         AudioStreamBasicDescription f {}; f.mSampleRate = SR; f.mFormatID = kAudioFormatLinearPCM;
         f.mFormatFlags = kAudioFormatFlagsNativeFloatPacked | kAudioFormatFlagIsNonInterleaved;
@@ -79,6 +100,7 @@ struct Au
     { auto it = byName.find (name); if (it == byName.end()) { printf ("    !! no parameter named '%s'\n", name); return false; }
       return AudioUnitSetParameter (au, it->second, kAudioUnitScope_Global, 0, (float) idx, 0) == noErr; }
     void note (int n, int v) { MusicDeviceMIDIEvent (au, v ? 0x90 : 0x80, (UInt32) n, (UInt32) v, 0); }
+    void cc (int c, int v)   { MusicDeviceMIDIEvent (au, 0xB0, (UInt32) c, (UInt32) v, 0); }
     void pump (double sec) { const double t0 = CFAbsoluteTimeGetCurrent(); while (CFAbsoluteTimeGetCurrent() - t0 < sec) CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.01, false); }
     // renders `blocks`, returning the per-block microseconds of each
     void render (int blocks, std::vector<double>* times)
@@ -367,6 +389,74 @@ int main (int argc, char** argv)
         return 0;
     }
 
+
+    // ── tp105 — orgreal [secs]: Organics as Max plays it. Each gesture is replayed for `secs` of WALL time so the plugin's
+    //    own probe (TERRAIN_CPU_PROBE → terrain-cpu.txt, ~5 s windows) sees it: "DSP x% [gather | voices | fx+master]" and
+    //    the "ORG core" line (the Organics engines' own render inside "voices"). The same gesture on Wavetable prices the
+    //    voice chain (filter, envelopes, mod) that every engine pays.
+    if (argc > 1 && ! std::strcmp (argv[1], "orgreal"))
+    {
+        setenv ("TERRAIN_CPU_PROBE", "1", 1);
+        const double secs = argc > 2 ? atof (argv[2]) : 11.0;
+        const char* only = argc > 3 ? argv[3] : nullptr;
+        struct G { const char* name; const char* inst; int unison; int kind; };   // kind 0 pedal · 1 chord · 2 run
+        const G gs[3] = { { "Salamander, pedal down, 17 notes ringing", "salamander.grand.v3", 1, 0 },
+                          { "violin section, unison 7 (Ensemble), 8 held", "vsco2.strings.violin-section", 7, 1 },
+                          { "glockenspiel run, 16 notes, long tails", "vcsl.mallets.glockenspiel", 1, 2 } };
+        const std::string probe = std::string (getenv ("HOME")) + "/Library/Caches/Terrain/terrain-cpu.txt";
+        printf ("\n== tp105 - ORGANICS IN REAL USE ==   %.0f s of wall time per line, %d-frame blocks (%.0f us budget)%s\n\n",
+                secs, BLK, budgetUs(), getenv ("TERRAIN_AU_BUNDLE") ? "  [bundle under test]" : "  [installed AU]");
+        for (const auto& g : gs)
+            for (int eng : { 7, 0 })
+            {
+                if (only && ! std::strstr (g.name, only)) continue;
+                Au a; if (! a.open()) { printf ("no AU\n"); return 2; }
+                a.set ("Osc A Enable", 1.0f, false);
+                if (g.unison > 1) a.set ("Synth OSC A Unison", (float) (g.unison - 1) / 15.0f);
+                if (eng == 7) { a.setIdx ("Synth OSC A Engine", 7); a.pump (0.2); a.injectOrganic (g.inst); a.pump (2.5); }
+                a.set ("Synth Amp Release", 0.35f, false);   // 3.5 s amp release (the AU reports 1..10000 ms; set() is linear in it) — the tails are the point
+                a.pump (0.3); a.render (6, nullptr);
+                std::remove (probe.c_str());
+                std::vector<double> t; a.peak = 0.0f;
+                const double t0 = CFAbsoluteTimeGetCurrent();
+                long reps = 0;
+                while (CFAbsoluteTimeGetCurrent() - t0 < secs)
+                {
+                    ++reps;
+                    if (g.kind == 0)
+                    {   // pedal down, 17 notes C2..C6 in thirds, each struck and released under the pedal, then ring
+                        a.cc (64, 127);
+                        for (int n = 36; n <= 84; n += 3) { a.note (n, 96); a.render (2, &t); a.note (n, 0); a.render (2, &t); }
+                        a.render (120, &t);
+                        a.cc (64, 0); a.render (100, &t);
+                    }
+                    else if (g.kind == 1)
+                    {
+                        for (int n : { 55, 59, 62, 66, 67, 71, 74, 79 }) a.note (n, 90);
+                        a.render (180, &t);
+                        for (int n : { 55, 59, 62, 66, 67, 71, 74, 79 }) a.note (n, 0);
+                        a.render (100, &t);
+                    }
+                    else
+                    {
+                        for (int k = 0; k < 16; ++k) { const int n = 72 + (k * 5) % 25; a.note (n, 100); a.render (3, &t); a.note (n, 0); a.render (3, &t); }
+                        a.render (200, &t);
+                    }
+                }
+                const float pk = a.peak;
+                a.close();
+                double mean = 0; for (double x : t) mean += x; mean /= (double) std::max<size_t> (1, t.size());
+                auto srt = t; std::sort (srt.begin(), srt.end());
+                const double p95 = srt.empty() ? 0 : srt[(size_t) (0.95 * (double) (srt.size() - 1))];
+                printf ("  %-44s %-8s mean %6.0f us (%5.2f %%) · p95 %6.0f us (%5.2f %%) · %ld reps · peak %.1f dBFS\n", g.name, eng == 7 ? "ORGANIC" : "WT",
+                        mean, mean / budgetUs() * 100.0, p95, p95 / budgetUs() * 100.0, reps, pk > 1e-9f ? 20.0 * std::log10 ((double) pk) : -240.0);
+                if (! getenv ("ORG_PROBE")) continue;   // the probe file is shared by EVERY Terrain instance on the machine (a DAW, a UI harness): opt-in
+                if (FILE* f = fopen (probe.c_str(), "r")) { char ln[512]; while (fgets (ln, sizeof ln, f)) if (! std::strncmp (ln, "DSP", 3) || ! std::strncmp (ln, "ORG", 3)) printf ("        %s", ln); fclose (f); }
+                else printf ("        (no probe file at %s — run longer than ~6 s)\n", probe.c_str());
+            }
+        printf ("\n");
+        return 0;
+    }
     // ── tp104 — organic [id]: the Organics engine against Wavetable, the design §8 CPU bar ──
     if (argc > 1 && ! std::strcmp (argv[1], "organic"))
     {

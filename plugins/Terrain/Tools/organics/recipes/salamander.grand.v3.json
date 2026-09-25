@@ -35,6 +35,9 @@
   }
  ],
  "capScale": true,
+ "tfixMode": {
+  "Natural": "stretch"
+ },
  "releaseCap": 2.5,
  "minLayers": 6,
  "budgetSteps": [
@@ -82,5 +85,14 @@
    "cap",
    2
   ]
+ ],
+ "noiseMap": [
+  {
+   "set": "piano-keydown",
+   "trig": "on",
+   "relDb": -32,
+   "zone": "key",
+   "velPow": 1.2
+  }
  ]
 }

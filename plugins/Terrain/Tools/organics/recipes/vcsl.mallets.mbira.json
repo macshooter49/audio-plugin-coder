@@ -1,0 +1,24 @@
+{
+ "id": "vcsl.mallets.mbira",
+ "name": "Mbira",
+ "family": "kalimba",
+ "category": "Mallets & Bells",
+ "tags": [
+  "mbira",
+  "thumb piano",
+  "zimbabwe",
+  "african",
+  "buzz"
+ ],
+ "licence": "CC0-1.0",
+ "credit": "Versilian Community Sample Library (VCSL), CC0",
+ "author": "Versilian Studios LLC (Sam Gossner et al.)",
+ "url": "https://github.com/sgossner/VCSL",
+ "licenceDir": "VCSL",
+ "artics": [
+  {
+   "name": "Nyamaropa",
+   "sfz": "VCSL/Idiophones/Plucked Idiophones/Mbira dzaVadzimu Nyamaropa, Zimbabwe, Low B.sfz"
+  }
+ ]
+}

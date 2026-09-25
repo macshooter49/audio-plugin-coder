@@ -19,5 +19,23 @@
    "name": "Plucked",
    "sfz": "FreePats/SpanishClassicalGuitar-SFZ+FLAC-20190618/SpanishClassicalGuitar-SFZ+FLAC-20190618/SpanishClassicalGuitar-20190618.sfz"
   }
+ ],
+ "noiseMap": [
+  {
+   "set": "guitar-pick",
+   "trig": "on",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 4,
+   "velPow": 1.3
+  },
+  {
+   "set": "guitar-fret",
+   "trig": "off",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.4
+  }
  ]
 }

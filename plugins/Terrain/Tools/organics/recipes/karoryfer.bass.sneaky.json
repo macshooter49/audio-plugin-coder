@@ -1,0 +1,42 @@
+{
+ "id": "karoryfer.bass.sneaky",
+ "name": "Jazz Pizz Bass",
+ "family": "bass",
+ "category": "Strings",
+ "tags": [
+  "double bass",
+  "upright",
+  "jazz",
+  "pizzicato",
+  "late night"
+ ],
+ "licence": "CC0-1.0",
+ "author": "Karoryfer Samples",
+ "credit": "Karoryfer Sneakybass (1958 Otto Rubner double bass, played by D. Smolken), CC0",
+ "url": "https://github.com/sfzinstruments/karoryfer.sneakybass",
+ "licenceDir": "sfzinstruments/karoryfer.sneakybass",
+ "noise": [
+  "noise"
+ ],
+ "velPowerMin": 0.6,
+ "artics": [
+  {
+   "name": "Pluck",
+   "sfz": "sfzinstruments/karoryfer.sneakybass/Programs/02-sneakybass_pluck.sfz"
+  },
+  {
+   "name": "Mute",
+   "sfz": "sfzinstruments/karoryfer.sneakybass/Programs/04-sneakybass_mute.sfz"
+  }
+ ],
+ "noiseMap": [
+  {
+   "set": "guitar-fret",
+   "trig": "off",
+   "relDb": -34,
+   "zone": 12,
+   "maxFiles": 3,
+   "velPow": 0.4
+  }
+ ]
+}
