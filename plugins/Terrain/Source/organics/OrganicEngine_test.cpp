@@ -1545,6 +1545,23 @@ int main (int argc, char** argv)
             ok &= std::abs (both - wantK[3]) <= 0.12 * wantK[3];
             bar ("Release = max(amp-env release, knob time)", ok, d + fmt (" · knob .75 + amp 0.3 s → %.3f s", both));
         }
+        // tp105b THE TAIL RELEASE on the fixture piano (12 dB/s decay, 4 s, tail loop at 2.4 s): a 12 s release crosses into
+        // the tail loop and lands −60 dB at 12 s; a release the recording covers takes the round-1 path (no tail release)
+        {
+            auto pr = [&] (float knob, float ampRel, int& tails) {
+                const int t0 = organics_debug::tailReleases();
+                OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (piano);
+                auto p = P0(); p.release = knob; p.ampRelease = ampRel; p.noise = 0.f;
+                e.noteOn (43, 0.8f, 1, kNoDet, 7u);
+                Rec r; run (e, p, r, 48000, 512); e.noteOff (false); run (e, p, r, (int64_t) (16.0 * kSR), 512);
+                tails = organics_debug::tailReleases() - t0;
+                return t60 (mono (r), 48000);
+            };
+            int n1 = 0, n0 = 0, n2 = 0;
+            const double t1 = pr (1.f, 0.f, n1), t0 = pr (0.f, 0.f, n0), t2 = pr (0.f, 2.f, n2);
+            bar ("Tail release: 12 s past a 4 s recording (fixture)", n1 == 1 && std::abs (t1 - 12.0) <= 0.4 && n0 == 0 && n2 == 0 && t0 < 0.1,
+                 fmt ("knob 1 → %.2f s (tail release %d) · knob 0 → %.3f s, amp 2 s → %.2f s: no tail release (%d, %d), the round-1 path", t1, n1, t0, t2, n0, n2));
+        }
         // NOISE on / off: the on-burst (3 kHz) with the note, the off-burst (5 kHz) at note-off; knob 0 / 0.5 / 1
         {
             auto nz = [&] (float knob, double& on, double& off, double& onLate, double& offEarly) {
@@ -1602,6 +1619,7 @@ int main (int argc, char** argv)
         const double tSal = (juce::Time::getMillisecondCounterHiRes() - t0) / 1000.0;
         auto vio = load ("vsco2.strings.violin-section"), solo = load ("vsco2.strings.solo-violin");
         auto vibes = load ("vcsl.mallets.vibraphone");   // tp105 release table (absent → reported, not failed)
+        auto glocken = load ("vcsl.mallets.glockenspiel");   // tp105b
         OrganicsLibrary::get().rescan();
         double idxMB = 0;
         if (auto* a = OrganicsLibrary::get().index().getArray())
@@ -1765,38 +1783,105 @@ int main (int argc, char** argv)
                           offDb, lr, 1000.0 * (double) at / kSR, ck.relDb, ck.atMs));
             }
 
-            // tp105 — THE RELEASE ON REAL INSTRUMENTS: the −60 dB point after note-off vs the knob (amp release 0) and vs
-            // the amp release (knob 0), Salamander C3 · violin section G4 · vibraphone F4 (Max: "at 100 % … at least 10 s")
+            // tp105/tp105b — THE RELEASE ON REAL INSTRUMENTS: the −60 dB point after note-off for knob 0 / 0.5 / 1 × amp release
+            // 0.3 / 2 / 5 s (release = max of the two), Salamander C3 · violin section G4 · vibraphone F4 · glockenspiel G5.
+            // Max: "at 100 % … at least 10 seconds" — on EVERY instrument: a release longer than the recording crosses into the
+            // region's compile-time tail loop (level-matched crossfades) and keeps decaying there. Per case: no click after the
+            // note-off (HP 8k residual re the note), and no loop flutter (10 ms RMS, detrended over 0.4 s windows, < 0.5 dB).
             {
-                auto vib = vibes;
+                auto glock = glocken;
                 struct Inst { const char* nm; std::shared_ptr<const OrganicInstrument> I; int key; };
-                const Inst ins[3] = { { "salamander C3", sal, 48 }, { "violin sect G4", vio, 67 }, { "vibraphone F4", vib, 65 } };
-                bool okK = true, okA = true;
+                const Inst ins[4] = { { "salamander C3", sal, 48 }, { "violin sect G4", vio, 67 }, { "vibraphone F4", vibes, 65 }, { "glockenspiel G5", glock, 79 } };
+                bool okK = true, okA = true, okC = true, okF = true, okH = true;
+                double worstRip = 0, worstClk = -300, worstLr = 0; std::string ripWho, clkWho;
+                std::printf ("      INFO release (−60 dB re note-off, s; key held 1 s)   rows knob 0 / 0.5 / 1 · columns amp 0.3 / 2 / 5 s\n");
                 for (const auto& in : ins)
                 {
-                    if (! in.I) { std::printf ("      INFO release: %s not in the compiled library\n", in.nm); continue; }
-                    auto rel = [&] (float knob, float ampRel, bool off = true) {
+                    if (! in.I) { std::printf ("      INFO release: %s not in the compiled library\n", in.nm); okK = false; continue; }
+                    // returns t60; fills flutter (dB) and click metrics of the release part
+                    bool tail = false;
+                    auto rel = [&] (float knob, float ampRel, int64_t hold, double& rip, double& clk, double& lr) {
+                        const int tr0 = organics_debug::tailReleases();
                         OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (in.I);
                         auto p = P0(); p.release = knob; p.ampRelease = ampRel; p.noise = 0.f;   // the tone's release (key-off noise off)
                         e.noteOn (in.key, 0.8f, 1, kNoDet, 7u);
-                        Rec r; run (e, p, r, 48000, 512); if (off) e.noteOff (false);
+                        Rec r; run (e, p, r, hold, 512); e.noteOff (false);
                         run (e, p, r, (int64_t) (16.0 * kSR), 512);
-                        return t60 (mono (r), 48000);
+                        const auto x = mono (r);
+                        const double t = t60 (x, hold);
+                        // flutter: the STEREO level (L² + R², what the ears get; a stereo piano's mono sum drifts ±1 dB with its own
+                        // L/R correlation), 40 ms RMS (hop 10 ms: longer than a low note's period, shorter than a tail loop) from
+                        // 0.3 s after the off until 45 dB down, detrended per 0.4 s (linear fit)
+                        an::Buf pw (r.L.size());
+                        for (size_t q = 0; q < pw.size(); ++q) pw[q] = std::sqrt (0.5f * (r.L[q] * r.L[q] + r.R[q] * r.R[q]));
+                        std::vector<double> db;
+                        double ref = an::rms (pw, hold - 4800, 4800);
+                        for (int64_t w = hold + (int64_t) (0.3 * kSR); w + 1920 < (int64_t) pw.size(); w += 480)
+                        {
+                            const double v = an::rms (pw, w, 1920);
+                            if (v < ref * 0.0056) break;           // −45 dB: below that the int16 floor and the fade take over
+                            db.push_back (an::db (v));
+                        }
+                        rip = 0;
+                        for (size_t w0 = 0; w0 + 40 <= db.size(); w0 += 20)
+                        {
+                            double sx = 0, sy = 0, sxx = 0, sxy = 0; const int N = 40;
+                            for (int k = 0; k < N; ++k) { sx += k; sy += db[w0 + (size_t) k]; sxx += (double) k * k; sxy += k * db[w0 + (size_t) k]; }
+                            const double sl = (N * sxy - sx * sy) / (N * sxx - sx * sx), ic = (sy - sl * sx) / N;
+                            double lo = 1e9, hi = -1e9;
+                            for (int k = 0; k < N; ++k) { const double rr = db[w0 + (size_t) k] - (ic + sl * k); lo = std::min (lo, rr); hi = std::max (hi, rr); }
+                            rip = std::max (rip, hi - lo);
+                        }
+                        // click: HP(8k) peak after the off re the whole render's peak, and its local |Δ| ratio
+                        const auto h = an::highpass (x, 8000.0); const double sp = an::peak (x);
+                        double hp = 0; int64_t at = hold;
+                        for (int64_t i = hold; i < (int64_t) h.size(); ++i) if (std::abs (h[(size_t) i]) > hp) { hp = std::abs (h[(size_t) i]); at = i; }
+                        std::vector<double> dd;
+                        for (int64_t i = std::max<int64_t> (1, at - 2400); i < std::min<int64_t> ((int64_t) x.size(), at + 2400); ++i) dd.push_back (std::abs ((double) x[(size_t) i] - x[(size_t) i - 1]));
+                        std::nth_element (dd.begin(), dd.begin() + (long) dd.size() / 2, dd.end());
+                        lr = std::abs ((double) x[(size_t) at] - x[(size_t) at - 1]) / std::max (1e-20, dd[dd.size() / 2]);
+                        clk = an::db (hp / std::max (1e-20, sp));
+                        tail = organics_debug::tailReleases() != tr0;
+                        return t;
                     };
-                    const double nat = rel (0.5f, 0.f, false);   // the recording's own −60 dB from the same point, key held
-                    const double k0 = rel (0.f, 0.f), k5 = rel (0.5f, 0.f), k1 = rel (1.f, 0.f);
-                    const double a03 = rel (0.f, 0.3f), a2 = rel (0.f, 2.f), a5 = rel (0.f, 5.f);
-                    std::printf ("      INFO release %-15s knob 0 %6.3f s · 0.5 %6.3f s · 1 %6.3f s  |  amp 0.3 s %6.3f s · 2 s %6.3f s · 5 s %6.3f s  |  key held (natural) %6.3f s  (−60 dB re note-off; -1 = > 16 s)\n",
-                                 in.nm, k0, k5, k1, a03, a2, a5, nat);
-                    auto T = [] (double t) { return t < 0 ? 1.0e9 : t; };   // −1 = never fell 60 dB in 16 s = longer than 16 s
-                    // knob 1 reaches 10 s or the recording's own decay, whichever comes first (a decaying piano cannot ring
-                    // longer than its sample; Sustain's tail loop is the knob for that)
-                    okK &= T (k1) >= T (k5) && T (k5) > T (k0) && T (k0) <= 0.1 && T (k1) >= std::min (10.0, T (nat)) - 0.25;
-                    okA &= T (a5) >= std::min (1.5 * T (a2), T (nat) - 0.25) && T (a2) > 1.5 * T (a03);
-                    if (in.I == vio) okK &= T (k1) >= 10.0;
+                    auto T = [] (double t) { return t < 0 ? 1.0e9 : t; };   // −1 = still above −60 dB after 16 s
+                    double tab[3][3], flut[3][3];
+                    const float knobs[3] = { 0.f, 0.5f, 1.f }, amps[3] = { 0.3f, 2.f, 5.f };
+                    for (int kk = 0; kk < 3; ++kk)
+                        for (int aa = 0; aa < 3; ++aa)
+                        {
+                            double rip, clk, lr;
+                            tab[kk][aa] = rel (knobs[kk], amps[aa], 48000, rip, clk, lr);
+                            // flutter + click are the TAIL release's bars: the instruments whose regions play the tail loop (decaying);
+                            // a looped (bowed) region keeps its authored loop and its own bow movement (reported, not gated)
+                            flut[kk][aa] = tail ? rip : -1.0;
+                            if (in.I != vio && tail)
+                            {
+                                okF &= rip < 0.5; okC &= clk <= -60.0 || lr <= 1.5;
+                                if (rip > worstRip) { worstRip = rip; ripWho = fmt ("%s knob %.1f amp %.1f", in.nm, knobs[kk], amps[aa]); }
+                                if (clk > worstClk) { worstClk = clk; worstLr = lr; clkWho = fmt ("%s knob %.1f amp %.1f", in.nm, knobs[kk], amps[aa]); }
+                            }
+                            else std::printf ("      INFO violin (authored sustain loops, not the tail path) knob %.1f amp %.1f: ripple %.2f dB, HP %.1f dB lr %.2f\n", knobs[kk], amps[aa], rip, clk, lr);
+                        }
+                    double rh, ch, lh;
+                    const double held = rel (1.f, 0.f, (int64_t) (3.5 * kSR), rh, ch, lh);   // key held PAST the tail loop: the jump in
+                    okH &= T (held) >= 10.0 && (in.I == vio || (rh < 0.5 && (ch <= -60.0 || lh <= 1.5)));
+                    std::printf ("      INFO %-15s tail-release flutter (dB; -1 = the short, non-tail path):  %5.2f %5.2f %5.2f | %5.2f %5.2f %5.2f | %5.2f %5.2f %5.2f\n", in.nm,
+                                 flut[0][0], flut[0][1], flut[0][2], flut[1][0], flut[1][1], flut[1][2], flut[2][0], flut[2][1], flut[2][2]);
+                    std::printf ("      INFO %-15s knob 0 %6.2f %6.2f %6.2f | 0.5 %6.2f %6.2f %6.2f | 1 %6.2f %6.2f %6.2f  · held 3.5 s, knob 1: %6.2f s (flutter %.2f dB)\n",
+                                 in.nm, tab[0][0], tab[0][1], tab[0][2], tab[1][0], tab[1][1], tab[1][2], tab[2][0], tab[2][1], tab[2][2], held, rh);
+                    // knob 0: the amp release sets it. Shorter than the recording, the release multiplies the natural decay (as
+                    // round 1: −60 dB lands a little early on a fast-decaying mallet); longer, the tail release lands it exactly
+                    for (int aa = 0; aa < 3; ++aa) okA &= T (tab[0][aa]) >= amps[aa] * 0.5;
+                    okA &= std::abs (T (tab[0][2]) - 5.0) <= 0.6 || in.I == vio;
+                    okA &= T (tab[0][2]) > T (tab[0][1]) && T (tab[0][1]) > T (tab[0][0]);
+                    okK &= T (tab[2][0]) >= 10.0 && T (tab[2][0]) >= T (tab[1][0]) - 0.05;
                 }
-                bar ("real release: knob 0 < 0.5 ≤ 1 ≥ min(10 s, natural)", okK, "see the INFO table above (violin section: knob 1 ≥ 10 s)");
-                bar ("real release: the amp release lengthens every instrument", okA, "amp 0.3 → 2 → 5 s each ≥ 1.5× longer, piano included");
+                bar ("real release: knob 1 ≥ 10 s on every instrument", okK, "see the INFO table above (rows knob, columns amp)");
+                bar ("real release: the amp release lengthens every instrument", okA, "knob 0: amp 0.3 → 2 → 5 s, each longer; amp 5 s lands at 5 s ± 0.6 (the tail release), piano included");
+                bar ("real release: no click after the note-off", okC, fmt ("worst HP(8k) %.1f dB re peak, local ratio %.2f (%s)", worstClk, worstLr, clkWho.c_str()));
+                bar ("real release: no loop flutter (< 0.5 dB)", okF, fmt ("worst detrended 40 ms stereo RMS ripple (tail releases) %.2f dB (%s)", worstRip, ripWho.c_str()));
+                bar ("real release: a note held past its tail loop still rings ≥ 10 s", okH, "key held 3.5 s, knob 1 (the crossfade into the loop from beyond it)");
             }
             // CPU on the real piano (stereo, decaying, 8-note chord)
             {

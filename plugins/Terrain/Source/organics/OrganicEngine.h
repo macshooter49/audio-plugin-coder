@@ -30,5 +30,7 @@ namespace tw
         int lastLiveReaders() noexcept;
         /** Total steal-fades started (process-wide counter). */
         int steals() noexcept;
+        /** tp105b: total note-offs that took the TAIL release (the requested release outlived the recording). */
+        int tailReleases() noexcept;
     }
 }
