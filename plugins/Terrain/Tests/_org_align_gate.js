@@ -4,22 +4,24 @@
 //    node Tests/_org_align_gate.js [page.html] [out-dir]
 //
 //  Osc A runs the reference engine (Modal, then Wavetable), osc C runs Organics, at deviceScaleFactor 3, dark theme.
-//  Everything is INK (rendered pixels read back from the screenshot), in CSS px relative to each device's own
-//  top-left, so the devices compare directly. Text is compared by its BASELINE (the lowest row carrying ≥ 25 % of
-//  the densest row: descenders are sparse and cannot move it; same size + same baseline = same centreline);
-//  boxes ([A] [+]) and arrows (‹ ›) by their ink bbox centre.
-//   1  THE HEADER TEXT IS ONE LINE: OSC · Organics · the articulation pill · the name share a baseline (≤ 0.5 px),
-//      with and without the pill, and it is Modal's baseline (≤ 0.5 px)
-//   2  THE BOXES [A] [+] sit on Modal's box line, and ‹ › sit on the name exactly as the wavetable engine's ‹ › do
-//      (arrow centre − name baseline, ≤ 0.5 px). Nothing in the header moves when the pill appears, and the pill
-//      never touches the ‹ (a long name included)
-//   3  THE KNOB ROW: five rings evenly spaced (gaps equal ≤ 0.5 px) on Modal's exact centres (Δ ≤ 0.5 px), the
-//      labels on Modal's label baseline, the ‹ › set arrows on Modal's
-//   4  THE PICTURE BOX is Modal's box (≤ 0.5 px) and each ring's number is centred in its ring as Modal's are
+//  tp105 — the header is now measured against the TEXT INK (Tests/_org_ink.js, shared with the real-WebView harness
+//  Tests/_org_real.js): the line = the middle of OSC's capitals; every text's own cap middle, and the ink centre of every
+//  box, arrow and the dot, must sit on it. Round 1 compared the boxes to Modal's boxes — which carried the same 2 px
+//  offset Max saw ("the A and + boxes sit lower than the text").
+//   1  THE RED LINE: OSC · Organics · the articulation · ‹ the instrument › · [A] · [+] — every ink centre within ±0.5 px
+//      of the line (CSS px), with the pill, without it, a 33-character name, and the swapped side (+ → ←)
+//   2  FIXED POSITIONS: the pill appearing or changing moves nothing; the pill clears the ‹ by ≥ 4 px
+//   3  THE KNOB ROW: five rings evenly spaced on Modal's exact centres, labels on Modal's label baseline, ‹ › on Modal's
+//   4  THE PICTURE BOX is Modal's box and it is TRANSPARENT (no fill, no outline — Max: "same colour as everything else")
+//   5  THE SAME LAW ON EVERY ENGINE: osc A under each of the eight engines, ink centres within ±0.5 px
+//   6  THE TWINS: every family whose single drawing fills < 55 % of the box width is drawn as TWO; the pair is symmetric
+//      about the box centre (outer margins equal ≤ 0.5 px), the gap stays in [6 %, 20 %] of the width, and the pair fills
+//      ≥ 58 % of it; every twin's two halves are different drawings
 //  Writes org-align.png (red lines through the measured ink) into the out-dir.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const fs = require('fs'), path = require('path');
 const H = require('./_org_harness.js');
+const INK = require('./_org_ink.js');
 const PAGE = process.argv[2] || H.PAGE_DEFAULT;
 const OUT = process.argv[3] || path.resolve(__dirname, '../Design/organics/impl-shots');
 const DPR = 3;
@@ -74,11 +76,21 @@ async function measure(p, lines) {
   }, shot, DPR, lines || []);
 }
 
+// the header's ink centres (Tests/_org_ink.js) for the devices in ids (viewport px; divide by the page scale for CSS px)
+async function inkLine(p, ids) {
+  await p.evaluate(`window.__INKC=${INK.COLLECT.toString()};window.__INKA=${INK.ANALYZE.toString()};`);
+  const g = await p.evaluate(ids => window.__INKC(ids), ids), shot = await p.screenshot({ encoding: 'base64' });
+  const r = await p.evaluate((b64, g, d) => window.__INKA(b64, g, d), shot, g, DPR);
+  const out = {}; ids.forEach(id => { out[id] = INK.centreline(r[id]); if (out[id]) out[id].R = g[id].R; }); return out; }
+async function scaleOf(p, id) { return p.evaluate(id => { const d = document.getElementById(id); return d.getBoundingClientRect().height / d.offsetHeight; }, id); }
+const worstCss = (c, sc) => c ? c.worst / sc : 99;
+const listCss = (c, sc) => c ? c.items.map(q => q.key + (q.txt ? '(' + q.txt.slice(0, 10) + ')' : '') + ' ' + f2(q.d / sc)).join('  ') : 'no OSC ink';
+
 (async () => {
   const { b, p, errs } = await H.launch({ page: PAGE, dpr: DPR, width: 1200, height: 820 });
   await H.enable(p, 'a'); await H.enable(p, 'c');
   await H.setEngine(p, 'a', 6); await H.setEngine(p, 'c', 7); await H.sleep(900);
-  await p.evaluate(() => { const vals = [0.5, 0.75, 0.2, 0.93, 0.25]; ['DYNAMICS', 'TONE', 'BODY', 'ATTACK', 'HUMAN'].forEach((s, i) => { const k = document.querySelector('.knob[data-syn="SYN_OSC_C_ORG_' + s + '"]'); if (k && k.__applyFill) k.__applyFill(vals[i]); });
+  await p.evaluate(() => { const vals = [0.5, 0.75, 0.2, 0.93, 0.25]; ['DYNAMICS', 'TONE', 'BODY', 'VIBRATO', 'HUMAN'].forEach((s, i) => { const k = document.querySelector('.knob[data-syn="SYN_OSC_C_ORG_' + s + '"]'); if (k && k.__applyFill) k.__applyFill(vals[i]); });
     ['HARD', 'POS', 'DECAY', 'MATERIAL', 'BREATH'].forEach((s, i) => { const k = document.querySelector('.knob[data-syn="SYN_OSC_A_MODAL_' + s + '"]'); if (k && k.__applyFill) k.__applyFill([0.62, 0.4, 0.55, 0.3, 0.48][i]); }); });
   await H.sleep(300);
   const G = await measure(p);                                                   // Organics: Grand Piano (one articulation)
@@ -93,24 +105,23 @@ async function measure(p, lines) {
 
   const o = G.c, m = G.a;
   if (process.env.ORG_DUMP) console.log(JSON.stringify({ V: V.c.H, L: LONG.c.H, R: V.c.R }, null, 0));
-  // [1] text baselines
-  const tb = (Hd) => ['osc', 'engine', 'pill', 'name'].filter(k => Hd[k]).map(k => [k, Hd[k].base]);
-  const spread = a => max(a.map(q => q[1])) - min(a.map(q => q[1]));
-  const bG = tb(o.H), bV = tb(V.c.H), bM = tb(m.H).concat(m.H.name2 ? [['name2', m.H.name2.base]] : []);
-  const mBase = m.H.osc.base;
-  ok(spread(bG) <= 0.5 && spread(bV) <= 0.5 && max(bG.concat(bV).map(q => Math.abs(q[1] - mBase))) <= 0.5,
-     `[1] the header text is ONE baseline: Organics spread ${f2(spread(bG))} (Grand) / ${f2(spread(bV))} (Violin, with the pill) px; off Modal's OSC baseline ≤ ${f2(max(bG.concat(bV).map(q => Math.abs(q[1] - mBase))))} px`,
-     'organics(violin): ' + bV.map(q => q[0] + ' ' + f2(q[1])).join(' · ') + '\n        modal: ' + bM.map(q => q[0] + ' ' + f2(q[1])).join(' · ') + ` (Modal's own spread ${f2(spread(bM))})`);
-  // [2] boxes, arrows, fixed positions, no collision
-  const boxD = max(['A', 'plus'].map(k => Math.abs(o.H[k].cy - m.H[k].cy)));
-  const arrO = [V.c.H.prev.cy - V.c.H.name.base, V.c.H.next.cy - V.c.H.name.base], arrW = [WT.a.H.prev.cy - WT.a.H.name.base, WT.a.H.next.cy - WT.a.H.name.base];
-  const arrD = max([Math.abs(arrO[0] - arrW[0]), Math.abs(arrO[1] - arrW[1])]);
+  // [1] the red line, Organics (osc C): Grand (no pill), Violin (the pill), a long name, the swapped side
+  const SC = await scaleOf(p, 'osc-c-device'), C1 = [];
+  await p.evaluate(() => window.__orgSetInstrument('c', 'salamander.grand')); await H.sleep(400); C1.push(['Grand', (await inkLine(p, ['osc-c-device']))['osc-c-device']]);
+  await p.evaluate(() => window.__orgSetInstrument('c', 'vsco.violin.section')); await H.sleep(400); C1.push(['Violin + pill', (await inkLine(p, ['osc-c-device']))['osc-c-device']]);
+  await p.evaluate(() => { document.getElementById('osc-c-orginst-display').textContent = 'Salamander Grand Piano V3 Concert'; }); await H.sleep(150);
+  C1.push(['33-char name', (await inkLine(p, ['osc-c-device']))['osc-c-device']]);
+  await p.evaluate(() => window.__orgSetInstrument('c', 'vsco.violin.section')); await H.sleep(300);
+  await p.evaluate(() => document.querySelector('#osc-c-device .swap-btn').click()); await H.sleep(400); C1.push(['swapped (←)', (await inkLine(p, ['osc-c-device']))['osc-c-device']]);
+  await p.evaluate(() => document.querySelector('#osc-c-device .swap-btn').click()); await H.sleep(400);
+  const w1 = max(C1.map(q => worstCss(q[1], SC)));
+  ok(w1 <= 0.5 && C1.every(q => q[1] && q[1].items.some(x => x.key === 'letter:box') && q[1].items.some(x => x.key === 'plus:box')),
+     `[1] the red line: every ink centre of the Organics header within ±0.5 px of OSC's cap middle (worst ${f2(w1)} px)`, C1.map(q => q[0] + ': ' + listCss(q[1], SC)).join('\n        '));
+  // [2] fixed positions + the pill's clearance
   const moved = max(['engine', 'osc', 'A', 'plus', 'next'].map(k => Math.abs(G.c.H[k].cx - V.c.H[k].cx)));
   const clear = [V.c, LONG.c].map(d => d.H.prev.left - d.H.pill.right);
-  const boxesVsWT = max(['A', 'plus'].map(k => Math.abs(o.H[k].cy - WT.a.H[k].cy)));
-  ok(boxD <= 0.5 && arrD <= 0.5 && moved <= 0.5 && min(clear) >= 4,
-     `[2] [A] [+] on Modal's box line (Δ ${f2(boxD)} px); ‹ › sit on the name as the wavetable's do (Δ ${f2(arrD)} px); the pill moves nothing (${f2(moved)} px) and clears the ‹ by ${clear.map(f2).join(' / ')} px (Violin "Sus" / a 33-character name with "Stacc")`,
-     `arrow − name baseline: Organics ${arrO.map(f2).join(', ')} · Wavetable ${arrW.map(f2).join(', ')}; boxes cy Organics ${f2(o.H.A.cy)}/${f2(o.H.plus.cy)} Modal ${f2(m.H.A.cy)}/${f2(m.H.plus.cy)} Wavetable ${f2(WT.a.H.A.cy)} (Δ ${f2(boxesVsWT)})`);
+  ok(moved <= 0.5 && min(clear) >= 4,
+     `[2] the pill moves nothing (${f2(moved)} px) and clears the ‹ by ${clear.map(f2).join(' / ')} px (Violin / a 33-character name)`);
   // [3] knobs
   const gaps = o.rings.slice(1).map((r, i) => r.cx - o.rings[i].cx), gm = m.rings.slice(1).map((r, i) => r.cx - m.rings[i].cx);
   const dx = o.rings.map((r, i) => Math.abs(r.cx - m.rings[i].cx)), dy = o.rings.map((r, i) => Math.abs(r.cy - m.rings[i].cy));
@@ -123,17 +134,37 @@ async function measure(p, lines) {
   const bxD = max(['x', 'y', 'w', 'h'].map(k => Math.abs(o.box[k] - m.box[k])));
   const kv = r => max([Math.abs(r.kdx || 0), Math.abs(r.kdy || 0)]);
   const kO = max(o.rings.map(kv)), kM = max(m.rings.map(kv));
-  ok(bxD <= 0.5 && o.rings.every(r => r.kdx != null) && kO <= Math.max(0.5, kM + 0.1),
-     `[4] the picture box is Modal's (Δ ${f2(bxD)} px, ${f2(o.box.w)} × ${f2(o.box.h)}); ring numbers centred: Organics ≤ ${f2(kO)} px (Modal ≤ ${f2(kM)} px)`,
+  const bgC = await p.evaluate(() => { const e = document.querySelector('#osc-c-device .sample-view .samp-disp'), cs = getComputedStyle(e); return { bg: cs.backgroundColor, bw: cs.borderTopWidth, bs: cs.borderTopStyle, sh: cs.boxShadow, ol: cs.outlineStyle }; });
+  const clearBox = /rgba\(0, 0, 0, 0\)|transparent/.test(bgC.bg) && (bgC.bs === 'none' || parseFloat(bgC.bw) === 0) && (bgC.sh === 'none') && (bgC.ol === 'none');
+  ok(bxD <= 0.5 && o.rings.every(r => r.kdx != null) && kO <= Math.max(0.5, kM + 0.1) && clearBox,
+     `[4] the picture box is Modal's (Δ ${f2(bxD)} px, ${f2(o.box.w)} × ${f2(o.box.h)}) and TRANSPARENT (${bgC.bg}, border ${bgC.bs}, shadow ${bgC.sh}); ring numbers centred: Organics ≤ ${f2(kO)} px (Modal ≤ ${f2(kM)} px)`,
      o.rings.map(r => `"${r.t}" ${f2(r.kdx)},${f2(r.kdy)}`).join(' · ') + ' | modal ' + m.rings.map(r => `"${r.t}" ${f2(r.kdx)},${f2(r.kdy)}`).join(' · '));
 
+  // [5] every engine on osc A
+  const SA = await scaleOf(p, 'osc-a-device'), E5 = [];
+  for (let e = 0; e < 8; e++) { await H.setEngine(p, 'a', e); await H.sleep(500); E5.push([e, (await inkLine(p, ['osc-a-device']))['osc-a-device']]); }
+  const w5 = max(E5.map(q => worstCss(q[1], SA)));
+  ok(w5 <= 0.5, `[5] the same line on every engine (osc A, engines 0–7): worst ${f2(w5)} px`, E5.map(q => 'engine ' + q[0] + ': ' + listCss(q[1], SA)).join('\n        '));
+  // [6] the twins
+  const T = await p.evaluate(() => { const A = window.__orgArt, out = []; const W = 302.65, Hh = 65;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); document.body.appendChild(svg);
+    Object.keys(A.families).forEach(id => { const f = A.families[id], one = A.render(id, { w: W, h: Hh, single: true }); svg.innerHTML = one.svg; const bb = svg.getBBox();
+      const r = { id, fill1: bb.width / W, twin: !!f.twin };
+      if (f.twin) { const t = A.render(id, { w: W, h: Hh }); svg.innerHTML = t.svg; const gs = [...svg.querySelectorAll('.twm')].map(g => g.getBBox());
+        r.l = gs[0].x; r.r = W - (gs[1].x + gs[1].width); r.gap = gs[1].x - (gs[0].x + gs[0].width); r.span = (gs[1].x + gs[1].width - gs[0].x) / W;
+        r.inBox = gs.every(g => g.x >= -0.5 && g.x + g.width <= W + 0.5); r.differ = t.svg.split('class="twm"')[1] !== t.svg.split('class="twm"')[2]; }
+      out.push(r); }); svg.remove(); return { W, rows: out, gmin: A.TWIN.gapMin, gmax: A.TWIN.gapMax }; });
+  const miss = T.rows.filter(r => !r.twin && r.fill1 < 0.55), badT = T.rows.filter(r => r.twin && !(Math.abs(r.l - r.r) <= 0.5 && r.gap >= T.gmin * T.W - 0.5 && r.gap <= T.gmax * T.W + 0.5 && r.span >= 0.58 && r.inBox && r.differ));
+  ok(!miss.length && !badT.length, `[6] twins: every family under 55 % single fill is drawn twice (${T.rows.filter(r => r.twin).length} twins), symmetric (outer margins ≤ 0.5 px apart), gap in [6, 20] %, span ≥ 58 %`,
+     (miss.length ? 'SINGLE BUT SMALL: ' + miss.map(r => r.id + ' ' + Math.round(r.fill1 * 100) + '%').join(', ') + '\n        ' : '') + (badT.length ? 'BAD: ' + badT.map(r => r.id).join(', ') + '\n        ' : '') +
+     T.rows.map(r => r.twin ? `${r.id} margins ${f2(r.l)}/${f2(r.r)} gap ${Math.round(r.gap / T.W * 100)}% span ${Math.round(r.span * 100)}%` : `${r.id} single ${Math.round(r.fill1 * 100)}%`).join(' · '));
   // the proof picture: Modal (A) and Organics (C, Violin), red lines through the measured ink
   await H.setEngine(p, 'a', 6); await H.sleep(600);
   const lines = [];
+  const LINE = await inkLine(p, ['osc-a-device', 'osc-c-device']); LINE.a = LINE['osc-a-device']; LINE.c = LINE['osc-c-device'];
   const pre = await measure(p);
-  [['a', mBase], ['c', null]].forEach(([k]) => { const d = pre[k], R = d.R;
-    lines.push({ h: 1, x: R.left - 8, y: R.top + d.H.osc.base, w: R.w + 16 });                         // the header text baseline
-    lines.push({ h: 1, x: R.left - 8, y: R.top + d.H.A.cy, w: R.w + 16 });                             // the box line
+  [['a'], ['c']].forEach(([k]) => { const d = pre[k], R = d.R;
+    const L = LINE[k]; if (L) lines.push({ h: 1, x: R.left - 8, y: L.line, w: R.w + 16 });            // THE red line: the header's ink centreline
     lines.push({ h: 1, x: R.left - 8, y: R.top + d.rings[0].cy, w: R.w + 16 });                        // the ring centres
     lines.push({ h: 1, x: R.left - 8, y: R.top + d.labels[0], w: R.w + 16 });                          // the label baseline
     d.rings.forEach(r => lines.push({ h: 0, x: R.left + r.cx, y: R.top + r.cy - 20, hh: 40 })); });
