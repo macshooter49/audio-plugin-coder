@@ -13017,9 +13017,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         // ── tp104 — ORGANICS engine: gather the twelve per OSC (ORGANICS-ENGINE-GATHER). Only when this bank has an osc on
         //    engine 7 (the unused law: an Organics-free block reads nothing new). APVTS 0..1 → OrganicParams' DSP units
-        //    (contract §4): the bipolar four 2v−1, Image 1.5v, the rest as-is. tp105: knob 3 = VIBRATO (Attack is read
-        //    raw, hidden at Natural); the back panel's Rate 3..9 Hz / Delay 0..2 s / Velocity Curve / Tuning; and the amp
-        //    envelope's attack/release (the engine's note-off decay = max(amp release, Release knob time)). Mod: dest OrganicBase + o·10 + k — for bank 1
+        //    (contract §4): the bipolar three (Dynamics, Tone, Body) 2v−1, Image 1.5v, the rest as-is. tp105: knob 3 =
+        //    VIBRATO (ATTACK stays declared + hidden and plays at Natural); the back panel's Rate 3..9 Hz / Delay 0..2 s /
+        //    Velocity Curve / Tuning; and the amp envelope's attack/release (the engine's note-off decay = max(amp
+        //    release, Release knob time)). Mod: dest OrganicBase + o·10 + k — for bank 1
         //    too (destForBank rebased E–H's explicit ints onto this bank's A–D slots, so `o` is 0..3 in both).
         tw::OrganicParams orgP[4];
         const bool orgBank = engineIdx == tw::organics::kEngineIndex || engineIdxB == tw::organics::kEngineIndex

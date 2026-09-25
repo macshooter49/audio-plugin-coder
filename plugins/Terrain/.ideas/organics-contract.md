@@ -114,3 +114,26 @@ Right-click menu on the Organics osc = the same menu every engine has (mute / so
 C++ (`Source/organics/*`, `SynthVoice.h`, `PluginProcessor.*`, `PluginEditor.*`, `ParameterIDs.hpp`, `OscBankIds.h`,
 `SynthModConfig.h`, `CMakeLists.txt`, C++ tests) · L = library (`Tools/organics/**`, `Resources/Organics/**`, the compiled
 library outside git, `Tests/organics_compile_test.py`, new fixtures folders).
+
+---
+
+## tp106 AMENDMENT (2026-09-24, the final overpass) — measured, then changed
+
+**Engine.** Release at 1.0 = max(12 s, **2 ×** the authored release) ≤ 30 s (was max(12 s, authored): the upper half of the
+knob was dead on every instrument authored at ≥ 12 s — the glockenspiel's 15 s). Tone's tilt pivot = max(700 Hz, the lead
+note's f0) (a fixed 700 Hz pivot sat under every partial above ~F5, so Tone only changed the level there). A reader whose
+estimated level falls under −90 dBFS retires with the 5 ms fade (the old hard stop stepped the output by up to
+−83 dBFS). **Voice:** an engine switch under a sounding note fades the osc out through its own 4 ms gate, switches at
+silence and fades back in (it switched on the spot: a 48 dB HP-residual click, on every engine).
+
+**Library (Tools/organics).** Every sustain loop is POLISHED at compile time (`analyse.polish_loop`): a repeating swell is
+flattened with a 200 ms gain curve (not on recipes with `"loopFlatten": false` — the organs and the accordion), the
+cleanest crossfade length (10–200 ms) is chosen by an HP-residual seam metric and BAKED into the audio with an
+energy-preserving law for the measured correlation, 8 pad frames after `le` repeat the frames from `ls`, and **the map's
+`xf` is 0** (the runtime wraps le → ls with no crossfade of its own). `tfix` is per take on performed instruments
+(Strings, Winds, Brass, Choir & Voice) and per note on struck / plucked ones; an authored whole-semitone transpose that
+compensates the sample's own offset counts as a tuning correction. A file whose mean is over 2 % of its RMS gets a causal
+8 Hz high-pass (DC). Loudness is closed THROUGH THE ENGINE: `Tools/organics/engine_calibrate.py` measures the calibration
+point with the runtime (`Tests/organics_audit.sh calib`) and moves every region of the instrument by one offset (−24 LUFS
+± 0.05; the v127 peak of that key ≤ −1 dBFS). New recipe keys: `loopFlatten`, `loopMotionWhy` (the loop gate reports that
+instrument's pump instead of failing it), `pitchCheckWhy` (the pitch check does not judge it).

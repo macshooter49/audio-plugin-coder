@@ -7,8 +7,8 @@
 //               finish their fades (live readers never exceed 48). notes[] = 96 + 16 so a new note never starves.
 // Per block: params are smoothed once, each note recomputes its region targets only when Dynamics/Body moved,
 // each reader computes ratio + gain endpoints once, then the inner loop is interpolate → gain ramp → accumulate.
-// Tone is ONE first-order tilt per voice (pivot 700 Hz, the lead note's velocity/key/Human tone; coefficients
-// glide across the block, identity-bracketed on/off), Image one M/S multiply per engine (skipped at 1.0).
+// Tone is ONE first-order tilt per voice (pivot max(700 Hz, f0 of the lead note), the lead note's velocity/key/Human
+// tone; coefficients glide across the block, identity-bracketed on/off), Image one M/S multiply per engine (skipped at 1.0).
 // Memory: ~35 KB per engine (the pools), allocated in the constructor + prepare(); nothing after prepare().
 //
 // Reused from SampleEngine.h (fb204 law): the 4-point Hermite kernel, the EQUAL-GAIN smoothstep loop crossfade
@@ -338,7 +338,7 @@ namespace tw
         struct PendingOn { bool on = false; int note = 60; float vel = 0.8f; int players = 1; float det[kMaxPlayers] {}; uint32_t seed = 0; };
 
         // ── state ──
-        double sr = 48000.0; int maxBlock = 0; float toneK = 0.f;
+        double sr = 48000.0; int maxBlock = 0; float toneK = 0.f, tonePivotHz = 700.f;
         bool nonRealtime = false;
         std::shared_ptr<const OrganicInstrument> inst;
         std::shared_ptr<const OrganicInstrument> retiring[kRetire], graveyard[kRetire];
@@ -365,6 +365,7 @@ namespace tw
             sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
             maxBlock = std::max (16, block);
             for (auto* v : { &sumL, &sumR, &envBuf }) v->assign ((size_t) maxBlock, 0.f);
+            tonePivotHz = 700.f;
             toneK = (float) std::tan (3.14159265358979 * 700.0 / sr);
             (void) sincTable();
             reset();
@@ -923,13 +924,16 @@ namespace tw
         }
 
         /** tp105 note-off decay time (s): the Release knob's taper — 20 ms at 0, the instrument's AUTHORED release
-            (map.json env.r, 30 ms..30 s) at 0.5, ≥ 12 s at 1 (log-interpolated both halves) — and never shorter than
-            the voice's amp-envelope release. */
+            (map.json env.r, 30 ms..30 s) at 0.5, max(12 s, 2 × authored) at 1 (≤ 30 s; log-interpolated both halves) —
+            and never shorter than the voice's amp-envelope release. tp106: the top was max(12 s, authored), which left
+            the upper half of the knob DEAD on every instrument authored at ≥ 12 s (the glockenspiel's 15 s: 50 → 100 %
+            changed nothing) — the exposure law: 100 % is always twice the authored ring, at least 12 s. */
         float relTime (const org::Region& r) const noexcept
         {
             const float A = std::clamp (r.envR, 0.03f, 30.f), rr = sRelease;
+            const float top = std::min (30.f, std::max (12.f, 2.f * A));
             const float T = rr <= 0.5f ? 0.02f * std::pow (A / 0.02f, 2.f * rr)
-                                       : A * std::pow (std::max (12.f, A) / A, 2.f * rr - 1.f);
+                                       : A * std::pow (top / A, 2.f * rr - 1.f);
             return std::max (T, ampRelSec);
         }
 
@@ -1192,7 +1196,8 @@ namespace tw
             {
                 const float lin = g1 * 32768.f * std::max (rd.panL, rd.panR);    // g1 already holds the Sustain comp
                 const float est = rd.s->envAt (rd.pos) + 20.f * std::log10 (lin * (rd.fading ? rd.fadeStart : 1.f) + 1.0e-9f);
-                if (est < -90.f && rd.age > rd.fadeInLen + 4800) rd.active = false;
+                // under −90 dBFS: retire with the house 5 ms fade (a hard stop here stepped the output by up to −83 dBFS)
+                if (est < -90.f && rd.age > rd.fadeInLen + 4800 && ! rd.fading) startFade (rd, fadeFrames (0.005));
             }
         }
 
@@ -1359,20 +1364,33 @@ namespace tw
                 if (nt.started && nt.nrd == 0) nt.used = false;
             }
 
-            // Tone: ONE first-order tilt per voice (pivot 700 Hz): 9·t + velocity·Velocity + key tracking above
-            // C6 + the lead note's Human tone. Coefficients only when the target moved > 0.05 dB (fb441).
+            // Tone: ONE first-order tilt per voice (pivot 700 Hz, or the lead note's f0 when that is higher): 9·t
+            // + velocity·Velocity + key tracking above C6 + the lead note's Human tone. Coefficients only when the
+            // target moved > 0.05 dB (fb441) or the pivot moved.
+            // tp106: a FIXED 700 Hz pivot sits below every partial of a note above ~F5 — the tilt then only changes the
+            // level (glockenspiel C6: Tone 0 → 100 % moved the centroid 0.7 %). Tracking f0 (the fundamental at the unity
+            // point, the partials above it tilted) keeps Tone a brightness control on every key; up to F5 the pivot is
+            // 700 Hz as before.
+            bool pivotMoved = false;
             if (lead >= 0)
             {
                 const auto& ln = notes[lead];
                 const float kt = ln.key > 84 ? -1.5f * (float) (ln.key - 84) / 12.f : 0.f;
                 leadTone = std::clamp (9.f * sTone + 4.f * (ln.vel01 - 0.6f) * sVelo + kt + ln.humToneDb, -12.f, 12.f);
+                const float piv = std::clamp (440.f * std::exp2 ((float) (ln.key - 69) / 12.f), 700.f, (float) (0.2 * sr));
+                if (std::abs (piv - tonePivotHz) > 0.01f * tonePivotHz)
+                {
+                    tonePivotHz = piv;
+                    toneK = (float) std::tan (3.14159265358979 * (double) piv / sr);
+                    pivotMoved = true;
+                }
             }
             // The IDENTITY coefficients (A = 1: b0 = 1, b1 = a1) bracket every on/off: the filter glides in from
             // identity and glides out to identity for one block before it is bypassed, and while bypassed its
             // state is kept exactly what identity would hold — so neither switch steps the signal.
             const float ident[3] = { 1.f, (toneK - 1.f) / (1.f + toneK), (toneK - 1.f) / (1.f + toneK) };
             const float prev[3] = { tb0, tb1, ta1 };
-            if (std::abs (leadTone - toneCur) > 0.05f)
+            if (std::abs (leadTone - toneCur) > 0.05f || (pivotMoved && std::abs (toneCur) >= 0.05f))
             {
                 toneCur = leadTone;
                 const float A = dbToLin (toneCur), C = A, K = toneK;

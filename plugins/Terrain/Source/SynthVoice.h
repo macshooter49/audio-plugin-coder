@@ -1206,7 +1206,27 @@ class SynthVoice : public juce::SynthesiserVoice
          *  SYN_OSC_A_ENGINE APVTS choice. Out-of-range clamps to nearest end. */
         void setEngine (int idx) noexcept
         {
-            engine_ = engineFromIndex (idx);   // tp104 — 0..7 live, 8..11 reserved → WT
+            requestEngine (0, engineFromIndex (idx));   // tp104 — 0..7 live, 8..11 reserved → WT · tp106 — faded when sounding
+        }
+
+        /*  tp106 — AN ENGINE SWITCH UNDER A HELD NOTE. Every engine used to switch on the spot, stepping the oscillator's
+            output from one engine to the other (a 48 dB HP-residual click: Tests/organics_integration.sh [19], Organics ⇄
+            Wavetable). A SOUNDING voice now takes the oscillator out through its own 4 ms solo/mute gate, switches once the
+            gate is silent (≈ 35 ms) and fades the new engine in the same way; an idle voice (and a new note) switches at
+            once. Nothing changes for a patch that does not switch engines mid-note (robinGate reads a false flag). */
+        Engine& engineRef (int o) noexcept { return o == 0 ? engine_ : (o == 1 ? engineB_ : (o == 2 ? engineC_ : engineD_)); }
+        void requestEngine (int o, Engine e) noexcept
+        {
+            auto& cur = engineRef (o);
+            engPend_[o] = e;
+            if (e == cur)    { engSwitchMute_[o] = false; return; }
+            if (! playing_)  { cur = e; engSwitchMute_[o] = false; return; }
+            engSwitchMute_[o] = true;
+        }
+        void commitEngineSwitches (bool now) noexcept
+        {
+            for (int o = 0; o < 4; ++o)
+                if (engSwitchMute_[o] && (now || oscGate_[o] < 1.0e-4f)) { engineRef (o) = engPend_[o]; engSwitchMute_[o] = false; }
         }
 
         /** Test-only accessor — not used in production audio path. */
@@ -1561,7 +1581,7 @@ class SynthVoice : public juce::SynthesiserVoice
 
         void setEngineB (int idx) noexcept
         {
-            engineB_ = engineFromIndex (idx);   // tp104
+            requestEngine (1, engineFromIndex (idx));   // tp104 · tp106 — faded when sounding
         }
 
         // ── Phase 8b — Unison + EROSION + HORIZON setters ────────────────
@@ -2978,7 +2998,7 @@ class SynthVoice : public juce::SynthesiserVoice
         }
         // effective per-osc gate target = SOLO/MUTE gate masked by this note's round-robin pick
         float robinGate (int g) const noexcept
-        { return (robinPick_ >= 0 && g != robinPick_) ? 0.0f : oscGateTarget_[g]; }
+        { return (engSwitchMute_[g] || (robinPick_ >= 0 && g != robinPick_)) ? 0.0f : oscGateTarget_[g]; }   // tp106 — + an engine switch in flight
 
         void setOscGates (float a, float b, float c, float d) noexcept
         {
@@ -2993,8 +3013,8 @@ class SynthVoice : public juce::SynthesiserVoice
         void setWavetableFrameD (float pos) noexcept { framePosBaseD_ = juce::jlimit (0.0f, 1.0f, pos); }
         void setWarpC (int mode, float amount) noexcept { warpModeC_ = juce::jlimit(0,kWarpModeMax,mode); warpAmountBaseC_ = juce::jlimit(0.0f,1.0f,amount); }
         void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,kWarpModeMax,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
-        void setEngineC (int idx) noexcept { engineC_ = engineFromIndex (idx); }   // tp104
-        void setEngineD (int idx) noexcept { engineD_ = engineFromIndex (idx); }
+        void setEngineC (int idx) noexcept { requestEngine (2, engineFromIndex (idx)); }   // tp104 · tp106 — faded when sounding
+        void setEngineD (int idx) noexcept { requestEngine (3, engineFromIndex (idx)); }   // tp104 · tp106
         void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (2, activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); }   // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (3, activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); }   // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,kWarpModeMax,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,kWarpModeMax,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
@@ -3141,6 +3161,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 robinDelay_ = h.delaySamp;                 // Wobble: humanized late start
                 robinGlideFrom_ = h.glideFrom; robinGlideSec_ = h.glideSec;
             }
+            commitEngineSwitches (true);   // tp106 — a new note starts on the engine the osc is set to
             for (int g = 0; g < 4; ++g) oscGate_[g] = robinGate (g);
 
             currentMidiNote_ = midiNote;
@@ -3491,6 +3512,7 @@ class SynthVoice : public juce::SynthesiserVoice
                               int startSample, int numSamples) override
         {
             if (! playing_) return;
+            commitEngineSwitches (false);   // tp106 — an engine switch lands once its fade-out is silent
             /* tp36 — dev census of WHAT is rendering (TERRAIN_PROFILE prints and resets it per block): held · releasing ·
                stealing/handover-fading · finishing. A voice's cost is the same in every one of these states. */
             if (tiVoiceCensusOn)
@@ -7737,6 +7759,8 @@ class SynthVoice : public juce::SynthesiserVoice
         bool  oscDead_[4]       { false, false, false, false }; // gate fully settled at 0 → skip the osc's render entirely
         unsigned fltBlockGen_ = 1; bool fltNoSkip_ = false;   // tp38 — the block generation the filter pairs key their silent-skip on (state lives on FilterSlot)
         float oscGateTarget_[4] { 1.0f, 1.0f, 1.0f, 1.0f };
+        Engine engPend_[4]      { Engine::WT, Engine::WT, Engine::WT, Engine::WT };   // tp106 — the engine a faded switch lands on
+        bool   engSwitchMute_[4] { false, false, false, false };                     // tp106 — a switch is fading this osc out
         float flowWave_ = 0.0f;   // FLOW · ARP WAVE lane frame offset (fb105), block-pushed
 
         // FLOW · ROBIN state (see setRobin) — the Wheel brain stages, startNote applies
@@ -8704,7 +8728,7 @@ class SynthVoice : public juce::SynthesiserVoice
         //  The engine ADDS into the block; the block goes where every block engine's goes (engine → FILTER → FX).
         void renderOrganicOsc (int o, bool isOrg, int oct, int semi, float cent,
                                int numSamples, std::uint32_t seed, bool doNoteOn,
-                               int uniCount, const float* uDetuneCents, float uNorm, float level) noexcept
+                               int uniCount, const float* uDetuneCents, float level) noexcept
         {
             orgBlkL_[o] = orgBlkR_[o] = nullptr;   // null = silence at the consumer
             orgAlive_[o] = false;
@@ -8755,8 +8779,14 @@ class SynthVoice : public juce::SynthesiserVoice
             orgAlive_[o] = e.isActive() && e.readLevel() > 1.0e-4f;
             if (uniCount > 1)
             {
-                juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);   // the house unison auto-gain (RMS-constant)
-                juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
+                // tp106 — the Ensemble's auto-gain. The house uNorm is 1/√Σg² over the unison BLEND gains g, but the
+                //  engine plays every player at full level (it has no per-player gain), so on Organics that norm made
+                //  2 players +3.6 dB louder than 1 and then sank back (Tests/organics_integration.sh [24]). Players are
+                //  separate takes / RR picks / detunes — decorrelated — so 1/√N keeps the RMS constant, as the house
+                //  law intends.
+                const float g = 1.0f / std::sqrt ((float) juce::jlimit (1, kMaxUnison, uniCount));
+                juce::FloatVectorOperations::multiply (wL, g, numSamples);
+                juce::FloatVectorOperations::multiply (wR, g, numSamples);
             }
             orgBlkL_[o] = wL; orgBlkR_[o] = wR;
         }
@@ -8785,10 +8815,10 @@ class SynthVoice : public juce::SynthesiserVoice
             const bool doOn = orgNoteOnPending_;
             const bool prof = tw::organics_prof::on.load (std::memory_order_relaxed);
             const int64_t pt0 = prof ? juce::Time::getHighResolutionTicks() : 0;
-            renderOrganicOsc (0, engine_  == Engine::ORGANIC, octOffset_,  semiOffset_,  centsOffset_  + coarseModA_ * 100.f, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
-            renderOrganicOsc (1, engineB_ == Engine::ORGANIC, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
-            renderOrganicOsc (2, engineC_ == Engine::ORGANIC, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
-            renderOrganicOsc (3, engineD_ == Engine::ORGANIC, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
+            renderOrganicOsc (0, engine_  == Engine::ORGANIC, octOffset_,  semiOffset_,  centsOffset_  + coarseModA_ * 100.f, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), blkGateLevel (0, level_));
+            renderOrganicOsc (1, engineB_ == Engine::ORGANIC, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), blkGateLevel (1, levelB_));
+            renderOrganicOsc (2, engineC_ == Engine::ORGANIC, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), blkGateLevel (2, levelC_));
+            renderOrganicOsc (3, engineD_ == Engine::ORGANIC, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), blkGateLevel (3, levelD_));
             orgNoteOnPending_ = false; orgNoteOffPending_ = false; orgKillPending_ = false;
             if (prof) tw::organics_prof::ticks.fetch_add (juce::Time::getHighResolutionTicks() - pt0, std::memory_order_relaxed);
         }

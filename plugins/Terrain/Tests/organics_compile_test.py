@@ -11,7 +11,8 @@
      plus value ranges; families/categories from the contract;
    - zone coverage: no key/velocity holes per articulation over the declared key range, with complete RR
      sets (seq positions 0..n-1, random slots covering [0,1));
-   - every loop seam (sustain loop and tail loop) re-measured on the decoded FLAC: ratio ≤ 1.5;
+   - every loop seam (sustain loop and tail loop) re-measured on the decoded FLAC: ratio ≤ 1.5; a tp106 BAKED sustain
+     loop (xf 0) by identity instead — the frame before le is the frame before ls and the pad repeats ls (≤ 6 LSB);
    - onsets inside the region; loop points inside the sample; smp indexes valid;
    - budget: int16 RAM (from the FLAC headers) ≤ the instrument's budget and ≈ index sizeMB;
    - licence: source/LICENCE.txt, source/provenance.csv (one row per sample, sha256), a mapping file;
@@ -337,8 +338,21 @@ def check_audio(d: str, m: dict, frames, budget_mb: float, idx_size, quick: bool
             if quick and len(seen) > 40:
                 continue
             x, _ = sf.read(os.path.join(d, "samples", m["samples"][r["smp"]]), dtype="float64", always_2d=True)
-            mt = an.seam_metric(x, ls, le, r["xf"])
             n += 1
+            if r["loop"] in ("continuous", "sustain") and r["xf"] == 0 and ls >= an.LOOP_PAD:
+                # tp106 — a BAKED sustain loop (analyse.polish_loop): the wrap le → ls is the recording's own ls-1 → ls,
+                # so the join is proven by identity, not by a slope ratio (which only measures how steep the waveform
+                # naturally is at ls): the last frame before le IS the frame before ls (the blend lands on it; the ones
+                # before it are still a hair into the crossfade) and the pad after le repeats the frames from ls, to the
+                # 16-bit dither (a few LSB)
+                tol = 6.0 / 32768.0
+                d_in = float(np.max(np.abs(x[le - 1] - x[ls - 1])))
+                d_pad = float(np.max(np.abs(x[le: le + an.LOOP_PAD] - x[ls: ls + an.LOOP_PAD]))) if le + an.LOOP_PAD <= len(x) else 1.0
+                worst = max(worst, max(d_in, d_pad) * 32768.0 / 6.0)
+                check(d_in <= tol and d_pad <= tol, f"{iid}: baked loop smp {r['smp']} [{ls},{le}) does not join: "
+                      f"|Δ| before {d_in * 32768:.1f} LSB, pad {d_pad * 32768:.1f} LSB (≤ 6)")
+                continue
+            mt = an.seam_metric(x, ls, le, r["xf"])
             worst = max(worst, mt["ratio"])
             check(mt["ratio"] <= 1.5, f"{iid}: loop seam smp {r['smp']} [{ls},{le}) xf {r['xf']} ratio {mt['ratio']:.2f} > 1.5")
     return ram, n, worst

@@ -20,5 +20,6 @@
    "name": "Nyamaropa",
    "sfz": "VCSL/Idiophones/Plucked Idiophones/Mbira dzaVadzimu Nyamaropa, Zimbabwe, Low B.sfz"
   }
- ]
+ ],
+ "pitchCheckWhy": "tuned to the Nyamaropa scale, not 12-TET: the SFZ's own tune values ARE the instrument (±60 ¢ is beyond tfix)"
 }

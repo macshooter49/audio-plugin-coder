@@ -9,6 +9,8 @@
   seam_metric()       renders the loop join the way the runtime does (equal-power crossfade of the xf frames
                       before `le` with the xf frames before `ls`, then continues at `ls`) and compares the local
                       peak |Δ| at the join with the typical local peak |Δ| around it. Pass = ratio ≤ 1.5.
+  polish_loop()       tp106: every sustain loop's final shape — a repeating swell flattened (loop_pump_db), the
+                      cleanest crossfade length chosen (seam_click_db) and BAKED into the audio (bake_loop_xfade)
   read_smpl_loops()   WAV 'smpl' chunk (root note + loops) for libraries with pre-looped files
   Renderer            a tiny offline sampler over a compiled map.json, used for preview.flac and the
                       listen-by-numbers QA. It is NOT the runtime; it only has to be honest about levels.
@@ -258,6 +260,135 @@ def extend_decay(x: np.ndarray, sr: int, ls: int, le: int, xf: int, rate_db_s: f
     z = s * (10.0 ** (-rate_db_s * ((m - ls) / sr) / 20.0))[:, None]
     out = np.concatenate([x2[:ls], z])
     return out if x.ndim == 2 else out[:, 0]
+
+
+# --------------------------------------------------------------------------------------------- loop polish (tp106)
+LOOP_PAD = 8          # frames after `le` that repeat the frames from `ls` (the interpolators read up to le + 3)
+
+
+def loop_pump_db(mono: np.ndarray, sr: int, ls: int, le: int) -> float:
+    """The slow level ripple a sustain loop REPEATS: 200 ms RMS every 25 ms over two passes of [ls, le) (the wrap
+    included), max − min in dB. 200 ms averages vibrato / tremolo AM out; a bow change or swell inside the loop
+    comes back every loop length and reads as pumping."""
+    seg = np.concatenate([mono[ls:le], mono[ls:le]]).astype(np.float64)
+    w, h = int(0.2 * sr), max(1, int(0.025 * sr))
+    if len(seg) < w + h:
+        return 0.0
+    c = np.concatenate([[0.0], np.cumsum(seg ** 2)])
+    idx = np.arange(0, len(seg) - w, h)
+    e = 10.0 * np.log10((c[idx + w] - c[idx]) / w + 1e-20)
+    return float(e.max() - e.min())
+
+
+def _smooth_env(mono: np.ndarray, sr: int, a: int, le: int, win_s: float = 0.2) -> np.ndarray:
+    """RMS envelope (linear) per frame over [a, le): a centred `win_s` window over the recording as it is (clipped at
+    the file edges). Continuous by construction, so a gain derived from it never steps."""
+    w2 = max(1, int(win_s * sr) // 2)
+    lo0 = max(0, a - w2)
+    seg = mono[lo0: min(len(mono), le + w2)].astype(np.float64)
+    c = np.concatenate([[0.0], np.cumsum(seg ** 2)])
+    j = np.arange(a, le) - lo0
+    lo = np.clip(j - w2, 0, len(seg)); hi = np.clip(j + w2, 0, len(seg))
+    return np.sqrt((c[hi] - c[lo]) / np.maximum(1, hi - lo))
+
+
+def flatten_loop(x: np.ndarray, sr: int, ls: int, le: int, lead: int, max_db: float = 12.0) -> Tuple[np.ndarray, Dict[str, float]]:
+    """Level the slow (200 ms) envelope of [ls − lead, le) to the level at ls − lead, so the loop no longer repeats a
+    swell or a bow change (vibrato / tremolo / bow grain are faster and stay). Gain = target / envelope, which is 1 at
+    ls − lead (the recording continues into it without a step); the level at `le` and at `ls` both land on the target,
+    so the baked crossfade between them joins two equal levels. ±max_db."""
+    x2 = (x if x.ndim == 2 else x[:, None]).astype(np.float64).copy()
+    mono = x2.mean(axis=1)
+    a = max(0, ls - lead)
+    env = _smooth_env(mono, sr, a, le)
+    target = env[0]
+    g = target / np.maximum(env, 1e-9)
+    lim = 10.0 ** (max_db / 20.0)
+    g = np.clip(g, 1.0 / lim, lim)
+    x2[a:le] *= g[:, None]
+    info = {"flattenMinDb": round(db(float(g.min())), 2), "flattenMaxDb": round(db(float(g.max())), 2)}
+    return (x2 if x.ndim == 2 else x2[:, 0]), info
+
+
+def bake_loop_xfade(x: np.ndarray, ls: int, le: int, xf: int) -> Tuple[np.ndarray, float]:
+    """Write the loop's crossfade INTO the audio: the xf frames before `le` become a blend of themselves and the xf
+    frames before `ls`, with an energy-preserving law for the measured correlation ρ of the two (ρ = 1 → equal gain,
+    ρ = 0 → equal power; a + b and a² + b² + 2ρab = 1 in between), and LOOP_PAD frames after `le` repeat the frames
+    from `ls`. The runtime then wraps le → ls with no crossfade of its own (map xf = 0): the last frame of the blend
+    IS the frame before `ls`, so the join is sample-continuous for every interpolator."""
+    x2 = (x if x.ndim == 2 else x[:, None]).astype(np.float64).copy()
+    A, B = x2[le - xf: le], x2[ls - xf: ls]
+    den = math.sqrt(float(np.sum(A * A)) * float(np.sum(B * B)))
+    rho = float(np.sum(A * B)) / den if den > 1e-20 else 1.0
+    rho = min(1.0, max(0.0, rho))
+    t = (np.arange(xf) + 1.0) / xf                     # reaches exactly 1 on the last blended frame
+    b = t * t * (3.0 - 2.0 * t)
+    a = -rho * b + np.sqrt(np.maximum(0.0, 1.0 - b * b * (1.0 - rho * rho)))
+    x2[le - xf: le] = A * a[:, None] + B * b[:, None]
+    need = le + LOOP_PAD
+    if need > len(x2):
+        x2 = np.concatenate([x2, np.zeros((need - len(x2), x2.shape[1]))])
+    x2[le: need] = x2[ls: ls + LOOP_PAD]
+    return (x2 if x.ndim == 2 else x2[:, 0]), rho
+
+
+def seam_click_db(x: np.ndarray, sr: int, ls: int, le: int) -> Dict[str, float]:
+    """A BAKED loop's join (wrap le → ls, no runtime crossfade) as the runtime plays it: the 200 ms before `le`
+    followed by the 200 ms from `ls`, per channel. clickDb = the largest HF(8 kHz, 4th-order) peak within ±2 ms of
+    the join over the largest HF peak anywhere else in that 400 ms (> 0 dB = the join is the sharpest event there);
+    levelDb = the 20 ms RMS just after the join re just before (a step)."""
+    from scipy.signal import butter, sosfilt
+    x2 = x if x.ndim == 2 else x[:, None]
+    M = int(0.2 * sr)
+    a0 = max(0, le - M)
+    sos = butter(4, 8000.0 / (sr / 2.0), btype="highpass", output="sos") if sr > 16000 else None
+    worst, lvl = -200.0, 0.0
+    for ch in range(x2.shape[1]):
+        y = np.concatenate([x2[a0: le, ch], x2[ls: ls + M, ch]]).astype(np.float64)
+        j = le - a0
+        if sos is not None:
+            h = np.abs(sosfilt(sos, y))
+            k = int(0.002 * sr)
+            near = h[max(0, j - k): j + k]
+            far = np.concatenate([h[int(0.01 * sr): max(0, j - 4 * k)], h[j + 4 * k:]])
+            if len(near) and len(far):
+                worst = max(worst, db(float(near.max())) - db(float(far.max()) + 1e-20))
+        q = int(0.02 * sr)
+        lvl = max(lvl, abs(db(_rms(y[j: j + q])) - db(_rms(y[j - q: j]))))
+    return {"clickDb": round(worst, 2), "levelDb": round(lvl, 2)}
+
+
+def polish_loop(x: np.ndarray, sr: int, ls: int, le: int, xf0: int, onset: int, flatten: bool) -> Tuple[np.ndarray, int, Dict[str, float]]:
+    """tp106 — the final shape of a sustain loop: (1) flatten a repeating swell (pump > 1.5 dB) when allowed, (2) pick
+    the crossfade length that makes the cleanest join (10 ms … 200 ms, ≤ 45 % of the loop, lead-in after the attack),
+    (3) bake it into the audio. Returns (new audio, xf for the map = 0, info)."""
+    mono = to_mono(x).astype(np.float64)
+    L = le - ls
+    room = ls - (onset + int(0.08 * sr))                # the lead-in must not reach back into the attack
+    cands = sorted({int(v) for v in (xf0, 0.010 * sr, 0.025 * sr, 0.05 * sr, 0.1 * sr, 0.2 * sr)
+                    if 64 <= int(v) <= min(0.45 * L, max(64, room), ls)})
+    info = {"pumpBeforeDb": round(loop_pump_db(mono, sr, ls, le), 2)}
+    if not cands:
+        cands = [int(v) for v in (min(ls, 0.45 * L),) if int(v) >= 8]
+    if not cands:                                       # no lead-in before `ls` (a loop from the file's first frames)
+        info.update(xfBaked=0, rho=1.0, seamClickDb=seam_click_db(x, sr, ls, le)["clickDb"], seamLevelDb=0.0,
+                    pumpAfterDb=info["pumpBeforeDb"], noLeadIn=True)
+        return x, xf0, info
+    y = x
+    if flatten and info["pumpBeforeDb"] > 1.5:
+        y, fi = flatten_loop(x, sr, ls, le, max(cands))
+        info.update(fi)
+    best = None
+    for xf in cands:
+        z, rho = bake_loop_xfade(y, ls, le, xf)
+        m = seam_click_db(z, sr, ls, le)
+        score = max(0.0, m["clickDb"]) + 2.0 * m["levelDb"] + (0.5 if xf < 0.02 * sr else 0.0)
+        if best is None or score < best[0]:
+            best = (score, xf, z, rho, m)
+    _, xf, z, rho, m = best
+    info.update(xfBaked=int(xf), rho=round(rho, 3), seamClickDb=m["clickDb"], seamLevelDb=m["levelDb"],
+                pumpAfterDb=round(loop_pump_db(to_mono(z).astype(np.float64), sr, ls, le), 2))
+    return z, 0, info
 
 
 def read_smpl_loops(path: str) -> Tuple[Optional[int], List[Tuple[int, int]]]:

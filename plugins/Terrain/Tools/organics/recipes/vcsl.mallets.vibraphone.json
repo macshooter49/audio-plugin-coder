@@ -31,5 +31,6 @@
    "swLabel": "Bowed",
    "sustaining": true
   }
- ]
+ ],
+ "pitchCheckWhy": "the motor's amplitude vibrato throws the YIN period detector (octave / semitone jumps); its fundamental partial measures within ±3 ¢"
 }

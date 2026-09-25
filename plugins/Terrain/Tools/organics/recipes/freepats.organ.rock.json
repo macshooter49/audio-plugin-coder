@@ -20,5 +20,7 @@
    "sfz": "FreePats/RockOrganEmulation-SFZ-20190715/RockOrganEmulation-SFZ-20190715/RockOrganEmulation-20190715.sfz",
    "sustaining": true
   }
- ]
+ ],
+ "loopFlatten": false,
+ "loopMotionWhy": "the level motion inside the loop is the instrument's own (beating ranks / rotary speaker / bellows): periodic by nature, kept"
 }
