@@ -22,7 +22,7 @@ namespace tw
     struct OrganicParams
     {
         float dyn     = 0.0f;    // Dynamics  −1..+1  layer-selection velocity offset (±63), live crossfade
-        float tone    = 0.0f;    // Tone      −1..+1  velocity-aware tilt, pivot max(700 Hz, f0), ±9 dB
+        float tone    = 0.0f;    // Tone      −1..+1  velocity-aware tilt, pivot max(700 Hz, f0), ±9 dB; on SPARSE spectra (bells, flute) a harmonic exciter on + and a deeper low-pass on − (tp108)
         float body    = 0.0f;    // Body      −1..+1  zone lookup shift ±6 st, repitched back (formant-like)
         float attack  = 0.0f;    // Attack    −1..+1  +1 Tight (air trim + lift) … 0 Natural … −1 a ~3 s swell (log fade + softer layer)
                                  //                   tp107: APVTS knob v → 1 − 2v (knob 0 = Tight, 0.5 = Natural, 1 = the swell)
