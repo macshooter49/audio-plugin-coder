@@ -8,7 +8,7 @@ const OUT = process.argv[3] || path.resolve(__dirname, '../Design/organics/impl-
 const ONLY = process.argv[4] ? process.argv[4].split(',') : null;
 fs.mkdirSync(OUT, { recursive: true });
 (async () => {
-  const { b, p, errs } = await H.launch({ page: PAGE, dpr: 3, width: 1200, height: 820 });
+  const { b, p, errs } = await H.launch({ page: PAGE, dpr: +(process.env.ORG_DPR || 3), width: 1200, height: 820 });
   await H.enable(p, 'a'); await H.setEngine(p, 'a', 7); await H.sleep(900);
   await p.evaluate(() => window.__orgSetInstrument('a', 'salamander.grand')); await H.sleep(400);
   const fams = ONLY || await p.evaluate(() => Object.keys(window.__orgArt.families));

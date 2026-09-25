@@ -7409,7 +7409,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 #syn-panel .samp-disp .org-viz, #syn-panel .samp-disp .org-status { display: none; }
 #syn-panel .device.osc.engine-organic .samp-disp { --org-bg: #1A1A2E; background: transparent; border: none; box-shadow: none; outline: none; cursor: default; }   /* tp105 — NO BOX (Max): transparent over the panel like the wavetable view; --org-bg is set from the real ground by paintBg() */
 #syn-panel .device.osc.engine-organic .samp-disp > :not(.org-viz):not(.org-status) { display: none !important; }
-#syn-panel .device.osc.engine-organic .samp-disp .org-viz { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; will-change: transform; }   /* tp105 — its own layer: painted once; the moving copies live in .org-fx above it */
+#syn-panel .device.osc.engine-organic .samp-disp .org-viz { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; will-change: transform; }
+#syn-panel .device.osc.engine-organic .samp-disp .org-viz.org-fx { will-change: auto; }   /* the overlay paints with the panel: a second layer cost compositing every frame the page moves (measured) */   /* tp105 — its own layer: painted once; the moving copies live in .org-fx above it */
 #syn-panel .device.osc.engine-organic .samp-disp .org-status { display: flex; position: absolute; inset: 0; align-items: center; justify-content: center; pointer-events: none;
   font-size: 9px; font-weight: 300; letter-spacing: 1px; color: var(--text-secondary); opacity: 0; transition: opacity .2s ease; }
 #syn-panel .device.osc.engine-organic .samp-disp.org-missing .org-status { opacity: 1; }
@@ -9486,11 +9487,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_A_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = wide. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_A_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 10 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
@@ -9856,11 +9857,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_B_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = wide. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_B_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 10 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
@@ -10250,11 +10251,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_C_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = wide. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_C_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 10 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
@@ -10620,11 +10621,11 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                 <div class="knob" data-syn="SYN_OSC_D_ORG_DYNAMICS" title="Dynamics — which recorded layer plays: left borrows the softer layers (the pp timbre), right the harder ones (ff). Loudness still follows your playing. It crossfades live, so the mod wheel or an LFO makes it breathe"><div class="knob-ring"></div><div class="knob-label">Dynamics</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_TONE" title="Tone — velocity-aware brightness tilt, pivot 700 Hz, ±9 dB: dark and felted left, open and bright right"><div class="knob-ring"></div><div class="knob-label">Tone</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_BODY" title="Body — borrows a neighbouring sample and repitches it to the note: right = a bigger, darker instrument, left = smaller and nasal. ±6 semitones of formant, no pitch change"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = wide. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_ORG_VIBRATO" title="Vibrato — a player’s vibrato that eases in after the note starts: 0 = none, 100 = ±50 cents. Its rate and delay are on the back (+)"><div class="knob-ring"></div><div class="knob-label">Vibrato</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_HUMAN" title="Human — per-note variation: detune, level, start, tone, timing and round-robin depth. 0 = every note identical"><div class="knob-ring"></div><div class="knob-label">Human</div></div>
               </div>
               <div class="osc-knobs organic-knobs organic-pg2">
-                <div class="knob" data-syn="SYN_OSC_D_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 10 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_ORG_RELEASE" title="Release — how long a note rings after you let go: 20 ms at 0, as recorded in the centre, 12 s and more at 100. The amp envelope’s release always lengthens it"><div class="knob-ring"></div><div class="knob-label">Release</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_NOISE" title="Noise — the mechanical noises (hammer, pedal, fret, breath, key-up): 0 = silent, centre = as recorded, 100 = +12 dB"><div class="knob-ring"></div><div class="knob-label">Noise</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_SUSTAIN" title="Sustain — 0 = the natural decay; up = it crossfades into a held tail loop, and at the top a piano holds for ever"><div class="knob-ring"></div><div class="knob-label">Sustain</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_ORG_VELOCITY" title="Velocity — how much your playing sets the level and the brightness: 0 = every note full, 100 = the instrument’s own curve"><div class="knob-ring"></div><div class="knob-label">Velocity</div></div>
@@ -21911,10 +21912,10 @@ setTimeout(function wireSynControls () {
         /* tp105 — the back panel's two times read in their units (contract tp105: rate 3..9 Hz, delay 0..2 s) */
         if (k === 'VIBRATE')  return ring ? (3 + 6 * n).toFixed (1) : (3 + 6 * n).toFixed (1) + ' Hz';
         if (k === 'VIBDELAY') return ring ? (2 * n).toFixed (n < 0.5 ? 2 : 1) : (2 * n).toFixed (2) + ' s';
+        if (k === 'VIBRATO')  { const ct = 50 * Math.pow (n, 1.6); return ring ? String (Math.round (ct)) : (n < 0.005 ? 'Off' : (ct < 9.95 ? ct.toFixed (1) : Math.round (ct)) + ' ct'); }   /* the engine's depth: 50·v^1.6 cents */
         if (ring) return String (pct);
-        if (k === 'VIBRATO')  return n < 0.005 ? 'Off' : String (pct);
-        /* tp105 — Release is a real release now: 20 ms at 0, the recording's own at the centre, ≥ 10 s at 100 (the amp envelope's release always lengthens it) */
-        if (k === 'RELEASE')  { if (n < 0.005) return '20 ms'; if (n > 0.995) return '10 s'; if (Math.abs (n - 0.5) < 0.006) return 'Natural'; return (n < 0.5 ? 'Shorter ' : 'Longer ') + Math.round (Math.abs (n - 0.5) * 200); }
+        /* tp105 — Release is a real release now: 20 ms at 0, the recording's own at the centre, ≥ 12 s at 100, log in both halves (the amp envelope's release always lengthens it) */
+        if (k === 'RELEASE')  { if (n < 0.005) return '20 ms'; if (n > 0.995) return '12 s'; if (Math.abs (n - 0.5) < 0.006) return 'Natural'; return (n < 0.5 ? 'Shorter ' : 'Longer ') + Math.round (Math.abs (n - 0.5) * 200); }
         if (k === 'NOISE')    { if (n < 0.005) return 'Off'; const db = n <= 0.5 ? 20 * Math.log10 (2 * n) : (n - 0.5) / 0.5 * 12; return sgn (db, 1) + ' dB'; }   /* tp105 — 1 = +12 dB */
         if (k === 'SUSTAIN')  return n < 0.005 ? 'Natural' : (n > 0.995 ? 'Hold' : String (pct));
         if (k === 'IMAGE')    return n < 0.005 ? 'Mono' : (Math.abs (n - 0.667) < 0.006 ? 'As recorded' : (1.5 * n).toFixed (2) + '×');
@@ -49292,12 +49293,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
         var e = document.createElementNS ('http://www.w3.org/2000/svg', 'ellipse'); e.setAttribute ('class', 'mouth'); e.setAttribute ('cx', m.getAttribute ('data-x')); e.setAttribute ('cy', m.getAttribute ('data-y'));
         e.setAttribute ('rx', (0.85 * mm.scale).toFixed (2)); e.setAttribute ('ry', (0.75 * mm.scale).toFixed (2)); vv.appendChild (e); });
       vars.push (varOf (g, mm)); });
-    /* the overlay layer (tp105): one empty group per variant, carrying the variant's own transform and fade mask */
+    /* the overlay layer (tp105): one empty group per variant, carrying the variant's own transform */
     var fx = svg.nextElementSibling; if (!fx || !fx.classList || !fx.classList.contains ('org-fx')) { fx = document.createElementNS ('http://www.w3.org/2000/svg', 'svg');
       fx.setAttribute ('class', 'org-viz org-fx'); fx.setAttribute ('aria-hidden', 'true'); fx.setAttribute ('preserveAspectRatio', svg.getAttribute ('preserveAspectRatio') || 'xMidYMid meet'); svg.parentNode.insertBefore (fx, svg.nextSibling); }
     fx.setAttribute ('viewBox', '0 0 ' + W + ' ' + H);
-    fx.innerHTML = vars.map (function (w) { var tf = w.g.getAttribute ('transform'), mk = w.g.getAttribute ('mask') || (w.g.parentNode && w.g.parentNode.getAttribute && w.g.parentNode.getAttribute ('mask'));
-      return '<g' + (mk ? ' mask="' + mk + '"' : '') + '><g class="twfx"' + (tf ? ' transform="' + tf + '"' : '') + '></g></g>'; }).join ('');
+    /* no fade mask on the overlay: a masked group is re-composited whole on every change (measured on the grand's run); a lit
+       key low in the fade simply shows at full strength */
+    fx.innerHTML = vars.map (function (w) { var tf = w.g.getAttribute ('transform');
+      return '<g><g class="twfx"' + (tf ? ' transform="' + tf + '"' : '') + '></g></g>'; }).join ('');
     [].slice.call (fx.querySelectorAll ('.twfx')).forEach (function (gx, i) { if (vars[i]) vars[i].fx = gx; });
     V[o] = { fam: fam, w: b.w, h: b.h, meta: r.meta, svg: svg, fx: fx, vars: vars, split: splitOf (vars) };
     dropAnim (o);
@@ -49407,17 +49410,20 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* the overlay: lift a copy of part e (lit or not) and the later parts that overlap it into variant w's overlay group */
   function bbOf (e) { if (e.__bb !== undefined) return e.__bb; var b = null; try { var q = e.getBBox (); b = { x: q.x, y: q.y, w: q.width, h: q.height }; } catch (x) {} return (e.__bb = b); }
   function coverOf (e) { if (e.__cov) return e.__cov; var bb = bbOf (e), out = [];
-    if (bb) for (var n = e.nextElementSibling; n; n = n.nextElementSibling) { if (!n.classList || !n.classList.contains ('pt')) continue; var b2 = bbOf (n);
+    /* the later parts that overlap it — at most 6, the nearest first in paint order (a key's black neighbours, a bar's neighbours): a
+       long tail of covers made every lift a big repaint for a sliver of stacking truth */
+    if (bb) for (var n = e.nextElementSibling; n && out.length < 6; n = n.nextElementSibling) { if (!n.classList || !n.classList.contains ('pt')) continue; var b2 = bbOf (n);
       if (b2 && b2.x < bb.x + bb.w && bb.x < b2.x + b2.w && b2.y < bb.y + bb.h && bb.y < b2.y + b2.h) out.push (n); }
     return (e.__cov = out); }
   function lift (w, e, cls, bare) { if (!w.fx || !e) return []; var c = e.cloneNode (true); (cls || []).forEach (function (k) { c.classList.add (k); }); w.fx.appendChild (c); var out = [c];
     if (!bare) coverOf (e).forEach (function (k) { var cc = k.cloneNode (true); cc.classList.remove ('on'); cc.classList.remove ('ring'); w.fx.appendChild (cc); out.push (cc); }); return out; }
   function drop (arr) { (arr || []).forEach (function (x) { if (x.parentNode) x.parentNode.removeChild (x); }); }
+  var FLASH = 450;
   function ring (o, w, s, note, opt) { opt = opt || {}; var old = A.ringing.get (s); if (old) unring (s, old);
     var up = lift (w, s, ['ring'], true), sv = s.querySelector ('.vib'); if (!up.length) return;   /* bare: nothing covers a lit string */
     if (sv) sv.style.visibility = 'hidden';   /* the still string steps aside while its lit copy shows (one flip per note) */
     var st = { o: o, note: note, up: up, sv: sv, hold: !!(opt.sustain || opt.damp) }; A.ringing.set (s, st);
-    if (!opt.sustain) st.tm = setTimeout (function () { unring (s, st); }, Math.round (Math.min (1.6, opt.tau || 0.9) * 1000)); }
+    st.tm = setTimeout (function () { unring (s, st); }, opt.sustain ? 600 : Math.round (Math.min (0.9, opt.tau || 0.9) * 1000)); }   /* a plucked string ≤ 0.9 s, a bowed one 0.6 s, then out */
   function unring (s, st) { clearTimeout (st.tm); drop (st.up); if (st.sv) st.sv.style.visibility = ''; if (A.ringing.get (s) === st) A.ringing.delete (s); }
   function nearestIn (els, note) { var best = null, bd = 1e9; els.forEach (function (e) { var n = +e.getAttribute ('data-i'), d = Math.abs (n - note);
     for (var k = -48; k <= 48; k += 12) d = Math.min (d, Math.abs (n - (note + k)) + Math.abs (k) * 0.01); if (d < bd) { bd = d; best = e; } }); return best; }
@@ -49430,14 +49436,16 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function varFor (v, note) { if (v.vars.length < 2 || v.split == null) return v.vars[0]; return v.vars[note < v.split ? 0 : 1]; }
   function noteOn (o, note, vel) {
     var v = V[o]; if (!v || A.off) return; vel = vel == null ? 0.8 : vel;
+    if (window.__tiMotionOn && !window.__tiMotionOn ()) return;   /* Settings › Motion Off (tp62): the instrument rests as a still drawing — zero reaction cost */
     var H = heldOf (o); if (H.has (note)) return;
     var st = { up: [] }; H.set (note, st);
     var w = varFor (v, note); if (!w) return; var g = w.g, m = w.meta, fam = w.kind;
     var type = (m.map && m.map.type) || 'keys';
-    var flash = function (els) { els.forEach (function (e) { if (e) st.up = st.up.concat (lift (w, e, ['on'])); }); };
-    if (type === 'keys') { flash ([foldInto (all (g, '.r-key'), note)]);
-      if (m.map.strings && w.strings.length) { var n = w.strings.length, k = Math.max (0, Math.min (n - 1, Math.round ((note - m.map.lo) / m.map.span * (n - 1))));
-        var s = byI (w.strings, k); if (s) ring (o, w, s, note, { damp: true, tau: fam === 'grand' ? 1.5 : 0.6 }); } }
+    /* a STRIKE: the part lights for FLASH ms and goes out on its own, held or not — a held chord costs nothing after that (measured:
+       a lit copy that stayed lit re-painted with everything else the page animates while notes sound, ~1 % of a core) */
+    var flash = function (els) { var up = []; els.forEach (function (e) { if (e) up = up.concat (lift (w, e, ['on'])); }); st.up = st.up.concat (up);
+      if (up.length) setTimeout (function () { drop (up); }, FLASH); };
+    if (type === 'keys') flash ([foldInto (all (g, '.r-key'), note)]);   /* tp105 — the key lights; its string no longer does (a lit piano string on a fast run cost +10 % of a core in WebKit's GPU process: a long diagonal repaint per note) */
     else if (type === 'strings') {
       var open = m.map.open, id2 = 0;
       if (open.length > 8) id2 = open.reduce (function (b, q, i) { return Math.abs (q - note) < Math.abs (open[b] - note) ? i : b; }, 0);
@@ -49447,7 +49455,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else if (type === 'tines') { var L = w.strings.length; if (L) { var want = fam === 'kalimba' ? [8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2][((note % 12) + 12) % 12] % L : ((note % L) + L) % L;
       var s3 = byI (w.strings, want); if (s3) ring (o, w, s3, note, { tine: true, amp: 0.7 + vel * 0.6, tau: fam === 'musicbox' ? 0.7 : 1.3 }); } }
     else if (type === 'bars') { var b = foldInto (all (g, '.r-bar'), note); if (b) { var bu = lift (w, b, ['on', 'hit']);
-      setTimeout (function () { if (bu[0]) bu[0].classList.remove ('hit'); }, 70); setTimeout (function () { drop (bu); }, fam === 'glock' ? 1600 : 700); } }
+      setTimeout (function () { if (bu[0]) bu[0].classList.remove ('hit'); }, 70); setTimeout (function () { drop (bu); }, fam === 'glock' ? 900 : 600); } }
     else if (type === 'pipes') { var ps = all (g, '.r-pipe'), np = ps.length; if (np) { var ip = ((np - 1 - ((note - 36) % np)) % np + np) % np; flash ([byI (ps, ip)]); } }
     else if (type === 'voices') { var vs = all (g, '.r-voice'), nv = vs.length; if (nv) { var va = ((note * 7) % nv + nv) % nv, vb = (va + Math.floor (nv / 2)) % nv;
       flash ([byI (vs, va), byI (vs, vb)]); } }

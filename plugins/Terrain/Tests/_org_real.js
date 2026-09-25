@@ -70,14 +70,15 @@ const driver = `(function () {
           for (var s = 0; s < states.length; s++) { var acc = { on: [], off: [] };
             /* the reaction ON and OFF alternate twice over the SAME notes (a slow drift of the page cannot pose as the reaction) */
             if (states[s][0] === 'run') await host({ cmd: 'run', notes: states[s][1], hz: 12, vel: 100 }); else await host({ cmd: 'notes', notes: states[s][1], vel: 100 });
-            for (var rep = 0; rep < 4; rep++) { var on = (rep % 2) === 0;
+            for (var rep = 0; rep < 4; rep++) { var on = ${process.env.ORG_CPU_ONLYON ? 'true' : '(rep % 2) === 0'};   /* ORG_CPU_ONLYON=1: a build without the switch (the before-picture) */
               window.__orgAnim.off = !on; try { window.__orgRelease('a'); } catch (e) {}   /* every window re-triggers from the next feed snapshot (the feed repeats while notes sound) */
               var f0 = window.__orgAnim.frames, c0 = window.__orgAnim.cost, v0 = window.__orgVizN || 0; await sleep(700); var fxN = document.querySelectorAll('#osc-a-device .org-fx .pt').length;
               var cpu = await host({ cmd: 'cpu', secs: 6 });
               acc[on ? 'on' : 'off'].push({ host: cpu.host, wc: cpu.webcontent, gpu: cpu.gpu, frames: window.__orgAnim.frames - f0, js: window.__orgAnim.cost - c0, viz: (window.__orgVizN || 0) - v0, fx: fxN, occ: cpu.occluded ? 1 : 0, beacon: String(cpu.beacon || '').split('\\n').slice(0, 2).join(' || ') }); }
             await host({ cmd: 'notes', notes: [] }); await sleep(900);
             var mean = function (a, f) { return a.reduce(function (x, q) { return x + q[f]; }, 0) / a.length; };
-            var row = { id: id, fam: (window.__orgView('a') || {}).fam, twin: ((window.__orgVars('a') || {}).vars || []).length === 2, state: states[s][0] };
+            if (!acc.off.length) acc.off = acc.on;
+            var row = { id: id, fam: (window.__orgView('a') || {}).fam, twin: (((window.__orgVars ? window.__orgVars('a') : null) || {}).vars || []).length === 2, state: states[s][0] };
             ['host', 'wc', 'gpu', 'frames', 'js', 'viz', 'fx', 'occ'].forEach(function (f) { row[f + 'On'] = +mean(acc.on, f).toFixed(2); row[f + 'Off'] = +mean(acc.off, f).toFixed(2); });
             row.beacon = acc.on[0].beacon; R.cpu.push(row); await log(JSON.stringify(row).slice(0, 300)); }
         }
