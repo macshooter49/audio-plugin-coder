@@ -4536,6 +4536,20 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (args.size() >= 1) audioProcessor.setVoiceCeiling ((int) args[0], true);
                 complete (juce::var (audioProcessor.getMidiSettingsJson()));
             })
+            // ── tp109 — PRESSURE SENSITIVITY (Settings → Expression). Every instance (MidiSettings.json), answered with
+            //    getMidiSettings' JSON (pressCurve / pressStart / pressCeil) so the page paints the clamped truth.
+            .withNativeFunction ("setPressureShape", [this] (const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // args[0] = curve −1..1 (+ = hard), args[1] = start 0..0.5, args[2] = ceiling 0.5..1
+                if (args.size() >= 3)
+                    audioProcessor.setPressureShape ((float) (double) args[0], (float) (double) args[1], (float) (double) args[2], true);
+                complete (juce::var (audioProcessor.getMidiSettingsJson()));
+            })
+            .withNativeFunction ("getPressureIn", [this] (const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // the loudest RAW pressure arriving right now, 0..1 (the Pressure curve's live dot)
+                complete (juce::var ((double) audioProcessor.getPressureIn()));
+            })
             // setVelCurve: the velocity curve (Settings → Controllers). args[0] = c in [-1,1], or 999 = FIXED.
             .withNativeFunction("setVelCurve", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)

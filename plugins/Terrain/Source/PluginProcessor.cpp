@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "TerrainGlobalPrefs.h"   // tp103 — Settings: engine prefs + library locations
+#include "TerrainPressure.h"     // tp109 — Settings: pressure curve / start / ceiling
 #include "LoopTempo.h"   // tp57 — the BPM lock reads the loop's own tempo (JUCE-free, gated by Tests/looptempo_cert.cpp)
 static const char* const kSrcBSfx[4] = { "SRC_E", "SRC_F", "SRC_G", "SRC_H" };   // tp20 — bank 1's route pills, every device
 #if JUCE_MAC
@@ -11456,8 +11457,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             }
         }
         const float kSm = 1.0f - std::exp (-(float) numSamples / ((float) juce::jmax (1.0, getSampleRate()) * 0.010f));
+        // tp109 — PRESSURE SENSITIVITY. The T values stay RAW (0..127 / 127); the Settings curve / start / ceiling is
+        //  applied here, where each one enters its smoother, so a change under a held key is heard at once (no new
+        //  MIDI needed) and every pressure source (channel, MPE member, poly key) is shaped the same way. At the
+        //  defaults apply() returns its input untouched: bit-identical to before (Tests/expression_midi.sh null).
+        const wc::PressureShape pShape = wc::pressureShape().load();
+        float pressIn = midiAtT_;   // the loudest RAW pressure right now (the Settings page's live dot)
         midiWheelSm_ += (midiWheelT_ - midiWheelSm_) * kSm;
-        midiAtSm_    += (midiAtT_    - midiAtSm_)    * kSm;
+        midiAtSm_    += (pShape.apply (midiAtT_) - midiAtSm_) * kSm;
         midiBendSm_  += (midiBendT_  - midiBendSm_)  * kSm;
         midiSlideSm_ += (midiSlideT_ - midiSlideSm_) * kSm;
         float atView = midiAtSm_;   // the whole-instrument aftertouch (the global pass, the rack, the comet)
@@ -11466,9 +11473,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             bool live = false; float mx = 0.0f;
             for (int n = 0; n < 128; ++n)
             {
-                float& sm = polyAtSm_[n]; const float t = polyAtT_[n];
+                float& sm = polyAtSm_[n]; const float raw = polyAtT_[n], t = pShape.apply (raw);   // tp109 — shaped
                 sm += (t - sm) * kSm; if (std::abs (t - sm) < 1.0e-5f) sm = t;
-                if (sm != 0.0f || t != 0.0f) live = true;
+                if (sm != 0.0f || raw != 0.0f) live = true;   // a held key below the start stays live (the start may move)
+                pressIn = juce::jmax (pressIn, raw);
                 mx = juce::jmax (mx, sm);
                 globalSrc_.polyAt[n].store (sm, std::memory_order_relaxed);
             }
@@ -11483,11 +11491,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             { mpeRangeSeen_ = mpeBendSetting_.load (std::memory_order_relaxed); mpeRangeRt_ = mpeRangeSeen_; }
             for (int c = 1; c <= 16; ++c)
             {
-                if (snapCh[c]) { chBendSm_[c] = chBendT_[c]; chPressSm_[c] = chPressT_[c]; chSlideSm_[c] = chSlideT_[c]; }
+                const float pT = pShape.apply (chPressT_[c]);   // tp109 — this note's pressure, shaped
+                if ((mpeMask >> c) & 1u) pressIn = juce::jmax (pressIn, chPressT_[c]);
+                if (snapCh[c]) { chBendSm_[c] = chBendT_[c]; chPressSm_[c] = pT; chSlideSm_[c] = chSlideT_[c]; }
                 else
                 {
                     chBendSm_[c]  += (chBendT_[c]  - chBendSm_[c])  * kSm;
-                    chPressSm_[c] += (chPressT_[c] - chPressSm_[c]) * kSm;
+                    chPressSm_[c] += (pT - chPressSm_[c]) * kSm;
                     chSlideSm_[c] += (chSlideT_[c] - chSlideSm_[c]) * kSm;
                 }
                 globalSrc_.chBend[c].store (chBendSm_[c], std::memory_order_relaxed);
@@ -11507,6 +11517,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             }
         }
         mpeMaskLast_ = mpeMask;
+        pressInView_.store (pressIn, std::memory_order_relaxed);
         globalSrc_.mpeMemberMask.store (mpeMask, std::memory_order_relaxed);
         globalSrc_.wheel.store (midiWheelSm_, std::memory_order_relaxed);
         globalSrc_.atChan.store (midiAtSm_, std::memory_order_relaxed);
@@ -17664,16 +17675,32 @@ void TerrainAudioProcessor::loadMidiPrefs()
     if (tw::deterministic()) return;   // a measurement never depends on the owner's settings
     const auto f = midiPrefsFile();
     if (! f.existsAsFile()) return;
-    const auto v = juce::JSON::parse (f.loadFileAsString());
+    applyMidiPrefsJson (f.loadFileAsString());
+}
+
+// tp109 — the file's text <-> the values, split from the file itself so a test can round-trip them without
+//  touching the owner's MidiSettings.json.
+void TerrainAudioProcessor::applyMidiPrefsJson (const juce::String& text)
+{
+    const auto v = juce::JSON::parse (text);
     auto* o = v.getDynamicObject(); if (o == nullptr) return;
     if (o->hasProperty ("a4"))      wc::tuningA4Hz().store (juce::jlimit (415.0f, 466.0f, (float) (double) o->getProperty ("a4")), std::memory_order_relaxed);
     if (o->hasProperty ("voices"))  tiVoiceCeiling().store (juce::jlimit (8, 96, (int) o->getProperty ("voices")), std::memory_order_relaxed);
     if (o->hasProperty ("mpe"))     mpeSetting_.store ((int) o->getProperty ("mpe") != 0);
     if (o->hasProperty ("mpeBend")) mpeBendSetting_.store (juce::jlimit (1.0f, 96.0f, (float) (double) o->getProperty ("mpeBend")));
     if (o->hasProperty ("chan"))    midiChannelFilter_.store (juce::jlimit (0, 16, (int) o->getProperty ("chan")));
+    if (o->hasProperty ("pressCurve") || o->hasProperty ("pressStart") || o->hasProperty ("pressCeil"))   // tp109
+        wc::pressureShape().store (wc::PressureShape::clamped ((float) (double) o->getProperty ("pressCurve"),
+                                                               (float) (double) o->getProperty ("pressStart"),
+                                                               o->hasProperty ("pressCeil") ? (float) (double) o->getProperty ("pressCeil") : 1.0f));
 }
 
 void TerrainAudioProcessor::saveMidiPrefs() const
+{
+    try { const auto f = midiPrefsFile(); f.getParentDirectory().createDirectory(); f.replaceWithText (midiPrefsJson()); } catch (...) {}
+}
+
+juce::String TerrainAudioProcessor::midiPrefsJson() const
 {
     auto* o = new juce::DynamicObject();
     o->setProperty ("a4",      (double) wc::tuningA4Hz().load());
@@ -17681,7 +17708,11 @@ void TerrainAudioProcessor::saveMidiPrefs() const
     o->setProperty ("mpe",     mpeSetting_.load() ? 1 : 0);
     o->setProperty ("mpeBend", (double) mpeBendSetting_.load());
     o->setProperty ("chan",    midiChannelFilter_.load());
-    try { const auto f = midiPrefsFile(); f.getParentDirectory().createDirectory(); f.replaceWithText (juce::JSON::toString (juce::var (o), true)); } catch (...) {}
+    const auto ps = wc::pressureShape().load();   // tp109
+    o->setProperty ("pressCurve", (double) ps.curve);
+    o->setProperty ("pressStart", (double) ps.start);
+    o->setProperty ("pressCeil",  (double) ps.ceiling);
+    return juce::JSON::toString (juce::var (o), true);
 }
 
 void TerrainAudioProcessor::setMpeOn (bool on, float bendSemis, bool persist)
@@ -17704,6 +17735,12 @@ void TerrainAudioProcessor::setTuningA4 (float hz, bool persist)
     if (persist) saveMidiPrefs();
 }
 
+void TerrainAudioProcessor::setPressureShape (float curve, float start, float ceiling, bool persist)
+{   // tp109 — one value per process (every instance), like A4; the audio thread reads it once per block
+    wc::pressureShape().store (wc::PressureShape::clamped (curve, start, ceiling));
+    if (persist) saveMidiPrefs();
+}
+
 void TerrainAudioProcessor::setVoiceCeiling (int voices, bool persist)
 {
     tiVoiceCeiling().store (juce::jlimit (8, 96, voices), std::memory_order_relaxed);
@@ -17719,6 +17756,10 @@ juce::String TerrainAudioProcessor::getMidiSettingsJson() const
     o->setProperty ("chan",      midiChannelFilter_.load());
     o->setProperty ("a4",        (double) wc::tuningA4Hz().load());
     o->setProperty ("voices",    getVoiceCeiling());
+    const auto ps = wc::pressureShape().load();   // tp109 — pressure curve (−1..1), start / ceiling (0..1)
+    o->setProperty ("pressCurve", (double) ps.curve);
+    o->setProperty ("pressStart", (double) ps.start);
+    o->setProperty ("pressCeil",  (double) ps.ceiling);
     return juce::JSON::toString (juce::var (o), true);
 }
 
