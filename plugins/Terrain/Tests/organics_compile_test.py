@@ -28,8 +28,10 @@
    (segment peak < −50 dBFS, or a static gain 40 dB under the instrument's median);
 6. loudness: every instrument's centre key at velocity 100 (Velocity 0.75) within ±1 dB of the library target
    (K-weighted, first 1 s), velocity-127 peak at that key ≤ −1 dBFS.
-7. tp108: EVERY key's velocity-127 peak ≤ −1 dBFS (build-report peakTrim, written by Tools/organics/peaktrim.py, and —
-   when the audit binary is built — re-measured here through the runtime, every RR take, Noise at its default); the
+7. tp108: EVERY key's velocity-127 peak ≤ −1 dBFS (build-report peakTrim, written by Tools/organics/peaktrim.py, and
+   re-measured here through the runtime, every RR take, Noise at its default — the audit renderer is (re)built first by
+   Tests/organics_audit.sh against the current sources; if it cannot build, the re-measure prints SKIPPED with the
+   reason; if it ran, 0 keys measured or an instrument with no key is a FAIL); the
    trim curve ≤ 0 dB, ≤ 1.5 dB between adjacent keys, 0 on the calibration key. tfix may reach ±95 ¢ (the runtime clamps
    ±100) from a strong measurement; unit tests cover tuning.measure_pitch on short takes, the tfix inheritance and the
    trim envelope.
@@ -596,16 +598,34 @@ def check_peak_trim(lib: str, idx: dict, engine: bool):
                 lim = float((rep.get("loudness") or {}).get("peakLimitedByTrimDb", 0.0))
                 check(abs(tk.get(ck, 0.0) + lim) < 0.02, f"{iid}: the calibration key {ck} is trimmed {tk.get(ck)} dB "
                                                           f"but the loudness records a {lim} dB peak limit")
-    if engine and os.path.exists(peaktrim.AUDIT):
-        env = dict(os.environ, TERRAIN_ORGANICS_DIR=lib, ORG_PEAK_NOISE=peaktrim.NOISE)
-        p = subprocess.run([peaktrim.AUDIT, "--peaks", lib, "", "127"], env=env, capture_output=True, text=True)
-        rows = [ln.split() for ln in p.stdout.splitlines() if ln.startswith("PEAK ")]
-        hot = [(f[1], f[2], f[3], f[5]) for f in rows if float(f[5]) > -1.0]
-        check(rows and not hot, f"engine: {len(hot)} of {len(rows)} keys peak over −1 dBFS at velocity 127, e.g. {hot[:4]}")
-        if rows:
-            worst = max(rows, key=lambda f: float(f[5]))
-            print(f"   engine peaks: {len(rows)} artic×keys at v127, loudest {float(worst[5]):+.2f} dBFS "
-                  f"({worst[1]} a{worst[2]} k{worst[3]}), {len(hot)} over −1 dBFS")
+    if not engine:
+        print("   engine peaks: SKIPPED (--no-engine)")
+        return
+    # the renderer is built HERE, against the current engine + audit sources, by Tests/organics_audit.sh (the same
+    # build the script does) — a binary left over from before tp108 has no --peaks mode and would print nothing
+    why = peaktrim.ensure_audit()
+    if why:
+        print("   ####################################################################################")
+        print(f"   ## engine peaks: SKIPPED — the audit renderer cannot run: {why}")
+        print("   ####################################################################################")
+        return
+    env = dict(os.environ, TERRAIN_ORGANICS_DIR=lib, ORG_PEAK_NOISE=peaktrim.NOISE)
+    p = subprocess.run([peaktrim.AUDIT, "--peaks", lib, "", "127"], env=env, capture_output=True, text=True)
+    rows = [ln.split() for ln in p.stdout.splitlines() if ln.startswith("PEAK ")]
+    rows = [f for f in rows if len(f) == 7]
+    want = len(idx)
+    measured = {f[1] for f in rows}
+    # the renderer ran: measuring nothing (or skipping instruments) is itself a failure, never a pass
+    check(len(rows) > 0, f"engine: the renderer ran (exit {p.returncode}) but measured 0 keys — "
+                         f"stdout {p.stdout[-200:]!r} stderr {p.stderr[-200:]!r}")
+    missing = sorted(set(idx) - measured)
+    check(not missing, f"engine: {len(missing)} of {want} instruments measured no key at all, e.g. {missing[:4]}")
+    hot = [(f[1], f[2], f[3], f[5]) for f in rows if float(f[5]) > -1.0]
+    check(not hot, f"engine: {len(hot)} of {len(rows)} keys peak over −1 dBFS at velocity 127, e.g. {hot[:4]}")
+    if rows:
+        worst = max(rows, key=lambda f: float(f[5]))
+        print(f"   engine peaks: {len(rows)} artic×keys of {len(measured)} instruments at v127, loudest "
+              f"{float(worst[5]):+.2f} dBFS ({worst[1]} a{worst[2]} k{worst[3]}), {len(hot)} over −1 dBFS")
 
 
 # ---------------------------------------------------------------------------------------------- main

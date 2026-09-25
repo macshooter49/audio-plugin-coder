@@ -45,6 +45,25 @@ STEP_DB = 1.4               # the largest key-to-key step the trim may add (Max:
 NOISE = "0.5"               # the Noise knob's default
 
 
+AUDIT_SH = os.path.normpath(os.path.join(HERE, "..", "..", "Tests", "organics_audit.sh"))
+
+
+def ensure_audit() -> str:
+    """(Re)build the audit binary against the CURRENT engine + test sources through Tests/organics_audit.sh (a stale
+    binary from before tp108 has no --peaks mode and prints nothing). Returns "" when it is ready, else why not."""
+    p = subprocess.run(["bash", AUDIT_SH, "build"], capture_output=True, text=True)   # builds, then the usage exit
+    out = (p.stdout + p.stderr).strip()
+    for bad in ("COMPILE FAIL", "LINK FAIL", "JUCE modules not found"):
+        if bad in out:
+            return out.splitlines()[0] if out else bad
+    if not os.path.exists(AUDIT):
+        return f"no binary at {AUDIT} after the build"
+    q = subprocess.run([AUDIT, "--peaks", "/nonexistent-organics-root", "no-such-id", "127"], capture_output=True, text=True)
+    if "PEAKSUMMARY" not in q.stdout:
+        return f"{AUDIT} has no --peaks mode (exit {q.returncode})"
+    return ""
+
+
 def measure(lib: str, iid: str) -> dict:
     """{(artic, key): peak dBFS} at velocity 127 through the runtime."""
     env = dict(os.environ, TERRAIN_ORGANICS_DIR=lib, ORG_PEAK_NOISE=NOISE)
@@ -242,8 +261,9 @@ def main():
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 2))
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
-    if not os.path.exists(AUDIT):
-        print(f"needs {AUDIT}: run Tests/organics_audit.sh calib once to build it")
+    why = ensure_audit()
+    if why:
+        print(f"cannot measure through the engine: {why}")
         return 1
     ids = a.ids or sorted(e["id"] for e in json.load(open(os.path.join(a.lib, "index.json"))))
     with ThreadPoolExecutor(a.jobs) as ex:
