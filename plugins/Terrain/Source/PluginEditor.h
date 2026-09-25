@@ -748,6 +748,7 @@ private:
     static constexpr int kOrgRelayKnobs = 17;   // tp105: + VIBRATO VIBRATE VIBDELAY VCURVE TUNING
     std::unique_ptr<juce::WebSliderRelay> orgRelay_[4][kOrgRelayKnobs];
     juce::WebBrowserComponent::Options withOrganics (juce::WebBrowserComponent::Options o);
+    juce::String organicsUserPatch (const juce::String& js, bool isIndex);   // tp108 — user imports live in <root>/User/<id>
     juce::uint32 orgVizEmitMs_ = 0;   // the organicViz feed's ≤ 15 Hz clock
 
     // ════ UNIVERSAL OSC BOXES — COARSE + SUB relays (5 × 4 osc, 2026-07-09) ════

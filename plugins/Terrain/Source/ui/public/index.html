@@ -43037,6 +43037,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           (cat.items || []).forEach (function (it) {
             if (String (it.name).toLowerCase().indexOf (q) < 0) return;
             var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub, dim: it.dim, play: it.onPlay, tip: it.tip });
+            if (it.onCtx) d.oncontextmenu = function (ev) { ev.preventDefault (); ev.stopPropagation (); try { it.onCtx (ev); } catch (x) {} };   /* tp108 */
             /* fb563 — a MULTI browser (the modulator picker) toggles and stays open: you add three
                sources in a row without reopening it. Its pick() owns `sel`; the list just repaints. */
             d.onclick = function (ev) {
@@ -43057,6 +43058,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       };
       function renderItems (ci) { itemsEl.innerHTML = ''; var cat = CATS[ci]; if (! cat) return;   /* fb606 — CATS is the level being shown, ROOT_CATS is the whole tree */
         (cat.items || []).forEach (function (it) { var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub, dim: it.dim, play: it.onPlay, tip: it.tip });
+          if (it.onCtx) d.oncontextmenu = function (ev) { ev.preventDefault (); ev.stopPropagation (); try { it.onCtx (ev); } catch (x) {} };   /* tp108 — a row's own right-click */
           if (it.dim) { itemsEl.appendChild (d); return; }   /* tp104 — shown, never picked (Not installed) */
           d.onclick = function (ev) {
             /* fb564 — DOUBLE-CLICK ASSIGNS. Max: "I double-click something, it just closes the menu
@@ -49531,12 +49533,80 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
            CREDITS.md), never on screen. An instrument that is not installed is dimmed, has no ▶, and says why in its tooltip. */
         return { name: e.name, tip: inst ? '' : e.name + ' — not installed', sel: e.id === cur, dim: !inst, id: e.id,
                  pick: function () { if (inst) setInstrument (o, e.id); }, onPlay: inst ? function () { call ('organicsPreview', [e.id]).catch (function () {}); } : null }; }) }; });
+      /* tp108 — THE USER CATEGORY: the user's imports (contract tp108), name-only rows like every other category, right-click →
+         Remove; its last row imports a new one (the native file chooser). No ▶ on these rows: the preview player reads the factory
+         folders only. */
+      var users = ix.filter (function (e) { return e.category === 'User'; }).map (function (e) { var inst = e.installed !== false;
+        return { name: e.name, tip: inst ? '' : e.name + ' \u2014 not installed', sel: e.id === cur, dim: !inst, id: e.id,
+                 pick: function () { if (inst) setInstrument (o, e.id); }, onPlay: null, onCtx: function (x) { removeMenu (o, e, x, ev); } }; });
+      users.push ({ name: 'Import SoundFont\u2026', id: '', pick: function () { closeTpb (); chooseImport (o); } });
+      cats.push ({ label: 'User', items: users });
       var openCat = 0; cats.forEach (function (c, k) { if (c.items.some (function (it) { return it.sel; })) openCat = k; });
       window.openTwoPaneBrowser (ev, { cats: cats, openCat: openCat, searchPlaceholder: 'Search instruments',   /* tp107 — the house grey/white categories (no purple here) */
-        onAudition: function () { var id = (S[o] || {}).id; if (id) call ('organicsPreview', [id]).catch (function () {}); } });
+        onImport: function () { chooseImport (o); }, importLabel: 'Import SoundFont\u2026',   /* tp108 */
+        onAudition: function () { var id = (S[o] || {}).id; if (id && id.indexOf ('user.') !== 0) call ('organicsPreview', [id]).catch (function () {}); } });
     });
   }
   window.__orgOpenBrowser = function (o, ev) { openBrowser (String (o), ev || { clientX: 200, clientY: 120, target: document.body }); };
+  /* ═══ tp108 — IMPORT SOUNDFONT (.sfz / .sf2 / .sf3 → a User instrument). The C++ converts on its own thread
+     (organicsImport → job id); progress and the result come back as the `organicImport` event and ride the house toast.
+     An SF2 with several presets asks which one (the house .pmenu, + "Import all presets"); over 500 MB asks first. ═══ */
+  var IMP = { jobs: {}, drop: null, hover: null };
+  function impToast (m) { try { if (window.__tiToast) window.__tiToast (m); } catch (e) {} }
+  function baseName (p) { return String (p || '').split (/[\\/]/).pop (); }
+  function closeTpb () { try { var c = window.__tpbClose || window.__tpbClose2; if (c) c (); } catch (e) {} }
+  function impAnchor (x, y) { var a = document.getElementById ('org-imp-anchor'); if (!a) { a = document.createElement ('div'); a.id = 'org-imp-anchor';
+      a.style.cssText = 'position:fixed;width:1px;height:1px;pointer-events:none;'; document.body.appendChild (a); }
+    a.style.left = Math.round (x || 200) + 'px'; a.style.top = Math.round (y || 120) + 'px'; return a; }
+  function impStart (o, path, preset, allow, x, y) {
+    call ('organicsImport', [String (path), preset, !!allow]).then (function (js) { var r = parse (js) || {};
+      if (!(r.job > 0)) { impToast (r.error || 'Import failed'); return; }
+      IMP.jobs[r.job] = { o: o, path: path, preset: preset, x: x, y: y }; impToast ('Importing ' + baseName (path) + '\u2026'); })
+    .catch (function () { impToast ('Import is not available'); }); }
+  function importPath (o, path, x, y) {
+    if (!path) return;
+    if (!/\.sf[23]$/i.test (path)) { impStart (o, path, -1, false, x, y); return; }
+    call ('organicsListSf2Presets', [String (path)]).then (function (js) { var r = parse (js) || {}, ps = r.presets || [];
+      if (!r.ok) { impToast (r.error || ('Cannot read ' + baseName (path))); return; }
+      if (ps.length <= 1) { impStart (o, path, -1, false, x, y); return; }
+      openMenu (impAnchor (x, y), 'Preset', ps.concat (['Import all presets']), -1, function (i) { impStart (o, path, i >= ps.length ? -2 : i, false, x, y); });
+      if (pm) { pm.style.maxHeight = '60vh'; pm.style.overflowY = 'auto'; } })
+    .catch (function () { impToast ('Import is not available'); }); }
+  function chooseImport (o) { var d = devOf (o), sd = d && d.querySelector ('.sample-view .samp-disp'), r = sd ? sd.getBoundingClientRect () : { left: 200, bottom: 120 };
+    call ('organicsChooseSoundFont', []).then (function (p) { if (p) importPath (o, String (p), r.left, r.bottom); }).catch (function () {}); }
+  function removeMenu (o, e, x, bev) { var fm = window.__tpbFolderMenu || window.__tpbFolderMenu2; if (!fm) return;
+    fm (e.name, [{ label: 'Remove', danger: true, onPick: function () {
+      call ('organicsDeleteUser', [e.id]).then (function (js) { var r = parse (js) || {};
+        impToast (r.ok ? 'Removed ' + e.name : (r.error || 'Cannot remove ' + e.name));
+        if (r.ok) loadIndex (true).then (function () { openBrowser (o, bev); }); }).catch (function () {}); } }], x.clientX, x.clientY); }
+  window.__orgImportIn = function (payload) { var d = parse (payload); if (!d) return; var J = IMP.jobs[d.job] || {};
+    if (!d.done) { impToast ('Importing ' + baseName (J.path) + ' \u2014 ' + Math.round (+d.pct || 0) + '%'); return; }
+    delete IMP.jobs[d.job];
+    if (d.needConfirm) { openMenu (impAnchor (J.x, J.y), 'Import ' + Math.round (+d.mb || 0) + ' MB of audio?', ['Import anyway', 'Cancel'], -1,
+      function (i) { if (i === 0) impStart (J.o, J.path, J.preset, true, J.x, J.y); }); return; }
+    if (!d.ok) { impToast (d.error || 'Import failed'); return; }
+    var n = (d.ids || []).length;
+    loadIndex (true).then (function () { if (J.o && isOrg (J.o) && d.id) setInstrument (J.o, d.id);
+      impToast ('Imported ' + (n > 1 ? n + ' instruments' : (d.name || d.id)) + (d.warning ? ' \u2014 ' + d.warning : '')); }); };
+  try { if (window.__JUCE__ && window.__JUCE__.backend && window.__JUCE__.backend.addEventListener)
+    window.__JUCE__.backend.addEventListener ('organicImport', function (p) { window.__orgImportIn (p); }); } catch (e) {}
+  window.__orgImportPath = function (o, path) { importPath (String (o), path); };
+  window.__orgChooseImport = function (o) { chooseImport (String (o)); };
+  /* the drop: the WebView's drop event names the file (no path) and says WHERE; the OS-level drop (C++ filesDropped →
+     __orgFileDropped) carries the path. Either may come first; they pair within 2 s. Captured before the sample display's own
+     drop (which would load the file as a sample). */
+  function orgDropTarget (e) { var t = e.target, sd = t && t.closest ? t.closest ('.engine-organic .samp-disp') : null; return sd ? oscOfEl (sd) : null; }
+  function isSf (name) { return /\.(sfz|sf2|sf3)$/i.test (String (name || '')); }
+  function dropPair () { var d = IMP.drop, f = IMP.file, now = Date.now ();
+    if (!f || now - f.t > 2000) return; var tgt = (d && now - d.t < 2000) ? d : ((IMP.hover && now - IMP.hover.t < 700) ? IMP.hover : null);
+    if (!tgt) return; IMP.drop = IMP.file = null; importPath (tgt.o, f.path, tgt.x, tgt.y); }
+  document.addEventListener ('dragover', function (e) { var o = orgDropTarget (e); if (o) IMP.hover = { o: o, t: Date.now (), x: e.clientX, y: e.clientY }; }, true);
+  document.addEventListener ('drop', function (e) { var o = orgDropTarget (e); if (!o) return;
+    var fl = e.dataTransfer && e.dataTransfer.files, f = fl && fl[0]; if (!f || !isSf (f.name)) return;
+    e.preventDefault (); e.stopImmediatePropagation (); var sd = e.target.closest ('.samp-disp'); if (sd) sd.classList.remove ('dragover');
+    IMP.drop = { o: o, t: Date.now (), x: e.clientX, y: e.clientY }; dropPair (); }, true);
+  window.__orgFileDropped = function (path) { if (!isSf (path)) return; IMP.file = { path: String (path), t: Date.now () }; dropPair ();
+    setTimeout (dropPair, 300); };
   /* the articulation dropdown — the house .pmenu glass (bullet on the current row), clamped to the window */
   var pm = null;
   function closePm () { if (pm) { try { pm.remove (); } catch (e) {} pm = null; document.removeEventListener ('pointerdown', pmOut, true);

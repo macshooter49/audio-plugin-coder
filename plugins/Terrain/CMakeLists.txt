@@ -63,6 +63,12 @@ set(TERRAIN_ORG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source/organics")
 if (EXISTS "${TERRAIN_ORG_DIR}/OrganicEngine.cpp" AND EXISTS "${TERRAIN_ORG_DIR}/OrganicsLibrary.cpp")
     target_sources(Terrain PRIVATE Source/organics/OrganicEngine.cpp Source/organics/OrganicsLibrary.cpp)
     message(STATUS "Terrain: Organics runtime found — OrganicEngine.cpp + OrganicsLibrary.cpp")
+    # tp108 — the user SoundFont import (SFZ / SF2 / SF3 → .torg in <library>/User), built on the runtime's library.
+    # TERRAIN_ORG_IMPORT gates the editor's import natives (the stub build has no library to import into).
+    if (EXISTS "${TERRAIN_ORG_DIR}/OrganicsImport.cpp")
+        target_sources(Terrain PRIVATE Source/organics/OrganicsImport.cpp)
+        target_compile_definitions(Terrain PRIVATE TERRAIN_ORG_IMPORT=1)
+    endif()
 else()
     target_sources(Terrain PRIVATE Source/organics/OrganicsStub.cpp)
     message(STATUS "Terrain: Organics runtime absent — building the silent OrganicsStub.cpp")
@@ -83,6 +89,21 @@ if (EXISTS "${TERRAIN_ORG_DIR}/OrganicEngine_test.cpp" AND EXISTS "${TERRAIN_ORG
         PUBLIC juce::juce_recommended_config_flags)
     set_target_properties(organics_engine_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
     message(STATUS "Terrain: + organics_engine_test (the Organics runtime's own test binary)")
+endif()
+#  tp108 — the user import's test binary (Tests/organics_import_test.sh builds it with plain clang on the Mac; this target is
+#  the Windows CI's way in). Not part of `all`. Run it on a dir written by Tests/organics_import_fixtures.py.
+if (EXISTS "${TERRAIN_ORG_DIR}/OrganicsImport.cpp" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/organics_import_test.cpp")
+    juce_add_console_app(organics_import_test PRODUCT_NAME "organics_import_test")
+    target_sources(organics_import_test PRIVATE Tests/organics_import_test.cpp
+        Source/organics/OrganicsImport.cpp Source/organics/OrganicEngine.cpp Source/organics/OrganicsLibrary.cpp)
+    target_include_directories(organics_import_test PRIVATE Source Source/organics)
+    target_compile_definitions(organics_import_test PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 _USE_MATH_DEFINES JUCE_MODAL_LOOPS_PERMITTED=1)
+    if (MSVC)
+        target_compile_options(organics_import_test PRIVATE /bigobj /utf-8)
+    endif()
+    target_link_libraries(organics_import_test PRIVATE juce::juce_core juce::juce_events juce::juce_audio_basics juce::juce_audio_formats
+        PUBLIC juce::juce_recommended_config_flags)
+    set_target_properties(organics_import_test PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
 
 # ══ tp103 — THE BUILD ID a bug report quotes (Settings → Report a bug). The commit at CONFIGURE time, set on the one

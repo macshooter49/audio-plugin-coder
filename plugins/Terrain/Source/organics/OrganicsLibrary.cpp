@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <set>
 
 namespace tw
 {
@@ -457,17 +458,31 @@ namespace tw
             void loadIds()
             {
                 idToIdx.clear(); idxToId.clear(); idsLoaded = true;
+                const auto root = OrganicsLibrary::get().root();
                 juce::var v;
-                const auto f = OrganicsLibrary::get().root().getChildFile ("ids.json");
-                if (! f.existsAsFile() || juce::JSON::parse (f.loadFileAsString(), v).failed()) return;
-                if (auto* o = v.getDynamicObject())
-                    for (auto& p : o->getProperties())
-                    {
-                        const int n = (int) p.value;
-                        if (n <= 0) continue;
-                        idToIdx[p.name.toString()] = n;
-                        idxToId[n] = p.name.toString();
-                    }
+                const auto f = root.getChildFile ("ids.json");
+                if (f.existsAsFile() && juce::JSON::parse (f.loadFileAsString(), v).wasOk())
+                    if (auto* o = v.getDynamicObject())
+                        for (auto& p : o->getProperties())
+                        {
+                            const int n = (int) p.value;
+                            if (n <= 0) continue;
+                            idToIdx[p.name.toString()] = n;
+                            idxToId[n] = p.name.toString();
+                        }
+                // tp108 — the user's imports (User/user-ids.json, numbers from 2048). A factory number or id always wins.
+                juce::var u;
+                const auto uf = root.getChildFile ("User").getChildFile ("user-ids.json");
+                if (uf.existsAsFile() && juce::JSON::parse (uf.loadFileAsString(), u).wasOk())
+                    if (auto* o = u.getDynamicObject())
+                        for (auto& p : o->getProperties())
+                        {
+                            const int n = (int) p.value;
+                            const auto id = p.name.toString();
+                            if (n < 2048 || n > 4095 || ! org::isUserId (id) || idxToId.count (n) || idToIdx.count (id)) continue;
+                            idToIdx[id] = n;
+                            idxToId[n] = id;
+                        }
             }
 
             void deliver (std::vector<Done>&& cbs, std::shared_ptr<const OrganicInstrument> inst)
@@ -490,7 +505,7 @@ namespace tw
                     }
                     if (job.isNotEmpty())
                     {
-                        auto folder = OrganicsLibrary::get().root().getChildFile (job);
+                        auto folder = org::instrumentFolder (job);
                         juce::String err;
                         std::shared_ptr<const OrganicInstrument> inst = folder.isDirectory() ? OrganicInstrument::loadFromFolder (folder, &err) : nullptr;
                         std::vector<Done> cbs;
@@ -578,6 +593,29 @@ namespace tw
             const auto f = root().getChildFile ("index.json");
             if (f.existsAsFile() && juce::JSON::parse (f.loadFileAsString(), v).wasOk() && v.isArray()) s.indexVar = v;
             else s.indexVar = juce::var (juce::Array<juce::var>());
+            // tp108 — merge the user's imports (User/user-index.json): category "User", after the factory entries. A copy,
+            // so the factory index.json var is never touched; an id the factory already has is skipped.
+            juce::var u;
+            const auto uf = root().getChildFile ("User").getChildFile ("user-index.json");
+            if (uf.existsAsFile() && juce::JSON::parse (uf.loadFileAsString(), u).wasOk())
+                if (auto* ua = u.getArray(); ua != nullptr && ! ua->isEmpty())
+                {
+                    juce::Array<juce::var> merged;
+                    std::set<juce::String> have;
+                    if (auto* fa = s.indexVar.getArray())
+                        for (auto& e : *fa) { merged.add (e); have.insert (e.getProperty ("id", {}).toString()); }
+                    for (auto& e : *ua)
+                    {
+                        const auto id = e.getProperty ("id", {}).toString();
+                        if (! org::isUserId (id) || have.count (id) || ! e.isObject()) continue;
+                        auto* o = new juce::DynamicObject();
+                        if (auto* src = e.getDynamicObject()) for (auto& kv : src->getProperties()) o->setProperty (kv.name, kv.value);
+                        o->setProperty ("category", "User");
+                        merged.add (juce::var (o));
+                        have.insert (id);
+                    }
+                    s.indexVar = juce::var (merged);
+                }
         }
         return s.indexVar;
     }
@@ -589,6 +627,12 @@ namespace tw
         s.indexLoaded = false; s.idsLoaded = false;
         s.indexVar = juce::var();
         s.loadIds();
+        // tp108 — a user instrument may have been deleted or re-imported under the same id: drop the cached copies (an
+        // oscillator that still plays one keeps its own reference; the next request() reads the folder again)
+        std::vector<std::shared_ptr<const OrganicInstrument>> drop;
+        for (auto it = s.cache.begin(); it != s.cache.end();)
+            if (org::isUserId (it->first) && ! it->second.loading) { drop.push_back (std::move (it->second.inst)); it = s.cache.erase (it); }
+            else ++it;
     }
 
     void OrganicsLibrary::request (const juce::String& id, std::function<void (std::shared_ptr<const OrganicInstrument>)> done)
@@ -613,6 +657,17 @@ namespace tw
         s.ensureStarted();
         if (hit != nullptr) { if (done) juce::MessageManager::callAsync ([done, hit] { done (hit); }); }
         else s.notify();
+    }
+
+    bool org::isUserId (const juce::String& id) noexcept
+    {
+        return id.startsWith ("user.") && id.length() > 5 && validId (id);
+    }
+
+    juce::File org::instrumentFolder (const juce::String& id)
+    {
+        const auto root = OrganicsLibrary::get().root();
+        return isUserId (id) ? root.getChildFile ("User").getChildFile (id) : root.getChildFile (id);
     }
 
     int OrganicsLibrary::idToIndex (const juce::String& id) const
