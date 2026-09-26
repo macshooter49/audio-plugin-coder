@@ -75,6 +75,7 @@ struct AuHost
     bool init()
     {
         AudioComponentDescription d {}; d.componentType = kAudioUnitType_MusicDevice; d.componentSubType = 'Tern'; d.componentManufacturer = 'Wvcr';
+        if (std::getenv ("TPZ_FX")) { d.componentType = kAudioUnitType_Effect; d.componentSubType = 'Trrn'; }   // tpfx: open Terrain FX (the effect) instead
         AudioComponent c = nullptr;
         if (const char* bp = std::getenv ("TERRAIN_AU_BUNDLE"))
         {
@@ -82,7 +83,7 @@ struct AuHost
             NSBundle* b = [NSBundle bundleWithPath: [NSString stringWithUTF8String: bp]];
             if (b == nil || ! [b load]) { std::printf ("  !! cannot load %s\n", bp); return false; }
             CFBundleRef cb = CFBundleCreate (nullptr, (__bridge CFURLRef) b.bundleURL);
-            auto factory = (AudioComponentFactoryFunction) CFBundleGetFunctionPointerForName (cb, CFSTR ("TerrainAUFactory"));
+            auto factory = (AudioComponentFactoryFunction) CFBundleGetFunctionPointerForName (cb, std::getenv ("TPZ_FX") ? CFSTR ("Terrain_FXAUFactory") : CFSTR ("TerrainAUFactory"));
             if (factory == nullptr) { std::printf ("  !! no TerrainAUFactory in %s\n", bp); return false; }
             c = AudioComponentRegister (&d, CFSTR ("Waves Crate: Terrain (local build)"), 0x10000, factory);
             std::printf ("  using the BUILT bundle %s\n", bp);
@@ -146,7 +147,7 @@ int main (int argc, char** argv)
         [NSApp finishLaunching]; [NSApp activateIgnoringOtherApps: YES];
         const char* scriptArg = argc > 1 ? argv[1] : "Tests/_tpz_measure.js";
         const double secs = argc > 2 ? atof (argv[2]) : 120.0;
-        NSString* dir = [NSHomeDirectory() stringByAppendingPathComponent: @"Library/Caches/Terrain"];
+        NSString* dir = [NSHomeDirectory() stringByAppendingPathComponent: std::getenv ("TPZ_FX") ? @"Library/Caches/Terrain FX" : @"Library/Caches/Terrain"];   /* tpfx: JUCE tempDirectory = the plugin binary name */
         [[NSFileManager defaultManager] createDirectoryAtPath: dir withIntermediateDirectories: YES attributes: nil error: nil];
         NSString* expPath = [dir stringByAppendingPathComponent: @"terrain-ui-exp.js"];
         NSString* resPath = [dir stringByAppendingPathComponent: @"terrain-ui-exp-result.txt"];
