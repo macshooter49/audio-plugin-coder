@@ -29,7 +29,7 @@
 6. loudness: every instrument's centre key at velocity 100 (Velocity 0.75) within ±1 dB of the library target
    (K-weighted, first 1 s), velocity-127 peak at that key ≤ −1 dBFS. tp113: the target is closed THROUGH THE ENGINE
    (build-report loudness.engine, Tools/organics/engine_calibrate.py) — −24 LUFS in library units = −24 + the engine's
-   output makeup (organics::kOutputMakeupDb, +12 dB since tp114b) as the engine plays it — and it is NEVER peak-limited any more: an
+   output makeup (organics::kOutputMakeupDb, +14 dB since tp114b) as the engine plays it — and it is NEVER peak-limited any more: an
    instrument the old rule held under it is lifted (loudness.peakLiftDb) and its peak bars move up by that lift.
 7. tp108: EVERY key's velocity-127 peak ≤ −1 dBFS (tp113: library units — through the engine −1 + the makeup + the
    instrument's peakLiftDb) (build-report peakTrim, written by Tools/organics/peaktrim.py, and

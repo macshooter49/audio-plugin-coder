@@ -1104,7 +1104,7 @@ int main()
                 L = a.L; R = a.R;
                 tw::organics_debug::setLimiter (true);
             };
-            // tp114b (makeup +12): the full-scale sine reaches the ceiling only with the osc Volume up — 1.0 (+6 dB) is the hot case
+            // tp114b (makeup +14): the full-scale sine reaches the ceiling only with the osc Volume up — 1.0 (+6 dB) is the hot case
             double pOff = 0, pOn = 0, pLoOff = 0, pLoOn = 0, pHi = 0; std::vector<float> L0, R0, L1, R1, Lx, Rx;
             render (false, 1.0f, pOff, Lx, Rx); render (true, 1.0f, pOn, Lx, Rx);
             render (false, 0.1f, pLoOff, L0, R0); render (true, 0.1f, pLoOn, L1, R1);

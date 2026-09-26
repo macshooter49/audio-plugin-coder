@@ -19,7 +19,7 @@
 // the note's own first 30 ms) · DC (the note's mean over −50 dBFS and within 20 dB of its RMS) · centre-key loudness ±1 dB of −24 LUFS (less any peak limit the calibration reports) ·
 // adjacent-velocity jump ≤ 6 dB · the per-engine reader cap · tp108: every key's velocity-127 peak ≤ −1 dBFS (the library
 // trims the recording per key — Tools/organics/peaktrim.py — never a clipper, never a limiter).
-// tp113: every level above is in LIBRARY UNITS (the engine at unity); the engine now plays organics::kOutputMakeupDb (tp114b: +12 dB)
+// tp113: every level above is in LIBRARY UNITS (the engine at unity); the engine now plays organics::kOutputMakeupDb (tp114b: +14 dB)
 // over them, so each ABSOLUTE bar here is the library bar + kMk: loudness −24 + kMk LUFS, the v127 key bar −1 + kMk (+ the
 // instrument's loudness.peakLiftDb: the calibration is lifted, never peak-limited), and the level floors of the silence, DC
 // and click metrics move up with it (a floor is "inaudible in the library", not "inaudible at 20 dB less gain").

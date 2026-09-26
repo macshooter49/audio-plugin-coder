@@ -151,16 +151,16 @@ namespace tw
         //  no clipper) puts the calibration point at −24 + 20 = −4 LUFS at the engine = −16 LUFS at the plugin output, the
         //  Wavetable's level. Tools/organics/*.py and Tests/organics_audit.cpp read THIS constant (engine-level bars =
         //  library bars + kOutputMakeupDb). The v127 peak trim keeps its per-key shape, so peaks move up by the same 20 dB.
-        // tp114b — LOWERED TO +12 dB (Max, 2026-09-26, "option 2": keep the limiter, lower the makeup so it catches attack
-        //  spikes instead of holding instruments' bodies down). The sweep (organics-library.md §12.1): at +20 the limiter took
-        //  > 0.5 dB off 22 of 74 instruments' v100 calibration point (meatbass −6.2) and held v127 notes down for up to 1.4 s;
-        //  +12 is the highest value where ≤ 2 instruments lose > 0.5 dB at v100 (1: kalimba −0.8). Every v127 key the library
-        //  trims to its −1 dBFS bar still reaches the limiter by ~3 dB at the default osc (−1 + 12 − 9.03 = +2 dBFS), so
-        //  sustained v127 notes are held ~3 dB (not attack-only — that needs ≤ +9 dB, 11 dB under the Wavetable). Level: the
-        //  calibration point is −24 + 12 = −12 LUFS at the engine, Organics median −23.9 LUFS at the plugin output (WT −15.8).
-        constexpr float kOutputMakeupDb = 12.0f;
-        inline float outputMakeupGain() noexcept { return 3.98107170553497f; }   // = 10^(kOutputMakeupDb / 20)
-        static_assert (kOutputMakeupDb == 12.0f, "outputMakeupGain() is the linear value of kOutputMakeupDb — change both");
+        // tp114b — LOWERED TO +14 dB (Max, 2026-09-26, "option 2": keep the limiter, lower the makeup so it catches attack
+        //  spikes instead of holding instruments' bodies down; then "about +14", ≈ 6 dB under the Wavetable). The sweep
+        //  (organics-library.md §12.1): at +20 the limiter took > 0.5 dB off 22 of 74 instruments' v100 calibration point
+        //  (meatbass −6.2) and held v127 notes down for up to 1.4 s; at +14, 6 (kalimba −1.9). Every v127 key the library
+        //  trims to its −1 dBFS bar still reaches the limiter at the default osc (−1 + 14 − 9.03 = +4 dBFS at the envelope's
+        //  top), so loud v127 notes are held a few dB (attack-only needs ≤ +9 dB). Level: the calibration point is
+        //  −24 + 14 = −10 LUFS at the engine, Organics median −22.0 LUFS at the plugin output (WT −15.8).
+        constexpr float kOutputMakeupDb = 14.0f;
+        inline float outputMakeupGain() noexcept { return 5.01187233627272f; }   // = 10^(kOutputMakeupDb / 20)
+        static_assert (kOutputMakeupDb == 14.0f, "outputMakeupGain() is the linear value of kOutputMakeupDb — change both");
         // tp114 — THE ORGANICS SAFETY LIMITER (OrganicEngine.cpp, PeakGuard). The +20 dB makeup traded headroom for level: at
         //  the plugin output (default osc Volume + master) 50 % of the v127 key × RR takes went over 0 dBFS (mbira +13.3). Max,
         //  2026-09-26: "yes build the organics limiter — let's hear how that would sound … I don't want quality or volume

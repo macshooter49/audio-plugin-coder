@@ -999,7 +999,7 @@ static void tp114LimiterBars (const std::shared_ptr<const OrganicInstrument>& si
                         if (is > worstIsp) { worstIsp = is; ispAt = fmt ("%s k%d blk %d", I == &sine ? "sine" : "piano", key, blk); }
                     }
                 }
-        bar ("limiter: hot notes never pass the ceiling", worst <= ceil * (1.0 + 1e-6) && worstRaw > 1.25 * ceil && worstIsp <= ceilTp,   // tp114b: the fixtures sit +3.4 dB over at the +12 makeup
+        bar ("limiter: hot notes never pass the ceiling", worst <= ceil * (1.0 + 1e-6) && worstRaw > 1.25 * ceil && worstIsp <= ceilTp,   // tp114b: the fixtures sit +5.4 dB over at the +14 makeup
             
              fmt ("%d notes × block sizes 1-777: raw up to %+.2f dBFS → limited %+.4f dBFS (ceiling %+.2f), 4× ISP %+.2f (%s; bar %+.2f = 0 dBTP at the plugin output)",
                   n, an::db (worstRaw), an::db (worst), an::db (ceil), an::db (worstIsp), ispAt.c_str(), an::db (ceilTp)));
