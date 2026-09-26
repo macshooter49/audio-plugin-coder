@@ -277,7 +277,14 @@
 (function(){
   var reg = new Map(), lastPush = nowMs(), laneSeen = false;   /* fb581 — see THE LANE IS THE CLOCK below */
   function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  /* tp110 — ONE PAINTER PASS PER VSYNC. While a hand is on the page (a drag, a wheel) the gesture clock (gFrame) and the
+     push lane each armed their own rAF, and both ran every painter in the SAME frame with the same timestamp — the
+     second pass redrew identical pictures from identical data. Measured on the Patcher (Bedroque): 18.9 ms + 17.8 ms a
+     frame while panning. Every callback of one vsync receives the same rAF timestamp, so a pass that sees the timestamp
+     it already painted is that duplicate and stands down. Wakes and repairs pass performance.now(), never a repeat. */
+  var lastRunTs = -1;
   function run(ts){
+    if (ts === lastRunTs) return; lastRunTs = ts;
     motionStep();                    /* fb636 — THE MOTION CLOCK (below) steps once per painter pass, glass or not, so its envelope stays true */
     if (window.__tiFrozen) return;   /* fb620 — the preset browser's glass covers every painter; nothing under it needs a frame */
     lastRunAt = nowMs();
@@ -11697,7 +11704,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                   var cards=(window.__fxrCardsAll?window.__fxrCardsAll(rack):rack.querySelectorAll('.fxr-dev'));
                   for(var ci=0;ci<cards.length;ci++){
                     var card=cards[ci], di=+card.getAttribute('data-dev'), dd=DEVS[di];
-                    if(!dd||dd.core!=='granular') continue;
+                    if(!dd||dd.core!=='granular') continue; if(window.__tpCulled&&window.__tpCulled(card)) continue;   /* tp110 — off the Patcher's canvas: not painted */
                     var svg=card.querySelector('.fxr-core[data-core="granular"]'); if(!svg) continue;
                     var o=feed[(dd.inst||1)-1]; if(!o) continue;          /* THIS card's own ring */
                     var X0=6.5,X1=219.5,W=X1-X0,CY=39,SY=29;
@@ -12130,7 +12137,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
                   var cards=(window.__fxrCardsAll?window.__fxrCardsAll(rack):rack.querySelectorAll('.fxr-dev'));
                   for(var ci=0;ci<cards.length;ci++){
                     var card=cards[ci], di=+card.getAttribute('data-dev'), dd=DEVS[di];
-                    if(!dd||dd.core!=='tape') continue;
+                    if(!dd||dd.core!=='tape') continue; if(window.__tpCulled&&window.__tpCulled(card)) continue;   /* tp110 — off the Patcher's canvas: not painted */
                     var cv=card.querySelector('.fxr-core[data-core="tape"] canvas'); if(!cv) continue;
                     watchCanvas(cv);   /* fb576 — a canvas that changes size (a panel shown, a card reflowed) repaints without a frame */
                     var r=(window.__tpRect?window.__tpRect(cv):cv.getBoundingClientRect()), TDz=TDPR*(window.__tpZoomUp?window.__tpZoomUp(cv):1);   /* tp8 — layout px + a bitmap for the zoom */
@@ -13144,7 +13151,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var feed=window.__fltVizPush;
             var cards=document.querySelectorAll('.fxr-dev');
             for(var c=0;c<cards.length;c++){
-              var card=cards[c], core=card.querySelector('.fxr-core[data-core="flt"]'); if(!core) continue;
+              var card=cards[c], core=card.querySelector('.fxr-core[data-core="flt"]'); if(!core) continue; if(window.__tpCulled&&window.__tpCulled(card)) continue;   /* tp110 — off the Patcher's canvas: not painted */
               var dev=DEVS[+cards[c].getAttribute('data-dev')]; if(!dev||dev.core!=='flt') continue; /* tp11 — by the card's OWN index: on the Patcher, after a roll, the DOM order is not the device order and these drew into the wrong cards (Max: the visuals vanish until a trip to the synth page) */
               var f=(feed&&feed.length)?feed[(dev.inst||1)-1]:null;   // level only, for brightness
               var curve=core.querySelector('.flt-curve');
@@ -13217,7 +13224,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           function fx3Tick(){
             var feed=window.__fx3VizPush; if(!feed) return;
             var cards=document.querySelectorAll('.fxr-dev');
-            for(var c=0;c<cards.length;c++){
+            for(var c=0;c<cards.length;c++){ if(window.__tpCulled&&window.__tpCulled(cards[c])) continue;   /* tp110 — off the Patcher's canvas: not painted */
               var dev=DEVS[+cards[c].getAttribute('data-dev')]; if(!dev) continue; /* tp11 — by the card's OWN index: on the Patcher, after a roll, the DOM order is not the device order and these drew into the wrong cards (Max: the visuals vanish until a trip to the synth page) */
               var core=cards[c].querySelector('.fxr-core[data-core="'+dev.core+'"]');
               if(!core||(dev.core!=='cho'&&dev.core!=='fla'&&dev.core!=='pha')) continue;
@@ -13470,7 +13477,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           function fx4SpecCanvas(core){
             var cv=core.querySelector('canvas.fx-spec'); if(!cv) return null;
             var r=core.getBoundingClientRect(); if(r.width<6||r.height<6) return null;
-            var dpr=Math.min(window.devicePixelRatio||1,3);
+            var dpr=Math.min(window.devicePixelRatio||1,3)*(window.__tpBmpHold?window.__tpBmpHold(core):1);   /* tp110 — a zoom glide keeps the bitmap it started with (re-buffered once, at settle) */
             var W=Math.max(2,Math.round(r.width*dpr)), Hp=Math.max(2,Math.round(r.height*dpr));
             var buf=core.__specBuf||(core.__specBuf=document.createElement('canvas'));
             if(buf.width!==W||buf.height!==Hp){ buf.width=W; buf.height=Hp; }
@@ -13806,7 +13813,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           function fx4Tick(){
             var feed=window.__fx4VizPush||null;
             var cards=document.querySelectorAll('.fxr-dev');
-            for(var c=0;c<cards.length;c++){
+            for(var c=0;c<cards.length;c++){ if(window.__tpCulled&&window.__tpCulled(cards[c])) continue;   /* tp110 — off the Patcher's canvas: not painted */
               var dev=DEVS[+cards[c].getAttribute('data-dev')]; if(!dev||!FX4_DRAW[dev.core]) continue; /* tp11 — by the card's OWN index: on the Patcher, after a roll, the DOM order is not the device order and these drew into the wrong cards (Max: the visuals vanish until a trip to the synth page) */
               var core=cards[c].querySelector('.fxr-core[data-core="'+dev.core+'"]'); if(!core) continue;
               var bank=feed?feed[dev.core]:null, f=(bank&&bank.length)?bank[(dev.inst||1)-1]:null;
@@ -15571,7 +15578,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               var rvCards=(window.__fxrCardsAll?window.__fxrCardsAll(rack):rack.querySelectorAll('.fxr-dev'));
               for(var rci=0;rci<rvCards.length;rci++){
                 var rCard=rvCards[rci], rdi=+rCard.getAttribute('data-dev'), dd=DEVS[rdi];
-                if(!dd||dd.core!=='reverb') continue;
+                if(!dd||dd.core!=='reverb') continue; if(window.__tpCulled&&window.__tpCulled(rCard)) continue;   /* tp110 — off the Patcher's canvas: not painted */
                 var core=rCard.querySelector('.fxr-core[data-core="reverb"]'); if(!core) continue;
                 var rkey=dd.pfx||('r'+rdi), RS=ST_RVB[rkey];
                 if(!RS) RS=ST_RVB[rkey]={smooth:0,cellsCore:null,cells:null,P:null,wasLive:false,scF:0};
@@ -15683,7 +15690,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               var cards=(window.__fxrCardsAll?window.__fxrCardsAll(rack):rack.querySelectorAll('.fxr-dev'));
               for(var ci=0;ci<cards.length;ci++){                          // EVERY delay card, not just the first
                 var cardEl=cards[ci], di=+cardEl.getAttribute('data-dev'), dd=DEVS[di];
-                if(!dd||dd.core!=='delay') continue;
+                if(!dd||dd.core!=='delay') continue; if(window.__tpCulled&&window.__tpCulled(cardEl)) continue;   /* tp110 — off the Patcher's canvas: not painted */
                 var core=cardEl.querySelector('.fxr-core[data-core="delay"]'); if(!core) continue;
                 var key=dd.pfx||('i'+di), st=ST[key];
                 if(!st) st=ST[key]={smooth:0,lastSig:'',geo:null,pulseT:0,prevPX:14};
@@ -15908,7 +15915,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                   var dCores=[]; for(var dq=0;dq<dCards.length;dq++){ var dc0=dCards[dq].querySelector('.fxr-core[data-core="saturate"]'); if(dc0) dCores.push(dc0); }
                   var dcI=0;
                   for(dcI=0;dcI<dCores.length;dcI++){
-                    var dvEl=dCores[dcI].closest('.fxr-dev'), dvIx=dvEl?+dvEl.getAttribute('data-dev'):-1;
+                    var dvEl=dCores[dcI].closest('.fxr-dev'), dvIx=dvEl?+dvEl.getAttribute('data-dev'):-1; if(window.__tpCulled&&window.__tpCulled(dCores[dcI])) continue;   /* tp110 — off the Patcher's canvas: not painted */
                     var dvD=(dvIx>=0)?DEVS[dvIx]:null, dvN=dvD?(dvD.inst|0):0;
                     if(dvN<=1){ dstPaint(dCores[dcI], o, true); continue; }
                     var ent=null, eArr=o.e||[];
@@ -35808,7 +35815,15 @@ restoreThemeFromBackend();
   function lfoMaster(n){ var s=ss('LFO'+n+'_DEPTH'); return s?s.getScaledValue():0.35; }
   var phase=[0,0,0,0,0,0,0,0,0,0], lastT=0;
   // resolve a route's live target element — LFO→LFO tabs re-render (and page), so look them up fresh
-  function curEl(a){ if(a.dest>=12&&a.dest<=21) return document.querySelector('#mod-engine .mv-tabs .t[data-tab="'+(a.dest-11)+'"]');
+  /* tp110 — ONE RESOLVE PER ROUTE PER PASS. The underline pass asks curEl for every route once, and then routeFor asks
+     it again for EVERY route for EVERY mark — and a route whose surface is not on screen (an envelope not displayed, an
+     Env/LFO tab not selected) resolves to null, so each of those asks re-ran elForDest's document-wide scans. Measured
+     on the Patcher (Bedroque, 10 marks): 122 querySelectorAll + 16,480 getAttribute a pass, 15.6 ms of the frame. While a
+     pass runs (curMemo set) an answer is kept for the rest of that pass only — the DOM it answers about does not change
+     inside a pass, and the next pass asks afresh, so nothing can go stale. */
+  var curMemo=null;
+  function curEl(a){ if(curMemo){ if(curMemo.has(a)) return curMemo.get(a); var r0=curEl0(a); curMemo.set(a,r0); return r0; } return curEl0(a); }
+  function curEl0(a){ if(a.dest>=12&&a.dest<=21) return document.querySelector('#mod-engine .mv-tabs .t[data-tab="'+(a.dest-11)+'"]');
     /* fb453 — an FX-rack surface is valid only while it still ADVERTISES this destination. A card
        re-render replaces the node (handled below), but a Type change can also retire a back cell
        in place: __fxRedrawKnobs marks it dead and strips its data-mod-dest, leaving the very same
@@ -36442,8 +36457,14 @@ restoreThemeFromBackend();
   /* which destination is under this element — the drag's own targets() list, the drop's own slot
      resolution (cut / fslot follow the ACTIVE filter tab), fb524b's opaque-card rule, and the
      SMALLEST surface wins so a pill inside a knob row answers for itself, not for the row. */
+  /* tp110 — one targets() scan for a BATCH of destAt questions. The Patcher's sync() (every 700 ms) asks __ctlDestAt for
+     every oscillator knob, and each ask re-ran targets()' ten document-wide scans — on the Patcher every rack card's
+     knobs are inside #syn-panel too. Measured, 106 modules: 20 asks = 59 ms of the 61 ms sync, a hitch every 700 ms.
+     Inside __ctlDestBatch the list is built once; the batch only reads, so the list cannot change under it. */
+  var tgMemo=null;
+  window.__ctlDestBatch=function(fn){ var own=!tgMemo; if(own) tgMemo=targets(); try{ return fn(); } finally { if(own) tgMemo=null; } };
   function destAt(target){ if(!target||!target.closest) return null;
-    var tg=targets(), best=null, bestA=1e12;
+    var tg=tgMemo||targets(), best=null, bestA=1e12;
     var card=target.closest('.ti-card.open');
     for(var i=0;i<tg.length;i++){ var t=tg[i]; if(!t.el||!(t.el===target||t.el.contains(target))) continue;
       if(card&&!card.contains(t.el)) continue;
@@ -36885,7 +36906,8 @@ restoreThemeFromBackend();
       if(R.__sl!==w[2]){ R.__sl=w[2]; R.classList.toggle('sel',w[2]); } if(R.__op!==w[3]){ R.__op=w[3]; R.style.opacity=w[3]; } if(R.style.display==='none') R.style.display=''; }
     if(RP){ RP.t+=performance.now()-t0; RP.w+=RQ.length; } RQ.length=0; }
   window.__smRingGeom=function(el){ var g=ringGeom(el); return g?g.f:null; };   /* gate hook — which family a destination's dial belongs to */
-  function loop(ts){ if(window.__cardOnly==='mod')return; var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
+  function loop(ts){ curMemo=new Map(); try{ loop0(ts); } finally { curMemo=null; } }
+  function loop0(ts){ if(window.__cardOnly==='mod')return; var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
     for(var n=1;n<=10;n++){ phase[n-1]+=dt*lfoHz(n); if(phase[n-1]>=1)phase[n-1]-=Math.floor(phase[n-1]); }   // (kept for the future "knob moves with the LFO" pass)
     var on = window.__cardOnly ? true
            : window.__tiOff ? !window.__tiOff('syn-panel')
@@ -37070,6 +37092,9 @@ restoreThemeFromBackend();
     for(var ci=0;ci<cms.length;ci++){ var cc=cms[ci];
       if(cc.offsetParent!==null||cc.offsetWidth>0||cc.offsetHeight>0) return cc; }
     if(cms.length) return cms[0];   // none visible: keep the route anchored to a real node (the mark simply stays down)
+    if(curMemo) return synScanIndex()(dest);   /* tp110 — inside an underline pass: the same five scans, once per pass */
+    return synScan(dest); }
+  function synScan(dest){
     var found=null; document.querySelectorAll('#syn-panel .knob[data-syn]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-syn')]===dest) found=k; });
     // COARSE/SUB pill dests (42..53) live on pills, not knobs — without these two scans a
     // restored route has no badge (invisible modulation) and the next push() clobbers it
@@ -37078,6 +37103,18 @@ restoreThemeFromBackend();
     if(!found) document.querySelectorAll('#syn-panel .warp2-pill .warp2-val').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-warp2-amt')]===dest) found=k; });   // fb77
     if(!found) document.querySelectorAll('#syn-panel .ph-val[data-ph]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-ph')]===dest) found=k; });   // fb541 — .ph-val replaced the uni-pill
     return found; }
+  /* tp110 — synScan's answer for every dest at once, built on the first miss of a pass and dropped with the pass
+     (kept on curMemo). Same five scans in the same order, same rule: within a family the LAST match wins, and an
+     earlier family beats a later one — so every lookup returns exactly what synScan would. */
+  function synScanIndex(){ var ix=curMemo.get(synScanIndex); if(ix) return ix;
+    var fam=[{},{},{},{},{}], put=function(f,d,k){ if(d!==undefined) fam[f][d]=k; };
+    document.querySelectorAll('#syn-panel .knob[data-syn]').forEach(function(k){ put(0,KNOBDEST[k.getAttribute('data-syn')],k); });
+    document.querySelectorAll('#syn-panel .coarse-pill .coarse-val[data-coarse]').forEach(function(k){ put(1,KNOBDEST[k.getAttribute('data-coarse')],k); });
+    document.querySelectorAll('#syn-panel .sub-pill .sub-val').forEach(function(k){ ['data-sub-weight','data-sub-heat','data-sub-range','data-sub-form'].forEach(function(at){ put(2,KNOBDEST[k.getAttribute(at)],k); }); });
+    document.querySelectorAll('#syn-panel .warp2-pill .warp2-val').forEach(function(k){ put(3,KNOBDEST[k.getAttribute('data-warp2-amt')],k); });
+    document.querySelectorAll('#syn-panel .ph-val[data-ph]').forEach(function(k){ put(4,KNOBDEST[k.getAttribute('data-ph')],k); });
+    ix=function(dest){ for(var f=0;f<5;f++){ var k=fam[f][dest]; if(k) return k; } return null; };
+    curMemo.set(synScanIndex,ix); return ix; }
   /* fb187 — dest → short display name ("Level A", "WT Pos C", "Feedback B") for the env
      hub badges. Tiered: reverse-KNOBDEST + suffix prettifier → static non-osc ids →
      harvest the element's own label. Names stay SHORT (the hub badge is ellipsis-capped). */
@@ -45952,7 +45989,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function mkNode(key,kind,el,extra){ var sz=SZ(kind), pd=padOf(kind), n={key:key,kind:kind,el:el,w:sz[0],h:sz[1],pad:pd,ports:[]}; if(extra) for(var q2 in extra) n[q2]=extra[q2];
     var p=layout.pos[key], d=defaultPos(n); n.x=p?p[0]:(extra&&extra.at?extra.at[0]:d[0]); n.y=p?p[1]:(extra&&extra.at?extra.at[1]:d[1]);
     { var wrap=document.createElement('div'); wrap.className='tp-node tp-in'; setTimeout(function(){ try{ wrap.classList.remove('tp-in'); }catch(e){} },300); wrap.dataset.key=key; wrap.dataset.kind=kind; if(n.core) wrap.dataset.core=n.core; wrap.style.width=n.w+'px'; wrap.style.height=n.h+'px'; wrap.style.zIndex=++zTop;
-      wrap.innerHTML='<div class="tp-box"></div><div class="tp-body"></div>'; n.wrap=wrap; n.body=wrap.querySelector('.tp-body'); n.body.style.width=n.w+'px'; n.body.style.height=n.h+'px'; if(pd[0]||pd[1]){ n.body.style.boxSizing='border-box'; n.body.style.paddingTop=pd[0]+'px'; n.body.style.paddingBottom=pd[1]+'px'; }
+      wrap.innerHTML='<div class="tp-box"></div><div class="tp-body"></div>'; n.wrap=wrap; wrap.__tpN=n; n.body=wrap.querySelector('.tp-body'); n.body.style.width=n.w+'px'; n.body.style.height=n.h+'px'; if(pd[0]||pd[1]){ n.body.style.boxSizing='border-box'; n.body.style.paddingTop=pd[0]+'px'; n.body.style.paddingBottom=pd[1]+'px'; }
       if(el&&!n.home) n.home={parent:el.parentNode,next:el.nextSibling}; if(el) n.body.appendChild(el); ((extra&&extra.parent)||nodesEl).appendChild(wrap); }
     place(n); nodes.push(n); addSidePorts(n); markViz(n); return n; }
   function resizeNode(n,w,h){ if(w===n.w&&h===n.h) return; n.w=w; n.h=h; n.wrap.style.width=w+'px'; n.wrap.style.height=h+'px'; n.body.style.width=w+'px'; n.body.style.height=h+'px';
@@ -46019,7 +46056,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* where an element sits inside its node, in world units — measured, not summed, so no engine's zoom rounding can drift it (tp3) */
   function offsetIn(el,root){ try{ var a=el.getBoundingClientRect(), b=root.getBoundingClientRect(), z=view.z||1; return {x:(a.left-b.left)/z, y:(a.top-b.top)/z, w:a.width/z, h:a.height/z}; }catch(e){ return {x:0,y:0,w:0,h:0}; } }
   function modTargets(n){ var out=[]; if(!n.el) return out; var dev=n.el;
-    if(n.kind==='osc'){ dev.querySelectorAll('.osc-knobs .knob[data-syn]').forEach(function(k){ if(k.offsetParent===null) return; var g=window.__ctlDestAt?window.__ctlDestAt(k):null; if(g&&g.dest!=null) out.push({el:k,dest:g.dest}); }); }
+    if(n.kind==='osc'){ var oscT=function(){ dev.querySelectorAll('.osc-knobs .knob[data-syn]').forEach(function(k){ if(k.offsetParent===null) return; var g=window.__ctlDestAt?window.__ctlDestAt(k):null; if(g&&g.dest!=null) out.push({el:k,dest:g.dest}); }); };
+      if(window.__ctlDestBatch) window.__ctlDestBatch(oscT); else oscT(); }   /* tp110 — one targets() scan for all of this node's knobs */
     else if(n.kind==='noise'){ dev.querySelectorAll('.noise-knobs .knob[data-mod-dest]').forEach(function(k){ var d=+k.getAttribute('data-mod-dest'); if(!isNaN(d)) out.push({el:k,dest:d}); }); }   /* tp42 */
     else if(n.kind==='filter'){ var slot=document.getElementById('filter-pill-2'); var s2=slot&&slot.classList.contains('act')?1:0; var T={cut:[0,1],res:[54,55],env:[56,57],drv:[58,59]};
       dev.querySelectorAll('.fk-em canvas').forEach(function(c){ var t=c.getAttribute('data-em'); if(T[t]) out.push({el:c.parentElement,dest:T[t][s2]}); }); }
@@ -46398,7 +46436,33 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function cablePath(a,b,kind){ if(kind==='rin'){ var dxr=Math.max(40,Math.abs(b.x-a.x)*0.35), dyr=Math.max(40,Math.abs(b.y-a.y)*0.5); return 'M'+a.x+' '+a.y+' C'+(a.x+dxr)+' '+a.y+', '+b.x+' '+(b.y-dyr)+', '+b.x+' '+b.y; }
     if(kind==='mod'){ var dx=Math.max(40,Math.abs(b.x-a.x)*0.35), dy=Math.max(36,Math.abs(b.y-a.y)*0.5); return 'M'+a.x+' '+a.y+' C'+(a.x+dx)+' '+a.y+', '+b.x+' '+(b.y+dy)+', '+b.x+' '+b.y; }
     var dx2=Math.max(46,Math.abs(b.x-a.x)*0.45); return 'M'+a.x+' '+a.y+' C'+(a.x+dx2)+' '+a.y+', '+(b.x-dx2)+' '+b.y+', '+b.x+' '+b.y; }
-  function layoutCable(c){ var a=portPos(c.from,c.fk,c.fi), b=portPos(c.to,c.tk,c.ti), d=cablePath(a,b,c.tk); c.core.setAttribute('d',d); c.spk.setAttribute('d',d); c.hit.setAttribute('d',d); try{ c.len=c.core.getTotalLength(); }catch(e){ c.len=100; } c.spk.setAttribute('stroke-dasharray','16 '+(c.len+60)); }
+  /* tp110 — a cable whose path has not changed is not re-laid. sync() (every 700 ms) re-lays EVERY cable, and each
+     one wrote two path attributes and then asked getTotalLength — a forced layout of the whole page per cable, 104 of
+     them in a 106-module patch; unchanged paths now cost a string compare. A cable that moves (a drag, a port that
+     followed its knob) is re-laid exactly as before. */
+  function layoutCable(c){ var a=portPos(c.from,c.fk,c.fi), b=portPos(c.to,c.tk,c.ti), d=cablePath(a,b,c.tk); if(c.__d===d&&c.core.getAttribute('d')===d) return; c.__d=d; c.core.setAttribute('d',d); c.hit.setAttribute('d',d); try{ c.len=c.core.getTotalLength(); }catch(e){ c.len=100; } c.bez=bezLut(d); c.spkD=null; }
+  /* tp110 — THE SPARK IS ITS OWN 16 px, NOT A DASH OF THE WHOLE CABLE. It used to be the full cable path with a
+     16-unit dash slid along it by stroke-dashoffset: every frame a note sounds, WebKit invalidated the WHOLE cable's
+     box (plus the glow) and re-rastered every module under it — measured on Bedroque (15 cables): sparks hidden took
+     the page from 16 to 32 fps and the GPU process from 69 % to 36 %. Now the spark's path IS the 16-unit piece of the
+     same cubic (de Casteljau, an exact sub-curve — the look is identical: the dash was in user units, measured), so
+     a frame repaints the spark's own few pixels. The arc-length → t table is built once per layout, not per frame. */
+  function bezLut(d){ var v=(d.match(/-?[\d.]+(?:e-?\d+)?/g)||[]).map(Number); if(v.length<8) return null;
+    var P=v.slice(0,8), T=[0], L=[0], px=P[0], py=P[1], acc=0;
+    for(var i=1;i<=32;i++){ var t=i/32, q=bezAt(P,t); acc+=Math.hypot(q[0]-px,q[1]-py); px=q[0]; py=q[1]; T.push(t); L.push(acc); }
+    return {P:P,T:T,L:L,len:acc}; }
+  function bezAt(P,t){ var u=1-t, a=u*u*u, b=3*u*u*t, c=3*u*t*t, e=t*t*t; return [a*P[0]+b*P[2]+c*P[4]+e*P[6], a*P[1]+b*P[3]+c*P[5]+e*P[7]]; }
+  function bezT(B,s){ if(s<=0) return 0; if(s>=B.len) return 1; var L=B.L, lo=0, hi=L.length-1; while(hi-lo>1){ var m=(lo+hi)>>1; if(L[m]<s) lo=m; else hi=m; } return B.T[lo]+(B.T[hi]-B.T[lo])*(s-L[lo])/((L[hi]-L[lo])||1); }
+  function bezSub(P,t0,t1){ function sp(Q,t){ var x01=Q[0]+(Q[2]-Q[0])*t, y01=Q[1]+(Q[3]-Q[1])*t, x12=Q[2]+(Q[4]-Q[2])*t, y12=Q[3]+(Q[5]-Q[3])*t, x23=Q[4]+(Q[6]-Q[4])*t, y23=Q[5]+(Q[7]-Q[5])*t,
+        xa=x01+(x12-x01)*t, ya=y01+(y12-y01)*t, xb=x12+(x23-x12)*t, yb=y12+(y23-y12)*t, xm=xa+(xb-xa)*t, ym=ya+(yb-ya)*t; return [[Q[0],Q[1],x01,y01,xa,ya,xm,ym],[xm,ym,xb,yb,x23,y23,Q[6],Q[7]]]; }
+    var left=sp(P,t1)[0], Q=(t1>0)?sp(left,t0/t1)[1]:left, f=function(n){ return n.toFixed(1); };
+    return 'M'+f(Q[0])+' '+f(Q[1])+' C'+f(Q[2])+' '+f(Q[3])+', '+f(Q[4])+' '+f(Q[5])+', '+f(Q[6])+' '+f(Q[7]); }
+  /* tp110 — the stylesheet has held .spk at opacity:0 since tp1 (a CSS rule beats the opacity ATTRIBUTE the frame
+     writes), so the spark has never been seen — yet it cost half of Bedroque's frame. While the sheet hides it, the
+     frame writes nothing to it; the moment a rule shows it, it animates, at the 16 px cost above. Read once. */
+  var spkShown=null; function sparkShown(){ if(spkShown===null){ var c0=cables[0]; if(!c0||!c0.spk.isConnected) return false; try{ spkShown=getComputedStyle(c0.spk).opacity!=='0'; }catch(e){ spkShown=true; } } return spkShown; }
+  /* the spark's piece of cable: [s, s+16] in the cable's own length units (the old dash window), clipped to the cable */
+  function sparkPath(c){ var B=c.bez; if(!B) return ''; var k=B.len/(c.len||B.len||1), a=Math.max(0,c.s)*k, b=Math.min(c.len||B.len,c.s+16)*k; if(b<=a) return ''; return bezSub(B.P,bezT(B,a),bezT(B,b)); }
   function syncCables(){ var want=derive(), byId={}; cables.forEach(function(c){ byId[c.id]=c; }); var next=[];
     want.forEach(function(w){ var c=byId[w.id]; if(c){ c.from=w.from; c.to=w.to; c.fi=w.fi; c.ti=w.ti; c.edit=w.edit; c.fixed=w.fixed; delete byId[w.id]; }
       else { c=w; var g=document.createElementNS(SVGNS,'g'); g.setAttribute('class','cable '+c.t+(c.fixed?' fixed':'')); g.setAttribute('data-id',c.id); c.el=g; var mk=function(cls){ var e=document.createElementNS(SVGNS,'path'); e.setAttribute('class',cls); g.appendChild(e); return e; };
@@ -46458,7 +46522,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   window.__tpCableTip=function(){ return { on: !!(ctip&&ctip.classList.contains('on')), text: ctip?ctip.querySelector('.t').textContent:'', cable: ctipC?ctipC.id:null, lit: [].slice.call(document.querySelectorAll('#tp-page .tp-cables .cable.lit')).map(function(g){ return g.getAttribute('data-id'); }) }; };   /* the gate reads it */
   function layoutCablesOf(n){ cables.forEach(function(c){ if(c.from===n||c.to===n) layoutCable(c); }); }
   function tapeName(n){ if(n.kind!=='fx'||n.core!=='tape'||!n.el) return; var d=(window.__fxrDevs?window.__fxrDevs():[])[n.idx], nm=n.el.querySelector('.fxr-name'); if(d&&nm&&nm.firstChild&&nm.firstChild.nodeType===3&&nm.firstChild.nodeValue!==d.type) nm.firstChild.nodeValue=d.type; }   /* tp10 — "Studio", "Cassette", not "Tape" */
-  function sync(){ if(!isOpen||!adopted) return; try{ syncPresence(); nodes.forEach(function(n){ tapeName(n); if(n.kind==='flow'&&n.ext) fitNodeToCard(n); if(n.kind==='osc') markViz(n); if(n.kind==='osc'||n.kind==='filter'||n.kind==='fx'||n.kind==='tape'||n.kind==='tapeloop') modDots(n); }); syncCables(); if(nodeByKey('tape')&&window.__fxTapePaint) window.__fxTapePaint(); if(page.classList.contains('viz')) vizFitAll(); }catch(e){ try{ console.warn('[tp] sync',e); }catch(_){} } }
+  function sync(){ if(!isOpen||!adopted) return; try{ syncPresence(); var perNode=function(){ nodes.forEach(function(n){ tapeName(n); if(n.kind==='flow'&&n.ext) fitNodeToCard(n); if(n.kind==='osc') markViz(n); if(n.kind==='osc'||n.kind==='filter'||n.kind==='fx'||n.kind==='tape'||n.kind==='tapeloop') modDots(n); }); };
+    if(window.__ctlDestBatch) window.__ctlDestBatch(perNode); else perNode();   /* tp110 — the whole pass shares one targets() scan */ syncCables(); if(nodeByKey('tape')&&window.__fxTapePaint) window.__fxTapePaint(); if(page.classList.contains('viz')) vizFitAll(); }catch(e){ try{ console.warn('[tp] sync',e); }catch(_){} } }
   function soon(){ clearTimeout(syncT); syncT=setTimeout(sync,40); }
 
   /* ── the eye — visualizers only: each picture is RE-LAID OUT to its glass (the painters draw it at that size, crisp), then slid to the middle ── */
@@ -47291,8 +47356,27 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     while(step<steps.length){ var f=steps[step++]; f(); } }
 
   /* ── view — the mockup's: scroll pans, ⌃/⌘ scroll or a pinch zooms about the cursor; everything scales together, nothing hides ── */
-  function applyView(){ if(!world) return; world.style.transform='translate('+view.x+'px,'+view.y+'px) scale('+view.z+')'; $('.tp-grid').style.backgroundSize=(26*view.z)+'px '+(26*view.z)+'px'; $('.tp-grid').style.backgroundPosition=view.x+'px '+view.y+'px'; page.classList.toggle('lod',view.z<0.55); drawMini(); zoomSettled(); }
-  var zoomT=0, lastZ=0; function zoomSettled(){ if(view.z===lastZ) return; lastZ=view.z; clearTimeout(zoomT); zoomT=setTimeout(function(){ if(!isOpen) return; try{ var tl=nodeByKey('tapeloop'); if(tl){ var rc=document.getElementById('tape-reel-canvas'); if(rc) reelSize(parseFloat(rc.style.width)||270,parseFloat(rc.style.height)||88); } if(window._fxSizeFn) window._fxSizeFn(); recrisp(); }catch(e){} },120); }   /* tp8 — NO window resize: the synth page's sizers would re-measure scaled boxes (the shifting) */
+  /* tp110 — THE CULL. A rack card whose node is entirely off the visible canvas is not painted: the fx painters ask
+     __tpCulled(card) and skip it, so neither their JS nor the style/layout/paint their writes cause scale with the
+     modules you cannot see (measured, 106 modules at 1×: 11 ms of painters + 14 ms of render a frame, almost all for
+     cards off screen). Pure arithmetic on the node's world box and the view — no layout read. A culled card keeps
+     its last picture; the moment one comes back into view the rest latches are cleared and one repaint is asked
+     for (debounced), so a card never shows a stale or blank face (tp11: pictures never disappear). The eye (viz)
+     re-lays the nodes, so it culls nothing. */
+  var pageW=0, pageH=0, cullT=0;
+  function cullEntered(){ window.__fxRestDrawn=false; window.__heroDrawn=false; clearTimeout(cullT); cullT=setTimeout(function(){ if(isOpen&&window.__tiWake) window.__tiWake(); },150); }
+  window.__tpCulled=function(el){ if(!isOpen||!page||!pageW||page.classList.contains('viz')) return false; var w=el&&el.closest?el.closest('.tp-node'):null, n=w&&w.__tpN; if(!n) return false;
+    var z=view.z||1, x0=n.x*z+view.x, y0=n.y*z+view.y, M=48, off=(x0+n.w*z< -M||y0+n.h*z< -M||x0>pageW+M||y0>pageH+M);
+    if(n.__culled&&!off) cullEntered(); n.__culled=off; return off; };
+  window.addEventListener('resize',function(){ if(isOpen&&page){ pageW=page.clientWidth; pageH=page.clientHeight; } });
+  function applyView(){ if(!world) return; if(page){ pageW=page.clientWidth; pageH=page.clientHeight; } world.style.transform='translate('+view.x+'px,'+view.y+'px) scale('+view.z+')'; $('.tp-grid').style.backgroundSize=(26*view.z)+'px '+(26*view.z)+'px'; $('.tp-grid').style.backgroundPosition=view.x+'px '+view.y+'px'; page.classList.toggle('lod',view.z<0.55); drawMini(); zoomSettled(); }
+  /* tp110 — A ZOOM RE-BUFFERS ONCE, WHEN IT SETTLES. Every painter sizes its bitmap from __tpZoomUp = max(1, zoom), so a
+     pinch above 1× re-allocated (and wiped) ~10 canvases on EVERY frame of the glide (measured: 10.2 re-buffers a frame,
+     Bedroque). While the zoom moves, the bitmaps keep the scale they had when it started (bmpZ) and the compositor
+     scales them; 120 ms after the last step the freeze lifts, recrisp() re-sizes the fixed faces and one painter pass
+     re-rasters every canvas at the new scale. The REST state is exactly as before: a bitmap for the zoom (tp11). */
+  var bmpZ=null; window.__tpBmpFreeze=true;   /* the gate's A/B switch */
+  var zoomT=0, lastZ=0; function zoomSettled(){ if(view.z===lastZ) return; if(bmpZ===null&&lastZ&&window.__tpBmpFreeze) bmpZ=lastZ; lastZ=view.z; clearTimeout(zoomT); zoomT=setTimeout(function(){ bmpZ=null; if(!isOpen) return; try{ var tl=nodeByKey('tapeloop'); if(tl){ var rc=document.getElementById('tape-reel-canvas'); if(rc) reelSize(parseFloat(rc.style.width)||270,parseFloat(rc.style.height)||88); } if(window._fxSizeFn) window._fxSizeFn(); recrisp(); if(window.__tiWake) window.__tiWake(); }catch(e){} },120); }   /* tp8 — NO window resize: the synth page's sizers would re-measure scaled boxes (the shifting) */
   /* the fixed-bitmap faces (the hero's knob canvases, the deck's arcs) get a bitmap for the new scale and repaint — every other painter already sizes itself from its screen rect */
   function recrisp(){ try{ var D=window.DPR||window.devicePixelRatio||1, z=Math.max(1,view.z||1);
       nodesEl.querySelectorAll('canvas').forEach(function(c){ c.__r=null; });   /* the 32-frame rect caches re-read */
@@ -47312,7 +47396,8 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       cables.forEach(function(c){ var L=0; if(c.t==='a') L=aud; else if(c.t==='n') L=live?1:0; else if(c.t==='r') L=(nowR()<rFlash)?1:0; else { var mm=/^lfo(\d+)$/.exec((c.edit&&c.edit.mod)||''); if(mm){ var v=window.__mvLfoValAt?window.__mvLfoValAt(+mm[1]-1):0; L=live?0.35+0.65*Math.abs(v||0):0; } else L=live?e:0; }
         c.lvl+=(L-c.lvl)*(L>c.lvl?0.45:0.1); var Lv=c.lvl, on=Lv>0.04; c.el.classList.toggle('hot',Lv>0.08);   /* the spike fades with the level */
         if(c.s==null) c.s=-16-Math.random()*(c.len||100); if(on) c.s+=dt*(c.t==='m'?70+40*Lv:150+280*Lv); if(c.s>(c.len||100)+16) c.s=-16-(c.t==='m'?50:0);
-        c.spk.setAttribute('stroke-dashoffset',(-c.s).toFixed(1)); c.spk.setAttribute('opacity',on?(0.3+0.7*Lv).toFixed(2):'0'); });
+        if(sparkShown()){ var op=on?(0.3+0.7*Lv).toFixed(2):'0'; if(c.spkO!==op){ c.spkO=op; c.spk.setAttribute('opacity',op); }   /* tp110 — written only when it changes: an unchanged attribute write still repaints */
+          if(on){ var sd=sparkPath(c); if(c.spkD!==sd){ c.spkD=sd; c.spk.setAttribute('d',sd); } } } });
       cables.forEach(function(c){ var a=c.from.ports.filter(function(p){return p.kind===c.fk;})[c.fi], b=(c.tk==='mod')?(c.to.mods&&c.to.mods[c.ti]&&{el:c.to.mods[c.ti].port}):c.to.ports.filter(function(p){return p.kind===c.tk;})[c.ti]; if(a) a.el.classList.toggle('live',c.lvl>0.08); if(b&&b.el) b.el.classList.toggle('live',c.lvl>0.08); });
       var midi=nodeByKey('midi'); if(midi){ var held=[0,4,7,11]; midi.wrap.querySelectorAll('.tp-keys i').forEach(function(k,i){ k.classList.toggle('on',live&&held.indexOf(i)>=0); }); }
       if(nodeByKey('tapeloop')&&typeof drawTapeReels==='function'){ try{ drawTapeReels(t,!live); }catch(e){} }   /* the deck's reels turn in the node (the hero's painter rests while the hero is hidden) */
@@ -47715,7 +47800,10 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     else window.addEventListener('load',function(){ tick(); setInterval(tick,1000); });
   })();
   window.__fxrCardsAll=function(rack){ var a=rack?[].slice.call(rack.querySelectorAll('.fxr-dev')):[]; if(isOpen&&nodesEl){ var t=nodesEl.querySelectorAll('.tp-node > .tp-body > .fxr-dev'); for(var i=0;i<t.length;i++) a.push(t[i]); } return a; };
-  window.__tpZoomUp=function(el){ var s2=1; try{ if(isOpen&&page&&page.classList.contains('viz')){ var vv=el&&el.closest?el.closest('.tp-viz'):null, mm=vv?/scale\(([\d.]+)\)/.exec(vv.style.getPropertyValue('--vz')||''):null; if(mm) s2=+mm[1]||1; } }catch(e){} return Math.max(1,window.__tpZoomOf(el)*s2); };   /* tp8 — a bitmap grows for zoom-in, never shrinks for zoom-out · tp11 — the eye's own scale counts too (no stretching, Max's HARD RULE) */
+  /* tp110 — for a painter that sizes its bitmap from the SCREEN rect (the fx4 spectra): while a zoom glides, the ratio
+     that keeps the bitmap the size it had when the glide began; 1 at rest and everywhere off the Patcher */
+  window.__tpBmpHold=function(el){ return (bmpZ!==null&&isOpen&&page&&el&&page.contains(el)&&view.z)?bmpZ/view.z:1; };
+  window.__tpZoomUp=function(el){ var s2=1; try{ if(isOpen&&page&&page.classList.contains('viz')){ var vv=el&&el.closest?el.closest('.tp-viz'):null, mm=vv?/scale\(([\d.]+)\)/.exec(vv.style.getPropertyValue('--vz')||''):null; if(mm) s2=+mm[1]||1; } }catch(e){} var zb=window.__tpZoomOf(el); if(bmpZ!==null&&isOpen&&page&&el&&page.contains(el)) zb=bmpZ; return Math.max(1,zb*s2); };   /* tp8 — a bitmap grows for zoom-in, never shrinks for zoom-out · tp11 — the eye's own scale counts too (no stretching, Max's HARD RULE) */
   window.addEventListener('tipanelchange',function(e){ var p=e.detail&&e.detail.panel; if(p==='tp') openPage(); else closePage(); });
   function watchRack(){ var rack=document.getElementById('fxr-rack'); if(rack&&window.MutationObserver){ new MutationObserver(function(){ if(isOpen&&adopted&&!adopting){ adoptFx(); soon(); } }).observe(rack,{childList:true}); return true; } return false; }
   if(!watchRack()) document.addEventListener('DOMContentLoaded',watchRack);
