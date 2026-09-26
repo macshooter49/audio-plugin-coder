@@ -66,7 +66,7 @@
      keyed by painter name — recognise that call and time each entry under its registered name */
   var PF = {};   /* the registry's painters by name, seen through the dispatcher's forEach (the exp 'painters' re-registers them) */
   (function(){ var oFE = Map.prototype.forEach;
-    Map.prototype.forEach = function(cb, th){ if (cur && typeof cb === 'function' && /try \{ fn\(ts\); \}/.test(cb.__tpzS || (cb.__tpzS = String(cb).slice(0, 60)))) {
+    Map.prototype.forEach = function(cb, th){ if (cur && typeof cb === 'function' && /fn\(ts\)/.test(cb.__tpzS || (cb.__tpzS = String(cb).slice(0, 140)))) {
         var self = this; return oFE.call(this, function(v, k){ PF[k] = v; var a = now(); try { cb.call(th, v, k, self); } finally { var d = now() - a; cur.who['p:' + k] = (cur.who['p:' + k] || 0) + d; } }); }
       return oFE.call(this, cb, th); }; })();
 
@@ -112,7 +112,7 @@
     return null; }
   /* a real drag is a pointer stream AND a mouse stream: pointerdown/move/up first, then the mouse event */
   function mouse(type, x, y, target){ var o = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: type === 'mouseup' ? 0 : 1, view: window };
-    var t = target || document.elementFromPoint(x, y) || window;
+    var t = target || document.elementFromPoint(x, y) || document;
     try { t.dispatchEvent(new PointerEvent(type.replace('mouse', 'pointer'), Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, o))); } catch (e) {}
     t.dispatchEvent(new MouseEvent(type, o)); }
   /* a trackpad gesture is LATCHED to the element it began on (WebKit keeps the wheel target for the whole gesture):
@@ -121,12 +121,13 @@
   function wheel(x, y, dx, dy, ctrl){ var t = wheelLatch || (wheelLatch = document.elementFromPoint(x, y) || page());
     t.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: x, clientY: y, deltaX: dx, deltaY: dy, deltaMode: 0, ctrlKey: !!ctrl, view: window })); }
   function dragPan(label, ms){ var p = emptyPoint(); if (!p) { R.errs.push('no empty point to drag'); return measure(label, ms, null); }
-    var down = false, t = document.elementFromPoint(p.x, p.y);
-    return measure(label, ms, function(i, el){
+    var down = false, t = document.elementFromPoint(p.x, p.y), lx = p.x, ly = p.y;
+    /* the release ALWAYS lands (a missed pointerup leaves the page believing a hand is down: every frame a full repaint) */
+    return measure(label, ms, function(i, el){ lx = p.x + 180 * Math.sin(el / 1000 * 1.3); ly = p.y + 110 * Math.sin(el / 1000 * 1.3 * 1.7);
       if (!down) { down = true; mouse('mousedown', p.x, p.y, t); }
       /* a slow lissajous around the press point, ±180 px — a hand exploring the patch */
       var ph = el / 1000 * 1.3, x = p.x + 180 * Math.sin(ph), y = p.y + 110 * Math.sin(ph * 1.7);
-      mouse('mousemove', x, y); if (el >= ms - 20) mouse('mouseup', x, y); }); }
+      mouse('mousemove', x, y); }).then(function(){ mouse('mouseup', lx, ly); R.info.upGest = (R.info.upGest || '') + (window.__tiGestureLive && window.__tiGestureLive() ? 'T' : 'f'); }); }
   function wheelPan(ms){ var c = emptyPoint(); if (!c) { var r = pageRect(); c = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 }; }   /* over blank canvas: over a module the wheel is the module's (tp40) */
     return measure('pan-wheel', ms, function(i, el){ var ph = el / 1000 * 1.1;
       /* two trackpad events per frame, like a real two-finger scroll */
@@ -157,7 +158,7 @@
       R.info.canvases = document.querySelectorAll('#tp-page canvas').length;
       R.info.cables = window.__tpCables ? window.__tpCables().length : null;
       R.info.dom = document.querySelectorAll('#tp-page *').length;
-      R.info.fitZ = +window.__tpView().z.toFixed(2);
+      R.info.fitZ = +window.__tpView().z.toFixed(2); R.info.far = !!window.__tpLod;
       announce('built'); await wait(2500);
       /* what the Patcher's 700 ms sync() costs once the patch is built (a long task there is a periodic hitch) */
       var sy = []; for (var k3 = 0; k3 < 5; k3++) { var a3 = performance.now(); try { window.__tpSync(); } catch (e) {} sy.push(+(performance.now() - a3).toFixed(1)); await wait(150); }
@@ -165,6 +166,11 @@
       var v0 = window.__tpView();
       announce('cpu-rest'); await wait(6000);   /* no probe at all: the host's CPU reading for this phase is the page as a user has it */
       await measure('rest-fit', 6000, null);
+      /* tp11: pictures never disappear — count on-screen canvases whose bitmap is fully transparent, at fit */
+      R.info.blankAtFit = (function(){ var pr = page().getBoundingClientRect(), n = 0, b = 0, ks = [];
+        document.querySelectorAll('#tp-page .tp-node canvas').forEach(function(cv){ var r = cv.getBoundingClientRect(); if (!cv.width || !cv.height || r.width < 4 || r.right < pr.left || r.left > pr.right || r.bottom < pr.top || r.top > pr.bottom) return;
+          try { var d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data, any = false; for (var i = 3; i < d.length; i += 28) if (d[i]) { any = true; break; } n++; if (!any) { b++; var w = cv.closest('.tp-node'); ks.push(w ? w.dataset.key : '?'); } } catch (e) {} });
+        return b + '/' + n + (ks.length ? ' ' + ks.slice(0, 8).join(',') : ''); })();
       if (A.exp === 'hide') {   /* attribute the GPU/WebContent cost per node: hide one at a time */
         if (A.hz) { window.__tpSetView(v0.x, v0.y, A.hz); await wait(1200); await measure('hz-rest', 3000, null); }
         var ks = window.__tpNodes().map(function(n){ return n.key; });
@@ -295,7 +301,12 @@
       await dragPan('pan-drag-z1', 4000);
       window.__tpFit(); await wait(1500);
       announce('cpu-silent'); await wait(7000);   /* the host releases the chord here: the Patcher at rest with nothing sounding */
+      R.info.gestBefore = !!(window.__tiGestureLive && window.__tiGestureLive());
+      try { document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'mouse', isPrimary: true })); } catch (e) { R.errs.push('pu ' + e.message); }
+      await wait(600);
+      var w0 = window.__tiWakes, why0 = JSON.stringify(window.__tiWhy);
       await measure('silent-fit', 4000, null);
+      R.info.silentFar = !!window.__tpLod + ' z=' + window.__tpView().z.toFixed(2) + ' wakes+' + (window.__tiWakes - w0) + ' why ' + why0 + '->' + JSON.stringify(window.__tiWhy) + ' gest ' + (window.__tiGestureLive && window.__tiGestureLive());
       R.info.pageErrs = Object.keys(errSeen).length;
       announce('done'); announcing = false; publish();
     } catch (e) { R.errs.push('run: ' + (e && e.message)); announce('failed'); announcing = false; publish(); }
