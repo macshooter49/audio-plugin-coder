@@ -1533,7 +1533,7 @@ class SynthVoice : public juce::SynthesiserVoice
             if (oe[osc] != Engine::ORGANIC) return false;
             const auto& e = orgV_->eng[osc];
             if (! e.isActive()) return false;
-            note = orgNote_; level = e.readLevel();
+            note = orgNote_; level = e.readLevel() / tw::organics::outputMakeupGain();   // tp113 — the viz brightness stays in library units (the makeup would pin every note at 1)
             return true;
         }
         void setModalParamsA (const tw::ModalParams& p) noexcept { modalParamsA_ = p; }   // MODAL-ENGINE-PUSH

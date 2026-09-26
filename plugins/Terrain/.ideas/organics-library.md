@@ -550,7 +550,7 @@ Levels (`relDb`) are the noise's loudest 100 ms (K-weighted) relative to the cal
 - Per-instrument detail: `Tools/organics/library-report.md` (tp105 section) and each `build-report.json` → `tfix`.
 
 ### 9.5 Loudness normalisation
-Every instrument is calibrated so its centre key (middle C when playable) at velocity 100, Velocity 0.75 (the runtime default) reaches **−24.0 LUFS** (BS.1770 K-weighting, ungated, first 1 s from the onset), with the same key at velocity 127 peaking ≤ −1 dBFS. One gain offset per instrument, so its internal velocity dynamics and register balance are untouched. Before: the old −18 dB-RMS calibration measured −7.4 (hang) … −23.8 LUFS (Clean Electric), a 16 dB spread. After: **−24.00 LUFS for all 74 (spread 0.00 dB)**, no instrument peak-limited. −24 is the loudest target that every centre-key crest (up to 23 dB on plucked strings) allows. Velocity-127 peaks elsewhere in the range are reported (`peak127RangeDb`) but not flattened.
+Every instrument is calibrated so its centre key (middle C when playable) at velocity 100, Velocity 0.75 (the runtime default) reaches **−24.0 LUFS** (BS.1770 K-weighting, ungated, first 1 s from the onset), with the same key at velocity 127 peaking ≤ −1 dBFS. One gain offset per instrument, so its internal velocity dynamics and register balance are untouched. Before: the old −18 dB-RMS calibration measured −7.4 (hang) … −23.8 LUFS (Clean Electric), a 16 dB spread. After: **−24.00 LUFS for all 74 (spread 0.00 dB)**, no instrument peak-limited. −24 is the loudest target that every centre-key crest (up to 23 dB on plucked strings) allows. Velocity-127 peaks elsewhere in the range are reported (`peak127RangeDb`) but not flattened. **tp113 (§11): −24 LUFS is now LIBRARY UNITS — the engine adds a flat +20 dB at its output, so the plugin plays the calibration point at −16 LUFS, the Wavetable init patch's level, and the calibration is no longer peak-limited.**
 
 ### 9.6 Round-robin and audibility audit (Max's xylophone report)
 The compiler now drops RR steps whose own segment never rises above −50 dBFS and completes every RR set (`repair_rr`: missing sequential positions cloned from a sibling, random slots widened to cover [0, 1)). The test checks all 127 velocities × every key × every articulation. Result: 0 silent regions anywhere; 3 missing sequential positions repaired in the Yamaha upright; random-slot gaps closed in French horn (5), trombone (7) and solo violin (12). **`vcsl.mallets.xylophone` has no round robins at all** (1 region per zone and layer, every sample audible), so its "every other press is silent" cannot come from the data. The likely cause is the runtime's fake-RR neighbour borrowing near the range edge, which is Agent E's area.
@@ -609,3 +609,22 @@ correction per sample:
   Yamaha upright 1 (k33, a bass string whose fundamental is 20 dB down).
 Unreadable (not judged): mostly Jazz Pizz Bass (50: no clear fundamental on the low pizzicato), string tremolo/sustain
 with period and partials disagreeing, and short breathy takes. Salamander "Natural" keeps its fitted stretch (§9.4).
+
+
+## 11. tp113 (2026-09-25): the Organics play at the synth's level
+
+Max: "Why are the Organics so quiet? Normalize them and turn them the fuck up … each one damn near at the same level."
+Measured through the real processor (default osc Volume 0.5, default master, C4 v100, K-weighted, first 1 s):
+Wavetable init −15.8 LUFS · FM −17.2 · Organics −36.0 (median of 74; mbira −39.0). The library's −24 LUFS sat 20 dB under the synth.
+
+- **One global gain:** `organics::kOutputMakeupDb = 20` (`OrganicsApi.h`), applied to the engine's summed output (attack,
+  release and noise regions alike: no balance change; no limiter, no clipper). The library stays in LIBRARY UNITS
+  (−24 LUFS / −1 dBFS at unity); every engine-level bar = library bar + 20. The visualiser level stays in library units.
+- **Outliers:** `engine_calibrate.py` no longer peak-limits. The seven instruments tp108 held under −24 were lifted
+  (mbira +3.64, Clean Electric +1.82, kalimba +1.42, ganjo +1.34, Hungarian zither +0.95, water glasses +0.56, timpani +0.33;
+  `loudness.peakLiftDb`); `peaktrim.py`'s bar moves with the lift (idempotent, nothing re-trimmed).
+- **After:** Organics median −15.9 LUFS through the processor (= Wavetable), engine calibration point −4.00 ± 0.05 for all 74;
+  processor spread 3.0 dB (66 of 74 within ±1 dB; the rest are short mallets/percussion +1.2…+1.7 and the hang −1.3).
+- **Peaks (headroom traded for level, as asked):** v127 at the plugin output, every key × RR take (6,410): 35 % over 0 dBFS,
+  19 % over +3, 9 % over +6, max +10.4 (mbira); v100: 18 % over 0, max +7.1. In a DAW the master passes float (no clip stage;
+  `masterGuard_` is standalone-only) — the DAW's own master decides. The standalone app's limiter + soft clip catches them.

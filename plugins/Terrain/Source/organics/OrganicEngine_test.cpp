@@ -1620,7 +1620,7 @@ int main (int argc, char** argv)
         {
             first[k] = -1;
             for (int64_t s = 0; s + 480 < 4800; s += 24)
-                if (an::amp (m, s, 480, mk[k] * mtof (48)) > 0.02) { first[k] = 1000.0 * s / kSR; break; }
+                if (an::amp (m, s, 480, mk[k] * mtof (48)) > 0.02 * organics::outputMakeupGain()) { first[k] = 1000.0 * s / kSR; break; }   // tp113: library units
         }
         bar ("Ensemble: 4 players = 4 RR picks, k·7 ms·D timing", first[0] >= 0 && first[1] > first[0] && first[2] > first[1] && first[3] > first[2],
              fmt ("markers k3/k5/k7/k9 first seen at %.1f / %.1f / %.1f / %.1f ms (expected 0 / 5.6 / 11.2 / 16.8 + window)", first[0], first[1], first[2], first[3]));
@@ -2044,7 +2044,8 @@ int main (int argc, char** argv)
             };
             double on0, off0, a, b, on5, off5, onL, offE, on1, off1;
             nz (0.f, on0, off0, a, b); nz (0.5f, on5, off5, onL, offE); nz (1.f, on1, off1, a, b);
-            const bool ok = on0 < 1e-6 && off0 < 1e-6 && on5 > 0.05 && off5 > 0.05 && onL < 0.01 * on5 && offE < 1e-6
+            const double u = organics::outputMakeupGain();   // tp113: the floors are in library units (the engine plays +20 dB)
+            const bool ok = on0 < 1e-6 * u && off0 < 1e-6 * u && on5 > 0.05 * u && off5 > 0.05 * u && onL < 0.01 * on5 && offE < 1e-6 * u
                          && std::abs (an::db (on1 / on5) - 12.0) <= 0.5 && std::abs (an::db (off1 / off5) - 12.0) <= 0.5;
             bar ("Noise: trig on with the note, off at note-off, 0/authored/+12", ok,
                  fmt ("on-burst %.1f dBFS · off-burst %.1f dBFS (knob 0: %.0f / %.0f dB) · knob 1: %+.2f / %+.2f dB re 0.5 · off-burst before note-off %.0f dB",

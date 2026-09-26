@@ -27,8 +27,12 @@
    seq position 1..seq_length and the random slots [0, 1) resolve to a region, and no attack region is near-silent
    (segment peak < −50 dBFS, or a static gain 40 dB under the instrument's median);
 6. loudness: every instrument's centre key at velocity 100 (Velocity 0.75) within ±1 dB of the library target
-   (K-weighted, first 1 s), velocity-127 peak at that key ≤ −1 dBFS.
-7. tp108: EVERY key's velocity-127 peak ≤ −1 dBFS (build-report peakTrim, written by Tools/organics/peaktrim.py, and
+   (K-weighted, first 1 s), velocity-127 peak at that key ≤ −1 dBFS. tp113: the target is closed THROUGH THE ENGINE
+   (build-report loudness.engine, Tools/organics/engine_calibrate.py) — −24 LUFS in library units = −24 + the engine's
+   output makeup (organics::kOutputMakeupDb, +20 dB) as the engine plays it — and it is NEVER peak-limited any more: an
+   instrument the old rule held under it is lifted (loudness.peakLiftDb) and its peak bars move up by that lift.
+7. tp108: EVERY key's velocity-127 peak ≤ −1 dBFS (tp113: library units — through the engine −1 + the makeup + the
+   instrument's peakLiftDb) (build-report peakTrim, written by Tools/organics/peaktrim.py, and
    re-measured here through the runtime, every RR take, Noise at its default — the audit renderer is (re)built first by
    Tests/organics_audit.sh against the current sources; if it cannot build, the re-measure prints SKIPPED with the
    reason; if it ran, 0 keys measured or an instrument with no key is a FAIL); the
@@ -261,7 +265,10 @@ def check_rr_audible(d: str, m: dict):
 
 def check_loudness(lib: str, idx: dict):
     """tp105 normalisation: centre key, velocity 100 (Velocity 0.75) within ±1 dB of the library target; velocity-127
-    peaks ≤ −1 dBFS (the compiler's own measurement, re-verified by rendering here)."""
+    peaks ≤ −1 dBFS (the compiler's own measurement, re-verified by rendering here).
+    tp113: the number that counts is the one closed THROUGH THE ENGINE (loudness.engine.achievedLufs, in library units:
+    less the makeup it was measured with) — torgc's offline renderer is only its starting point; nothing is peak-limited
+    (loudness.peakLimitedDb 0), a lifted instrument's centre-key peak bar is −1 + peakLiftDb."""
     ach = {}
     for iid in idx:
         rp = os.path.join(lib, iid, "build-report.json")
@@ -269,14 +276,19 @@ def check_loudness(lib: str, idx: dict):
         L = rep.get("loudness")
         if not check(L is not None, f"{iid}: build-report has no loudness calibration (rebuild with tp105 torgc)"):
             continue
-        check(L["peak127Db"] <= torgc.PEAK_CEIL_DB + 0.05, f"{iid}: velocity-127 peak {L['peak127Db']} dBFS > ceiling")
-        ach[iid] = L.get("verify", L["achieved"])
+        lift = float(L.get("peakLiftDb", 0.0))
+        check(L["peak127Db"] <= torgc.PEAK_CEIL_DB + lift + 0.05, f"{iid}: velocity-127 peak {L['peak127Db']} dBFS > ceiling")
+        check(float(L.get("peakLimitedDb", 0.0)) <= 0.005,
+              f"{iid}: the calibration is peak-limited {L.get('peakLimitedDb')} dB (tp113: run Tools/organics/engine_calibrate.py — it lifts it)")
+        E = L.get("engine")
+        ach[iid] = (E["achievedLufs"] - float(E.get("makeupDb", 0.0))) if E else L.get("verify", L["achieved"])
     if ach:
         lo, hi = min(ach.values()), max(ach.values())
         check(hi - torgc.CALIB_LUFS <= 1.0 and torgc.CALIB_LUFS - lo <= 1.0,
               f"loudness spread {lo:.2f}..{hi:.2f} LUFS is outside target {torgc.CALIB_LUFS} ± 1 dB: "
               f"{sorted(ach.items(), key=lambda t: t[1])[:3]} … {sorted(ach.items(), key=lambda t: t[1])[-3:]}")
-        print(f"   loudness: {len(ach)} instruments, {lo:.2f} … {hi:.2f} LUFS (target {torgc.CALIB_LUFS})")
+        print(f"   loudness: {len(ach)} instruments, {lo:.2f} … {hi:.2f} LUFS library units (target {torgc.CALIB_LUFS}; "
+              f"through the engine {torgc.CALIB_LUFS + peaktrim.MAKEUP_DB:+.1f})")
 
 
 # ---------------------------------------------------------------------------------------------- coverage
@@ -577,7 +589,9 @@ def check_peak_trim(lib: str, idx: dict, engine: bool):
         PT = rep.get("peakTrim")
         if not check(PT is not None, f"{iid}: build-report has no peakTrim (run Tools/organics/peaktrim.py)"):
             continue
-        check(PT["peak127MaxDb"] <= -1.0, f"{iid}: velocity-127 peak {PT['peak127MaxDb']} dBFS > −1 dBFS")
+        # the bar the trim ran against (tp113 records it in engine units: −1 + the makeup + the lift)
+        check(PT["peak127MaxDb"] <= float(PT.get("ceilDb", -1.0)),
+              f"{iid}: velocity-127 peak {PT['peak127MaxDb']} dBFS > its bar {PT.get('ceilDb', -1.0)} dBFS")
         ck = PT.get("calibrationKey")
         mm = json.load(open(os.path.join(lib, iid, "map.json")))
         for art, rec in PT.get("artics", {}).items():
@@ -620,12 +634,16 @@ def check_peak_trim(lib: str, idx: dict, engine: bool):
                          f"stdout {p.stdout[-200:]!r} stderr {p.stderr[-200:]!r}")
     missing = sorted(set(idx) - measured)
     check(not missing, f"engine: {len(missing)} of {want} instruments measured no key at all, e.g. {missing[:4]}")
-    hot = [(f[1], f[2], f[3], f[5]) for f in rows if float(f[5]) > -1.0]
-    check(not hot, f"engine: {len(hot)} of {len(rows)} keys peak over −1 dBFS at velocity 127, e.g. {hot[:4]}")
+    # tp113: through the engine the bar is −1 dBFS + the output makeup + the instrument's calibration lift
+    bar = {iid: peaktrim.CEIL_DB + peaktrim.lift_db(json.load(open(os.path.join(lib, iid, "build-report.json"))))
+           for iid in measured if os.path.exists(os.path.join(lib, iid, "build-report.json"))}
+    hot = [(f[1], f[2], f[3], f[5]) for f in rows if float(f[5]) > bar.get(f[1], peaktrim.CEIL_DB)]
+    check(not hot, f"engine: {len(hot)} of {len(rows)} keys peak over their bar (−1 + {peaktrim.MAKEUP_DB:.0f} dB makeup "
+                   f"+ lift) at velocity 127, e.g. {hot[:4]}")
     if rows:
         worst = max(rows, key=lambda f: float(f[5]))
         print(f"   engine peaks: {len(rows)} artic×keys of {len(measured)} instruments at v127, loudest "
-              f"{float(worst[5]):+.2f} dBFS ({worst[1]} a{worst[2]} k{worst[3]}), {len(hot)} over −1 dBFS")
+              f"{float(worst[5]):+.2f} dBFS ({worst[1]} a{worst[2]} k{worst[3]}), {len(hot)} over their bar")
 
 
 # ---------------------------------------------------------------------------------------------- main
