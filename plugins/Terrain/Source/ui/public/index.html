@@ -25201,6 +25201,9 @@ setTimeout(function wireSynControls () {
           if (it.sub) {   /* fb564 — a row that opens something carries an SVG chevron in the SAME 16 px box the route rows' ✕ sits in: one right rail */
             const a = document.createElement('span'); a.className = 'syn-ctx-arrow';
             a.innerHTML = window.__chevGlyph ? window.__chevGlyph(12) : '\u203A'; div.appendChild(a);
+          } else if (it.xIcon) {   /* tp110d — Max: "just put the same X next to MIDI CC 1 instead of Remo…": the route rows' own ✕, in the same right-rail box */
+            const a = document.createElement('span'); a.className = 'syn-ctx-arrow'; a.title = it.xTitle || 'Remove';
+            a.innerHTML = window.__xGlyph ? window.__xGlyph(12) : '\u2715'; div.appendChild(a);
           } else if (it.isChecked && opts && opts.cls === 'ctl') {   /* fb564 — the grid has no left-hand dot; a checked row carries its mark in the right-hand box instead */
             const ck = document.createElement('span'); ck.className = 'syn-ctx-ck';
             ck.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>'; div.appendChild(ck);
@@ -36613,7 +36616,7 @@ restoreThemeFromBackend();
   window.__macroNamesChanged=function(){ try{ markTargets(); }catch(e){} try{ var m=document.getElementById('syn-ctx-menu'); if(lastMenu&&m&&m.classList.contains('act')) lastMenu(); }catch(e){} };   /* fb564 — a renamed macro renames its rows everywhere */
   function midiRows(g){ var pid=paramIdOf(g); if(!pid) return [];
     var cc=midiCcFor(pid);
-    if(cc!=null) return [{ label:'MIDI CC '+cc, badge:'Remove', onPick:function(){ nativeCall('removeMidiCc',pid); try{ if(window.__midiMap) delete window.__midiMap[String(cc)]; }catch(e){} } }];
+    if(cc!=null) return [{ label:'MIDI CC '+cc, xIcon:true, xTitle:'Remove MIDI CC '+cc, onPick:function(){ nativeCall('removeMidiCc',pid); try{ if(window.__midiMap) delete window.__midiMap[String(cc)]; }catch(e){} } }];
     if(midiLearnFor===pid) return [{ label:'MIDI Learn', badge:'waiting…', onPick:function(){ midiLearnFor=null; nativeCall('setMidiLearn',''); } }];
     return [{ label:'MIDI Learn', onPick:function(){ midiLearnFor=pid; nativeCall('setMidiLearn',pid); } }]; }
   /* fb564 — a registry row spelled "Warp mode · Bend ›" becomes a grid row: the badge is the word, the

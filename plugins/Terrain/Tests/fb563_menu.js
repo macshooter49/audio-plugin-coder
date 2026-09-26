@@ -376,12 +376,15 @@ const HELPERS = () => {
   r = await pg.evaluate(() => { // the processor pushes the new map once the CC lands — simulate that push
     window.__midiMap = { "74": "SYN_OSC_A_WARP_AMOUNT" }; window.__midiLearnedCc = 74; window.__midiMapChanged();
     const st = window.__mState(); const row = st.rows.find(x => x.startsWith('MIDI CC 74'));
+    // tp110d — the row's right rail carries the route rows' own ✕ (no "Remove" word)
+    const it = [...document.querySelectorAll('#syn-ctx-menu .syn-ctx-item')].find(d => (d.textContent || '').startsWith('MIDI CC 74'));
+    const xbox = it ? it.querySelector('.syn-ctx-arrow svg path') : null, noWord = !!it && !/Remove/.test(it.textContent || '');
     window.__natives.length = 0; const ok = window.__mRow('MIDI CC 74');
     const rm = window.__natives.filter(n => n.fn === 'removeMidiCc').map(n => n.args[0]);
     const st3 = window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]'));
-    return { rebuilt: st.act, row, ok, rm, back: st3.rows.some(x => x === 'MIDI Learn'), learning: window.__midiLearnFor() }; });
-  chk(r.rebuilt && r.row && /Remove$/.test(r.row) && r.ok && r.rm.length === 1 && r.rm[0] === 'SYN_OSC_A_WARP_AMOUNT' && r.back && r.learning === null,
-      '11 the pushed map rebuilds the open menu into "MIDI CC 74 · Remove"; Remove calls removeMidiCc and the row is "MIDI Learn" again', JSON.stringify(r));
+    return { rebuilt: st.act, row, x: !!xbox, noWord, ok, rm, back: st3.rows.some(x => x === 'MIDI Learn'), learning: window.__midiLearnFor() }; });
+  chk(r.rebuilt && r.row && r.x && r.noWord && r.ok && r.rm.length === 1 && r.rm[0] === 'SYN_OSC_A_WARP_AMOUNT' && r.back && r.learning === null,
+      '11 the pushed map rebuilds the open menu into "MIDI CC 74 ✕" (the route rows\' ✕, no word); the row calls removeMidiCc and is "MIDI Learn" again', JSON.stringify(r));
   r = await pg.evaluate(() => { window.__mClose();
     const D = window.__fxrDevs(); const i = D.findIndex(x => x && x.core === 'reverb'); const card = document.querySelectorAll('#syn-panel .fxr-dev')[i];
     const kn = card.querySelector('.fxr-knob[data-mod-dest]'); const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;
