@@ -22,7 +22,7 @@ the recording's own level is trimmed, per key, in the library.
 5. APPLY — each region's gainDb moves by its atom's trim (attack, release and noise regions alike: a key's release and
    mechanical noise keep their level against its note). A region that spans atoms with different trims is SPLIT into
    one region per run of equal trim (same sample, same fields) — only on inconsistently zoned instruments.
-tp113: every bar above is in LIBRARY UNITS (the engine at unity). The engine now adds organics::kOutputMakeupDb (+20 dB,
+tp113: every bar above is in LIBRARY UNITS (the engine at unity). The engine now adds organics::kOutputMakeupDb (tp114b: +14 dB,
 OrganicsApi.h) at its output, so as measured here the bar is CEIL_DB = −1 + 20 (TARGET_DB −1.3 + 20), plus the instrument's
 loudness.peakLiftDb (engine_calibrate.py lifts a calibration the old rule peak-limited, whole instrument at once, so the bar
 moves with it and a re-run trims nothing new). Step 4's warning now means "run engine_calibrate.py again" (it lifts).

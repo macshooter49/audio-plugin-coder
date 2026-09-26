@@ -613,6 +613,8 @@ with period and partials disagreeing, and short breathy takes. Salamander "Natur
 
 ## 11. tp113 (2026-09-25): the Organics play at the synth's level
 
+> **tp114b (2026-09-26): the makeup is now +14 dB, not +20** (§12.1) — every "+20" / "−4 LUFS" below is the tp113 state.
+
 Max: "Why are the Organics so quiet? Normalize them and turn them the fuck up … each one damn near at the same level."
 Measured through the real processor (default osc Volume 0.5, default master, C4 v100, K-weighted, first 1 s):
 Wavetable init −15.8 LUFS · FM −17.2 · Organics −36.0 (median of 74; mbira −39.0). The library's −24 LUFS sat 20 dB under the synth.
@@ -628,3 +630,66 @@ Wavetable init −15.8 LUFS · FM −17.2 · Organics −36.0 (median of 74; mbi
 - **Peaks (headroom traded for level, as asked):** v127 at the plugin output, every key × RR take (6,410): 35 % over 0 dBFS,
   19 % over +3, 9 % over +6, max +10.4 (mbira); v100: 18 % over 0, max +7.1. In a DAW the master passes float (no clip stage;
   `masterGuard_` is standalone-only) — the DAW's own master decides. The standalone app's limiter + soft clip catches them.
+
+## 12. tp114 (2026-09-26): the Organics safety limiter
+
+Max: "yes build the organics limiter — let's hear how that would sound … I don't want quality or volume changed … find a way
+to make these NOT clip." An explicit, recorded exception to the lifeguard law (never a limiter) for ONE stage: the Organics
+engine's output after the +20 dB makeup (`OrganicEngine.cpp` PeakGuard, `OrganicsApi.h` `kLimiterCeilingDb`).
+
+- **The path, measured:** downstream of the engine a voice applies osc Volume × pan × the amp envelope (5 ms attack, 200 ms
+  to 0.7 sustain) × the unison norm; the −6 dB pre-FX pad and the ×2 instrument makeup cancel. At the envelope's top on the
+  default osc (Volume 0.5, centre pan) that is −9.03 dB — so tp113's "35 % over 0 dBFS, max +10.4" (engine − 11.9 dB, the
+  sustain level) under-read the attack: at the plugin output v127 had **50 % of 6,410 keys over 0 dBFS, max +13.3**
+  (mbira), v100 32 %, max +10.0.
+- **Design:** per engine (= per osc per voice), stereo-linked, **zero added latency** (it reads ahead inside the chunk the
+  engine has already rendered: 1.33 ms min-hold + box ramp, 30 ms hold, 40 → 150 ms program-dependent release, exactly 1.0f at
+  rest — bit-identical under the ceiling), **true peak** (a 16-tap 4× estimate held 0.5 dB under, so a BS.1770-style meter
+  reads ≤ 0 dBTP), a 0.5 dB working margin inside an episode (a peak that lands in a chunk's first 1.3 ms up to 0.5 dB louder
+  than the last needs no fast drop), and a **voice-aware ceiling**: the voice passes the block's largest downstream gain
+  (`OrganicParams::outGain`), so ONE Organics osc leaves its voice ≤ −1 dBFS at any Volume / pan / envelope and a quieter
+  Volume never limits. Without it (the engine alone) the default path is assumed (+8.03 dBFS at the engine).
+- **Proof:** `organics_audit.sh peaks` (6,410 keys × every RR take × v127 / v100, Noise 0.5): 0 over; limited max −1.00 dBFS,
+  4× ISP max −0.47 dBTP (output-referenced); the library's own PEAK lines unchanged (byte-identical). `lib`: 74/74 factory
+  clean (the v127 bar is the ceiling); 1 user import (user.piano k33 v127) gains a blind-spot click (a +7 dB spike 10 samples
+  into a chunk). `organics_null` 54/54 bit-identical; engine test 106/106; integration 46/46.
+- **The cost (the honest part):** the hot keys are hot in their BODY, not just the transient — the calibration point at v100
+  is untouched on 47 of 74 instruments, but 27 lose loudness (meatbass −6.2 dB, balafon −6.0, ganjo −5.5, kalimba −4.4,
+  timpani −3.9, steel pan −3.4 … engine-level, default path). Hottest notes (mbira k52 v127: 14.8 dB GR for ~0.65 s; tuba k32
+  v127: 11.2 dB for 1.7 s) are audibly turned down; residual after a 5 ms gain match −30 … −42 dB (no distortion to speak of).
+  Two limited oscs on one note, or a chord, still sum over 0 dBFS (+4.5 dBFS measured) — no master clipper was added.
+- CPU per engine per 512 block: +0.1 µs at rest (one peak scan), +7.7 µs while limiting; 0 when the engine is idle.
+
+### 12.1 tp114b: the makeup lowered to +14 dB (Max: "option 2", then "about +14")
+
+Max listened and chose to keep the limiter and LOWER `organics::kOutputMakeupDb`, so it catches attack spikes instead of
+holding bodies down. Sweep (engine alone, default osc path assumed with the envelope at 1 — the processor is gentler, see
+below; factory library, Noise 0.5; "hold" = the longest time a v127 key × RR take spends > 0.5 dB under unity; median =
+the centre key v100 through the processor, first 1 s K-weighted, vs the init Wavetable's −15.8 LUFS):
+
+| makeup | v100 lose > 0.5 dB (worst) | v127 hold mbira / tuba / meatbass / balafon (ms) | factory > 100 ms (longest) | median LUFS |
+|---|---|---|---|---|
+| +20 | 22 (meatbass −6.2) | 1394 / 980 / 850 / 163 | 63 (mbira 1394) | −16.1 |
+| +17 | 10 (balafon −3.8) | 597 / 932 / 575 / 147 | 55 (flute 946) | −19.0 |
+| +15 | 8 (kalimba −2.4) | 448 / 884 / 337 / 138 | 44 (flute 904) | −21.0 |
+| **+14 (shipped)** | **6 (kalimba −1.9)** | 407 / 837 / 249 / 132 | 39 (flute 878) | **−22.0** |
+| +12 | 1 (kalimba −0.8) | 257 / 680 / 130 / 111 | 33 (flute 755) | −23.9 |
+| +10 | 0 | 142 / 462 / 72 / 73 | 12 (tuba 462) | (≈ −25.9) |
+| +9 | 0 | 121 / 0 / 0 / 0 | 2 (mbira 121) | (≈ −26.9) |
+
+- **+12 met the "≤ 2 instruments lose > 0.5 dB" bar; Max chose +14** (≈ 6 dB under the Wavetable) as the trade: 6 lose
+  > 0.5 dB at v100 (kalimba −1.9 worst). No value ≥ +10 is attack-only at v127:
+  peaktrim holds every hot key to −1 dBFS in library units, so at the default osc that key peaks at −1 + M − 9.03 dBFS —
+  above the limiter's −1 whenever M > 9, by the same ~5 dB (at +14; ~3 at +12) on EVERY trimmed key, sustained ones included
+  (flute, brass, strings: ~3 dB held while the note is loud). Attack-only needs ≤ +9, 11 dB under the Wavetable.
+- **Through the processor it is gentler than the table:** the voice hands the engine its real downstream gain, and the
+  default amp envelope falls to 0.7 (−3.1 dB) after 205 ms, so bodies mostly clear the ceiling (measured at +12: tuba
+  k32 v127 not limited at all; mbira k52 v127 4.9 dB for 0.31 s; Kawai k70 v127 2.3 dB for 0.3 s). Every key × RR take of mbira, tuba,
+  meatbass, balafon and Kawai at v127 / v100 at the plugin output ≤ −1.05 dBFS (true peak ≤ −0.77 dBTP).
+- **Level (+14):** Organics median −22.0 LUFS vs the Wavetable's −15.8 (tp113 +20: −15.9 without the limiter, −16.1 with it).
+- Bars moved with the constant (they read it): peaktrim.py / engine_calibrate.py (`MAKEUP_DB` parsed from OrganicsApi.h),
+  organics_audit.cpp (`kMk`: loudness −24 + 14 = −10 LUFS, the library PEAK bar −1 + 14), organics_compile_test.py §6/§7
+  (through peaktrim), OrganicEngine_test.cpp (library-unit floors). The build reports' recorded `peakTrim.ceilDb` stay in
+  the units they were trimmed in (+20); the trim itself is makeup-independent (library units), so nothing is re-trimmed.
+- The voice's bound carries +0.1 dB for the mixer's per-sample glides (a +0.03 dB over measured on mbira k49 v127).
+

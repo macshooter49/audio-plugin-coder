@@ -13,6 +13,10 @@
 #    Tests/organics_audit.sh peaks [idFilter] [vels]  tp108: every key's v127 peak, every RR take (Tools/organics/peaktrim.py;
 #                                                ORG_PEAK_NOISE=0.5 = the Noise knob's default); last line PEAKSUMMARY
 #    Tests/organics_audit.sh pitchdump <dir> <id> [vels]  the renders Tests/organics_pitch_check.py / retune.py measure
+#    Tests/organics_audit.sh lim [idFilter]      tp114: the safety limiter's cost in loudness (calibration point v100 / v127, raw vs limited)
+#    Tests/organics_audit.sh limnote <id> <artic> <key> <vel> [wavdir]  tp114: one note raw vs limited (GR, level, residual, bands, WAVs)
+#  tp114: `peaks` prints PEAK (the library, limiter bypassed — peaktrim.py) AND LPEAK (the engine output, limited, + 4× ISP);
+#  PEAKSUMMARY's verdict is the limited output against organics::kLimiterCeilingDb.
 #  ORG_AUDIT_TSV=<file> (lib) writes one row per rendered note.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 set -u
@@ -55,5 +59,7 @@ case "$MODE" in
   pitchdump) exec "$OUT/organics_audit" --pitchdump "$ROOT" "$@" ;;
   note)  exec "$OUT/organics_audit" --note  "$ROOT" "$@" ;;
   null)  exec "$OUT/organics_audit" --null  "$ROOT" "$1" "${2:-}" ;;
-  *) echo "usage: $0 lib|loops|knobs|tone|calib|peaks|pitchdump|note|null"; exit 2 ;;
+  lim)   exec "$OUT/organics_audit" --lim   "$ROOT" "${1:-}" ;;
+  limnote) exec "$OUT/organics_audit" --limnote "$ROOT" "$@" ;;
+  *) echo "usage: $0 lib|loops|knobs|tone|calib|peaks|pitchdump|note|null|lim|limnote"; exit 2 ;;
 esac

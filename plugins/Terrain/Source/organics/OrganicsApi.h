@@ -47,6 +47,11 @@ namespace tw
         // ── tp114 (Max: "Natural vs As Recorded — I don't hear a difference … the Hz and the Delay — I don't hear anything"): the back
         //    panel is Vibrato · Rate · Delay · START · Noise. START skips into the recording at note-on (a sampler's sample start).
         float start     = 0.0f;  // Start      0..1   0 = the authored start (bit-identical) · skip = 2 s × v^2.5 (10 % 6 ms · 25 % 62 ms · 50 % 0.35 s · 1 = 2 s)
+
+        // ── tp114 (the safety limiter, organics::kLimiterCeilingDb): the LARGEST linear gain the voice applies to this block
+        //    of the engine's output on its way out (osc Volume × pan × the amp envelope × the unison norm). The engine holds
+        //    its output under −1 dBFS ÷ this. ≤ 0 = unknown → the default path (Volume 0.5, centre pan, envelope 1: −9.03 dB).
+        float outGain   = 0.0f;
     };
 
     /** A compiled .torg instrument, loaded in RAM (int16 samples + the region table + the
@@ -150,9 +155,35 @@ namespace tw
         //  no clipper) puts the calibration point at −24 + 20 = −4 LUFS at the engine = −16 LUFS at the plugin output, the
         //  Wavetable's level. Tools/organics/*.py and Tests/organics_audit.cpp read THIS constant (engine-level bars =
         //  library bars + kOutputMakeupDb). The v127 peak trim keeps its per-key shape, so peaks move up by the same 20 dB.
-        constexpr float kOutputMakeupDb = 20.0f;
-        inline float outputMakeupGain() noexcept { return 10.0f; }   // = 10^(kOutputMakeupDb / 20), exact
-        static_assert (kOutputMakeupDb == 20.0f, "outputMakeupGain() is the exact linear value of kOutputMakeupDb — change both");
+        // tp114b — LOWERED TO +14 dB (Max, 2026-09-26, "option 2": keep the limiter, lower the makeup so it catches attack
+        //  spikes instead of holding instruments' bodies down; then "about +14", ≈ 6 dB under the Wavetable). The sweep
+        //  (organics-library.md §12.1): at +20 the limiter took > 0.5 dB off 22 of 74 instruments' v100 calibration point
+        //  (meatbass −6.2) and held v127 notes down for up to 1.4 s; at +14, 6 (kalimba −1.9). Every v127 key the library
+        //  trims to its −1 dBFS bar still reaches the limiter at the default osc (−1 + 14 − 9.03 = +4 dBFS at the envelope's
+        //  top), so loud v127 notes are held a few dB (attack-only needs ≤ +9 dB). Level: the calibration point is
+        //  −24 + 14 = −10 LUFS at the engine, Organics median −22.0 LUFS at the plugin output (WT −15.8).
+        constexpr float kOutputMakeupDb = 14.0f;
+        inline float outputMakeupGain() noexcept { return 5.01187233627272f; }   // = 10^(kOutputMakeupDb / 20)
+        static_assert (kOutputMakeupDb == 14.0f, "outputMakeupGain() is the linear value of kOutputMakeupDb — change both");
+        // tp114 — THE ORGANICS SAFETY LIMITER (OrganicEngine.cpp, PeakGuard). The +20 dB makeup traded headroom for level: at
+        //  the plugin output (default osc Volume + master) 50 % of the v127 key × RR takes went over 0 dBFS (mbira +13.3). Max,
+        //  2026-09-26: "yes build the organics limiter — let's hear how that would sound … I don't want quality or volume
+        //  changed … find a way to make these NOT clip." That is an EXPLICIT exception to the house law (no limiter, no clipper)
+        //  for THIS ONE STAGE ONLY: the Organics engine's own output, per engine (= per oscillator per voice), stereo-linked,
+        //  zero added latency (it reads ahead inside the block it has already rendered), gain exactly 1.0f whenever nothing
+        //  reaches the ceiling (bit-identical to tp113). Nothing else in Terrain limits or clips.
+        //  The ceiling is set where Max hears it: −1 dBFS at the OSCILLATOR'S OUTPUT. Downstream of the engine the voice applies
+        //  osc Volume × pan × the amp envelope (5 ms attack, 200 ms down to the 0.7 sustain by default) × the unison norm, then
+        //  the voice's −6 dB pre-FX pad × the ×2 instrument makeup (they cancel) — a linear, band-flat path (Tests/
+        //  organics_limiter.sh gain). The voice hands the engine that gain's largest value in each block (OrganicParams::
+        //  outGain), so the engine-side ceiling follows the knob and the envelope: −1 dBFS ÷ outGain. Without it (the tests
+        //  that drive the engine alone) the ceiling assumes the DEFAULT path at the envelope's top: Volume 0.5 (−6.02 dB) ×
+        //  the centre pan law √½ (−3.01) = −9.03 dB → +8.03 dBFS at the engine. The master Output knob, the filters / FX, a
+        //  second oscillator or a chord can still take the sum past 0 dBFS downstream — this stage only guarantees that ONE
+        //  Organics oscillator of one voice, as it leaves the voice's mixer, does not.
+        constexpr float kLimiterOutputCeilingDb = -1.0f;     // dBFS at the plugin output (sample peak; 4× ISP measured ≤ 0)
+        constexpr float kDefaultPathHeadroomDb  = 9.0309f;   // −20·log10 (0.5 · √½): engine output − plugin output, envelope at 1
+        constexpr float kLimiterCeilingDb       = kLimiterOutputCeilingDb + kDefaultPathHeadroomDb;   // engine units: +8.03 dBFS
         // knob order for the dest block AND the page: Dynamics Tone Body Vibrato Human | Release Noise Sustain Velocity Image
         // (tp105: knob 3 is VIBRATO. tp107: ATTACK is back on page 2 with its OWN dest block, kAttackDestBase + osc)
     }
