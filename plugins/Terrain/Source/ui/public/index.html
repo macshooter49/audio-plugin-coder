@@ -13501,7 +13501,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var buf=core.__specBuf||(core.__specBuf=document.createElement('canvas'));
             if(buf.width!==W||buf.height!==Hp){ buf.width=W; buf.height=Hp; }
             core.__specTarget=cv;
-            var ctx=buf.getContext('2d'); ctx.clearRect(0,0,W,Hp); return {ctx:ctx,W:W,Hp:Hp,dpr:dpr};
+            /* tp110c — THE LINE FOLLOWS THE CARD'S SCALE. Max: the EQ / Splitter / Multiband spectrum "looks like marker" in
+               the Patcher. The bitmap is sized from the SCREEN rect, so a stroke of lw·dpr bitmap px stayed lw SCREEN px at every
+               world zoom while every SVG stroke beside it scaled with the card — zoomed out, the spectrum was the thickest ink on
+               the card. `s` = the card's screen/layout ratio (the Patcher's world zoom × any card zoom; exactly 1 on the synth
+               page, so it is untouched there); the returned dpr only drives line widths and the point density. */
+            var s=(core.offsetWidth>0)?r.width/core.offsetWidth:1; if(!(s>0.05&&s<20)) s=1;
+            var ctx=buf.getContext('2d'); ctx.clearRect(0,0,W,Hp); return {ctx:ctx,W:W,Hp:Hp,dpr:dpr*s};
           }
           function fx4SpecCommit(core){
             var buf=core.__specBuf, cv=core.__specTarget; if(!buf||!cv||!buf.width||!cv.isConnected) return;
@@ -35445,13 +35451,21 @@ restoreThemeFromBackend();
       // cost 2.6x (measured 0.92→1.45ms audio-on). Path built ONCE, stroked 3x (wide-faint →
       // mid → bright core) = the same purple glow; the fb311 idle→loud delta is untouched
       // because the brightness math (inLvl gates/alphas) is identical.
+      /* tp110c — PENCIL IN THE PATCHER. Max: the filter curve "looks like marker … make it more like a pencil". On the
+         Patcher canvas the curve is ONE thin stroke (no halo — the thin-white law), the same weight as the cards' SVG
+         curves; the synth page keeps its drawing (the Patcher never changes the synth page). Checked every 32 frames
+         with the rect cache, so it costs nothing per frame. */
+      if(cv.__rN===1||(cv.__rN&31)===1) cv.__inTp=!!(cv.closest&&cv.closest('#tp-page'));
+      var __pencil=!!cv.__inTp;
       ctx.save();
       ctx.beginPath(); crv.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); });
       ctx.lineJoin='round'; ctx.lineCap='round';
+      if(__pencil){ ctx.strokeStyle='#C9B3FF'; ctx.lineWidth=dpr*1.0; ctx.stroke(); ctx.restore(); }
+      else {
       ctx.strokeStyle='rgba(183,148,255,0.07)'; ctx.lineWidth=dpr*9.5; ctx.stroke();   // graduated 3-layer = gaussian-soft falloff (A/B'd vs blur, scratchpad glowab)
       ctx.strokeStyle='rgba(183,148,255,0.12)'; ctx.lineWidth=dpr*5.5; ctx.stroke();
       ctx.strokeStyle='rgba(183,148,255,0.20)'; ctx.lineWidth=dpr*3;   ctx.stroke();
-      ctx.strokeStyle='#C9B3FF'; ctx.lineWidth=dpr*1.8; ctx.stroke(); ctx.restore();
+      ctx.strokeStyle='#C9B3FF'; ctx.lineWidth=dpr*1.8; ctx.stroke(); ctx.restore(); }
       // travelling energy highlight — a bright segment sweeping along the curve, faster when the audio is louder
       /* fb636 h2 — ...and it is DECORATION: it fades with the motion envelope (it slows and dims over the ending), so at rest
          the curve is plain — no bright segment parked wherever tau stopped. */
@@ -35459,10 +35473,12 @@ restoreThemeFromBackend();
       var sweep=(t*(0.06+inLvl*0.55))%1, c0=Math.floor(sweep*N), seg=Math.max(6,Math.round(N*0.05));
       ctx.save(); ctx.lineCap='round';
       ctx.beginPath(); for(var k=0;k<=seg;k++){ var idx=c0+k; if(idx>N)break; var p=crv[idx]; k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }
+      if(__pencil){ ctx.strokeStyle='rgba(245,240,255,'+((0.32+inLvl*0.5)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*1.2; ctx.stroke(); ctx.restore(); }   // tp110c — the sweep, pencil too
+      else {
       ctx.strokeStyle='rgba(201,179,255,'+((0.05+inLvl*0.07)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*14;  ctx.stroke();   // fb342 — graduated halo (was shadowBlur 10*dpr)
       ctx.strokeStyle='rgba(201,179,255,'+((0.08+inLvl*0.11)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*7.5; ctx.stroke();
       ctx.strokeStyle='rgba(201,179,255,'+((0.12+inLvl*0.16)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*4;   ctx.stroke();
-      ctx.strokeStyle='rgba(245,240,255,'+((0.32+inLvl*0.5)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*2.1; ctx.stroke(); ctx.restore(); }
+      ctx.strokeStyle='rgba(245,240,255,'+((0.32+inLvl*0.5)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*2.1; ctx.stroke(); ctx.restore(); } }
     }
   }
   // ---- emblems (TE×Serum: thin white, purple ping-pong follower, grab-aware) ----
