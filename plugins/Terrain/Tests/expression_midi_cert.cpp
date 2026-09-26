@@ -159,6 +159,14 @@ int main()
 {
     setenv ("TERRAIN_DETERMINISTIC", "1", 1);   // also keeps the owner's MidiSettings.json out of the measurement
     juce::ScopedJuceInitialiser_GUI init;
+    {   // [0] tp112 — the factory pressure feel is Harder / start 50 % / ceiling 100 %; every check below measures the
+        //     engine through the NEUTRAL shape (as it was written), so it is set explicitly after reading the default.
+        const auto f = wc::pressureShape().load();
+        const bool ok = std::abs (f.curve - 0.8f) < 1e-6f && std::abs (f.start - 0.5f) < 1e-6f && std::abs (f.ceiling - 1.0f) < 1e-6f;
+        printf ("  %s [0 factory] pressure default: curve %.2f (Harder = 0.80) start %.0f %% ceiling %.0f %%\n", ok ? "PASS" : "FAIL", f.curve, 100.0 * f.start, 100.0 * f.ceiling);
+        if (ok) ++passes; else ++fails;
+        wc::pressureShape().store (wc::PressureShape {});
+    }
     printf ("tp103 expression + MIDI cert (the real processor, %g kHz, %d-sample blocks)\n", SR / 1000.0, BLK);
     const double fA = 261.6255653, fB = 391.9954360;   // notes 60 and 67 at A4 = 440
 

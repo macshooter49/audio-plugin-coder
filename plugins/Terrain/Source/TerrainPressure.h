@@ -45,7 +45,9 @@ namespace wc
 
     struct PressureShapeStore
     {
-        std::atomic<float> curve { 0.0f }, start { 0.0f }, ceiling { 1.0f };
+        // tp112 — THE FACTORY FEEL (Max: "way too sensitive … it jumps to 100 % and bursts my ears"): Harder, start 50 %,
+        // ceiling 100 % — a light touch does nothing, pressing hard brings it in. A saved MidiSettings.json still wins.
+        std::atomic<float> curve { 0.8f }, start { 0.5f }, ceiling { 1.0f };
         PressureShape load() const noexcept
         {
             PressureShape p; p.curve = curve.load (std::memory_order_relaxed); p.start = start.load (std::memory_order_relaxed);

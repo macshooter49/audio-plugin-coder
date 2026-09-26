@@ -1004,6 +1004,11 @@ window.__bootPage=+((location.search.match(/[?&]page=([1-5])/)||[])[1]||0);   /*
      it on the WKWebView, so every canvas sizes its FIRST backing store at the final DPR and the reveal
      need not wait for a settle push (which used to arrive ~10 ticks after load and re-buffer them all). */
   (function(){ var z=+((location.search.match(/[?&]z=([0-9.]+)/)||[])[1]||0);
+    /* tp112 — on the Mac (nz=1) the WKWebView's pageZoom is ALREADY z when this parses, and WebKit's devicePixelRatio
+       includes it: measured 1.5625 = 1.25 × 1.25 on a 1× screen at 125 %, i.e. every canvas buffered 1.25× too many pixels
+       per side (and capped at 3 on Retina). The base is the SCREEN's own scale — an integer — so take the zoom back out
+       when doing so lands on one; otherwise (zoom not applied yet) keep what WebKit reported. */
+    if(z>0.3&&z<3&&/[?&]nz=1(&|$)/.test(location.search)){ var b0=d0/z; if(Math.abs(b0-Math.round(b0))<0.02&&Math.round(b0)>=1){ d0=Math.round(b0); window.__baseDPR=d0; window.DPR=d0; } }
     if(z>0.3&&z<3&&!window.__cardOnly){ window.__uiScale=z; window.DPR=Math.min(d0*z,3); window.__uiScaleSettled=1; } })();
   window.__nativeZoom=/[?&]nz=1(&|$)/.test(location.search);   /* tpsz — the zoom is the WKWebView's own (Mac) */
   /* tpsz — and the root never scrolls there. Mid-drag the WKWebView is magnified from its settled layout
@@ -4053,6 +4058,7 @@ body > .syn-ctx-menu.act{position:fixed;z-index:2147483647;}   /* tp76 — porta
   font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
   font-variant-numeric:tabular-nums;}
 .ti-card.open{display:block;}
+.ti-card.tp-away,.mv-ext.tp-away,.filt-ext.tp-away{display:none!important;}   /* tp112 — an open card stays on its page */
 .ti-card .h{display:flex;align-items:center;gap:6px;padding:10px 14px 9px;   /* tp77 — 14 px = .ti-card .b's own left padding, so the title's first letter lands on the same rule as the screen and the tiles under it (Max: "the beginning of S lines up with the beginning of all this stuff") */
   border-bottom:1px solid rgba(255,255,255,.08);cursor:grab;}
 .ti-card .h.grab{cursor:grabbing;}
@@ -5739,6 +5745,13 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
 #syn-panel .device.osc .swap-btn.act::before { content: ''; font-size: 0; width: 8px; height: 8px; transform: none;
   background: linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat; }
 #syn-panel .device.osc .swap-btn::after { content: ''; display: none; grid-area: 1 / 1; }
+/* tp112 — Max: "did you make a new plus button? … I want the same plus button that the effect has … keep it in that same box …
+   it should never move off centre." The + is now IC_PLUS itself (the effects' glyph: 14-unit box, bars 2.6→11.4, stroke 1.4,
+   round caps) as a mask filled with currentColor, 14 px in the box's 14 px content, centred by the grid — no drawn bars,
+   no offset. The ← (.act) is unchanged. */
+#syn-panel .device.osc .swap-btn:not(.act)::before { width: 14px; height: 14px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Cline x1='7' y1='2.6' x2='7' y2='11.4'/%3E%3Cline x1='2.6' y1='7' x2='11.4' y2='7'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Cline x1='7' y1='2.6' x2='7' y2='11.4'/%3E%3Cline x1='2.6' y1='7' x2='11.4' y2='7'/%3E%3C/svg%3E") center / 14px 14px no-repeat; }
 #syn-panel .device.osc .swap-btn.act::after { display: block; width: 4.2px; height: 4.2px; box-sizing: border-box; border-left: 1px solid currentColor; border-bottom: 1px solid currentColor;
   transform: translateX(-1.9px) rotate(45deg); }
 #syn-panel .device.osc .osc-emblems .osc-letter:hover,
@@ -11154,7 +11167,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
           text-shadow:0 0 6px rgba(255,255,255,.35); }   /* fb627 — the text's answer to fb119's drop-shadow on the emblem */
         /* POLISH — Always / Scaled: FLAT purple, no glow (Max: like the import-pack purple). .vm-voiceview holds
            ONLY these two voice-toggles, so this overrides the fb627 white+glow just for them; Mono/Legato/Poly keep it. */
-        #syn-panel .ribbon-row.rr-new .vm-voiceview .voice-toggle.on{ color:var(--purple-400); text-shadow:none; }
+        /* tp112 — Max: "make the Always button white on the inside just like Poly … purple outline, white inside". The
+           flat-purple text override is gone: Always / Scaled light exactly like Mono / Legato / Poly (the rule above). */
         /* NO-GLASS transparent assign popout */
         #syn-panel .rr-pop{ position:absolute; z-index:60; width:212px; background:rgba(18,18,31,.9); border:1px solid var(--border-strong); border-radius:9px; padding:10px 11px 9px; display:none; box-shadow:0 12px 34px rgba(0,0,0,.55); }
         #syn-panel .rr-pop.show{ display:block; }
@@ -11465,6 +11479,14 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
         #syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
         #syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
         #syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
+        /* tp112 — THE ROUTE LETTERS ARE DRAWN, NOT TYPED (the tp3 osc-letter law). Max: "look at these letters … B and D … the S
+           … the A on the delay looks like it's to the left … they should be directly in the middle." A typed 8 px letter in a
+           flex:1 box snaps to whole device pixels by its own advance width, so every letter sat a different fraction off centre
+           (and moved with the window size). SVG text anchored at its middle, baseline at the cap-height centre, in the box's own
+           12×12 content: every letter shares one centre at every size. */
+        #syn-panel .fxr-r .fxr-t{ display:block; width:12px; height:12px; }
+        #syn-panel .fxr-r .fxr-lt{ display:block; width:12px; height:12px; overflow:visible; }
+        #syn-panel .fxr-r .fxr-lt text{ font-family:inherit; font-size:8px; font-weight:400; fill:currentColor; letter-spacing:0; }
         #syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }   /* fb440 — Max: the LETTER is white, the OUTLINE is purple */
         /* fb440 — fb437 read "white letters" as "white everything" and took the BORDER white too, which is
            the one white-outline-on-select in the whole UI and, because the route row rides every card, it read
@@ -14994,7 +15016,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                Splitter's twelve lane glyphs are state only (the lane menu drives them). */
             var coreN=(d.core==='utl')?3:(d.core==='spl'?12:0);   /* fb450 — three lamps */
             var pills=d.pills.slice(coreN).map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
-            var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+(i>=6?' fxr-pool':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
+            var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+(i>=6?' fxr-pool':'')+'" data-r="'+i+'"><span class="fxr-t"><svg class="fxr-lt" viewBox="0 0 12 12" aria-hidden="true"><text x="6" y="8.75" text-anchor="middle">'+RLBL[i]+'</text></svg></span></span>';}).join('');   /* tp112 — drawn, not typed (below) */
             /* ═══ fb415 — 🔑 THE FIRST-SLOT LAW (Max, HARD RULE) ═══════════════════════════
                SEND APPEARS ON THE FIRST DEVICE IN THE CHAIN AND NOWHERE ELSE. Max: "it only
                needs to be on the first effect... everything after every effect gets added, it
@@ -20153,6 +20175,29 @@ document.getElementById('syn-btn').addEventListener('click', () => {
     var b = document.getElementById(id); if (b) b.addEventListener('click', __closeSt, true);
   });
   window.addEventListener('tipanelchange', __closeSt);
+})();
+/* tp112 — AN OPEN CARD STAYS ON ITS PAGE. Max: "why do my extended cards always stay open anywhere I go … leave the kid
+   at home … all pages need to stay pages, nothing should carry over." A floating card (the .ti-card shell, the LFO /
+   filter extensions) remembers the page it was open on (data-tp-home) and hides on every other page; going back
+   shows it exactly as it was — never closed, never moved. Cards the Patcher adopts as nodes (#tp-page) and popped
+   native windows are not floating cards and are left alone: the synchronous pass marks what sits in the Patcher
+   BEFORE the Patcher's own listener adopts / returns anything, the deferred pass runs after it. */
+(function(){
+  var SEL = '.ti-card, .mv-ext, .filt-ext', prev = (typeof currentActivePanel !== 'undefined') ? currentActivePanel : null;
+  function key(p){ return p || 'front'; }
+  window.addEventListener('tipanelchange', function(e){
+    var p = key(e.detail && e.detail.panel), was = key(prev); prev = e.detail && e.detail.panel;
+    var cs = document.querySelectorAll(SEL);
+    cs.forEach(function(c){ c.__tpWasIn = !!(c.closest && c.closest('#tp-page')); });
+    setTimeout(function(){ cs.forEach(function(c){
+      try {
+        if (c.__tpWasIn || (c.closest && c.closest('#tp-page')) || c.classList.contains('ti-popcard')) { c.classList.remove('tp-away'); delete c.dataset.tpHome; return; }
+        var open = c.classList.contains('open'), away = c.classList.contains('tp-away');
+        if (open && !away) c.dataset.tpHome = was;                       // it was showing on the page we just left
+        if (!open && !away) { delete c.dataset.tpHome; return; }         // closed: it belongs nowhere
+        c.classList.toggle('tp-away', (c.dataset.tpHome || p) !== p);
+      } catch (err) {} }); }, 0);
+  });
 })();
 
 // Bridge raw <input type="range"> / <select> elements to the
@@ -36924,6 +36969,7 @@ restoreThemeFromBackend();
   var RQ=[], RP=null;   /* RP: window.__smRingProf, read once per pass — the gate's stopwatch; null in the plugin */
   function ringPaint(el,u,show,sel,kn,d,v,op){ if(!RP) return ringPaint0(el,u,show,sel,kn,d,v,op); var t0=performance.now(); ringPaint0(el,u,show,sel,kn,d,v,op); RP.t+=performance.now()-t0; RP.n++; }
   function ringPaint0(el,u,show,sel,kn,d,v,op){
+    if(window.__smRingDbg&&window.__smRingDbg.length<40) window.__smRingDbg.push([el.getAttribute&&el.getAttribute('data-syn'),show?1:0,kn,d,v,op]);   /* gate hook (off unless a probe sets the array) */
     var R=u.__ring;
     if(!show){ if(R&&R.__k!=='off'){ R.__k='off'; R.__w=null; RQ.push(R); } return; }
     var g=ringGeom(el); if(!g) return;
@@ -36962,6 +37008,13 @@ restoreThemeFromBackend();
     // where not one of those knobs was on screen. Ask first, measure second.
     if(!on){ if(!__ulDown){ __ulDown=true; ulMap.forEach(function(u,el){ u.style.display='none'; ringPaint(el,u,false); }); ringFlush(); } return; }
     __ulDown=false;
+    /* tp112 — THE RING SAW 0 FOREVER. Max: "the ring is still not there" (MPE pressure on Fold). MEASURED in the real WebView
+       (Tests/_tp112_ring_probe.js): __mvAT = 1, route depth 1, and ringPaint handed v = 0 every frame. The snapshot p2v() reads
+       is taken by __mvP2Tick(), which the C++ calls as its own statement in the frame — CONSTANT bytes, so the tp34
+       per-statement idle-skip shipped it once and never again: the snapshot froze at boot, and every wheel / aftertouch /
+       bend / macro comet and ring sat at its first value. The pass takes the snapshot itself now (an identical sample is
+       dropped inside, so this costs one compare per frame). */
+    try{ if(window.__mvP2Tick) window.__mvP2Tick(); }catch(e){}
     /* fb188 — badge positioning retired with the badges; the underline is the surface. */
     // fb182 S3 — underlines: one bar per modulated element; purple = the selected
     // modulator's route lives here, dim = someone else's. Repaints every frame, so
@@ -37104,7 +37157,7 @@ restoreThemeFromBackend();
      is the fb548 UI-probe law, and it made the one thing worth gating here untestable. __ulTick()
      runs exactly one iteration of the shipped loop on demand; __ulOverlays() reports what the
      stand-down currently considers to be covering the panel. Neither is a re-implementation. */
-  window.__ulTick=function(){ try{ loop((window.performance&&performance.now)?performance.now():0); return document.querySelectorAll('.sm-ul').length; }catch(e){ return -1; } };
+  window.__ulTick=function(){ try{ loop((window.performance&&performance.now)?performance.now():0); return document.querySelectorAll('.sm-ul').length; }catch(e){ window.__ulErr=String((e&&e.stack)||e).slice(0,300); return -1; } };
   window.__ulOverlays=function(){ try{ return overlayBoxes().map(function(o){
     return { cls:(o.el.id?('#'+o.el.id):(String(o.el.className||o.el.tagName).split(' ')[0])),
              r:[o.r.left|0,o.r.top|0,o.r.width|0,o.r.height|0] }; }); }catch(e){ return null; } };

@@ -419,7 +419,14 @@ static void terrainApplyWebScale (juce::Component& root, double pageZoom, double
        at 65 %; 1.6 / 1.0 / 0.5 % at 190 %. It is also a page-scale change, not a restyle, so a drag can
        step it every event. Guarded: where the SPI is absent the old pageZoom + magnification path runs.
        CSS px stay CSS px (clientX, getBoundingClientRect) exactly as under pageZoom (fb95). */
-    if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("_setViewScale:")))
+    /* 🚨 tp112 — OFF BY DEFAULT. Max, the night it shipped: text in the browser/Settings "low quality", Patcher LFO /
+       filter lines "way too thick" and "out of place", the page scrollable past its bottom with blank space under the
+       output strip, the effects row cut off. The view scale scales a rendering WebKit made at the UNSCALED size (and
+       reports a devicePixelRatio every canvas painter sizes from without it), so the whole page's tuning — every DPR
+       shim, every bitmap law, the tp64 fit — was built for pageZoom and broke under it. Back to pageZoom, which is
+       what all of that was measured on; the view scale stays reachable for experiments with TERRAIN_VIEW_SCALE=1. */
+    static const bool viewScaleOn = std::getenv ("TERRAIN_VIEW_SCALE") != nullptr;
+    if (viewScaleOn && ((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("_setViewScale:")))
     {
         const double want = pageZoom * magnification;
         if (std::abs (((double (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("_viewScale")) - want) > 1.0e-6)

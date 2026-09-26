@@ -111,6 +111,9 @@ struct AuHost
                 const int m = midi.exchange (0);
                 if (m == 1) for (int n : chord) MusicDeviceMIDIEvent (au, 0x90, (UInt32) n, 100, 0);
                 if (m == 2) for (int n : chord) MusicDeviceMIDIEvent (au, 0x80, (UInt32) n, 0, 0);
+                // tp112 — TPZ_PRESS=<0..127>: hold channel pressure on channel 1 while the chord sounds (the ring probe)
+                static const int press = std::getenv ("TPZ_PRESS") ? atoi (std::getenv ("TPZ_PRESS")) : -1;
+                if (press >= 0 && m == 1) MusicDeviceMIDIEvent (au, 0xD0, (UInt32) press, 0, 0);
                 abl->mNumberBuffers = 2;
                 abl->mBuffers[0].mNumberChannels = 1; abl->mBuffers[0].mDataByteSize = BLK * 4; abl->mBuffers[0].mData = l.data();
                 abl->mBuffers[1].mNumberChannels = 1; abl->mBuffers[1].mDataByteSize = BLK * 4; abl->mBuffers[1].mData = r.data();
