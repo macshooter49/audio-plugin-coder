@@ -19,6 +19,10 @@
 // the note's own first 30 ms) · DC (the note's mean over −50 dBFS and within 20 dB of its RMS) · centre-key loudness ±1 dB of −24 LUFS (less any peak limit the calibration reports) ·
 // adjacent-velocity jump ≤ 6 dB · the per-engine reader cap · tp108: every key's velocity-127 peak ≤ −1 dBFS (the library
 // trims the recording per key — Tools/organics/peaktrim.py — never a clipper, never a limiter).
+// tp113: every level above is in LIBRARY UNITS (the engine at unity); the engine now plays organics::kOutputMakeupDb (+20 dB)
+// over them, so each ABSOLUTE bar here is the library bar + kMk: loudness −24 + 20 = −4 LUFS, the v127 key bar −1 + 20 (+ the
+// instrument's loudness.peakLiftDb: the calibration is lifted, never peak-limited), and the level floors of the silence, DC
+// and click metrics move up with it (a floor is "inaudible in the library", not "inaudible at 20 dB less gain").
 //   organics_audit --peaks <root> [idFilter] [vels]  every key's v127 peak, every RR take (Tools/organics/peaktrim.py)
 #include "../Source/organics/OrganicEngine.h"
 #include "../Source/organics/OrganicsLibrary.h"
@@ -43,6 +47,8 @@ using namespace tw;
 using Buf = std::vector<float>;
 static constexpr double kPi = 3.14159265358979323846;
 static double gSR = 48000.0;
+static const double kMk    = (double) organics::kOutputMakeupDb;        // tp113 — the engine's output makeup (dB)
+static const double kMkLin = (double) organics::outputMakeupGain();     //         … linear
 static double db (double v) { return 20.0 * std::log10 (std::max (v, 1e-20)); }
 static std::string fmt (const char* f, ...)
 {
@@ -136,9 +142,9 @@ namespace an
             const int64_t ringN = (a1 - a0) - (c1 - c0);
             const double rloc = std::sqrt (std::max (ringE, 0.0) / (double) std::max<int64_t> (1, ringN)) + 1e-12;
             const double sloc = std::sqrt ((px[(size_t) a1] - px[(size_t) a0]) / (double) std::max<int64_t> (1, a1 - a0)) + 1e-12;
-            if (sloc < 1e-5) continue;                                         // below −100 dBFS: inaudible
+            if (sloc < 1e-5 * kMkLin) continue;                                // below −100 dBFS (library units): inaudible
             const double ex = db (a / rloc), rel = db (a / sloc);
-            bool hit = ex > excessBar && rel > relBar && a > 3.16e-5;    // (an HP residual under −90 dBFS is below the 16-bit floor)
+            bool hit = ex > excessBar && rel > relBar && a > 3.16e-5 * kMkLin;   // (an HP residual under −90 dBFS — library units — is below the 16-bit floor)
             if (hit)
             {
                 // ISOLATION: a discontinuity stands alone; a spiky periodic waveform (brass ff, a reed, a harpsichord
@@ -312,6 +318,8 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
         if (! I) { std::printf ("FAIL  %-36s does not load\n", id.toRawUTF8()); ++instFail; ++gFails; continue; }
         const auto rep = readReport (root, id);
         const double limited = (double) rep["loudness"].getProperty ("peakLimitedDb", 0.0);
+        const double lift    = (double) rep["loudness"].getProperty ("peakLiftDb", 0.0);    // tp113: the calibration's lift over the old peak limit
+        const double hotBar  = -1.0 + kMk + lift;
         std::vector<std::string> fails, flags;
         std::string info;
         const auto t0 = std::chrono::steady_clock::now();
@@ -339,7 +347,7 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
                     // skip: the note's own attack (first 30 ms after its onset) — the recording's transient
                     const auto c = an::clicks (m, { { 0, on + (int64_t) (0.030 * gSR) } });
                     const char* phase = c.at < 0 ? "-" : (c.at < n.offAt ? "hold" : (c.at < n.offAt + (int64_t) (0.05 * gSR) ? "noteoff" : "release"));
-                    if (s.peak < 0.001) ++silent;
+                    if (s.peak < 0.001 * kMkLin) ++silent;
                     nonFin += s.nonFinite; denorm += s.denorm;
                     bool inSource = false;
                     // the recording's own: the sounding attack region at that frame (a looped one keeps playing after
@@ -349,8 +357,8 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
                     if (c.hit && ! inSource) { ++clickN; if (c.excessDb > worstClickEx) { worstClickEx = c.excessDb; worstClickRel = c.relDb; clickWhere = fmt ("%s k%d v%d %s %.0fms", an_.c_str(), key, vel, phase, 1000.0 * (double) c.at / gSR); } }
                     const double dcDb = db (s.dc);
                     if (dcDb > worstDc) { worstDc = dcDb; dcWhere = fmt ("k%d v%d", key, vel); }
-                    if (dcDb > -50.0 && dcDb > db (s.rms) - 20.0) ++dcN;   // (a subsonic bow / breath bump averages to −55…−60 dBFS: not DC)
-                    if (vel == 127) { peak127 = std::max (peak127, db (s.peak)); if (db (s.peak) > -1.0) { ++hotN; if (hotWhere.empty()) hotWhere = fmt ("%s k%d %.1f dBFS", an_.c_str(), key, db (s.peak)); } }
+                    if (dcDb > -50.0 + kMk && dcDb > db (s.rms) - 20.0) ++dcN;   // (a subsonic bow / breath bump averages to −55…−60 dBFS: not DC)
+                    if (vel == 127) { peak127 = std::max (peak127, db (s.peak)); if (db (s.peak) > hotBar) { ++hotN; if (hotWhere.empty()) hotWhere = fmt ("%s k%d %.1f dBFS", an_.c_str(), key, db (s.peak)); } }
                     if (n.maxLive > organics::kMaxRegionsPerOsc) ++capN;
                     if (tsv) std::fprintf (tsv, "%s\t%s\t%d\t%d\t%.2f\t%.1f\t%.1f\t%.1f\t%.1f\t%s\t%d\t%d\t%d\n", id.toRawUTF8(), an_.c_str(), key, vel,
                                            db (s.peak), dcDb, c.excessDb, c.relDb, 1000.0 * (double) c.at / gSR, phase, s.nonFinite, s.denorm, n.maxLive);
@@ -363,7 +371,7 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
             if (capN)    fails.push_back (fmt ("%s: reader cap exceeded on %d notes", an_.c_str(), capN));
             if (srcN)    flags.push_back (fmt ("%s: %d notes carry an isolated HF transient that is IN THE RECORDING (not the engine)", an_.c_str(), srcN));
             // tp108: a BAR, no longer a flag — the library trims every key (Tools/organics/peaktrim.py), never a limiter
-            if (hotN)    fails.push_back (fmt ("%s: %d keys over -1 dBFS at vel 127 (first %s)", an_.c_str(), hotN, hotWhere.c_str()));
+            if (hotN)    fails.push_back (fmt ("%s: %d keys over %+.1f dBFS at vel 127 (first %s)", an_.c_str(), hotN, hotBar, hotWhere.c_str()));
             info += fmt (" [%s k%d-%d pk127 %.1f dc %.0f]", an_.c_str(), lo, hi, peak127, worstDc);
 
             // ── C. loudness (artic 0: the compiler's calibration point) + velocity response ──
@@ -375,7 +383,7 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
                     auto n = renderNote (I, q, centre, 100, 2.0, 0.05);
                     const int64_t on = an::onset (mono (n));
                     const double l = an::lufs (n.L, n.R, on, (int64_t) gSR);
-                    const double want = -24.0 - limited;
+                    const double want = -24.0 + kMk - limited;
                     info += fmt (" LUFS %.2f", l);
                     worstLoud = std::max (worstLoud, std::abs (l - want));
                     if (std::abs (l - want) > 1.0) fails.push_back (fmt ("loudness %.2f LUFS at k%d v100 (want %.1f)", l, centre, want));
@@ -787,14 +795,14 @@ static int runPeaks (const juce::String& filter, const juce::String& velList)
                         }
                         e.kill(); e.setInstrument (nullptr);
                     }
-                    if (pk > -1.0) ++worstBad;
+                    if (pk > -1.0 + kMk) ++worstBad;
                     std::printf ("PEAK %s %d %d %d %.3f %d\n", id.toRawUTF8(), a, key, vel, pk, presses);
                 }
         }
         std::fflush (stdout);
         I.reset(); org::drainDeferredReleases();
     }
-    std::printf ("PEAKSUMMARY %d keys over -1 dBFS — %s\n", worstBad, worstBad ? "FAIL" : "PASS");
+    std::printf ("PEAKSUMMARY %d keys over %+.1f dBFS (−1 + the %.0f dB makeup; a lifted instrument's own bar is higher) — %s\n", worstBad, -1.0 + kMk, kMk, worstBad ? "FAIL" : "PASS");
     return worstBad ? 1 : 0;
 }
 

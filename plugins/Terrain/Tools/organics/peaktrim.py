@@ -22,6 +22,10 @@ the recording's own level is trimmed, per key, in the library.
 5. APPLY — each region's gainDb moves by its atom's trim (attack, release and noise regions alike: a key's release and
    mechanical noise keep their level against its note). A region that spans atoms with different trims is SPLIT into
    one region per run of equal trim (same sample, same fields) — only on inconsistently zoned instruments.
+tp113: every bar above is in LIBRARY UNITS (the engine at unity). The engine now adds organics::kOutputMakeupDb (+20 dB,
+OrganicsApi.h) at its output, so as measured here the bar is CEIL_DB = −1 + 20 (TARGET_DB −1.3 + 20), plus the instrument's
+loudness.peakLiftDb (engine_calibrate.py lifts a calibration the old rule peak-limited, whole instrument at once, so the bar
+moves with it and a re-run trims nothing new). Step 4's warning now means "run engine_calibrate.py again" (it lifts).
 6. VERIFY — re-measure; repeat (≤ 3 passes) until no key is over the bar. The trims are CUMULATIVE and the smoothing is
    done on the cumulative curve, so repeated runs never stack steps. build-report.json → "peakTrim" records the curve
    per articulation (dB per key), the worst peak before / after, and the regions split.
@@ -39,10 +43,33 @@ from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_LIB = os.path.expanduser("~/Developer/VST-Plugins/organics-library/compiled")
 AUDIT = os.path.normpath(os.path.join(HERE, "..", "..", "..", "..", "build", "organics_engine_test", "organics_audit"))
-CEIL_DB = -1.0              # the bar
-TARGET_DB = -1.3            # what the trim aims for (margin for the noise draw and the release's own transient)
+
+
+def engine_makeup_db() -> float:
+    """tp113 — organics::kOutputMakeupDb (Source/organics/OrganicsApi.h): the engine's flat output makeup. Every level this
+    pipeline measures THROUGH THE ENGINE carries it; the library itself stays in LIBRARY UNITS (−24 LUFS / −1 dBFS)."""
+    import re
+    src = open(os.path.join(HERE, "..", "..", "Source", "organics", "OrganicsApi.h")).read()
+    m = re.search(r"kOutputMakeupDb\s*=\s*([-+0-9.]+)f?\s*;", src)
+    if not m:
+        raise RuntimeError("organics::kOutputMakeupDb not found in OrganicsApi.h")
+    return float(m.group(1))
+
+
+MAKEUP_DB = engine_makeup_db()
+LIB_CEIL_DB = -1.0          # the bar, in library units (the engine at unity)
+LIB_TARGET_DB = -1.3        # what the trim aims for (margin for the noise draw and the release's own transient)
+CEIL_DB = LIB_CEIL_DB + MAKEUP_DB       # the same bars as the engine measures them (tp113: + the output makeup)
+TARGET_DB = LIB_TARGET_DB + MAKEUP_DB
 STEP_DB = 1.4               # the largest key-to-key step the trim may add (Max: ≤ 1.5 dB)
 NOISE = "0.5"               # the Noise knob's default
+
+
+def lift_db(report: dict) -> float:
+    """tp113 — how far engine_calibrate.py lifted this instrument over the old peak limit (loudness.peakLiftDb): the
+    calibration now always reaches the target (Max: level over headroom), so the whole instrument — every key, every
+    trim — sits that much higher, and the per-key bar moves with it (a re-run trims nothing new: idempotent)."""
+    return float((report.get("loudness") or {}).get("peakLiftDb", 0.0))
 
 
 AUDIT_SH = os.path.normpath(os.path.join(HERE, "..", "..", "Tests", "organics_audit.sh"))
@@ -180,6 +207,7 @@ def trim_one(lib: str, iid: str, dry: bool) -> str:
         with open(mp, "w") as f:
             json.dump(m, f, indent=1)
     PT = {}
+    ceil, target = CEIL_DB + lift_db(R), TARGET_DB + lift_db(R)
     total = defaultdict(float)                              # (artic, key) → cumulative trim of THIS run
     before = measure(lib, iid)
     if not before:
@@ -189,7 +217,7 @@ def trim_one(lib: str, iid: str, dry: bool) -> str:
     splits, passes, warn = 0, 0, []
     ck = centre_key(m["regions"])
     for it in range(3):
-        if max(peaks.values()) <= CEIL_DB - 0.05 and it > 0:
+        if max(peaks.values()) <= ceil - 0.05 and it > 0:
             break
         delta = {}
         for a in range(len(m["artics"])):
@@ -198,8 +226,8 @@ def trim_one(lib: str, iid: str, dry: bool) -> str:
                 continue
             at = [[k] for k in keys]                        # per KEY: a smooth curve, not zone-sized steps
             # an atom needs its current cumulative trim, lowered by what its loudest key is still over the target
-            need = [min(total[(a, k)] + min(0.0, TARGET_DB - peaks[(a, k)]) for k in atom) for atom in at]
-            if max(peaks[(a, k)] for k in keys) <= CEIL_DB:
+            need = [min(total[(a, k)] + min(0.0, target - peaks[(a, k)]) for k in atom) for atom in at]
+            if max(peaks[(a, k)] for k in keys) <= ceil:
                 continue                                    # this articulation already meets the bar: untouched
             t = envelope(need, STEP_DB)
             for atom, tv in zip(at, t):
@@ -230,13 +258,14 @@ def trim_one(lib: str, iid: str, dry: bool) -> str:
             if keys:
                 rec["peak127MaxDb"] = round(max(peaks[(a, k)] for k in keys), 2)
             arts[name] = rec
-        R["peakTrim"] = {"pass": "tp108", "ceilDb": CEIL_DB, "targetDb": TARGET_DB, "stepDb": STEP_DB, "noise": float(NOISE),
+        R["peakTrim"] = {"pass": "tp113", "ceilDb": round(ceil, 2), "targetDb": round(target, 2), "makeupDb": MAKEUP_DB,
+                         "stepDb": STEP_DB, "noise": float(NOISE),
                          "peak127MaxBeforeDb": round(max(PT.get("peak127MaxBeforeDb", worst0), worst0) if PT else worst0, 2),
                          "peak127MaxDb": round(worst1, 2), "regionsSplit": int(PT.get("regionsSplit", 0)) + splits,
                          "calibrationKey": ck, "artics": arts}
-        # the calibration key's own trim is a PEAK LIMIT on the calibration (the tp106 rule engine_calibrate.py already
-        # applies at one press: the key's loudest take at v127 may not pass −1 dBFS) — recorded like it, so the audit's
-        # loudness bar reads −24 − peakLimitedDb
+        # the calibration key's own trim pulls the calibration under its target — recorded like a peak limit, so the
+        # audit's loudness bar reads target − peakLimitedDb until engine_calibrate.py runs again and LIFTS it back (tp113:
+        # the calibration is never peak-limited any more; the lift moves this instrument's bar up with it)
         ckt = round(-total.get((0, ck), 0.0), 2)
         L = R.setdefault("loudness", {})
         base = float(L.get("peakLimitedDb", 0.0)) - float(L.get("peakLimitedByTrimDb", 0.0))
@@ -248,9 +277,9 @@ def trim_one(lib: str, iid: str, dry: bool) -> str:
                                                    for w in warn))
         with open(rp, "w") as f:
             json.dump(R, f, indent=1)
-    hot0 = sum(1 for v in before.values() if v > CEIL_DB)
-    hot1 = sum(1 for v in peaks.values() if v > CEIL_DB)
-    return (f"{iid:40s} worst {worst0:+6.2f} → {worst1:+6.2f} dBFS · keys over {CEIL_DB}: {hot0:3d} → {hot1:3d} · "
+    hot0 = sum(1 for v in before.values() if v > ceil)
+    hot1 = sum(1 for v in peaks.values() if v > ceil)
+    return (f"{iid:40s} worst {worst0:+6.2f} → {worst1:+6.2f} dBFS · keys over {ceil:+.2f}: {hot0:3d} → {hot1:3d} · "
             f"passes {passes} · split {splits}" + (f" · WARN {sorted(set(warn))}" if warn else ""))
 
 

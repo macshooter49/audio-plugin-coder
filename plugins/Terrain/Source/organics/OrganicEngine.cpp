@@ -2244,11 +2244,16 @@ namespace tw
                     sumL[(size_t) i] = m + sd; sumR[(size_t) i] = m - sd;
                 }
             }
+            // tp113 — the output makeup (OrganicsApi.h organics::kOutputMakeupDb): one flat gain on the whole sum, after every
+            //  stage, so the library's calibration, the Tone stages and the release / noise balance are untouched. level (the
+            //  block peak) is the OUTPUT's: the voice's −80 dB keep-alive law reads what is actually heard.
+            const float mk = organics::outputMakeupGain();
             float peak = 0.f;
             for (int i = 0; i < n; ++i)
             {
-                L[i] += sumL[(size_t) i]; R[i] += sumR[(size_t) i];
-                peak = std::max (peak, std::max (std::abs (sumL[(size_t) i]), std::abs (sumR[(size_t) i])));
+                const float yl = mk * sumL[(size_t) i], yr = mk * sumR[(size_t) i];
+                L[i] += yl; R[i] += yr;
+                peak = std::max (peak, std::max (std::abs (yl), std::abs (yr)));
             }
             updateRetiring();
             return peak;

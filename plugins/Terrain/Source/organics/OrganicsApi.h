@@ -137,6 +137,18 @@ namespace tw
         constexpr int kDestEnd        = kDestBase + 8 * kDestPerOsc;   // 5352 (tp104's NumDests)
         constexpr int kAttackDestBase = kDestEnd;                      // tp107: Attack A–H = 5352 + osc(0..7); NumDests 5360
         constexpr int kMaxRegionsPerOsc = 48;   // players × layers × release, steal-fade beyond
+        // tp113 — THE ORGANICS OUTPUT MAKEUP (Max: "Why are the Organics so quiet? … turn them up … each one damn near at the
+        //  same level"). The library is calibrated in LIBRARY UNITS: every instrument's centre key at v100 = −24 LUFS with the
+        //  engine at unity (Tools/organics/engine_calibrate.py), the level every crest in the library allowed under a −1 dBFS
+        //  v127 peak. Through the real processor at the default osc Volume and master that came out at −36 LUFS, while the
+        //  init patch (Wavetable) plays −15.8 LUFS and FM −17.2 on the same note: the Organics sat 20 dB under the synth.
+        //  ONE flat gain at the engine's output (attack, release and noise regions alike — no balance change; no limiter,
+        //  no clipper) puts the calibration point at −24 + 20 = −4 LUFS at the engine = −16 LUFS at the plugin output, the
+        //  Wavetable's level. Tools/organics/*.py and Tests/organics_audit.cpp read THIS constant (engine-level bars =
+        //  library bars + kOutputMakeupDb). The v127 peak trim keeps its per-key shape, so peaks move up by the same 20 dB.
+        constexpr float kOutputMakeupDb = 20.0f;
+        inline float outputMakeupGain() noexcept { return 10.0f; }   // = 10^(kOutputMakeupDb / 20), exact
+        static_assert (kOutputMakeupDb == 20.0f, "outputMakeupGain() is the exact linear value of kOutputMakeupDb — change both");
         // knob order for the dest block AND the page: Dynamics Tone Body Vibrato Human | Release Noise Sustain Velocity Image
         // (tp105: knob 3 is VIBRATO. tp107: ATTACK is back on page 2 with its OWN dest block, kAttackDestBase + osc)
     }
