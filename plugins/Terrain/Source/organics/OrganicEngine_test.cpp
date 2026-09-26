@@ -918,6 +918,162 @@ static void tp108Bars (const std::shared_ptr<const OrganicInstrument>& pure, con
 }
 
 /** The real library (organics_audit --tone has the full table; these are its load-bearing rows). TODAY = ceff345d. */
+//==================================================================================================
+//  tp114 — THE SAFETY LIMITER (OrganicEngine.cpp PeakGuard, organics::kLimiterCeilingDb). Every other bar in this file runs
+//  with it BYPASSED (main: they gate the engine's DSP, and the fixtures are full-scale sines that sit over the ceiling);
+//  these gate the limiter itself.
+//==================================================================================================
+/** A reference 4× true peak: the EBU R128 / BS.1770 meter design (a Hann-windowed sinc over ±6 samples at ¼ ½ ¾). */
+static double refIsp (const an::Buf& L, const an::Buf& R)
+{
+    auto one = [] (const an::Buf& x) {
+        double best = 0; const int n = (int) x.size();
+        for (int i = 0; i < n; ++i) best = std::max (best, (double) std::abs (x[(size_t) i]));
+        const double pk = best;
+        for (int i = 0; i + 1 < n; ++i)
+        {
+            if (std::max (std::abs (x[(size_t) i]), std::abs (x[(size_t) i + 1])) < 0.5 * pk) continue;
+            for (int p = 1; p < 4; ++p)
+            {
+                double acc = 0;
+                for (int k = -5; k <= 6; ++k)
+                {
+                    const int j = i + k; if (j < 0 || j >= n) continue;
+                    const double u = p / 4.0 - k;
+                    acc += x[(size_t) j] * std::sin (kPi * u) / (kPi * u) * (0.5 + 0.5 * std::cos (kPi * u / 6.0));
+                }
+                best = std::max (best, std::abs (acc));
+            }
+        }
+        return best;
+    };
+    return std::max (one (L), one (R));
+}
+
+static void tp114LimiterBars (const std::shared_ptr<const OrganicInstrument>& sine, const std::shared_ptr<const OrganicInstrument>& piano)
+{
+    const double ceil = std::pow (10.0, (double) organics::kLimiterCeilingDb / 20.0), ceilTp = ceil * std::pow (10.0, 1.0 / 20.0);
+    auto note = [] (const std::shared_ptr<const OrganicInstrument>& I, bool lim, int key, float vel, int64_t frames, int blk, int maxBlk = 512,
+                    int64_t offAt = -1) {
+        organics_debug::setLimiter (lim);
+        I->resetPerformanceState();
+        OrganicEngine e; e.prepare (kSR, maxBlk); e.setInstrument (I);
+        e.noteOn (key, vel, 1, kNoDet, 5u);
+        Rec r;
+        if (offAt < 0) run (e, P0(), r, frames, blk);
+        else { run (e, P0(), r, offAt, blk); e.noteOff (false); run (e, P0(), r, frames - offAt, blk); }
+        organics_debug::setLimiter (false);
+        return r;
+    };
+    auto pk = [] (const Rec& r) { return std::max (an::peak (r.L), an::peak (r.R)); };
+    auto same = [] (const Rec& a, const Rec& b) { return a.L.size() == b.L.size() && std::memcmp (a.L.data(), b.L.data(), a.L.size() * sizeof (float)) == 0
+                                                         && std::memcmp (a.R.data(), b.R.data(), a.R.size() * sizeof (float)) == 0; };
+    // (a) at rest: under the ceiling the output is tp113's bit for bit (sine and the decaying piano, block sizes 1 … 777)
+    {
+        bool allSame = true; double worstRaw = 0; int cases = 0;
+        for (auto* I : { &sine, &piano })
+            for (float vel : { 0.08f, 0.2f })
+                for (int blk : { 1, 64, 512, 777 })
+                {
+                    const auto off = note (*I, false, 60, vel, 36000, blk), on = note (*I, true, 60, vel, 36000, blk);
+                    if (pk (off) >= ceil || refIsp (off.L, off.R) >= 0.95 * ceilTp) continue;
+                    ++cases; worstRaw = std::max (worstRaw, pk (off));
+                    allSame &= same (off, on);
+                }
+        bar ("limiter: under the ceiling = tp113 bit for bit", cases >= 8 && allSame,
+             fmt ("%d notes (raw peaks up to %+.1f dBFS, ceiling %+.1f): %s", cases, an::db (worstRaw), an::db (ceil), allSame ? "every sample identical" : "DIFFERENT"));
+    }
+    // (b) hot notes never pass the ceiling — any block size (the read-ahead spans only the chunk), keys 24 … 96, note-offs
+    {
+        double worst = 0, worstRaw = 0, worstIsp = 0; int n = 0; std::string ispAt;
+        for (auto* I : { &sine, &piano })
+            for (int key = 24; key <= 108; key += 12)
+                for (int blk : { 1, 17, 64, 256, 512, 777 })
+                {
+                    const auto on = note (*I, true, key, 1.f, 24000, blk, 512, 12000);
+                    const auto off = note (*I, false, key, 1.f, 24000, 512, 512, 12000);
+                    worst = std::max (worst, pk (on)); worstRaw = std::max (worstRaw, pk (off)); ++n;
+                    if (blk == 512 || blk == 64 || blk == 17)
+                    {
+                        const double is = refIsp (on.L, on.R);
+                        if (is > worstIsp) { worstIsp = is; ispAt = fmt ("%s k%d blk %d", I == &sine ? "sine" : "piano", key, blk); }
+                    }
+                }
+        bar ("limiter: hot notes never pass the ceiling", worst <= ceil * (1.0 + 1e-6) && worstRaw > 1.5 * ceil && worstIsp <= ceilTp,
+             fmt ("%d notes × block sizes 1-777: raw up to %+.2f dBFS → limited %+.4f dBFS (ceiling %+.2f), 4× ISP %+.2f (%s; bar %+.2f = 0 dBTP at the plugin output)",
+                  n, an::db (worstRaw), an::db (worst), an::db (ceil), an::db (worstIsp), ispAt.c_str(), an::db (ceilTp)));
+    }
+    // (c) a sustained LOW note held over the ceiling: the gain settles flat — no pumping at the waveform rate (the gain's own
+    //     ripple = limited / raw, 20 ms windows) and nothing added (the residual after a per-window gain match)
+    {
+        double worstRip = 0, worstRes = -200; std::string d;
+        for (int key : { 28, 40, 52 })
+        {
+            const auto on = note (sine, true, key, 1.f, 96000, 512), off = note (sine, false, key, 1.f, 96000, 512);
+            const auto m = mono (on), mo = mono (off);
+            double lo = 1e9, hi = 0, eRes = 0, eSig = 0;
+            for (int64_t s = 24000; s + 960 <= 96000; s += 960)
+            {
+                double xy = 0, yy = 0;
+                for (int64_t i = s; i < s + 960; ++i) { xy += (double) m[(size_t) i] * mo[(size_t) i]; yy += (double) mo[(size_t) i] * mo[(size_t) i]; }
+                const double g = yy > 0 ? xy / yy : 1.0;
+                lo = std::min (lo, g); hi = std::max (hi, g);
+                for (int64_t i = s; i < s + 960; ++i) { const double e = m[(size_t) i] - g * mo[(size_t) i]; eRes += e * e; eSig += (double) m[(size_t) i] * m[(size_t) i]; }
+            }
+            const double rip = an::db (hi / lo), res = 10.0 * std::log10 (eRes / std::max (1e-30, eSig) + 1e-30);
+            worstRip = std::max (worstRip, rip); worstRes = std::max (worstRes, res);
+            d += fmt ("k%d (%.0f Hz) GR %.2f dB · gain ripple %.3f dB · residual %.0f dB · ", key, mtof (key), -an::db (lo), rip, res);
+        }
+        bar ("limiter: sustained low note — flat gain, nothing added", worstRip <= 0.05 && worstRes <= -50.0, d);
+    }
+    // (d) the gain comes back to EXACTLY 1.0f while the note still sounds: from then on the output is tp113's sample for sample
+    {
+        const auto on = note (piano, true, 60, 1.f, 240000, 512), off = note (piano, false, 60, 1.f, 240000, 512);
+        int64_t last = -1;
+        for (size_t i = 0; i < on.L.size(); ++i) if (on.L[i] != off.L[i] || on.R[i] != off.R[i]) last = (int64_t) i;
+        const double after = last >= 0 ? an::peak (off.L, last + 1, 4800) : 0.0;
+        const double firstOver = [&] { for (size_t i = 0; i < off.L.size(); ++i) if (std::max (std::abs (off.L[i]), std::abs (off.R[i])) > ceil) return (double) i; return -1.0; }();
+        bar ("limiter: gain back to exactly 1.0 while the note sounds", last > 0 && last < 192000 && after > 1e-3,
+             fmt ("piano k60 v127: first over at %.1f ms, the last limited sample at %.1f ms, then identical to tp113 (still sounding at %+.1f dBFS)",
+                  1000.0 * firstOver / kSR, 1000.0 * (double) last / kSR, an::db (after)));
+    }
+    // (e) no click from the gain: the HP(8k) content of a limited attack is never above the same attack unlimited (a gain step
+    //     would splash HF; a smooth gain ≤ 1 only lowers it) — absolute peaks, every block size
+    {
+        double worst = -200; std::string d;
+        for (int key : { 36, 60, 84 })
+            for (int blk : { 64, 512 })
+            {
+                const auto on = note (piano, true, key, 1.f, 24000, blk), off = note (piano, false, key, 1.f, 24000, blk);
+                const double ca = an::peak (an::highpass (mono (on), 8000.0), 256), cb = an::peak (an::highpass (mono (off), 8000.0), 256);
+                worst = std::max (worst, an::db (ca / cb));
+                d += fmt ("k%d/%d HP(8k) %+.1f dB re unlimited (GR %.1f dB) · ", key, blk, an::db (ca / cb), an::db (pk (off) / pk (on)));
+            }
+        bar ("limiter: no click from the gain (HP residual)", worst <= 0.5, d + fmt ("worst %+.2f dB", worst));
+    }
+    // (f) CPU per engine per 512-sample block: at rest (the peak scan) and while limiting
+    {
+        auto timeIt = [&] (const std::shared_ptr<const OrganicInstrument>& I, float vel, bool lim) {
+            organics_debug::setLimiter (lim);
+            std::vector<std::unique_ptr<OrganicEngine>> es;
+            for (int k = 0; k < 8; ++k) { es.emplace_back (new OrganicEngine()); es.back()->prepare (kSR, 512); es.back()->setInstrument (I); es.back()->noteOn (48 + k, vel, 1, kNoDet, 9u); }
+            std::vector<float> l (512), r (512); double best = 1e9;
+            for (int rep = 0; rep < 5; ++rep)
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                for (int b = 0; b < 60; ++b) for (auto& e : es) { std::fill (l.begin(), l.end(), 0.f); std::fill (r.begin(), r.end(), 0.f); e->render (P0(), 0.f, l.data(), r.data(), 512); }
+                best = std::min (best, std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - t0).count() / (60.0 * 8.0));
+            }
+            organics_debug::setLimiter (false);
+            return best;
+        };
+        const double restOn = timeIt (sine, 0.08f, true), restOff = timeIt (sine, 0.08f, false);
+        const double limOn = timeIt (sine, 1.f, true), limOff = timeIt (sine, 1.f, false);
+        bar ("limiter: CPU per engine per 512 block", restOn - restOff <= 0.5 && limOn - limOff <= 12.0,
+             fmt ("at rest +%.2f µs (%.2f → %.2f) · limiting +%.2f µs (%.2f → %.2f)", restOn - restOff, restOff, restOn, limOn - limOff, limOff, limOn));
+    }
+}
+
 static void tp108RealBars (const juce::File& realRoot, const juce::File& fixRoot)
 {
     using namespace tp108;
@@ -991,6 +1147,9 @@ int main (int argc, char** argv)
     const auto fixRoot = juce::File::getCurrentWorkingDirectory().getChildFile (argv[1]);
     setEnv ("TERRAIN_ORGANICS_DIR", fixRoot.getFullPathName().toRawUTF8());
     juce::MessageManager::getInstance();
+    // tp114: these gates measure the engine's DSP with the safety limiter BYPASSED (the fixtures are full-scale sines over its
+    // ceiling); tp114LimiterBars switches it on for its own bars.
+    organics_debug::setLimiter (false);
 
     std::printf ("══ ORGANICS ENGINE GATES (Agent B) — fixtures %s ══\n", fixRoot.getFullPathName().toRawUTF8());
 
@@ -2080,6 +2239,7 @@ int main (int argc, char** argv)
         }
         tp107Bars (noisy, piano);
         tp108Bars (noisy, sine, norr);
+        tp114LimiterBars (sine, piano);
     }
     if (argc >= 3 && juce::File (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2])).isDirectory())
         tp108RealBars (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]), fixRoot);

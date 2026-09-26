@@ -44,6 +44,9 @@
 //   tp107:
 //   [25] ATTACK is back: onset vs the knob (0 … 1), onset = max(amp attack, knob), LFO 1 → the Attack dest 5352 + osc (A, and E
 //        through bank B's rebase).
+//   tp114 (the Organics safety limiter): [15] [23] [25] run with it bypassed (test.sine is full scale, ~10 dB over its ceiling at
+//   the default Volume, and they measure engine features); [27] the limiter itself: ≤ −1 dBFS out of the voice at Volume 0.5 and
+//        1.0, and at Volume 0.1 (nothing reaches the ceiling, which follows the knob) every sample identical to the bypass.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -85,8 +88,18 @@
 #include "PluginProcessor.h"
 #undef private
 #undef protected
+#include "organics/OrganicsLibrary.h"   // tp114 [27]: resetPerformanceState (the same take in each render)
 
 // The runtime's test hooks (OrganicEngine.h). Weak: when the stub is linked they do not exist and [3] reports so.
+namespace tw { namespace organics_debug { void setLimiter (bool) noexcept __attribute__((weak)); } }
+// tp114 — the Organics safety limiter (OrganicEngine PeakGuard). test.sine is a FULL-SCALE sine: at the default osc Volume it sits
+//  ~10 dB over the limiter's ceiling, so the bars that measure an engine FEATURE (a level ratio [15], a press-to-press wobble [23],
+//  an onset time [25]) run with it bypassed (the tp113 engine exactly); [27] gates the limiter itself on this processBlock.
+struct NoLimiter
+{
+    NoLimiter()  { if (tw::organics_debug::setLimiter != nullptr) tw::organics_debug::setLimiter (false); }
+    ~NoLimiter() { if (tw::organics_debug::setLimiter != nullptr) tw::organics_debug::setLimiter (true); }
+};
 namespace tw { namespace organics_debug { int lastRenderReaders() noexcept __attribute__((weak)); int lastLiveReaders() noexcept __attribute__((weak)); int lastNoteRegion() noexcept __attribute__((weak)); int steals() noexcept __attribute__((weak)); } }
 
 static int npass = 0, nfail = 0, nskip = 0;
@@ -721,6 +734,7 @@ int main()
     std::printf ("\n[15] Offline bounce (non-realtime → the 8-tap sinc reader): the same note, the same level, clean\n");
     if (want (15))
     {
+        NoLimiter bypass;
         auto render = [] (bool offline, double& cents, double& rms, ClickHit& k) {
             Inst a (SR, offline); useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
             setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
@@ -881,6 +895,7 @@ int main()
     std::printf ("\n[23] The mod matrix: LFO 1 → each of the ten Organics knobs moves the sound (vs the same note unrouted)\n");
     if (want (23))
     {
+        NoLimiter bypass;
         // feature: 0 centroid · 1 level · 2 pitch · 3 side/mid (held notes, detrended wobble) — or, for the knobs a note
         // reads at its start or its end, the spread over eight presses at different LFO phases: 4 level + pitch (Human, drawn
         // at note-on) · 6 the HF level of the note-on noise (Noise; the fixture's noise is 100 ms) · 7 the tail energy
@@ -998,6 +1013,7 @@ int main()
     std::printf ("\n[25] tp107 Attack: onset vs the knob and the amp attack (the max), LFO 1 → the Attack dest (A and bank B's E)\n");
     if (want (25))
     {
+        NoLimiter bypass;
         // onset = time until the 5 ms RMS first reaches −1 dB of the held level (3.6..4.0 s), on the looped test.sine, note 69
         auto onsetOf = [] (const std::vector<float>& x, size_t s0) {
             const size_t W = 240; double ref = rmsOf (x, s0 + (size_t) (3.6 * SR), s0 + (size_t) (4.0 * SR));
@@ -1067,6 +1083,39 @@ int main()
              && std::abs (resH - hu->getDefaultValue()) < 1e-6f && std::abs (resT - to->getDefaultValue()) < 1e-6f,
              "26 Human / Tone: kept on re-picking test.sine, back to default on test.piano",
              fmt ("same %.2f / %.2f · switched %.2f / %.2f (normalised; switched must equal the defaults)", keptH, keptT, resH, resT));
+    }
+
+    // ═══ [27] tp114 — THE SAFETY LIMITER on the shipping processBlock ═══
+    std::printf ("\n[27] tp114 the Organics safety limiter: ≤ −1 dBFS out of the voice, the ceiling follows the osc Volume, untouched under it\n");
+    if (want (27))
+    {
+        if (tw::organics_debug::setLimiter == nullptr) skip ("27 the limiter", "the stub is linked");
+        else
+        {
+            auto render = [] (bool lim, float vol, double& pk, std::vector<float>& L, std::vector<float>& R) {
+                tw::organics_debug::setLimiter (lim);
+                Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+                setP (*a.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f);
+                setP (*a.p, ParameterIDs::SYN_OSC_A_LEVEL, vol);
+                if (a.p->orgSlot_[0].inst != nullptr) a.p->orgSlot_[0].inst->resetPerformanceState();   // the same round-robin take each time
+                a.run (0.05); a.clear();
+                a.block ({ {69,1} }); a.run (1.5); a.block ({ {69,0} }); a.run (1.0);
+                pk = 0; for (size_t i = 0; i < a.L.size(); ++i) pk = std::max ({ pk, (double) std::abs (a.L[i]), (double) std::abs (a.R[i]) });
+                L = a.L; R = a.R;
+                tw::organics_debug::setLimiter (true);
+            };
+            double pOff = 0, pOn = 0, pLoOff = 0, pLoOn = 0, pHi = 0; std::vector<float> L0, R0, L1, R1, Lx, Rx;
+            render (false, 0.5f, pOff, Lx, Rx); render (true, 0.5f, pOn, Lx, Rx);
+            render (false, 0.1f, pLoOff, L0, R0); render (true, 0.1f, pLoOn, L1, R1);
+            render (true, 1.0f, pHi, Lx, Rx);
+            const bool same = L0.size() == L1.size() && std::memcmp (L0.data(), L1.data(), L0.size() * sizeof (float)) == 0
+                              && std::memcmp (R0.data(), R1.data(), R0.size() * sizeof (float)) == 0;
+            chk (dbOf (pOff) > 0.0 && dbOf (pOn) <= -1.0 + 1e-3, "27a a full-scale note at the default Volume: over 0 dBFS bypassed, <= -1 dBFS limited",
+                 fmt ("bypassed %+.2f dBFS -> limited %+.3f dBFS", dbOf (pOff), dbOf (pOn)));
+            chk (same, "27b Volume 0.1: the ceiling follows the knob - nothing reaches it, every sample identical to the bypass",
+                 fmt ("peak %+.2f dBFS (bypassed %+.2f)", dbOf (pLoOn), dbOf (pLoOff)));
+            chk (dbOf (pHi) <= -1.0 + 1e-3, "27c Volume 1.0 (+6 dB): still <= -1 dBFS out of the voice", fmt ("limited %+.3f dBFS", dbOf (pHi)));
+        }
     }
 
     std::printf ("\norganics_integration_cert: %d PASS · %d FAIL · %d SKIP\n", npass, nfail, nskip);

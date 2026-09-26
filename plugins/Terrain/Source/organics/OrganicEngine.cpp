@@ -40,6 +40,8 @@ namespace tw
         std::atomic<int> gLastReaders { 0 }, gLastRegion { -1 }, gLastLive { 0 }, gSteals { 0 }, gTailRel { 0 };
         std::atomic<int> gNzDecisions { 0 }, gNzHits { 0 }, gNzVar { -1 }, gNzVarN { 0 }, gNzDelay { 0 }; std::atomic<float> gNzDb { 0.f };   // tp107
         std::atomic<bool> gTnEnabled { true };   // tp108 test hook: the Tone stages off = the tp107 tilt alone (CPU A/B)
+        std::atomic<bool> gLimOn { true };       // tp114 test hook: the safety limiter bypassed = the tp113 engine exactly
+        std::atomic<float> gLimMaxGr { 0.f }; std::atomic<int64_t> gLimSamples { 0 }, gLimLast { 0 }, gLimChunks { 0 };   // tp114 stats
         std::atomic<float> gTnSwing { 0.f }, gTnSwingR { 0.f }, gTnFlat { 0.f }, gTnGap { 0.f }, gTnDom { 0.f }, gTnExc { 0.f }, gTnLp { 0.f }, gTnGateA { 1.f }, gTnRho { 0.f }; std::atomic<int> gTnStages { 0 };  // tp108
 
         inline uint32_t mix32 (uint32_t h) noexcept
@@ -514,6 +516,17 @@ namespace tw
     float organics_debug::lastNoiseDb() noexcept           { return gNzDb.load (std::memory_order_relaxed); }
     int   organics_debug::lastNoiseDelay() noexcept        { return gNzDelay.load (std::memory_order_relaxed); }
     void organics_debug::setToneStages (bool on) noexcept { gTnEnabled.store (on, std::memory_order_relaxed); }
+    void organics_debug::setLimiter (bool on) noexcept    { gLimOn.store (on, std::memory_order_relaxed); }
+    organics_debug::LimiterStats organics_debug::limiterStats() noexcept
+    {
+        return { gLimMaxGr.load (std::memory_order_relaxed), gLimSamples.load (std::memory_order_relaxed),
+                 gLimLast.load (std::memory_order_relaxed), gLimChunks.load (std::memory_order_relaxed) };
+    }
+    void organics_debug::resetLimiterStats() noexcept
+    {
+        gLimMaxGr.store (0.f, std::memory_order_relaxed); gLimSamples.store (0, std::memory_order_relaxed);
+        gLimLast.store (0, std::memory_order_relaxed);    gLimChunks.store (0, std::memory_order_relaxed);
+    }
     organics_debug::ToneState organics_debug::lastTone() noexcept
     {
         return { gTnSwing.load (std::memory_order_relaxed), gTnSwingR.load (std::memory_order_relaxed), gTnFlat.load (std::memory_order_relaxed), gTnGap.load (std::memory_order_relaxed), gTnDom.load (std::memory_order_relaxed),
@@ -1004,6 +1017,198 @@ namespace tw
 
         struct PendingOn { bool on = false; int note = 60; float vel = 0.8f; int players = 1; float det[kMaxPlayers] {}; uint32_t seed = 0; };
 
+        // ══ tp114 — THE ORGANICS SAFETY LIMITER (OrganicsApi.h organics::kLimiterCeilingDb) ═══════════════════════════════
+        //  Max, 2026-09-26: "yes build the organics limiter — let's hear how that would sound … I don't want quality or volume
+        //  changed … find a way to make these NOT clip." An EXPLICIT exception to the house law (never a limiter, never a
+        //  clipper — the lifeguard law) for THIS ONE STAGE ONLY: the engine's summed output after the tp113 makeup.
+        //  • ZERO added latency — it READS AHEAD instead of delaying: the engine renders a whole chunk into sumL/sumR before it
+        //    writes one sample, so every sample's future up to the chunk's end is known. The per-sample need (ceiling / |x|,
+        //    stereo-linked) gets a forward min-hold over D = 1.33 ms, then a D-sample box average: a linear ramp that is fully
+        //    down ON the peak and ≤ the need on every sample (no overshoot, no clipped attack). The one blind spot is the next
+        //    chunk's first D−1 samples: a peak there ramps from the chunk start instead (a note's onset lands on a chunk start,
+        //    so that is the silence before its own attack). A look-ahead DELAY was rejected: it moves every Organics sample even
+        //    when nothing is limited (not bit-identical) and it would need a reported latency or an Organics-only offset.
+        //  • THE WORKING MARGIN: an episode STARTS only on a real over (so everything under the ceiling stays bit-identical), but
+        //    once limiting, the gain is computed against a ceiling 0.5 dB lower. A peak that turns up in a chunk's blind spot
+        //    up to 0.5 dB louder than the ones before it then needs no fast drop (the blind spot's lines aim at the real
+        //    ceiling) — without it, the upright-knight k26 and Meatbass pizz k49 v127 notes clicked (peaks 0.52 / 0.41 dB up
+        //    at a chunk's 5th sample). Cost: limited stretches sit ~0.5 dB under the ceiling instead of on it.
+        //  • Hold 30 ms after the last pull-down (one period of a 33 Hz note: a sustained low note's waveform peaks never pump
+        //    the gain), then a one-pole release — 40 ms after a short over, easing to 150 ms after 0.5 s of continuous limiting
+        //    (program-dependent) — finished by a linear tail so the gain lands on EXACTLY 1.0f.
+        //  • While the gain is 1.0f and nothing in the chunk reaches the ceiling, the output loop is tp113's, instruction for
+        //    instruction (bit-identical); the only cost is one peak scan of the chunk. Zero allocation after prepare().
+        //  • TRUE PEAK: the need also covers the 4× inter-sample peaks (a 16-tap Hann-windowed-sinc polyphase estimate of every
+        //    interval, a sharper filter than a BS.1770 / EBU R128 meter's 12 taps), held to the ceiling + 0.5 dB — so at the
+        //    plugin output the sample peak is ≤ −1 dBFS and the meter's true peak ≤ 0 dBTP (bright struck tones — water glasses,
+        //    mbira, glockenspiel — carry up to +3.2 dB of inter-sample overshoot, measured). The estimate runs only on a chunk
+        //    whose sample peak is within 4 dB of that bar (or while limiting).
+        static constexpr int kTpT = 8;                     // true-peak interpolator: 2·kTpT taps per phase, 3 phases (¼ ½ ¾)
+        struct PeakGuard
+        {
+            int    D = 64, holdN = 1440;                   // look-ahead span, hold (samples)
+            float  ceil = 1.f, ceilTp = 1.f, tpGate = 1.f; // linear, engine units: sample ceiling, inter-sample ceiling, ISP gate
+            float  ceilW = 1.f, ceilTpW = 1.f;             // the working ceilings the gain is computed against (0.5 dB under)
+            float  kOut = 1.f, kDef = 1.f, kTp = 1.f, kGate = 1.f;   // −1 dBFS · the default-path ceiling (+8.03) · +0.5 dB · −4 dB
+            float  kGuard = 1.f, kGuardInv = 1.f;                    // the working margin: −0.5 dB under the ceiling (see computeNeed)
+            double relFast = 0, relSlow = 0, relRun = 1;   // one-pole release coefficients; samples to ease fast → slow
+            float  relMin = 0;                             // the linear tail's per-sample step (the last 0.01 dB in ≤ 10 ms)
+            float  g = 1.f; int hold = 0; int64_t run = 0; // the gain on the last emitted sample; hold left; samples under 1
+            bool   histOne = true;                         // need[0 .. D−1) (the previous chunk's last needs) are all 1
+            std::vector<float> need, hmin, pre, suf;       // [D−1 history | chunk | D−1 unknown future]
+            std::vector<float> hmHist;                     // the min-holds the previous chunk's last D−1 gains were made of
+            std::vector<float> xL, xR;                     // [kTpT history | chunk (×makeup) | kTpT mirrored] for the ISP estimate
+            std::vector<float> ispMax, ispTmp;             // per-interval inter-sample peak; one phase's FIR output
+            std::vector<float> rcp;                        // 1 / j for the blind spot's ramps (j = 1 … 2·D)
+            float  tp[3][2 * kTpT] {};                     // x(i + p/4) = Σ_k x[i + k] · tp[p−1][k + kTpT − 1], k = −7 … 8
+
+            void prepare (double sr, int block)
+            {
+                D = std::clamp ((int) std::lround (0.00133 * sr), 8, 512);
+                holdN = std::max (D, (int) std::lround (0.030 * sr));
+                kOut = std::pow (10.f, organics::kLimiterOutputCeilingDb / 20.f);
+                kDef = std::pow (10.f, organics::kLimiterCeilingDb / 20.f);
+                kTp = std::pow (10.f, 0.5f / 20.f); kGate = std::pow (10.f, -4.f / 20.f); kGuard = std::pow (10.f, -0.5f / 20.f); kGuardInv = 1.f / kGuard;
+                setCeiling (0.f);
+                relFast = 1.0 - std::exp (-1.0 / (0.040 * sr));
+                relSlow = 1.0 - std::exp (-1.0 / (0.150 * sr));
+                relRun  = 0.5 * sr;
+                relMin  = (float) ((1.0 - std::pow (10.0, -0.01 / 20.0)) / (0.010 * sr));
+                const size_t M = (size_t) block + 2 * (size_t) (D - 1);
+                for (auto* v : { &need, &hmin, &pre, &suf }) v->assign (M, 1.f);
+                hmHist.assign ((size_t) D, 1.f);
+                xL.assign ((size_t) block + 2 * kTpT, 0.f); xR.assign ((size_t) block + 2 * kTpT, 0.f);
+                ispMax.assign ((size_t) block + 1, 0.f); ispTmp.assign ((size_t) block + 1, 0.f);
+                rcp.assign ((size_t) (2 * D + 2), 0.f);
+                for (size_t j = 1; j < rcp.size(); ++j) rcp[j] = 1.f / (float) j;
+                for (int p = 1; p <= 3; ++p)
+                    for (int k = -(kTpT - 1); k <= kTpT; ++k)
+                    {
+                        const double u = (double) p / 4.0 - (double) k, pi = 3.14159265358979323846;
+                        const double s = std::sin (pi * u) / (pi * u), w = 0.5 + 0.5 * std::cos (pi * u / (double) kTpT);
+                        tp[p - 1][k + kTpT - 1] = (float) (s * w);
+                    }
+                reset();
+            }
+            /** The chunk's ceilings from the voice's downstream gain (OrganicParams::outGain; ≤ 0 = the default path). */
+            void setCeiling (float outGain) noexcept
+            {
+                ceil   = outGain > 0.f ? kOut / std::max (outGain, 1.0e-4f) : kDef;
+                ceilTp = ceil * kTp;     // the estimate held to −0.5 dBFS at the output: its error (16 taps near Nyquist, a chunk's
+                                         //  last interval) stays under 0 dBTP
+                ceilW = ceil * kGuard; ceilTpW = ceilTp * kGuard;   // the working ceilings (0.5 dB under)
+                tpGate = ceilTpW * kGate;                           // the estimate runs within 4 dB of its working bar
+            }
+            void reset() noexcept
+            {
+                g = 1.f; hold = 0; run = 0; histOne = true;
+                std::fill (xL.begin(), xL.begin() + std::min<size_t> (xL.size(), kTpT), 0.f);
+                std::fill (xR.begin(), xR.begin() + std::min<size_t> (xR.size(), kTpT), 0.f);
+            }
+            bool atRest() const noexcept { return g == 1.f && hold == 0 && histOne; }
+
+            /** need[0 .. n) for the chunk (ceiling / |x|, stereo-linked, and the inter-sample bar); returns the smallest. The
+                x buffers must hold [history | mk·sum | mirror] (loadX). */
+            float computeNeed (float* nd, int n) noexcept
+            {
+                const float* l = xL.data() + kTpT; const float* r = xR.data() + kTpT;
+                float mn = 1.f;
+                for (int i = 0; i < n; ++i)
+                {
+                    const float a = std::max (std::abs (l[i]), std::abs (r[i]));
+                    nd[i] = a > ceilW ? ceilW / a : 1.f;
+                    mn = std::min (mn, nd[i]);
+                }
+                // inter-sample: interval q − 1 … q for q = 0 … n. q = 0 reads the previous chunk's tail (its gain is already out:
+                // only sample 0 can answer); q = n runs into the next chunk, estimated on the mirrored tail now and measured again
+                // as the next chunk's q = 0. Three polyphase FIRs per channel, tap-outer loops so they vectorise.
+                const int nq = n + 1;
+                float* __restrict im = ispMax.data();
+                float* __restrict y  = ispTmp.data();
+                std::fill (im, im + nq, 0.f);
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    const float* x = (ch == 0 ? l : r) - 1;            // x[q] = the sample before interval q's midpoint
+                    for (int p = 0; p < 3; ++p)
+                    {
+                        std::fill (y, y + nq, 0.f);
+                        for (int k = -(kTpT - 1); k <= kTpT; ++k)
+                        {
+                            const float c = tp[p][k + kTpT - 1];
+                            const float* __restrict xs = x + k;
+                            for (int q = 0; q < nq; ++q) y[q] += c * xs[q];
+                        }
+                        for (int q = 0; q < nq; ++q) im[q] = std::max (im[q], std::abs (y[q]));
+                    }
+                }
+                for (int q = 0; q < nq; ++q)
+                    if (im[q] > ceilTpW)
+                    {
+                        const float t = ceilTpW / im[q];
+                        if (q > 0) nd[q - 1] = std::min (nd[q - 1], t);
+                        if (q < n) nd[q] = std::min (nd[q], t);
+                        mn = std::min (mn, t);
+                    }
+                return mn;
+            }
+            /** While limiting: the chunk's last intervals read samples that are not rendered yet (the mirror is a guess), and
+                their gains cannot be corrected by the next chunk — so they also take the POINT-reflected continuation
+                (x[n−1+k] = 2·x[n−1] − x[n−1−k], a slope that keeps going) and keep the lower need of the two. */
+            void edgeNeed (float* nd, int n) noexcept
+            {
+                const float* l = xL.data() + kTpT; const float* r = xR.data() + kTpT;
+                float e[2][3 * kTpT];                          // [n − 2·kTpT … n − 1 | kTpT point-reflected]
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    const float* x = ch == 0 ? l : r;
+                    for (int i = 0; i < 2 * kTpT; ++i)                                  // (before the kept history: silence)
+                        e[ch][i] = n - 2 * kTpT + i >= -kTpT ? x[n - 2 * kTpT + i] : 0.f;
+                    for (int k = 1; k <= kTpT; ++k)
+                        e[ch][2 * kTpT - 1 + k] = 2.f * x[n - 1] - x[std::max (-kTpT, n - 1 - k)];
+                }
+                for (int q = std::max (0, n - kTpT + 1); q <= n; ++q)   // interval q − 1 … q, its taps reach past n − 1
+                {
+                    float isp = 0.f;
+                    for (int ch = 0; ch < 2; ++ch)
+                        for (int p = 0; p < 3; ++p)
+                        {
+                            float y = 0.f;
+                            for (int k = -(kTpT - 1); k <= kTpT; ++k)
+                            {
+                                y += tp[p][k + kTpT - 1] * e[ch][(q - 1 + k) - (n - 2 * kTpT)];   // index ≥ 1 for q > n − kTpT
+                            }
+                            isp = std::max (isp, std::abs (y));
+                        }
+                    if (isp > ceilTpW)
+                    {
+                        const float t = ceilTpW / isp;
+                        if (q > 0) nd[q - 1] = std::min (nd[q - 1], t);
+                        if (q < n) nd[q] = std::min (nd[q], t);
+                    }
+                }
+            }
+            /** [history | mk·sum | mirror] for the chunk. */
+            void loadX (const float* sL, const float* sR, int n, float mk) noexcept
+            {
+                float* l = xL.data() + kTpT; float* r = xR.data() + kTpT;
+                for (int i = 0; i < n; ++i) { l[i] = mk * sL[i]; r[i] = mk * sR[i]; }
+                for (int k = 1; k <= kTpT; ++k) { const int s = std::max (0, n - 1 - k); l[n - 1 + k] = l[s]; r[n - 1 + k] = r[s]; }   // mirrored
+            }
+            /** Keep the chunk's last kTpT samples (×makeup) as the next chunk's history. */
+            void keepHistory (const float* sL, const float* sR, int n, float mk) noexcept
+            {
+                float* l = xL.data(); float* r = xR.data();
+                if (n >= kTpT) for (int k = 0; k < kTpT; ++k) { l[k] = mk * sL[n - kTpT + k]; r[k] = mk * sR[n - kTpT + k]; }
+                else
+                {
+                    std::memmove (l, l + n, sizeof (float) * (size_t) (kTpT - n)); std::memmove (r, r + n, sizeof (float) * (size_t) (kTpT - n));
+                    for (int k = 0; k < n; ++k) { l[kTpT - n + k] = mk * sL[k]; r[kTpT - n + k] = mk * sR[k]; }
+                }
+            }
+        };
+        PeakGuard guard;
+        int64_t sinceOn = 0;                             // samples rendered since the last noteOn (the limiter's stats clock)
+
         // ── state ──
         double sr = 48000.0; int maxBlock = 0; float toneK = 0.f, tonePivotHz = 700.f;
         bool nonRealtime = false;
@@ -1035,6 +1240,7 @@ namespace tw
             maxBlock = std::max (16, block);
             for (auto* v : { &sumL, &sumR, &envBuf }) v->assign ((size_t) maxBlock, 0.f);
             tn.prepare (sr, maxBlock);
+            guard.prepare (sr, maxBlock);
             tonePivotHz = 700.f;
             toneK = (float) std::tan (3.14159265358979 * 700.0 / sr);
             (void) sincTable();
@@ -1047,7 +1253,7 @@ namespace tw
             for (auto& r : readers) r.active = false;
             pend.on = false; offPending = false; pedalUpPending = false; pedalIsDown = false;
             level = 0.f; snap = true; toneCur = 1.0e9f; leadTone = 0.f; txL = txR = tyL = tyR = 0.f; tiltOn = false;
-            tn.reset(); toneDark = 0.f;
+            tn.reset(); toneDark = 0.f; guard.reset();
             for (auto& p : retiring) if (p != nullptr && ! org::deferRelease (p)) { for (auto& g : graveyard) if (g == nullptr) { g = std::move (p); break; } }
         }
 
@@ -1122,6 +1328,7 @@ namespace tw
             for (int k = 0; k < kMaxPlayers; ++k) pend.det[k] = (det != nullptr && k < pend.players) ? det[k] : 0.f;
             pend.seed = seed;
             offPending = false;
+            sinceOn = 0;
         }
         void noteOff (bool pedalDown) noexcept { offPending = true; offPedal = pedalDown; }
         void pedal (bool down) noexcept { pedalIsDown = down; if (! down) pedalUpPending = true; }
@@ -2009,7 +2216,7 @@ namespace tw
             {
                 const int m = std::min (maxBlock, n - done);
                 peak = std::max (peak, renderChunk (P, pitchCents, L + done, R + done, m, rendered));
-                done += m;
+                done += m; sinceOn += m;
             }
             level = peak;
             gLastReaders.store (rendered, std::memory_order_relaxed);
@@ -2098,7 +2305,7 @@ namespace tw
            #endif
             bool any = false;
             for (auto& nt : notes) if (nt.used) { any = true; break; }
-            if (! any) { txL = txR = tyL = tyR = 0.f; tiltOn = false; toneCur = 1.0e9f; tn.reset(); toneDark = 0.f; updateRetiring(); return 0.f; }
+            if (! any) { txL = txR = tyL = tyR = 0.f; tiltOn = false; toneCur = 1.0e9f; tn.reset(); toneDark = 0.f; guard.reset(); updateRetiring(); return 0.f; }
 
             std::fill (sumL.begin(), sumL.begin() + n, 0.f);
             std::fill (sumR.begin(), sumR.begin() + n, 0.f);
@@ -2247,15 +2454,127 @@ namespace tw
             // tp113 — the output makeup (OrganicsApi.h organics::kOutputMakeupDb): one flat gain on the whole sum, after every
             //  stage, so the library's calibration, the Tone stages and the release / noise balance are untouched. level (the
             //  block peak) is the OUTPUT's: the voice's −80 dB keep-alive law reads what is actually heard.
+            //  tp114: then the safety limiter (PeakGuard) — entered only when its gain is not at rest or this chunk reaches the
+            //  ceiling (sample or inter-sample); otherwise this loop is tp113's exactly.
             const float mk = organics::outputMakeupGain();
             float peak = 0.f;
-            for (int i = 0; i < n; ++i)
+            bool limit = false;
+            const bool limOn = gLimOn.load (std::memory_order_relaxed);
+            if (limOn)
             {
-                const float yl = mk * sumL[(size_t) i], yr = mk * sumR[(size_t) i];
-                L[i] += yl; R[i] += yr;
-                peak = std::max (peak, std::max (std::abs (yl), std::abs (yr)));
+                guard.setCeiling (P.outGain);                 // −1 dBFS where the voice's mixer lets this block out
+                bool look = ! guard.atRest();
+                if (! look)
+                {
+                    // the chunk's sample peak (vectorised; mk·max|x| == max|mk·x| exactly: a positive scale keeps the order)
+                    const auto a = juce::FloatVectorOperations::findMinAndMax (sumL.data(), n);
+                    const auto b = juce::FloatVectorOperations::findMinAndMax (sumR.data(), n);
+                    const float m = std::max (std::max (-a.getStart(), a.getEnd()), std::max (-b.getStart(), b.getEnd()));
+                    look = mk * m > guard.tpGate;             // within 4 dB of the inter-sample bar: measure the need
+                }
+                if (look)
+                {
+                    guard.loadX (sumL.data(), sumR.data(), n, mk);
+                    const float mn = guard.computeNeed (guard.need.data() + (guard.D - 1), n);
+                    limit = ! guard.atRest() || mn < guard.kGuard * 0.99999f;   // at rest: only a HARD over (sample or ISP) starts one
+                    if (limit) guard.edgeNeed (guard.need.data() + (guard.D - 1), n);   // limiting: the chunk end, conservatively
+                }
             }
+            else if (! guard.atRest()) guard.reset();      // the test A/B: bypassed = tp113
+            if (limit) peak = limitChunk (L, R, n, mk);
+            else
+                for (int i = 0; i < n; ++i)
+                {
+                    const float yl = mk * sumL[(size_t) i], yr = mk * sumR[(size_t) i];
+                    L[i] += yl; R[i] += yr;
+                    peak = std::max (peak, std::max (std::abs (yl), std::abs (yr)));
+                }
+            if (limOn) guard.keepHistory (sumL.data(), sumR.data(), n, mk);   // the next chunk's inter-sample estimate reads back
             updateRetiring();
+            return peak;
+        }
+
+        /** tp114 — the limiting path of the output stage (see PeakGuard): adds g·mk·sum into L/R, returns the block peak. */
+        float limitChunk (float* L, float* R, int n, float mk) noexcept
+        {
+            auto& G = guard;
+            const int D = G.D, H = D - 1, K = H + n, M = K + H;
+            float* need = G.need.data(); float* pre = G.pre.data(); float* suf = G.suf.data(); float* hm = G.hmin.data();
+            if (G.histOne) std::fill (need, need + H, 1.f);   // need[H …] = this chunk, from computeNeed (sample + inter-sample)
+            std::fill (need + K, need + M, 1.f);          // the next chunk is not rendered yet: unknown
+            // forward min-hold hm[k] = min (need[k .. k + D − 1]), k < K — van Herk / Gil-Werman (blocks of D, 3 passes)
+            for (int b0 = 0; b0 < M; b0 += D)
+            {
+                const int b1 = std::min (M, b0 + D);
+                pre[b0] = need[b0];
+                for (int i = b0 + 1; i < b1; ++i) pre[i] = std::min (pre[i - 1], need[i]);
+                suf[b1 - 1] = need[b1 - 1];
+                for (int i = b1 - 2; i >= b0; --i) suf[i] = std::min (suf[i + 1], need[i]);
+            }
+            for (int k = 0; k < K; ++k) hm[k] = std::min (suf[k], pre[k + D - 1]);
+            // the box average of the D min-holds that cover each sample: sample s (need[H + s]) averages hm[s .. s + H]
+            double S = 0.0;
+            for (int k = 0; k <= H; ++k) S += (double) hm[k];
+            const double invD = 1.0 / (double) D;
+            // THE BLIND SPOT: the previous chunk emitted its last gains from min-holds that took its unrendered future as 1
+            // (hmHist). When this chunk's first D−1 samples need less, the corrected box would STEP down at sample 0. Instead,
+            // for s < D−1 the gain follows the box as it was emitted (So, continuous with the past) clamped by the straight
+            // lines from the last emitted gain g0 to every coming need (just in time, ≤ the need at s): a ramp, not a step.
+            float* ho = G.hmHist.data();
+            if (G.histOne) std::fill (ho, ho + H, 1.f);
+            const float g0 = G.g;
+            // (only when the corrected box would really step DOWN under the last emitted gain at sample 0 — a held gain already
+            //  under it needs nothing)
+            bool surprise = std::min ((float) (S * invD), need[H]) < g0;
+            if (surprise) { surprise = false; for (int k = 0; k < H && ! surprise; ++k) surprise = hm[k] < ho[k]; }
+            double So = S;
+            if (surprise) { So = 0.0; for (int k = 0; k <= H; ++k) So += (double) (k < H ? ho[k] : hm[k]); }
+            float peak = 0.f, gmin = 1.f; int64_t lim = 0; int last = -1;
+            for (int s = 0; s < n; ++s)
+            {
+                float ga = std::min ((float) (S * invD), need[H + s]);   // ≤ the need by construction (the min is float rounding)
+                if (surprise && s < H)
+                {
+                    // (the lines aim at the HARD needs — the working needs ÷ the margin: a next-chunk peak up to 0.5 dB louder than the
+                    //  last ones needs no fast drop at all, the box brings the working margin back over the next D samples)
+                    const float ig = G.kGuardInv;
+                    float line = std::min (1.f, need[H + s] * ig);
+                    const int jEnd = std::min (n, s + D);
+                    const float s1 = (float) (s + 1); const float* rc = G.rcp.data();
+                    for (int j = s + 1; j < jEnd; ++j)
+                        line = std::min (line, g0 + std::min (0.f, std::min (1.f, need[H + j] * ig) - g0) * s1 * rc[j + 1]);
+                    ga = std::min ((float) (So * invD), line);
+                    if (s + 1 < n) So += (double) hm[s + H + 1] - (double) (s < H ? ho[s] : hm[s]);
+                }
+                if (s + 1 < n) S += (double) hm[s + H + 1] - (double) hm[s];
+                if (ga <= G.g && ga < 1.f) { G.g = ga; G.hold = G.holdN; }
+                else if (ga < 1.f && ga <= G.g * 1.0116f) G.hold = G.holdN;   // within 0.1 dB: still binding — keep holding (a decaying
+                                                                                 //  low note must not saw the gain between its cycles)
+                else if (G.hold > 0) --G.hold;
+                else if (G.g < 1.f)
+                {
+                    const double a = G.relFast + (G.relSlow - G.relFast) * std::min (1.0, (double) G.run / G.relRun);
+                    G.g = std::min (ga, G.g + std::max ((float) ((double) (ga - G.g) * a), G.relMin));
+                }
+                if (G.g < 1.f) { ++G.run; ++lim; last = s; gmin = std::min (gmin, G.g); }
+                else G.run = 0;
+                const float yl = mk * sumL[(size_t) s], yr = mk * sumR[(size_t) s];
+                const float ol = G.g * yl, orr = G.g * yr;
+                L[s] += ol; R[s] += orr;
+                peak = std::max (peak, std::max (std::abs (ol), std::abs (orr)));
+            }
+            std::memmove (need, need + n, sizeof (float) * (size_t) H);   // the last D−1 needs → the next chunk's history
+            std::memcpy (ho, hm + n, sizeof (float) * (size_t) H);        // …and the min-holds its last gains were made of
+            G.histOne = true;
+            for (int i = 0; i < H; ++i) if (need[i] < 1.f) { G.histOne = false; break; }
+            gLimChunks.fetch_add (1, std::memory_order_relaxed);
+            if (lim > 0)
+            {
+                gLimSamples.fetch_add (lim, std::memory_order_relaxed);
+                gLimLast.store (sinceOn + last, std::memory_order_relaxed);
+                const float gr = -20.f * std::log10 (gmin);
+                if (gr > gLimMaxGr.load (std::memory_order_relaxed)) gLimMaxGr.store (gr, std::memory_order_relaxed);
+            }
             return peak;
         }
 

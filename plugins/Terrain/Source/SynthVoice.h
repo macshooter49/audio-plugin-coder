@@ -8812,6 +8812,35 @@ class SynthVoice : public juce::SynthesiserVoice
         //  Pitch: everything the voice already applies, relative to the note the engine was started on — the glide
         //  (legato slides with it), OCT/SEMI/FINE, the COARSE lane (mod, pitch bend, this note's MPE bend, A4).
         //  The engine ADDS into the block; the block goes where every block engine's goes (engine → FILTER → FX).
+        // tp114 — THE ORGANICS SAFETY LIMITER's view of this voice (OrganicsApi.h organics::kLimiterCeilingDb): the LARGEST
+        //  gain the mixer below applies to osc o's engine block this block — Volume (the smoothed value or its target, with the
+        //  level mods), the louder pan side (current or target), the amp envelope's peak over the block (this block's
+        //  pre-pass; the hold level through an Organics release) × any Amp-routed envelope depth, and the unison norm. The
+        //  engine holds its output under −1 dBFS ÷ this, so ONE Organics osc leaves the voice ≤ −1 dBFS whatever the knobs.
+        float orgOutGain (int o, int numSamples, int uniCount) const noexcept
+        {
+            static constexpr int kN = 4;
+            const float lv[kN]  = { level_, levelB_, levelC_, levelD_ };
+            const float sm[kN]  = { lvlSmA_, lvlSmB_, lvlSmC_, lvlSmD_ };
+            const float pan[kN] = { juce::jmax (juce::jmax (panL_, panR_), juce::jmax (panLT_, panRT_)),
+                                    juce::jmax (juce::jmax (panLB_, panRB_), juce::jmax (panLBT_, panRBT_)),
+                                    juce::jmax (juce::jmax (panLC_, panRC_), juce::jmax (panLCT_, panRCT_)),
+                                    juce::jmax (juce::jmax (panLD_, panRD_), juce::jmax (panLDT_, panRDT_)) };
+            const float vol = juce::jmax (sm[o], juce::jlimit (0.0f, 1.0f, lv[o] + juce::jmax (0.0f, envLvlDrive_[o]) + juce::jmax (0.0f, noteLvlMod_[o])));
+            float env = 0.0f;
+            if (orgHoldBlk_) env = orgHoldLvl_;
+            else if (envScratch_.getNumChannels() > 0 && envScratch_.getNumSamples() >= numSamples && numSamples > 0)
+            {
+                const auto r = juce::FloatVectorOperations::findMinAndMax (envScratch_.getReadPointer (0), numSamples);
+                env = juce::jmax (-r.getStart(), r.getEnd());
+            }
+            else env = 1.0f;
+            float amp = 1.0f;
+            for (int k = 0; k < 4; ++k) if (envDest_[k + 1] == kEnvAmp) amp += juce::jmax (0.0f, envDepth_[k + 1]);
+            const float uni = uniCount > 1 ? 1.0f / std::sqrt ((float) juce::jlimit (1, kMaxUnison, uniCount)) : 1.0f;
+            return vol * pan[o] * env * amp * uni;
+        }
+
         void renderOrganicOsc (int o, bool isOrg, int oct, int semi, float cent,
                                int numSamples, std::uint32_t seed, bool doNoteOn,
                                int uniCount, const float* uDetuneCents, float level) noexcept
@@ -8858,7 +8887,9 @@ class SynthVoice : public juce::SynthesiserVoice
             juce::FloatVectorOperations::clear (wR, numSamples);
             if (! e.isActive() && ! doNoteOn) return;   // idle: 0 µs (and the consumer reads null → 0)
             const float pitchCents = (float) ((glideNote_ - (double) orgNote_) * 100.0) + (float) (oct * 1200 + semi * 100) + cent;
-            e.render (orgParams_[o], pitchCents, wL, wR, numSamples);
+            tw::OrganicParams q = orgParams_[o];
+            q.outGain = juce::jmax (1.0e-4f, orgOutGain (o, numSamples, uniCount));   // tp114 — the limiter's ceiling follows the mixer
+            e.render (q, pitchCents, wL, wR, numSamples);
             // tp105 — keeps the voice alive through the engine's release tail, but only while it is AUDIBLE: the voice's own
             //  fast-kill law (amp release under −80 dB → the 8 ms declick and the slot is free) applied to the engine's block
             //  peak, so a ringing tail under −80 dBFS never holds a whole voice chain (filters, envelopes, LFOs) awake.

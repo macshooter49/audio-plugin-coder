@@ -628,3 +628,33 @@ Wavetable init −15.8 LUFS · FM −17.2 · Organics −36.0 (median of 74; mbi
 - **Peaks (headroom traded for level, as asked):** v127 at the plugin output, every key × RR take (6,410): 35 % over 0 dBFS,
   19 % over +3, 9 % over +6, max +10.4 (mbira); v100: 18 % over 0, max +7.1. In a DAW the master passes float (no clip stage;
   `masterGuard_` is standalone-only) — the DAW's own master decides. The standalone app's limiter + soft clip catches them.
+
+## 12. tp114 (2026-09-26): the Organics safety limiter
+
+Max: "yes build the organics limiter — let's hear how that would sound … I don't want quality or volume changed … find a way
+to make these NOT clip." An explicit, recorded exception to the lifeguard law (never a limiter) for ONE stage: the Organics
+engine's output after the +20 dB makeup (`OrganicEngine.cpp` PeakGuard, `OrganicsApi.h` `kLimiterCeilingDb`).
+
+- **The path, measured:** downstream of the engine a voice applies osc Volume × pan × the amp envelope (5 ms attack, 200 ms
+  to 0.7 sustain) × the unison norm; the −6 dB pre-FX pad and the ×2 instrument makeup cancel. At the envelope's top on the
+  default osc (Volume 0.5, centre pan) that is −9.03 dB — so tp113's "35 % over 0 dBFS, max +10.4" (engine − 11.9 dB, the
+  sustain level) under-read the attack: at the plugin output v127 had **50 % of 6,410 keys over 0 dBFS, max +13.3**
+  (mbira), v100 32 %, max +10.0.
+- **Design:** per engine (= per osc per voice), stereo-linked, **zero added latency** (it reads ahead inside the chunk the
+  engine has already rendered: 1.33 ms min-hold + box ramp, 30 ms hold, 40 → 150 ms program-dependent release, exactly 1.0f at
+  rest — bit-identical under the ceiling), **true peak** (a 16-tap 4× estimate held 0.5 dB under, so a BS.1770-style meter
+  reads ≤ 0 dBTP), a 0.5 dB working margin inside an episode (a peak that lands in a chunk's first 1.3 ms up to 0.5 dB louder
+  than the last needs no fast drop), and a **voice-aware ceiling**: the voice passes the block's largest downstream gain
+  (`OrganicParams::outGain`), so ONE Organics osc leaves its voice ≤ −1 dBFS at any Volume / pan / envelope and a quieter
+  Volume never limits. Without it (the engine alone) the default path is assumed (+8.03 dBFS at the engine).
+- **Proof:** `organics_audit.sh peaks` (6,410 keys × every RR take × v127 / v100, Noise 0.5): 0 over; limited max −1.00 dBFS,
+  4× ISP max −0.47 dBTP (output-referenced); the library's own PEAK lines unchanged (byte-identical). `lib`: 74/74 factory
+  clean (the v127 bar is the ceiling); 1 user import (user.piano k33 v127) gains a blind-spot click (a +7 dB spike 10 samples
+  into a chunk). `organics_null` 54/54 bit-identical; engine test 106/106; integration 46/46.
+- **The cost (the honest part):** the hot keys are hot in their BODY, not just the transient — the calibration point at v100
+  is untouched on 47 of 74 instruments, but 27 lose loudness (meatbass −6.2 dB, balafon −6.0, ganjo −5.5, kalimba −4.4,
+  timpani −3.9, steel pan −3.4 … engine-level, default path). Hottest notes (mbira k52 v127: 14.8 dB GR for ~0.65 s; tuba k32
+  v127: 11.2 dB for 1.7 s) are audibly turned down; residual after a 5 ms gain match −30 … −42 dB (no distortion to speak of).
+  Two limited oscs on one note, or a chord, still sum over 0 dBFS (+4.5 dBFS measured) — no master clipper was added.
+- CPU per engine per 512 block: +0.1 µs at rest (one peak scan), +7.7 µs while limiting; 0 when the engine is idle.
+

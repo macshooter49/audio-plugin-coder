@@ -50,5 +50,13 @@ namespace tw
         ToneState lastTone() noexcept;
         /** tp108: false = the Tone stages never run (the tp107 tilt alone) — the CPU A/B and the null (tests only). */
         void setToneStages (bool on) noexcept;
+        /** tp114 the safety limiter (organics::kLimiterCeilingDb): false = bypassed = the tp113 engine exactly (the before/after
+            A/B, the library tools that measure the RECORDINGS: peaktrim / calibration). Process-wide (tests only). */
+        void setLimiter (bool on) noexcept;
+        /** Since the last reset: the deepest gain reduction (dB, ≥ 0), the samples rendered under unity gain, the last of them
+            (samples since that engine's most recent noteOn), and the limiting chunks (process-wide, tests only). */
+        struct LimiterStats { float maxGrDb; int64_t limitedSamples; int64_t lastLimitedAt; int64_t chunks; };
+        LimiterStats limiterStats() noexcept;
+        void resetLimiterStats() noexcept;
     }
 }

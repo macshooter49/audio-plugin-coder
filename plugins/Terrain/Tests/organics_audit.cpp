@@ -24,6 +24,13 @@
 // instrument's loudness.peakLiftDb: the calibration is lifted, never peak-limited), and the level floors of the silence, DC
 // and click metrics move up with it (a floor is "inaudible in the library", not "inaudible at 20 dB less gain").
 //   organics_audit --peaks <root> [idFilter] [vels]  every key's v127 peak, every RR take (Tools/organics/peaktrim.py)
+// tp114 THE SAFETY LIMITER (organics::kLimiterCeilingDb = +8.03 dBFS at the engine = −1 dBFS at the plugin output on the default
+// osc path): every mode renders the engine AS IT PLAYS (limiter on), except the two that measure the LIBRARY for its tools —
+// --peaks' PEAK lines (peaktrim.py) and --calib's CALIB lines (engine_calibrate.py) bypass it; --peaks adds LPEAK lines (the
+// limited peak + its 4× inter-sample peak) and --calib CALIBLIM lines. --lib's v127 bar is now the limiter's ceiling (a FAIL).
+//   organics_audit --lim     <root> [idFilter]                         centre-key loudness raw vs limited (v100) + v127 GR
+//   organics_audit --limnote <root> <id> <artic> <key> <vel> [wavdir]  one note raw vs limited: GR depth / duration, level and
+//                                                                      spectrum after 10 ms, the residual after a gain match, WAVs
 #include "../Source/organics/OrganicEngine.h"
 #include "../Source/organics/OrganicsLibrary.h"
 
@@ -49,7 +56,43 @@ static constexpr double kPi = 3.14159265358979323846;
 static double gSR = 48000.0;
 static const double kMk    = (double) organics::kOutputMakeupDb;        // tp113 — the engine's output makeup (dB)
 static const double kMkLin = (double) organics::outputMakeupGain();     //         … linear
+static const double kLimDb  = (double) organics::kLimiterCeilingDb;     // tp114 — the limiter's ceiling at the engine (dBFS)
+static const double kPathDb = (double) organics::kDefaultPathHeadroomDb; //        engine → plugin output on the default path (dB)
 static double db (double v) { return 20.0 * std::log10 (std::max (v, 1e-20)); }
+/** tp114 — the 4× oversampled (inter-sample) peak of a stereo pair: the EBU R128 / BS.1770 true-peak meter design (a Hann-windowed sinc over ±6 samples, 49 taps at 4×) between every pair of
+    samples within 6 dB of the loudest. */
+static double interSamplePeak (const std::vector<float>& L, const std::vector<float>& R)
+{
+    constexpr int K = 4, T = 6;    // the EBU R128 / BS.1770 true-peak meter design: 4×, a Hann-windowed sinc over ±6 samples (49 taps at 4×)
+    static double h[K][2 * T]; static bool init = false;
+    if (! init)
+    {
+        for (int ph = 0; ph < K; ++ph)
+            for (int t = -T; t < T; ++t)
+            {
+                const double u = (double) t + (double) ph / K, pi = 3.14159265358979323846;
+                h[ph][t + T] = (u == 0.0 ? 1.0 : std::sin (pi * u) / (pi * u)) * (0.5 + 0.5 * std::cos (pi * u / T));
+            }
+        init = true;
+    }
+    auto one = [] (const std::vector<float>& x) {
+        double pk = 0; const int n = (int) x.size();
+        for (int i = 0; i < n; ++i) pk = std::max (pk, (double) std::abs (x[(size_t) i]));
+        double best = pk;
+        for (int i = 0; i + 1 < n; ++i)
+        {
+            if (std::max (std::abs (x[(size_t) i]), std::abs (x[(size_t) i + 1])) < 0.5 * pk) continue;
+            for (int ph = 1; ph < K; ++ph)
+            {
+                double acc = 0;
+                for (int t = -T; t < T; ++t) { const int j = i - t; if (j >= 0 && j < n) acc += x[(size_t) j] * h[ph][t + T]; }
+                best = std::max (best, std::abs (acc));
+            }
+        }
+        return best;
+    };
+    return std::max (one (L), one (R));
+}
 static std::string fmt (const char* f, ...)
 {
     char b[2048]; va_list ap; va_start (ap, f); std::vsnprintf (b, sizeof b, f, ap); va_end (ap); return b;
@@ -319,7 +362,10 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
         const auto rep = readReport (root, id);
         const double limited = (double) rep["loudness"].getProperty ("peakLimitedDb", 0.0);
         const double lift    = (double) rep["loudness"].getProperty ("peakLiftDb", 0.0);    // tp113: the calibration's lift over the old peak limit
-        const double hotBar  = -1.0 + kMk + lift;
+        // tp114: the engine output passes the safety limiter — a v127 key over its ceiling is a FAIL again (the tp113 bar,
+        // −1 + the makeup + the lift, measured the library's own peaks: that is --peaks' PEAK lines now)
+        const double hotBar  = kLimDb + 1.0e-4;
+        (void) lift;
         std::vector<std::string> fails, flags;
         std::string info;
         const auto t0 = std::chrono::steady_clock::now();
@@ -370,7 +416,8 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
             if (dcN)     fails.push_back (fmt ("%s: DC on %d notes (worst %.1f dBFS %s)", an_.c_str(), dcN, worstDc, dcWhere.c_str()));
             if (capN)    fails.push_back (fmt ("%s: reader cap exceeded on %d notes", an_.c_str(), capN));
             if (srcN)    flags.push_back (fmt ("%s: %d notes carry an isolated HF transient that is IN THE RECORDING (not the engine)", an_.c_str(), srcN));
-            // tp108: a BAR, no longer a flag — the library trims every key (Tools/organics/peaktrim.py), never a limiter
+            // tp108: a BAR, no longer a flag — the library trims every key (Tools/organics/peaktrim.py). tp114: at the engine output
+            // (after the +20 dB makeup) the safety limiter holds every key to its ceiling — over it is a FAIL
             if (hotN)    fails.push_back (fmt ("%s: %d keys over %+.1f dBFS at vel 127 (first %s)", an_.c_str(), hotN, hotBar, hotWhere.c_str()));
             info += fmt (" [%s k%d-%d pk127 %.1f dc %.0f]", an_.c_str(), lo, hi, peak127, worstDc);
 
@@ -380,11 +427,18 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
                 if (a == 0)
                 {
                     OrganicParams q = p; q.noise = 0.f; q.release = 0.f;          // the compiler measures without noise
+                    // tp114: the bar is the LIBRARY's calibration (engine_calibrate.py's point, the limiter bypassed); what the
+                    // safety limiter then takes off it is shown beside it (and totalled by --lim)
+                    organics_debug::setLimiter (false);
                     auto n = renderNote (I, q, centre, 100, 2.0, 0.05);
+                    organics_debug::setLimiter (true);
                     const int64_t on = an::onset (mono (n));
                     const double l = an::lufs (n.L, n.R, on, (int64_t) gSR);
                     const double want = -24.0 + kMk - limited;
-                    info += fmt (" LUFS %.2f", l);
+                    {
+                        auto nl = renderNote (I, q, centre, 100, 2.0, 0.05);
+                        info += fmt (" LUFS %.2f (limited %+.2f)", l, an::lufs (nl.L, nl.R, on, (int64_t) gSR) - l);
+                    }
                     worstLoud = std::max (worstLoud, std::abs (l - want));
                     if (std::abs (l - want) > 1.0) fails.push_back (fmt ("loudness %.2f LUFS at k%d v100 (want %.1f)", l, centre, want));
                 }
@@ -696,11 +750,18 @@ static int runCalib (const juce::String& filter)
         for (auto& r : I->regions) if (r.artic == 0 && r.kind == org::Kind::Attack) { lo = std::min (lo, r.lk); hi = std::max (hi, r.hk); }
         const int centre = (lo <= 60 && 60 <= hi) ? 60 : (lo + hi + 1) / 2;
         OrganicParams q; q.human = 0.f; q.noise = 0.f; q.release = 0.f;
+        organics_debug::setLimiter (false);     // tp114: the calibration measures the LIBRARY (engine_calibrate.py), not the limiter
         auto n = renderNote (I, q, centre, 100, 2.0, 0.05);
         const int64_t on = an::onset (mono (n));
         const double l = an::lufs (n.L, n.R, on, (int64_t) gSR);
         auto n127 = renderNote (I, q, centre, 127, 2.0, 0.05);
+        organics_debug::setLimiter (true);
         std::printf ("CALIB %s %d %.3f %.3f\n", id.toRawUTF8(), centre, l, db (signalStats (n127).peak));
+        {
+            auto m = renderNote (I, q, centre, 100, 2.0, 0.05);
+            const double lm = an::lufs (m.L, m.R, on, (int64_t) gSR);   // the same window as the raw note
+            std::printf ("CALIBLIM %s %d %.3f %.3f\n", id.toRawUTF8(), centre, lm, lm - l);   // the same point, the limiter on
+        }
         std::fflush (stdout);
         I.reset(); org::drainDeferredReleases();
     }
@@ -750,12 +811,35 @@ static int runPitchDump (const juce::File& out, const juce::String& id, const ju
 //      PEAK <id> <artic> <key> <vel> <peakDb> <presses>
 //  Tools/organics/peaktrim.py reads it (the per-key trim) and Tests/organics_compile_test.py holds the bar (≤ −1 dBFS).
 //==================================================================================================
+/** tp114 — the instrument's shared performance state (round robin, random / fake-RR / noise memories, choke epochs), copied
+    so one key can be played twice from the same state (raw, then limited) and the sweep carries on as if played once. */
+struct PerfState
+{
+    std::vector<uint32_t> seq, epoch; std::vector<int32_t> last, fake, noise;
+    static PerfState of (const OrganicInstrument& I)
+    {
+        PerfState s; const size_t nk = (size_t) I.numArtics * 128;
+        for (size_t i = 0; i < nk; ++i) { s.seq.push_back (I.rrSeq()[i].load()); s.last.push_back (I.rrLast()[i].load()); }
+        for (size_t i = 0; i < 128; ++i) s.fake.push_back (I.fakeLast()[i].load());
+        if (I.noiseLast() != nullptr) for (size_t i = 0; i < 2 * nk; ++i) s.noise.push_back (I.noiseLast()[i].load());
+        for (size_t i = 0; i < (size_t) std::max (1, I.numGroups); ++i) s.epoch.push_back (I.groupEpoch()[i].load());
+        return s;
+    }
+    void restore (const OrganicInstrument& I) const
+    {
+        for (size_t i = 0; i < seq.size(); ++i) { I.rrSeq()[i].store (seq[i]); I.rrLast()[i].store (last[i]); }
+        for (size_t i = 0; i < fake.size(); ++i) I.fakeLast()[i].store (fake[i]);
+        for (size_t i = 0; i < noise.size(); ++i) I.noiseLast()[i].store (noise[i]);
+        for (size_t i = 0; i < epoch.size(); ++i) I.groupEpoch()[i].store (epoch[i]);
+    }
+};
+
 static int runPeaks (const juce::String& filter, const juce::String& velList)
 {
     juce::StringArray vs; vs.addTokens (velList.isEmpty() ? juce::String ("127") : velList, ",", "");
     const auto idx = OrganicsLibrary::get().index();
     const char* nzEnv = std::getenv ("ORG_PEAK_NOISE");
-    int worstBad = 0;
+    int worstBad = 0, rawOver = 0;
     for (auto& ent : *idx.getArray())
     {
         const juce::String id = ent["id"].toString();
@@ -777,33 +861,213 @@ static int runPeaks (const juce::String& filter, const juce::String& velList)
                     bool rnd = false; int cand = 0;
                     for (uint32_t i = 0; i < sp.count; ++i) { const auto& r = I->regions[I->list (sp)[i]]; ++cand; rnd |= (r.randLo > 0.f || r.randHi < 1.f); }
                     const int presses = std::clamp (rnd ? 2 * cand : cand, 1, 12);
-                    double pk = -200.0;
-                    for (int k = 0; k < presses; ++k)
+                    double pk = -200.0, lpk = -200.0, lisp = -200.0, gr = 0.0;
+                    // tp114: every press twice — the LIBRARY (limiter bypassed: the PEAK line peaktrim.py trims from, the round
+                    // robin carried from key to key exactly as before) and the engine as it plays (limited: LPEAK + its 4×
+                    // inter-sample peak), replayed from the same performance state → the same takes, the same seeds.
+                    const auto before = PerfState::of (*I);
+                    PerfState after;
+                    for (int lim = 0; lim < 2; ++lim)
                     {
-                        OrganicEngine e; e.prepare (gSR, 256); e.setInstrument (I);
-                        e.noteOn (key, (float) vel / 127.f, 1, kNoDet, 0x9e3779b9u + 7919u * (uint32_t) k);
-                        Buf l (256), r (256);
-                        const int64_t hold = (int64_t) (0.6 * gSR), total = hold + (int64_t) (1.5 * gSR);
-                        bool off = false;
-                        for (int64_t t = 0; t < total; t += 256)
+                        organics_debug::setLimiter (lim == 1);
+                        if (lim == 1) { after = PerfState::of (*I); before.restore (*I); }
+                        for (int k = 0; k < presses; ++k)
                         {
-                            if (! off && t >= hold) { e.noteOff (false); off = true; }
-                            std::fill (l.begin(), l.end(), 0.f); std::fill (r.begin(), r.end(), 0.f);
-                            e.render (p, 0.f, l.data(), r.data(), 256);
-                            for (int i = 0; i < 256; ++i) pk = std::max (pk, db (std::max (std::abs ((double) l[(size_t) i]), std::abs ((double) r[(size_t) i]))));
-                            if (off && ! e.isActive()) break;
+                            OrganicEngine e; e.prepare (gSR, 256); e.setInstrument (I);
+                            e.noteOn (key, (float) vel / 127.f, 1, kNoDet, 0x9e3779b9u + 7919u * (uint32_t) k);
+                            Buf l (256), r (256), NL, NR;
+                            const int64_t hold = (int64_t) (0.6 * gSR), total = hold + (int64_t) (1.5 * gSR);
+                            bool off = false;
+                            organics_debug::resetLimiterStats();
+                            for (int64_t t = 0; t < total; t += 256)
+                            {
+                                if (! off && t >= hold) { e.noteOff (false); off = true; }
+                                std::fill (l.begin(), l.end(), 0.f); std::fill (r.begin(), r.end(), 0.f);
+                                e.render (p, 0.f, l.data(), r.data(), 256);
+                                for (int i = 0; i < 256; ++i)
+                                    (lim ? lpk : pk) = std::max (lim ? lpk : pk, db (std::max (std::abs ((double) l[(size_t) i]), std::abs ((double) r[(size_t) i]))));
+                                if (lim) { NL.insert (NL.end(), l.begin(), l.end()); NR.insert (NR.end(), r.begin(), r.end()); }
+                                if (off && ! e.isActive()) break;
+                            }
+                            if (lim) { lisp = std::max (lisp, db (interSamplePeak (NL, NR))); gr = std::max (gr, (double) organics_debug::limiterStats().maxGrDb); }
+                            e.kill(); e.setInstrument (nullptr);
                         }
-                        e.kill(); e.setInstrument (nullptr);
                     }
-                    if (pk > -1.0 + kMk) ++worstBad;
+                    after.restore (*I);
+                    organics_debug::setLimiter (true);
+                    if (pk > -1.0 + kMk) ++rawOver;
+                    if (lpk > kLimDb + 1.0e-4 || lisp > kLimDb + 1.0) ++worstBad;
                     std::printf ("PEAK %s %d %d %d %.3f %d\n", id.toRawUTF8(), a, key, vel, pk, presses);
+                    // LPEAK <id> <artic> <key> <vel> <limited peak> <its 4× ISP> <deepest GR> — engine dBFS (plugin output = − kPathDb)
+                    std::printf ("LPEAK %s %d %d %d %.3f %.3f %.2f\n", id.toRawUTF8(), a, key, vel, lpk, lisp, gr);
                 }
         }
         std::fflush (stdout);
         I.reset(); org::drainDeferredReleases();
     }
-    std::printf ("PEAKSUMMARY %d keys over %+.1f dBFS (−1 + the %.0f dB makeup; a lifted instrument's own bar is higher) — %s\n", worstBad, -1.0 + kMk, kMk, worstBad ? "FAIL" : "PASS");
+    // the library's own peaks (PEAK, informational since tp114 — peaktrim.py holds each instrument to its lifted bar) and the
+    // engine's output through the safety limiter (LPEAK: the bar)
+    std::printf ("PEAKSUMMARY library: %d keys over %+.1f dBFS (−1 + the %.0f dB makeup; a lifted instrument's own bar is higher) · "
+                 "limited engine output: %d keys over the %+.2f dBFS ceiling (or its 4× ISP over %+.2f) = %+.1f / %+.1f dBFS at the plugin output — %s\n",
+                 rawOver, -1.0 + kMk, kMk, worstBad, kLimDb, kLimDb + 1.0, kLimDb - kPathDb, kLimDb + 1.0 - kPathDb, worstBad ? "FAIL" : "PASS");
     return worstBad ? 1 : 0;
+}
+
+//==================================================================================================
+//  tp114 — the safety limiter's cost in LOUDNESS and in SOUND
+//  --lim [idFilter]: every instrument's calibration point (artic 0, centre key, v100, Noise 0, Human 0) raw vs limited, K-weighted
+//      over the same first second; the same key at v127. One line per instrument:
+//      LIMLOUD <id> <key> <lufsRaw100> <lufsLim100> <Δ100> <grDb100> <Δ127> <grDb127>
+//  --limnote <id> <artic> <key> <vel> [wavdir]: one note (Human 0, the other knobs at their defaults) raw vs limited.
+//==================================================================================================
+static void writeWav32 (const juce::File& f, const Buf& L, const Buf& R, double gainDb)
+{
+    Buf l = L, r = R; const float g = (float) std::pow (10.0, gainDb / 20.0);
+    for (auto& v : l) v *= g; for (auto& v : r) v *= g;
+    f.deleteFile();
+    juce::WavAudioFormat fmtW;
+    std::unique_ptr<juce::OutputStream> os (f.createOutputStream().release());
+    const auto opts = juce::AudioFormatWriterOptions{}.withSampleRate (gSR).withNumChannels (2).withBitsPerSample (32)
+                                                       .withSampleFormat (juce::AudioFormatWriterOptions::SampleFormat::floatingPoint);
+    if (os != nullptr)
+        if (auto w = fmtW.createWriterFor (os, opts)) { const float* ch[2] = { l.data(), r.data() }; w->writeFromFloatArrays (ch, 2, (int) l.size()); }
+}
+
+static int runLim (const juce::String& filter)
+{
+    const auto idx = OrganicsLibrary::get().index();
+    double worst = 0; juce::String worstId;
+    for (auto& ent : *idx.getArray())
+    {
+        const juce::String id = ent["id"].toString();
+        if (filter.isNotEmpty() && ! id.contains (filter)) continue;
+        auto I = load (id);
+        if (! I) continue;
+        int lo = 128, hi = -1;
+        for (auto& r : I->regions) if (r.artic == 0 && r.kind == org::Kind::Attack) { lo = std::min (lo, r.lk); hi = std::max (hi, r.hk); }
+        const int centre = (lo <= 60 && 60 <= hi) ? 60 : (lo + hi + 1) / 2;
+        OrganicParams q; q.human = 0.f; q.noise = 0.f; q.release = 0.f;
+        double d[2] = {}, gr[2] = {}, lr100 = 0, ll100 = 0;
+        for (int vi = 0; vi < 2; ++vi)
+        {
+            const int vel = vi == 0 ? 100 : 127;
+            organics_debug::setLimiter (false);
+            auto raw = renderNote (I, q, centre, vel, 2.0, 0.05);
+            organics_debug::setLimiter (true); organics_debug::resetLimiterStats();
+            auto lim = renderNote (I, q, centre, vel, 2.0, 0.05);
+            gr[vi] = organics_debug::limiterStats().maxGrDb;
+            const int64_t on = an::onset (mono (raw));
+            const double a = an::lufs (raw.L, raw.R, on, (int64_t) gSR), b = an::lufs (lim.L, lim.R, on, (int64_t) gSR);
+            d[vi] = b - a;
+            if (vi == 0) { lr100 = a; ll100 = b; }
+        }
+        if (std::abs (d[0]) > std::abs (worst)) { worst = d[0]; worstId = id; }
+        std::printf ("LIMLOUD %s %d %.3f %.3f %+.3f %.2f %+.3f %.2f\n", id.toRawUTF8(), centre, lr100, ll100, d[0], gr[0], d[1], gr[1]);
+        std::fflush (stdout);
+        I.reset(); org::drainDeferredReleases();
+    }
+    std::printf ("LIMSUMMARY worst calibration-point loudness change %+.3f dB (%s)\n", worst, worstId.toRawUTF8());
+    return 0;
+}
+
+static int runLimNote (const juce::String& id, int artic, int key, int vel, const juce::File& wavDir)
+{
+    auto I = load (id);
+    if (! I) { std::printf ("missing %s\n", id.toRawUTF8()); return 1; }
+    OrganicParams p; p.human = 0.f; p.artic = artic;
+    const int blk = std::getenv ("ORG_LIM_BLK") ? std::atoi (std::getenv ("ORG_LIM_BLK")) : 256;   // the host block (the read-ahead span)
+    organics_debug::setLimiter (false);
+    auto raw = renderNote (I, p, key, vel, 1.5, 2.0, false, blk);
+    organics_debug::setLimiter (true); organics_debug::resetLimiterStats();
+    auto lim = renderNote (I, p, key, vel, 1.5, 2.0, false, blk);
+    const auto st = organics_debug::limiterStats();
+    const size_t N = std::min (raw.L.size(), lim.L.size());
+    const int64_t on = an::onset (mono (raw));
+    // the gain the limiter applied, sample by sample (limited = g · raw exactly; read on the louder channel)
+    double t1 = -1, t01 = -1, tEnd = -1, gMinAt = 0, gMin = 1;
+    for (size_t i = 0; i < N; ++i)
+    {
+        const double x = std::abs (raw.L[i]) >= std::abs (raw.R[i]) ? raw.L[i] : raw.R[i];
+        const double y = std::abs (raw.L[i]) >= std::abs (raw.R[i]) ? lim.L[i] : lim.R[i];
+        if (std::abs (x) < 1e-4) continue;
+        const double g = y / x;
+        if (g < gMin) { gMin = g; gMinAt = (double) ((int64_t) i - on); }
+        if (g < 0.98855) { if (t1 < 0) t1 = (double) i; tEnd = (double) i; }   // > 0.1 dB
+    }
+    auto ms = [] (double s) { return 1000.0 * s / gSR; };
+    int64_t gr1 = 0, gr01 = 0;
+    for (size_t i = 0; i < N; ++i)
+    {
+        const double x = std::abs (raw.L[i]) >= std::abs (raw.R[i]) ? raw.L[i] : raw.R[i];
+        const double y = std::abs (raw.L[i]) >= std::abs (raw.R[i]) ? lim.L[i] : lim.R[i];
+        if (std::abs (x) < 1e-4) continue;
+        const double g = y / x;
+        if (g < 0.891251) ++gr1;       // > 1 dB
+        if (g < 0.988553) ++gr01;      // > 0.1 dB
+    }
+    (void) t01;
+    // after the first 10 ms: level, the residual once a 5 ms-window gain is matched out (what is NOT a level change), bands
+    const int64_t a0 = on + (int64_t) (0.010 * gSR), a1 = std::min<int64_t> ((int64_t) N, on + (int64_t) (1.0 * gSR));
+    const double lvl = an::lufs (lim.L, lim.R, a0, a1 - a0) - an::lufs (raw.L, raw.R, a0, a1 - a0);
+    const double lvlAll = an::lufs (lim.L, lim.R, on, a1 - on) - an::lufs (raw.L, raw.R, on, a1 - on);
+    double eRes = 0, eSig = 0;
+    const int64_t W = (int64_t) (0.005 * gSR);
+    for (int64_t s = a0; s + W <= (int64_t) N; s += W)
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            const Buf& x = ch ? raw.R : raw.L; const Buf& y = ch ? lim.R : lim.L;
+            double xy = 0, xx = 0;
+            for (int64_t i = s; i < s + W; ++i) { xy += (double) x[(size_t) i] * y[(size_t) i]; xx += (double) x[(size_t) i] * x[(size_t) i]; }
+            const double g = xx > 0 ? xy / xx : 1.0;
+            for (int64_t i = s; i < s + W; ++i) { const double e = y[(size_t) i] - g * x[(size_t) i]; eRes += e * e; eSig += (double) y[(size_t) i] * y[(size_t) i]; }
+        }
+    const double res = 10.0 * std::log10 (eRes / std::max (1e-30, eSig) + 1e-30);
+    // third-octave band levels over [10 ms, 1 s], the overall level difference removed: the largest band change
+    constexpr int ord = 16, NF = 1 << ord;
+    auto bandsOf = [&] (const Note& n) {
+        std::vector<std::complex<double>> w ((size_t) NF);
+        for (int64_t i = a0; i < a1 && i - a0 < NF; ++i) w[(size_t) (i - a0)] = 0.5 * ((double) n.L[(size_t) i] + (double) n.R[(size_t) i]);
+        // iterative radix-2 FFT
+        for (size_t i = 1, j = 0; i < (size_t) NF; ++i) { size_t bit = (size_t) NF >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) std::swap (w[i], w[j]); }
+        for (size_t len = 2; len <= (size_t) NF; len <<= 1)
+        {
+            const std::complex<double> wl = std::polar (1.0, -2.0 * kPi / (double) len);
+            for (size_t i = 0; i < (size_t) NF; i += len)
+            {
+                std::complex<double> c (1.0, 0.0);
+                for (size_t k = 0; k < len / 2; ++k) { const auto u = w[i + k], v = w[i + k + len / 2] * c; w[i + k] = u + v; w[i + k + len / 2] = u - v; c *= wl; }
+            }
+        }
+        std::vector<double> b;
+        for (double f = 40.0; f < 18000.0; f *= std::pow (2.0, 1.0 / 3.0))
+        {
+            double e = 0; for (int k = (int) (f * NF / gSR); k < (int) (f * std::pow (2.0, 1.0 / 3.0) * NF / gSR); ++k) e += std::norm (w[(size_t) k]);
+            b.push_back (10.0 * std::log10 (e + 1e-30));
+        }
+        return b;
+    };
+    const auto br = bandsOf (raw), bl = bandsOf (lim);
+    double bandMax = 0; double fAt = 0; double f = 40.0;
+    const double top = *std::max_element (br.begin(), br.end());
+    for (size_t k = 0; k < br.size(); ++k, f *= std::pow (2.0, 1.0 / 3.0))
+        if (br[k] > top - 60.0 && std::abs ((bl[k] - br[k]) - lvl) > std::abs (bandMax)) { bandMax = (bl[k] - br[k]) - lvl; fAt = f; }
+    const double pr = db (signalStats (raw).peak), pl = db (signalStats (lim).peak);
+    std::printf ("LIMNOTE %s a%d k%d v%d · peak %+.2f → %+.2f dBFS engine (%+.2f → %+.2f at the plugin output; ISP %+.2f) · GR max %.2f dB at %.1f ms · "
+                 "GR > 1 dB for %.1f ms, > 0.1 dB for %.1f ms (last at %.0f ms) · level first 1 s %+.3f dB, after 10 ms %+.3f dB · "
+                 "residual after a 5 ms gain match %.1f dB · largest 1/3-oct change (level removed) %+.2f dB at %.0f Hz\n",
+                 id.toRawUTF8(), artic, key, vel, pr, pl, pr - kPathDb, pl - kPathDb, db (interSamplePeak (lim.L, lim.R)) - kPathDb,
+                 st.maxGrDb, ms (gMinAt), ms ((double) gr1), ms ((double) gr01), tEnd >= 0 ? ms (tEnd - (double) on) : 0.0,
+                 lvlAll, lvl, res, bandMax, fAt);
+    if (wavDir != juce::File())
+    {
+        wavDir.createDirectory();
+        const auto base = id + "_a" + juce::String (artic) + "_k" + juce::String (key) + "_v" + juce::String (vel);
+        writeWav32 (wavDir.getChildFile (base + "_1_before.wav"), raw.L, raw.R, -kPathDb);   // at the plugin output's level
+        writeWav32 (wavDir.getChildFile (base + "_2_after_limiter.wav"), lim.L, lim.R, -kPathDb);
+        std::printf ("  wrote %s_{1_before,2_after_limiter}.wav (plugin-output level, 32-bit float) in %s\n", base.toRawUTF8(), wavDir.getFullPathName().toRawUTF8());
+    }
+    I.reset(); org::drainDeferredReleases();
+    return 0;
 }
 
 int runKnobs (const juce::File& root);   // organics_audit_knobs.cpp
@@ -832,6 +1096,9 @@ int main (int argc, char** argv)
     if (mode == "--pitchdump" && argc >= 5) return runPitchDump (juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]), argv[4], argc >= 6 ? juce::String (argv[5]) : juce::String());
     if (mode == "--note" && argc >= 7) return runNote (argv[3], std::atoi (argv[4]), std::atoi (argv[5]), std::atoi (argv[6]), argc >= 8 ? std::atof (argv[7]) : 0.6,
                                                        argc >= 9 ? std::atof (argv[8]) : 0.5, argc >= 10 ? juce::File::getCurrentWorkingDirectory().getChildFile (argv[9]) : juce::File());
+    if (mode == "--lim") return runLim (argc >= 4 ? juce::String (argv[3]) : juce::String());
+    if (mode == "--limnote" && argc >= 7) return runLimNote (argv[3], std::atoi (argv[4]), std::atoi (argv[5]), std::atoi (argv[6]),
+                                                             argc >= 8 ? juce::File::getCurrentWorkingDirectory().getChildFile (argv[7]) : juce::File());
     if (mode == "--null" && argc >= 4) return runHash (root, juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]), argc >= 5 && std::string (argv[4]) == "check");
     return 2;
 }
