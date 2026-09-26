@@ -283,13 +283,20 @@
      frame while panning. Every callback of one vsync receives the same rAF timestamp, so a pass that sees the timestamp
      it already painted is that duplicate and stands down. Wakes and repairs pass performance.now(), never a repeat. */
   var lastRunTs = -1;
-  function run(ts){
+  /* tp111 — THE PATCHER'S FAR VIEW (Max approved, 2026-09-25: "about 40 %"). Below that zoom every card holds its last
+     frame: the push lane's pass skips the painters (window.__tpLod, set by the Patcher only at a settle). Two painters
+     are not cards and always run: 'front' (the footer's meters live in it) and 'sm-ul' (the mod marks are screen-space
+     overlays that must follow a pan). A REPAIR pass (runOnce: a wake, a settle, a heal, a hand on a control) always
+     paints everything, so a card is never left blank or stale by the freeze (tp11). */
+  var LOD_KEEP = { 'front': 1, 'sm-ul': 1 };
+  function run(ts, full){
     if (ts === lastRunTs) return; lastRunTs = ts;
     motionStep();                    /* fb636 — THE MOTION CLOCK (below) steps once per painter pass, glass or not, so its envelope stays true */
     if (window.__tiFrozen) return;   /* fb620 — the preset browser's glass covers every painter; nothing under it needs a frame */
     lastRunAt = nowMs();
     if (window.__tpMoving) return;   /* tp110 — the Patcher's view is gliding: every picture holds (see __tpMoving) */
-    reg.forEach(function(fn){ try { fn(ts); } catch(e) {} });
+    var lod = ! full && window.__tpLod;
+    reg.forEach(function(fn, name){ try { if (! lod || LOD_KEEP[name]) fn(ts); } catch(e) {} });
   }
   window.__tiFrameReg   = function(name, fn){ reg.set(name, fn); };
   window.__tiFrameUnreg = function(name){ reg.delete(name); };
@@ -393,7 +400,7 @@
      `painting` guards the loop a repair could otherwise start — a painter that RESIZES a canvas would
      trip the ResizeObserver below, which would wake again, forever. */
   var painting = false, paintedAt = 0;
-  function runOnce(ts){ if (painting) return; painting = true; try { run(ts || nowMs()); } finally { painting = false; paintedAt = nowMs(); } }
+  function runOnce(ts, stream){ if (painting) return; painting = true; try { run(ts || nowMs(), ! stream); } finally { painting = false; paintedAt = nowMs(); } }
   function repaintOnce(){ if (pend) return; pend = true; window.requestAnimationFrame(function(ts){ pend = false; runOnce(ts); }); }
   var wokeAt = 0;
   function wake(){ var t = nowMs(); if (t - wokeAt < 40) return; wokeAt = t; window.__fxRestDrawn = false; window.__heroDrawn = false; runOnce(t); }
@@ -442,7 +449,7 @@
   function gFrame(ts){
     gRaf = 0;
     var t0 = nowMs();
-    if (gDown || t0 < gTail || t0 - lastRunAt > 8) runOnce(ts || t0);   /* a hand always paints; a tail frame (fb636) skips a vsync a push already painted */
+    if (gDown || t0 < gTail) runOnce(ts || t0); else if (t0 - lastRunAt > 8) runOnce(ts || t0, true);   /* tp111 — a wind-down tail frame is a STREAM frame, not a repair: the Patcher's far view holds it */   /* a hand always paints; a tail frame (fb636) skips a vsync a push already painted */
     if (gDown || nowMs() < gTail) { gTell(); if (! gRaf) gRaf = window.requestAnimationFrame(gFrame); }   /* fb636 — only when none is pending: runOnce may already have armed one (tailKick on the live→still edge), and two chains double every pass for the rest of the gesture */
     /* fb636 — THE WIND-DOWN TAIL (THE MOTION CLOCK, below): after the sound ends, frames continue only while something is
        still winding, never past the cap, and WITHOUT gTell — the C++ is not woken, its frame stays idle-skipped. */
@@ -45532,6 +45539,8 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
    The selector names the breathers themselves: a `.tp-world *` subject made the class flip restyle all ~33k elements
    (a 140-230 ms hitch at the start and end of every gesture, measured). */
 #tp-page.tp-moving .dst-curve, #tp-page.tp-moving .grn-wave, #tp-page.tp-moving #env-line, #tp-page.tp-moving .mv-stroke { animation-play-state: paused !important; }
+/* tp111 — and in the far view (below ~40 % zoom) they hold for as long as it lasts */
+#tp-page.tp-far .dst-curve, #tp-page.tp-far .grn-wave, #tp-page.tp-far #env-line, #tp-page.tp-far .mv-stroke { animation-play-state: paused !important; }
 #tp-page .tp-world * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; will-change: auto !important; }
 #tp-page .tp-node:hover > .tp-box { border-color: rgba(255,255,255,.28); }
 #tp-page .tp-node.tp-sel > .tp-box { border-color: var(--purple-400); }
@@ -47408,7 +47417,13 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
      brings every picture back to live at once. At rest nothing is different. */
   var moveT=0;
   function moving(){ if(!page) return; if(!window.__tpMoving){ window.__tpMoving=true; page.classList.add('tp-moving'); } clearTimeout(moveT); moveT=setTimeout(endMoving,140); }
-  function endMoving(){ clearTimeout(moveT); moveT=0; if(!window.__tpMoving) return; window.__tpMoving=false; if(page) page.classList.remove('tp-moving'); if(isOpen&&window.__tiWake) window.__tiWake(); }
+  function endMoving(){ clearTimeout(moveT); moveT=0; if(!window.__tpMoving) return; window.__tpMoving=false; if(page) page.classList.remove('tp-moving'); setFar(); if(isOpen&&window.__tiWake) window.__tiWake(); }
+  /* tp111 — THE FAR VIEW is decided only here, at a settle (never mid-glide), with hysteresis around 0.40 so a zoom
+     resting on the line cannot flicker: in below 0.39, out above 0.41. The wake that follows every settle is a full
+     repair pass, so entering paints every card once (its held frame is current, never blank) and leaving resumes all. */
+  var FAR_IN=0.39, FAR_OUT=0.41;
+  function setFar(){ var z=view.z||1, far=!!window.__tpLod; if(!isOpen) far=false; else if(!far&&z<FAR_IN) far=true; else if(far&&z>FAR_OUT) far=false;
+    window.__tpLod=far; if(page) page.classList.toggle('tp-far',far); }
   var zoomT=0, lastZ=0; function zoomSettled(){ if(view.z===lastZ) return; if(bmpZ===null&&lastZ&&window.__tpBmpFreeze) bmpZ=lastZ; lastZ=view.z; clearTimeout(zoomT); zoomT=setTimeout(function(){ bmpZ=null; endMoving(); if(!isOpen) return; try{ var tl=nodeByKey('tapeloop'); if(tl){ var rc=document.getElementById('tape-reel-canvas'); if(rc) reelSize(parseFloat(rc.style.width)||270,parseFloat(rc.style.height)||88); } if(window._fxSizeFn) window._fxSizeFn(); recrisp(); if(window.__tiWake) window.__tiWake(); }catch(e){} },120); }   /* tp8 — NO window resize: the synth page's sizers would re-measure scaled boxes (the shifting) */
   /* the fixed-bitmap faces (the hero's knob canvases, the deck's arcs) get a bitmap for the new scale and repaint — every other painter already sizes itself from its screen rect */
   function recrisp(){ try{ var D=window.DPR||window.devicePixelRatio||1, z=Math.max(1,view.z||1);
@@ -47735,7 +47750,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       setViz(!!layout.viz,true); sync(); setTimeout(sync,120); setTimeout(sync,900); hist={undo:[],redo:[],cur:null};
       trackFlowCables();   /* tp30 — the pills and the output cables join the undo snapshot BEFORE the first edit can move them */
       setTimeout(function(){ hist.cur=snapshot(); paintTools(); },200); if(window.__tiFrameReg) window.__tiFrameReg('tp',frame); else if(!raf) raf=requestAnimationFrame(function loop(ts){ frame(ts); if(isOpen) raf=requestAnimationFrame(loop); else raf=0; }); requestAnimationFrame(frame); }); }
-  function closePage(){ if(!isOpen) return; isOpen=false; closeMenus(); try{ if(window.__tiFrameUnreg) window.__tiFrameUnreg('tp'); }catch(e){} try{ returnAll(); }catch(e){ try{ console.warn('[tp] return',e); }catch(_){} } if(raf){ cancelAnimationFrame(raf); raf=0; } lastT=0; }
+  function closePage(){ if(!isOpen) return; isOpen=false; window.__tpLod=false; if(page) page.classList.remove('tp-far'); closeMenus(); try{ if(window.__tiFrameUnreg) window.__tiFrameUnreg('tp'); }catch(e){} try{ returnAll(); }catch(e){ try{ console.warn('[tp] return',e); }catch(_){} } if(raf){ cancelAnimationFrame(raf); raf=0; } lastT=0; }
   window.__tpOpen=openPage; window.__tpClose=closePage; window.__tpNodes=function(){ return nodes.map(function(n){ return {key:n.key,x:n.x,y:n.y,w:n.w,h:n.h,ext:!!n.ext}; }); }; window.__tpCables=function(){ return cables.map(function(c){ return c.id; }); }; window.__tpSync=sync; window.__tpDrag=function(){ return drag?{kind:drag.kind,moved:!!drag.moved,ctl:!!drag.ctl}:null; };
   window.__tpConnect=connect; window.__tpNodeByKey=nodeByKey; window.__tpDerive=derive; window.__tpFlowInline=flowInline; window.__tpFlowTaps=flowTaps; window.__tpPlaceInline=placeInlineFlows; window.__tpSetFlowInline=setFlowInline; window.__tpDeckMask=deckMask; window.__tpDeckActive=deckActive; window.__tpCatalog=function(){ return catalog(); }; window.__tpCut=function(id){ var c=cables.filter(function(x){ return x.id===id; })[0]; return c?cut(c):false; };   /* tp41 — gates */ window.__tpUndo=undo; window.__tpRedo=redo; window.__tpHist=function(){ return {undo:hist.undo.length,redo:hist.redo.length}; }; window.__tpGenerate=generate; window.__tpLayout=function(){ return layout; }; window.__tpAdd=function(k,x,y){ addFromList(k,x||200,y||200); }; window.__tpRemove=function(key){ var n=nodeByKey(key); if(n) removeNode(n); }; window.__tpExt=function(key,on){ var n=nodeByKey(key); if(n&&n.kind==='flow') setFlowExt(n,!!on); }; window.__tpTidy=glideTidy; window.__tpRollOsc=rollOscNow; window.__tpOscList=function(){ return nodes.filter(function(n){return n.kind==='osc';}).map(function(n){return n.sub;}); };
   /* tp61 — THE GATES NEED THE REAL NODES. __tpNodes above is a projection (key/x/y/w/h) and
