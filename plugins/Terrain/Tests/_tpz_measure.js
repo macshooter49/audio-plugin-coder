@@ -78,7 +78,7 @@
   var page = function(){ return document.getElementById('tp-page'); };
 
   /* ── a phase: `drive(i, dt)` is called once per frame and dispatches the gesture's events ── */
-  function measure(label, ms, drive){ return new Promise(function(res){
+  function measure(label, ms, drive){ unlatch(); return new Promise(function(res){
     var m = { gaps: [], cbMs: 0, cbN: 0, evMs: 0, frameMs: 0, frameN: 0, rdMs: 0, rdN: 0, cvs: 0, d: 0, render: [], late: [], who: {}, pushMs: 0, evalMs: 0 }, last = 0, t0 = now(), i = 0, done = false;
     announce(label); cur = m;
     (function tick(ts){ if (last) m.gaps.push(ts - last); last = ts;
@@ -115,7 +115,10 @@
     var t = target || document.elementFromPoint(x, y) || window;
     try { t.dispatchEvent(new PointerEvent(type.replace('mouse', 'pointer'), Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, o))); } catch (e) {}
     t.dispatchEvent(new MouseEvent(type, o)); }
-  function wheel(x, y, dx, dy, ctrl){ var t = document.elementFromPoint(x, y) || page();
+  /* a trackpad gesture is LATCHED to the element it began on (WebKit keeps the wheel target for the whole gesture):
+     hit-test once per phase, not per event, or a module sliding under the pointer would steal a pan mid-gesture */
+  var wheelLatch = null; function unlatch(){ wheelLatch = null; }
+  function wheel(x, y, dx, dy, ctrl){ var t = wheelLatch || (wheelLatch = document.elementFromPoint(x, y) || page());
     t.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: x, clientY: y, deltaX: dx, deltaY: dy, deltaMode: 0, ctrlKey: !!ctrl, view: window })); }
   function dragPan(label, ms){ var p = emptyPoint(); if (!p) { R.errs.push('no empty point to drag'); return measure(label, ms, null); }
     var down = false, t = document.elementFromPoint(p.x, p.y);
@@ -124,7 +127,7 @@
       /* a slow lissajous around the press point, ±180 px — a hand exploring the patch */
       var ph = el / 1000 * 1.3, x = p.x + 180 * Math.sin(ph), y = p.y + 110 * Math.sin(ph * 1.7);
       mouse('mousemove', x, y); if (el >= ms - 20) mouse('mouseup', x, y); }); }
-  function wheelPan(ms){ var r = pageRect(), c = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+  function wheelPan(ms){ var c = emptyPoint(); if (!c) { var r = pageRect(); c = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 }; }   /* over blank canvas: over a module the wheel is the module's (tp40) */
     return measure('pan-wheel', ms, function(i, el){ var ph = el / 1000 * 1.1;
       /* two trackpad events per frame, like a real two-finger scroll */
       wheel(c.x, c.y, 4 * Math.cos(ph), 4 * Math.sin(ph * 1.3)); wheel(c.x, c.y, 4 * Math.cos(ph), 4 * Math.sin(ph * 1.3)); }); }
@@ -204,6 +207,69 @@
         var tT = 0; on2 = true; for (var k2 = 0; k2 < 40; k2++) { var a2 = performance.now(); FN(); tT += performance.now() - a2; } on2 = false;
         R.info.smTick = (tT / 40).toFixed(2) + 'ms/pass marks=' + document.querySelectorAll('.sm-ul').length;
         R.info.smProf = Object.keys(P).sort(function(x, y){ return P[y][1] - P[x][1]; }).map(function(k){ return k + ':' + (P[k][0] / 40).toFixed(0) + 'x/' + (P[k][1] / 40).toFixed(2) + 'ms'; }).join(' ');
+      }
+      if (A.exp === 'css') {   /* A/B the page's paint/composite cost: one CSS override at a time, rest + a drag-pan each */
+        var CSS = {
+          'noShadow': '#tp-page .tp-node > .tp-box{box-shadow:none !important}',
+          'noGrid': '#tp-page .tp-grid{display:none !important}',
+          'noMini': '#tp-page .tp-mini{display:none !important}',
+          'noCables': '#tp-page .tp-cables{display:none !important}',
+          'noPorts': '#tp-page .tp-port{display:none !important}',
+          'noFilters': '#tp-page .tp-world *{filter:none !important;-webkit-filter:none !important}',
+          'noAllShadows': '#tp-page .tp-world *{box-shadow:none !important;text-shadow:none !important}',
+          'noCanvas': '#tp-page .tp-world canvas{visibility:hidden !important}',
+          'noSmul': '.sm-ul{display:none !important}',
+          'noToolsGlass': '#tp-page .tp-tools,#tp-page .tp-mini{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}',
+          'noNodes': '#tp-page .tp-nodes{visibility:hidden !important}',
+          'wcWorld': '#tp-page .tp-world{will-change:transform !important}',
+          'wcNodes': '#tp-page .tp-node{will-change:transform !important}',
+          'wcWorldNodes': '#tp-page .tp-world,#tp-page .tp-node{will-change:transform !important}',
+          'containNodes': '#tp-page .tp-node{contain:strict !important}',
+          'wcBoth+noPainters': '#tp-page .tp-world{will-change:transform !important}'
+        };
+        R.info.layers = (function(){ var n = 0, wc = 0, bf = 0, fl = 0; document.querySelectorAll('#tp-page *').forEach(function(e){ var c = getComputedStyle(e);
+          if (c.willChange !== 'auto') wc++; if (c.webkitBackdropFilter && c.webkitBackdropFilter !== 'none') bf++; if (c.filter !== 'none') fl++; if (c.transform !== 'none') n++; }); return 'transforms ' + n + ' willChange ' + wc + ' backdrop ' + bf + ' filter ' + fl; })();
+        var st = document.createElement('style'); document.head.appendChild(st);
+        var keys = A.only || Object.keys(CSS);
+        for (var ci2 = 0; ci2 < keys.length; ci2++) { st.textContent = CSS[keys[ci2]]; await wait(500);
+          await measure('css:' + keys[ci2], 2500, null); await dragPan('csspan:' + keys[ci2], 2500); window.__tpSetView(v0.x, v0.y, v0.z);
+          if (A.zoomToo) { await wait(300); await pinch('csszin:' + keys[ci2], 2000, 1.0); await measure('csszset:' + keys[ci2], 800, null); window.__tpSetView(v0.x, v0.y, v0.z); await wait(500); } }
+        st.textContent = ''; await wait(500);
+        await measure('css:none', 2500, null); await dragPan('csspan:none', 2500); window.__tpSetView(v0.x, v0.y, v0.z); await wait(500);
+      }
+      if (A.exp === 'anim') {   /* painters and pushes ON; only the CSS breathers paused */
+        async function trio2(tag){ await measure('an-rest:' + tag, 2500, null); await dragPan('an-pan:' + tag, 2500); window.__tpSetView(v0.x, v0.y, v0.z); await wait(300);
+          await pinch('an-zin:' + tag, 2000, 1.0); await measure('an-z1:' + tag, 1500, null); await dragPan('an-panz1:' + tag, 2000); window.__tpSetView(v0.x, v0.y, v0.z); await wait(500); }
+        await trio2('live');
+        var st4 = document.createElement('style'); document.head.appendChild(st4);
+        st4.textContent = '#tp-page *{animation-play-state:paused !important}'; await wait(300);
+        await trio2('paused'); st4.remove(); await wait(300);
+      }
+      if (A.exp === 'freeze') {   /* the floor of a pure gesture: every painter and every push statement off */
+        var names2 = Object.keys(PF), keep2 = {}, pk = {};
+        var st3 = document.createElement('style'); document.head.appendChild(st3);
+        async function trio(tag){ await measure('fz-rest:' + tag, 2500, null); await dragPan('fz-pan:' + tag, 2500); window.__tpSetView(v0.x, v0.y, v0.z); await wait(300);
+          await pinch('fz-zin:' + tag, 2000, 1.0); await measure('fz-set:' + tag, 800, null); window.__tpSetView(v0.x, v0.y, v0.z); await wait(500); }
+        names2.forEach(function(k){ keep2[k] = PF[k]; window.__tiFrameUnreg(k); }); await wait(300);
+        await trio('noPainters');
+        PUSH.forEach(function(nm){ pk[nm] = window[nm]; window[nm] = function(){}; }); await wait(300);
+        await trio('noPaint+noPush');
+        st3.textContent = '#tp-page .tp-node{contain:strict !important}'; await wait(300);
+        await trio('noPaint+noPush+contain');
+        st3.textContent = '';
+        var an = document.getAnimations ? document.getAnimations() : [], byK = {};
+        an.forEach(function(a){ var t = a.effect && a.effect.target, k = (a.animationName || a.transitionProperty || a.constructor.name) + '@' + (t ? (t.id || String(t.className && t.className.baseVal != null ? t.className.baseVal : t.className)).slice(0, 30) : '?'); byK[k] = (byK[k] || 0) + 1; });
+        R.info.anims = an.length + ' ' + Object.keys(byK).sort(function(a, b){ return byK[b] - byK[a]; }).slice(0, 12).map(function(k){ return k + 'x' + byK[k]; }).join(' | ');
+        var smil = document.querySelectorAll('#tp-page svg'), smilOn = 0; smil.forEach(function(sv){ try { if (sv.animationsPaused && !sv.animationsPaused() && sv.querySelector('animate,animateTransform,animateMotion')) smilOn++; } catch (e) {} }); R.info.smilLive = smilOn;
+        an.forEach(function(a){ try { a.pause(); } catch (e) {} }); smil.forEach(function(sv){ try { sv.pauseAnimations(); } catch (e) {} });
+        await trio('noPaint+noPush+noAnim');
+        st3.textContent = ''; PUSH.forEach(function(nm){ window[nm] = pk[nm]; }); names2.forEach(function(k){ window.__tiFrameReg(k, keep2[k]); }); await wait(500);
+        /* microbench: what one forced style+layout costs on this DOM after a tiny write */
+        var wEl = document.querySelector('#tp-page .tp-world'), box = document.querySelector('#tp-page .tp-node > .tp-box'), tb = [0, 0, 0];
+        for (var q4 = 0; q4 < 20; q4++) { var a4 = performance.now(); wEl.style.transform = wEl.style.transform + ' '; page().getBoundingClientRect(); tb[0] += performance.now() - a4;
+          a4 = performance.now(); box.classList.toggle('tpz-x'); page().getBoundingClientRect(); tb[1] += performance.now() - a4;
+          a4 = performance.now(); document.body.classList.toggle('tpz-y'); page().getBoundingClientRect(); tb[2] += performance.now() - a4; }
+        R.info.forced = 'transform ' + (tb[0] / 20).toFixed(2) + ' boxClass ' + (tb[1] / 20).toFixed(2) + ' bodyClass ' + (tb[2] / 20).toFixed(2) + ' ms';
       }
       if (A.exp === 'painters') {   /* per painter: what the frame (JS + render) and the GPU process pay for it */
         var names = Object.keys(PF).filter(function(k){ return A.withTp || k !== 'tp'; });

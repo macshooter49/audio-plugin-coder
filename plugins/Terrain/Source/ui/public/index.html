@@ -288,6 +288,7 @@
     motionStep();                    /* fb636 — THE MOTION CLOCK (below) steps once per painter pass, glass or not, so its envelope stays true */
     if (window.__tiFrozen) return;   /* fb620 — the preset browser's glass covers every painter; nothing under it needs a frame */
     lastRunAt = nowMs();
+    if (window.__tpMoving) return;   /* tp110 — the Patcher's view is gliding: every picture holds (see __tpMoving) */
     reg.forEach(function(fn){ try { fn(ts); } catch(e) {} });
   }
   window.__tiFrameReg   = function(name, fn){ reg.set(name, fn); };
@@ -45506,6 +45507,13 @@ body.tp-open > #plugin > #footer { visibility: visible; position: absolute; left
   border: 1px solid rgba(255,255,255,0.11); box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); transition: border-color .15s; }
 /* tp8 — NOTHING INSIDE THE WORLD MAY BECOME ITS OWN LAYER: a backdrop blur or will-change makes WebKit rasterize that piece once and stretch it
    under the zoom (Max: "the header and footer are crystal clear … this looks blurry"). One painted world = sharp at every scale, like the mockup. */
+/* tp110 — WHILE THE VIEW GLIDES, THE BREATHERS HOLD. 73 infinite opacity breathes (mvBreathe/envBreathe on the rack's curves,
+   each under a double drop-shadow) repaint their filtered paths on every display frame; with 106 modules on the canvas that
+   alone cost 25 -> 35 fps at rest and 16 -> 21 fps panning (measured by pausing them). Held only while a pan/zoom moves
+   (#tp-page.tp-moving, 140 ms past the last step) and resumed where they were — the rest picture is untouched.
+   The selector names the breathers themselves: a `.tp-world *` subject made the class flip restyle all ~33k elements
+   (a 140-230 ms hitch at the start and end of every gesture, measured). */
+#tp-page.tp-moving .dst-curve, #tp-page.tp-moving .grn-wave, #tp-page.tp-moving #env-line, #tp-page.tp-moving .mv-stroke { animation-play-state: paused !important; }
 #tp-page .tp-world * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; will-change: auto !important; }
 #tp-page .tp-node:hover > .tp-box { border-color: rgba(255,255,255,.28); }
 #tp-page .tp-node.tp-sel > .tp-box { border-color: var(--purple-400); }
@@ -47369,14 +47377,21 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var z=view.z||1, x0=n.x*z+view.x, y0=n.y*z+view.y, M=48, off=(x0+n.w*z< -M||y0+n.h*z< -M||x0>pageW+M||y0>pageH+M);
     if(n.__culled&&!off) cullEntered(); n.__culled=off; return off; };
   window.addEventListener('resize',function(){ if(isOpen&&page){ pageW=page.clientWidth; pageH=page.clientHeight; } });
-  function applyView(){ if(!world) return; if(page){ pageW=page.clientWidth; pageH=page.clientHeight; } world.style.transform='translate('+view.x+'px,'+view.y+'px) scale('+view.z+')'; $('.tp-grid').style.backgroundSize=(26*view.z)+'px '+(26*view.z)+'px'; $('.tp-grid').style.backgroundPosition=view.x+'px '+view.y+'px'; page.classList.toggle('lod',view.z<0.55); drawMini(); zoomSettled(); }
+  function applyView(){ if(!world) return; if(isOpen) moving(); if(page&&!pageW){ pageW=page.clientWidth; pageH=page.clientHeight; } world.style.transform='translate('+view.x+'px,'+view.y+'px) scale('+view.z+')'; $('.tp-grid').style.backgroundSize=(26*view.z)+'px '+(26*view.z)+'px'; $('.tp-grid').style.backgroundPosition=view.x+'px '+view.y+'px'; page.classList.toggle('lod',view.z<0.55); drawMini(); zoomSettled(); }
   /* tp110 — A ZOOM RE-BUFFERS ONCE, WHEN IT SETTLES. Every painter sizes its bitmap from __tpZoomUp = max(1, zoom), so a
      pinch above 1× re-allocated (and wiped) ~10 canvases on EVERY frame of the glide (measured: 10.2 re-buffers a frame,
      Bedroque). While the zoom moves, the bitmaps keep the scale they had when it started (bmpZ) and the compositor
      scales them; 120 ms after the last step the freeze lifts, recrisp() re-sizes the fixed faces and one painter pass
      re-rasters every canvas at the new scale. The REST state is exactly as before: a bitmap for the zoom (tp11). */
   var bmpZ=null; window.__tpBmpFreeze=true;   /* the gate's A/B switch */
-  var zoomT=0, lastZ=0; function zoomSettled(){ if(view.z===lastZ) return; if(bmpZ===null&&lastZ&&window.__tpBmpFreeze) bmpZ=lastZ; lastZ=view.z; clearTimeout(zoomT); zoomT=setTimeout(function(){ bmpZ=null; if(!isOpen) return; try{ var tl=nodeByKey('tapeloop'); if(tl){ var rc=document.getElementById('tape-reel-canvas'); if(rc) reelSize(parseFloat(rc.style.width)||270,parseFloat(rc.style.height)||88); } if(window._fxSizeFn) window._fxSizeFn(); recrisp(); if(window.__tiWake) window.__tiWake(); }catch(e){} },120); }   /* tp8 — NO window resize: the synth page's sizers would re-measure scaled boxes (the shifting) */
+  /* tp110 — THE GLIDE. Any view change (a pan, a wheel, a pinch, the minimap, fit) marks the page moving; 140 ms after the
+     last one it settles. While moving, the painter pass holds every picture where it is (window.__tpMoving, read by the frame
+     dispatcher) and the CSS breathers pause — Max: pause the animations so moving around stays smooth. On settle one repaint
+     brings every picture back to live at once. At rest nothing is different. */
+  var moveT=0;
+  function moving(){ if(!page) return; if(!window.__tpMoving){ window.__tpMoving=true; page.classList.add('tp-moving'); } clearTimeout(moveT); moveT=setTimeout(endMoving,140); }
+  function endMoving(){ clearTimeout(moveT); moveT=0; if(!window.__tpMoving) return; window.__tpMoving=false; if(page) page.classList.remove('tp-moving'); if(isOpen&&window.__tiWake) window.__tiWake(); }
+  var zoomT=0, lastZ=0; function zoomSettled(){ if(view.z===lastZ) return; if(bmpZ===null&&lastZ&&window.__tpBmpFreeze) bmpZ=lastZ; lastZ=view.z; clearTimeout(zoomT); zoomT=setTimeout(function(){ bmpZ=null; endMoving(); if(!isOpen) return; try{ var tl=nodeByKey('tapeloop'); if(tl){ var rc=document.getElementById('tape-reel-canvas'); if(rc) reelSize(parseFloat(rc.style.width)||270,parseFloat(rc.style.height)||88); } if(window._fxSizeFn) window._fxSizeFn(); recrisp(); if(window.__tiWake) window.__tiWake(); }catch(e){} },120); }   /* tp8 — NO window resize: the synth page's sizers would re-measure scaled boxes (the shifting) */
   /* the fixed-bitmap faces (the hero's knob canvases, the deck's arcs) get a bitmap for the new scale and repaint — every other painter already sizes itself from its screen rect */
   function recrisp(){ try{ var D=window.DPR||window.devicePixelRatio||1, z=Math.max(1,view.z||1);
       nodesEl.querySelectorAll('canvas').forEach(function(c){ c.__r=null; });   /* the 32-frame rect caches re-read */
