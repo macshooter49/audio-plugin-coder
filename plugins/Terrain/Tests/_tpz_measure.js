@@ -64,9 +64,10 @@
   setInterval(wrapPush, 1000); wrapPush();
   /* per-PAINTER attribution: the dispatcher runs reg.forEach(function(fn){ try { fn(ts); } ... }) over a Map
      keyed by painter name — recognise that call and time each entry under its registered name */
+  var PF = {};   /* the registry's painters by name, seen through the dispatcher's forEach (the exp 'painters' re-registers them) */
   (function(){ var oFE = Map.prototype.forEach;
     Map.prototype.forEach = function(cb, th){ if (cur && typeof cb === 'function' && /try \{ fn\(ts\); \}/.test(cb.__tpzS || (cb.__tpzS = String(cb).slice(0, 60)))) {
-        var self = this; return oFE.call(this, function(v, k){ var a = now(); try { cb.call(th, v, k, self); } finally { var d = now() - a; cur.who['p:' + k] = (cur.who['p:' + k] || 0) + d; } }); }
+        var self = this; return oFE.call(this, function(v, k){ PF[k] = v; var a = now(); try { cb.call(th, v, k, self); } finally { var d = now() - a; cur.who['p:' + k] = (cur.who['p:' + k] || 0) + d; } }); }
       return oFE.call(this, cb, th); }; })();
 
   function pct(a, p){ if (!a.length) return 0; var s = a.slice().sort(function(x, y){ return x - y; }); return s[Math.min(s.length - 1, Math.floor(s.length * p))]; }
@@ -155,17 +156,21 @@
       R.info.dom = document.querySelectorAll('#tp-page *').length;
       R.info.fitZ = +window.__tpView().z.toFixed(2);
       announce('built'); await wait(2500);
+      /* what the Patcher's 700 ms sync() costs once the patch is built (a long task there is a periodic hitch) */
+      var sy = []; for (var k3 = 0; k3 < 5; k3++) { var a3 = performance.now(); try { window.__tpSync(); } catch (e) {} sy.push(+(performance.now() - a3).toFixed(1)); await wait(150); }
+      R.info.syncMs = sy.join(',');
       var v0 = window.__tpView();
       announce('cpu-rest'); await wait(6000);   /* no probe at all: the host's CPU reading for this phase is the page as a user has it */
       await measure('rest-fit', 6000, null);
       if (A.exp === 'hide') {   /* attribute the GPU/WebContent cost per node: hide one at a time */
+        if (A.hz) { window.__tpSetView(v0.x, v0.y, A.hz); await wait(1200); await measure('hz-rest', 3000, null); }
         var ks = window.__tpNodes().map(function(n){ return n.key; });
         R.info.cv = ks.map(function(k){ var n = window.__tpNodeByKey(k), px = 0, c = 0; if (n && n.wrap) n.wrap.querySelectorAll('canvas').forEach(function(cv){ px += cv.width * cv.height; c++; });
           return k + ':' + c + '/' + (px / 1e6).toFixed(2); }).join(' ');
         for (var hk = 0; hk < ks.length; hk++) { var nn = window.__tpNodeByKey(ks[hk]); if (!nn || !nn.wrap) continue; var od = nn.wrap.style.display; nn.wrap.style.display = 'none';
           await wait(400); await measure('hide:' + ks[hk], 3000, null); nn.wrap.style.display = od; }
         var all = ks.map(function(k){ return window.__tpNodeByKey(k); }).filter(function(n){ return n && n.wrap; });
-        all.forEach(function(n){ n.wrap.style.display = 'none'; }); await wait(400); await measure('hide:ALL', 3000, null); all.forEach(function(n){ n.wrap.style.display = ''; }); await wait(600);
+        all.forEach(function(n){ n.wrap.style.display = 'none'; }); await wait(400); await measure('hide:ALL', 3000, null); all.forEach(function(n){ n.wrap.style.display = ''; }); await wait(600); window.__tpSetView(v0.x, v0.y, v0.z); await wait(800);
       }
       if (A.exp === 'spk') {   /* the cable sparks: their drop-shadow, then the sparks themselves, then the mod underlines too */
         var st = document.createElement('style'); document.head.appendChild(st);
@@ -173,6 +178,41 @@
         st.textContent = '#tp-page .tp-cables .cable .spk{display:none !important}'; await wait(400); await measure('SPK-hidden', 4000, null); announce('cpu-SPK-hidden'); await wait(4000);
         window.__tiFrameUnreg('sm-ul'); await wait(400); await measure('SPK-hid+NOSMUL', 4000, null); announce('cpu-SPK-hid+NOSMUL'); await wait(4000);
         window.__tiFrameReg('sm-ul', function(){ window.__ulTick(); }); st.remove(); await wait(600);
+      }
+      if (A.exp === 'blank') {   /* evidence: how many on-screen canvases are BLANK (a wiped bitmap) in the frames of a zoom-in glide */
+        function scan(){ var pr = page().getBoundingClientRect(), n = 0, blank = 0;
+          document.querySelectorAll('#tp-page .tp-node canvas').forEach(function(cv){ var r = cv.getBoundingClientRect(); if (!cv.width || !cv.height || r.width < 8 || r.right < pr.left || r.left > pr.right || r.bottom < pr.top || r.top > pr.bottom) return;
+            try { var x = cv.getContext('2d'); if (!x) return; var d = x.getImageData(0, 0, cv.width, cv.height).data, any = false; for (var i = 3; i < d.length; i += 4 * 7) if (d[i]) { any = true; break; } n++; if (!any) blank++; } catch (e) {} });
+          return [n, blank]; }
+        var rest0 = scan(); R.info.blankRest = rest0.join('/');
+        var z0b = window.__tpView().z, r0 = pageRect(), cx = r0.left + r0.width * 0.3, cy = r0.top + r0.height * 0.35, frames = [], t0b = performance.now();
+        await new Promise(function(res){ (function st(){ var el = performance.now() - t0b, zt = z0b * Math.pow(2.2 / z0b, Math.min(1, el / 2500)), zc = window.__tpView().z;
+            wheel(cx, cy, 0, -Math.log(zt / zc) / 0.006, true);
+            setTimeout(function(){ var sc = scan(); frames.push(sc[1] + '/' + sc[0] + '@' + window.__tpView().z.toFixed(2)); if (el < 2600) oRAF(st); else res(); }, 0); })(); });
+        await wait(600); R.info.blankAfter = scan().join('/'); R.info.blankFrames = frames.filter(function(f){ return f[0] !== '0'; }).slice(0, 30).join(' '); R.info.blankN = frames.length;
+        window.__tpSetView(v0.x, v0.y, v0.z); await wait(1000);
+      }
+      if (A.exp === 'smprof') {   /* what inside the mod-underline pass costs: count + time DOM calls during 40 direct __ulTick() passes */
+        var P = {}, on2 = false;
+        function wr(obj, name, key){ var o = obj[name]; if (typeof o !== 'function') return; obj[name] = function(){ if (!on2) return o.apply(this, arguments); var a = performance.now(); try { return o.apply(this, arguments); } finally { var q = P[key] || (P[key] = [0, 0]); q[0]++; q[1] += performance.now() - a; } }; }
+        wr(Document.prototype, 'querySelector', 'doc.qS'); wr(Document.prototype, 'querySelectorAll', 'doc.qSA'); wr(Element.prototype, 'querySelector', 'el.qS'); wr(Element.prototype, 'querySelectorAll', 'el.qSA');
+        wr(Element.prototype, 'closest', 'closest'); wr(window, '__fxModIsDest', 'fxModIsDest'); wr(window, 'getComputedStyle', 'gCS'); wr(Element.prototype, 'getBoundingClientRect', 'gBCR'); wr(Range.prototype, 'getBoundingClientRect', 'rangeBCR');
+        wr(window, '__mvLfoValAt', 'lfoValAt'); wr(Element.prototype, 'setAttribute', 'setAttr'); wr(SVGGeometryElement.prototype, 'getTotalLength', 'getTotalLength'); wr(window, '__ctlDestAt', 'ctlDestAt'); wr(window, 'getSynParam', 'getSynParam'); wr(Element.prototype, 'getAttribute', 'getAttr'); wr(Node.prototype, 'contains', 'contains');
+        ['offsetParent', 'offsetWidth', 'offsetHeight', 'isConnected'].forEach(function(pn){ var proto = pn === 'isConnected' ? Node.prototype : HTMLElement.prototype, d = Object.getOwnPropertyDescriptor(proto, pn); if (!d || !d.get) return; var g = d.get;
+          Object.defineProperty(proto, pn, { configurable: true, get: function(){ if (!on2) return g.call(this); var a = performance.now(); try { return g.call(this); } finally { var q = P[pn] || (P[pn] = [0, 0]); q[0]++; q[1] += performance.now() - a; } } }); });
+        var FN = A.prof === 'sync' ? function(){ window.__tpSync(); } : function(){ window.__ulTick(); };
+        var tT = 0; on2 = true; for (var k2 = 0; k2 < 40; k2++) { var a2 = performance.now(); FN(); tT += performance.now() - a2; } on2 = false;
+        R.info.smTick = (tT / 40).toFixed(2) + 'ms/pass marks=' + document.querySelectorAll('.sm-ul').length;
+        R.info.smProf = Object.keys(P).sort(function(x, y){ return P[y][1] - P[x][1]; }).map(function(k){ return k + ':' + (P[k][0] / 40).toFixed(0) + 'x/' + (P[k][1] / 40).toFixed(2) + 'ms'; }).join(' ');
+      }
+      if (A.exp === 'painters') {   /* per painter: what the frame (JS + render) and the GPU process pay for it */
+        var names = Object.keys(PF).filter(function(k){ return A.withTp || k !== 'tp'; });
+        if (A.only) names = names.filter(function(k){ return A.only.indexOf(k) >= 0; });
+        R.info.painters = names.join(',');
+        for (var pi = 0; pi < names.length; pi++) { var nm = names[pi], fnp = PF[nm]; window.__tiFrameUnreg(nm); await wait(300);
+          await measure('no:' + nm, 2500, null); window.__tiFrameReg(nm, fnp); }
+        var keep = {}; names.forEach(function(k){ keep[k] = PF[k]; window.__tiFrameUnreg(k); }); await wait(300); await measure('no:ALL', 2500, null);
+        names.forEach(function(k){ window.__tiFrameReg(k, keep[k]); }); await wait(500);
       }
       if (A.exp === 'nosmul') { window.__tiFrameUnreg('sm-ul'); await measure('rest-fit-NOSMUL', 5000, null); announce('cpu-rest-NOSMUL'); await wait(5000);
         window.__tiFrameReg('sm-ul', function(){ window.__ulTick(); }); }
@@ -187,6 +227,9 @@
       window.__tpSetView(v0.x, v0.y, 1.0); await wait(1200);
       await measure('rest-z1', 4000, null);
       await dragPan('pan-drag-z1', 4000);
+      window.__tpFit(); await wait(1500);
+      announce('cpu-silent'); await wait(7000);   /* the host releases the chord here: the Patcher at rest with nothing sounding */
+      await measure('silent-fit', 4000, null);
       R.info.pageErrs = Object.keys(errSeen).length;
       announce('done'); announcing = false; publish();
     } catch (e) { R.errs.push('run: ' + (e && e.message)); announce('failed'); announcing = false; publish(); }

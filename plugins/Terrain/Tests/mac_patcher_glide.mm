@@ -161,6 +161,16 @@ int main (int argc, char** argv)
         if (v == nil) { std::printf ("  !! no view\n"); [[NSFileManager defaultManager] removeItemAtPath: expPath error: nil]; return 1; }
         NSWindow* w = [[NSWindow alloc] initWithContentRect: NSMakeRect (60, 60, v.frame.size.width, v.frame.size.height)
                                                   styleMask: NSWindowStyleMaskTitled backing: NSBackingStoreBuffered defer: NO];
+        // TPZ_NO_OCCLUSION=1: WebKit ignores window occlusion (a locked screen) so rAF keeps running — the page
+        // work is real but WindowServer composition is not; such numbers are marked and never the headline
+        if (std::getenv ("TPZ_NO_OCCLUSION") != nullptr)
+        {
+            std::vector<NSView*> st { v };
+            while (! st.empty()) { NSView* x = st.back(); st.pop_back();
+                if ([x isKindOfClass: NSClassFromString (@"WKWebView")] && [x respondsToSelector: NSSelectorFromString (@"_setWindowOcclusionDetectionEnabled:")])
+                { ((void (*)(id, SEL, BOOL)) objc_msgSend) (x, NSSelectorFromString (@"_setWindowOcclusionDetectionEnabled:"), NO); std::printf ("  occlusion detection OFF\n"); }
+                for (NSView* c in x.subviews) st.push_back (c); }
+        }
         w.releasedWhenClosed = NO; [w.contentView addSubview: v]; [w makeKeyAndOrderFront: nil];
         { const double t0 = nowMs(); while (! [[NSFileManager defaultManager] fileExistsAtPath: resPath]) { pumpMs (50); if (nowMs() - t0 > 30000) break; } }
         [[NSFileManager defaultManager] removeItemAtPath: expPath error: nil];   // ran once; never leave the hook armed
@@ -217,6 +227,7 @@ int main (int argc, char** argv)
                     cpuReport += line; std::printf ("%s", line); std::fflush (stdout);
                     phase = np; phT = tn; phWc = cw; phGpu = cg; phSelf = cs;
                     if (shots) { shotAt = tn + (std::getenv ("TPZ_SHOTS_EVERY") && np.rfind ("zoom", 0) == 0 ? 150 : 900); shotPhase = np; }
+                    if (np == "cpu-silent") { h.midi.store (2); std::printf ("  chord released (silent rest)\n"); }
                     if (! struck && np == "built") { struck = true; h.midi.store (2); pumpMs (120); h.midi.store (1); std::printf ("  patch built - chord re-struck\n"); }
                 }
                 continue;
