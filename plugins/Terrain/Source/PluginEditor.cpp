@@ -331,57 +331,137 @@ static void tiGrabWebKeys (juce::Component* comp)
    #endif
 }
 
+// tpsz — THE OPEN TRACE (opt-in, TERRAIN_OPEN_TRACE=1 only; a static bool read once, nothing written otherwise).
+//  One line per size/zoom decision, stamped with the mach-clock millisecond counter so a frame capture of the window
+//  (Tests/mac_open_frames.mm, ScreenCaptureKit host-time stamps) can be lined up against it frame by frame.
+static bool tiOpenTraceOn()
+{
+    static const bool on = std::getenv ("TERRAIN_OPEN_TRACE") != nullptr;
+    return on;
+}
+static void tiOpenTrace (const juce::String& line)
+{
+    if (! tiOpenTraceOn()) return;
+    juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+        .getChildFile ("Library/Caches/Terrain/terrain-open-trace.txt")
+        .appendText (juce::String (juce::Time::getMillisecondCounterHiRes(), 1) + "  " + line + "\n");
+}
+
 #if JUCE_MAC
 // fb95 — editor resize scales the WHOLE web UI via the native WKWebView pageZoom
 // (macOS 11+). This is real browser zoom — every JS coordinate API stays
 // consistent, unlike CSS zoom which skews clientX-vs-style.left math across the
-// 25k-line page. We reach the WKWebView by walking the editor peer's NSView tree.
-static void terrainApplyWebScale (juce::Component& root, double pageZoom, double magnification)
+// 25k-line page.
+// tpsz — the core's WKWebView, found through the COMPONENT tree (JUCE's WKWebViewImpl is an
+// NSViewComponent child of the WebBrowserComponent), so it is reachable with or without a peer.
+static id tiWKOf (juce::Component& root)
+{
+    Class wkClass = objc_getClass ("WKWebView");
+    if (wkClass == nullptr) return nil;
+    std::vector<juce::Component*> stack { &root };
+    while (! stack.empty())
+    {
+        auto* c = stack.back(); stack.pop_back();
+        if (auto* nv = dynamic_cast<juce::NSViewComponent*> (c))
+            if (id cand = (id) nv->getView())
+                if (((bool (*) (id, SEL, Class)) objc_msgSend) (cand, sel_registerName ("isKindOfClass:"), wkClass))
+                    return cand;
+        for (auto* ch : c->getChildren()) stack.push_back (ch);
+    }
+    return nil;
+}
+
+static void terrainApplyWebScale (juce::Component& root, double pageZoom, double magnification, bool clearBacking = true)
 {
     // fb176 — TERRAIN_ZOOM_KILL=1: diagnostic mode. Neuters the native zoom (simulates the
     // FL failure) so the page-side self-heal can be exercised and verified in any host.
     static const bool zoomKill = (getenv ("TERRAIN_ZOOM_KILL") != nullptr);
     if (zoomKill) { pageZoom = 1.0; magnification = 1.0; }
-    auto* peer = root.getPeer();
-    if (peer == nullptr) return;
-    id rootView = (id) peer->getNativeHandle();
-    Class wkClass = objc_getClass ("WKWebView");
-    if (rootView == nullptr || wkClass == nullptr) return;
-    std::vector<id> stack { rootView };
-    while (! stack.empty())
+    /* 🚨 tpsz — THE WKWebView IS REACHED THROUGH THE COMPONENT TREE, NOT THROUGH THE PEER.
+       This used to walk `root.getPeer()`'s NSView tree and simply return when there was no
+       peer. A core has no peer in exactly the moments that decide what an OPEN looks like:
+       while the shell is being constructed (the host has not attached the view yet) and while
+       it is parked. So every open set its bounds with the zoom silently unapplied and the zoom
+       only landed ~10 timer ticks later, with the page ON SCREEN in between at the zoom of its
+       LAST window. Filmed (Tests/mac_open_frames.mm): a core parked at 125 % and reopened at
+       100 % showed 1.23x the final size for 215 ms, then snapped. JUCE's WKWebViewImpl is an
+       NSViewComponent child of the WebBrowserComponent, so the WKWebView is one getView() away
+       at any time, peer or not, and a zoom set on a view outside a window is simply there when
+       the view is shown. */
+    id v = tiWKOf (root);
+    if (v == nil) return;
+    // fb148 — kill WKWebView's WHITE backing (the open-flash): drawsBackground=NO via KVC.
+    // tpsz — only once the page has loaded (the moment it always happened before this could run
+    // pre-peer): a view cleared before its page exists shows the HOST's window through it for the
+    // whole cold boot (filmed: the harness's grey) instead of WebKit's own ground.
+    if (clearBacking)
     {
-        id v = stack.back(); stack.pop_back();
-        if (((bool (*) (id, SEL, Class)) objc_msgSend) (v, sel_registerName ("isKindOfClass:"), wkClass))
+        id no  = ((id (*) (Class, SEL, signed char)) objc_msgSend) (objc_getClass ("NSNumber"), sel_registerName ("numberWithBool:"), 0);
+        id key = ((id (*) (Class, SEL, const char*)) objc_msgSend) (objc_getClass ("NSString"), sel_registerName ("stringWithUTF8String:"), "drawsBackground");
+        ((void (*) (id, SEL, id, id)) objc_msgSend) (v, sel_registerName ("setValue:forKey:"), no, key);
+    }
+    if (tiOpenTraceOn())
+        tiOpenTrace ("apply pageZoom=" + juce::String (pageZoom, 4) + " mag=" + juce::String (magnification, 4)
+                     + " core=" + juce::String (root.getWidth()) + "x" + juce::String (root.getHeight())
+                     + " peer=" + juce::String (root.getPeer() != nullptr ? 1 : 0));
+    /* 🚨 tpsz — THE SCALE IS THE VIEW'S, NOT THE FONTS'. (Max: "make it as small as possible ... no letter
+       should move.") pageZoom is a ZOOM: WebKit multiplies every font size by it and then applies its
+       "smart minimum" — any text specified at >= 9 CSS px is floored at 9 DEVICE px (Style::
+       computedFontSizeFromSpecifiedSize, minimumLogicalFontSize 9, not settable from WKWebView). At
+       65 % (zoom 0.65) every 9-13.8 px label therefore stayed ~9 px while the boxes around it shrank:
+       filmed at rest against the 820 design scaled — Settings 16.2 % of its static area out of place
+       (chips re-wrapped into four rows, "Audio & MI…" truncated, the paragraph re-broken), CHOP 3.6 %,
+       SYN 1.6 %; and at 190 % the rounded zoomed font sizes re-broke lines the other way (Settings
+       6.8 %). That is fb175's "panels shrank but letters didn't", which was never the zoom missing.
+       WKWebView's view scale (_setViewScale:, WebKit SPI — guarded below) scales the
+       RENDERING: layout at frame / scale = 820 CSS px exactly as before, fonts computed unzoomed, so
+       nothing can be floored or rounded differently — same film: Settings 0.4 %, SYN 0.2 %, CHOP 0.0 %
+       at 65 %; 1.6 / 1.0 / 0.5 % at 190 %. It is also a page-scale change, not a restyle, so a drag can
+       step it every event. Guarded: where the SPI is absent the old pageZoom + magnification path runs.
+       CSS px stay CSS px (clientX, getBoundingClientRect) exactly as under pageZoom (fb95). */
+    if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("_setViewScale:")))
+    {
+        const double want = pageZoom * magnification;
+        if (std::abs (((double (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("_viewScale")) - want) > 1.0e-6)
+            ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("_setViewScale:"), want);
+        pageZoom = 1.0; magnification = 1.0;   // the native zoom and magnification stay neutral (a page from an older build may carry them)
+    }
+    // Only a CHANGE is sent: each setter is a trip to the WebContent process and a relayout there.
+    if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
+        if (std::abs (((double (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("pageZoom")) - pageZoom) > 1.0e-6)
+            ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setPageZoom:"), pageZoom);
+    // tpsz — magnify about the view's TOP-LEFT corner (the corner a host pins the window by), not about
+    // the middle as plain setMagnification: does; that slid the page up and left under a drag.
+    if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setMagnification:centeredAtPoint:")))
+    {
+        if (std::abs (((double (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("magnification")) - magnification) > 1.0e-6)
         {
-            // fb102 — TWO-PHASE scaling. While a drag streams resized() calls we only
-            // move MAGNIFICATION (a compositor scale — smooth, no reflow, but it shows
-            // tiles rasterized at the old zoom = temporarily soft). ~160ms after the
-            // last resize we SETTLE: pageZoom takes the real scale (full re-raster —
-            // crisp text/SVG at any size) and magnification returns to 1. Both are set
-            // on every call so the pair can never drift apart. (fb96 used magnification
-            // alone: smooth, but it NEVER re-rasters → Max: "low quality PNG shit".)
-            // fb148 — kill WKWebView's WHITE backing (the open-flash): drawsBackground=NO via KVC
-            {
-                id no  = ((id (*) (Class, SEL, signed char)) objc_msgSend) (objc_getClass ("NSNumber"), sel_registerName ("numberWithBool:"), 0);
-                id key = ((id (*) (Class, SEL, const char*)) objc_msgSend) (objc_getClass ("NSString"), sel_registerName ("stringWithUTF8String:"), "drawsBackground");
-                ((void (*) (id, SEL, id, id)) objc_msgSend) (v, sel_registerName ("setValue:forKey:"), no, key);
-            }
-            if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
-                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setPageZoom:"), pageZoom);
-            if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setMagnification:")))
-                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setMagnification:"), magnification);
-            return;
+            const bool flipped = ((bool (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("isFlipped"));
+            const CGRect bnd = ((CGRect (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("bounds"));
+            const CGPoint topLeft = CGPointMake (0, flipped ? 0 : bnd.size.height);
+            ((void (*) (id, SEL, double, CGPoint)) objc_msgSend) (v, sel_registerName ("setMagnification:centeredAtPoint:"), magnification, topLeft);
         }
-        id subs = ((id (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("subviews"));
-        if (subs == nullptr) continue;
-        const auto nSubs = ((unsigned long (*) (id, SEL)) objc_msgSend) (subs, sel_registerName ("count"));
-        for (unsigned long i = 0; i < nSubs; ++i)
-            stack.push_back (((id (*) (id, SEL, unsigned long)) objc_msgSend) (subs, sel_registerName ("objectAtIndex:"), i));
     }
 }
 #else
-static void terrainApplyWebScale (juce::Component&, double, double) {}
+static void terrainApplyWebScale (juce::Component&, double, double, bool = true) {}
 #endif
+
+// tpsz — is a mouse button physically down anywhere right now? A resize while one is down is a live
+// drag (our corner, or the host's window frame, which JUCE never sees); without one it is an open, a
+// host setSize or a Settings change, and those may finish their whole job at once.
+static bool tiMouseButtonDown()
+{
+    // TERRAIN_TEST_LIVE_DRAG=1: a test host that steps the size with no button REALLY down (Tests/
+    // mac_open_frames.mm --drag) gets the live-drag behaviour a user's drag gets. Read once; inert unset.
+    static const bool testDrag = std::getenv ("TERRAIN_TEST_LIVE_DRAG") != nullptr;
+    if (testDrag) return true;
+   #if JUCE_MAC
+    return ((unsigned long (*) (id, SEL)) objc_msgSend) ((id) objc_getClass ("NSEvent"), sel_registerName ("pressedMouseButtons")) != 0;
+   #else
+    return juce::ComponentPeer::getCurrentModifiersRealtime().isAnyMouseButtonDown();
+   #endif
+}
 
 // fb480 -- the ONLY reason this subclass exists: know when the first real page load lands, so
 // the editor never evaluates JS into a WebView2 that is still initialising (Windows: pre-load
@@ -5773,10 +5853,23 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
     {
         // fb514 -- reopen lands on the user's page: carry the saved page in the boot URL so
         // the page applies the panel at PARSE time (zero hero flash, the front painters never
-        // start). uiPage==0 (fresh instance) emits no param -- byte-identical boot.
-        auto tiRoot = juce::WebBrowserComponent::getResourceProviderRoot();
-        const int tiPg = audioProcessor.uiPage.load (std::memory_order_relaxed);
-        webView->goToURL (tiPg > 0 ? tiRoot + "?page=" + juce::String (tiPg) : tiRoot);
+        // start).
+        // tpsz -- THE PAGE IS BORN AT ITS FINAL ZOOM. The window this core is about to be shown in
+        // opens at bootWidth(); its zoom is set on the WKWebView BEFORE the page loads (no peer is
+        // needed any more, see terrainApplyWebScale) and handed to the page in the URL, so the DPR
+        // every canvas sizes its first backing store from is already the final one. Before, a cold
+        // page laid out and painted at zoom 1, the zoom arrived ~10 ticks after load and every
+        // canvas re-buffered: the reveal raced that settle and could show the page at the wrong
+        // size first, worse under load (the 250 ms reveal cap).
+        {
+            const int w0 = bootWidth();
+            const int h0 = juce::roundToInt (w0 * (656.0 + CAPTURE_STRIP_HEIGHT) / 820.0);
+            const int strip0 = juce::jlimit (1, juce::jmax (1, h0 - 1), (int) std::lround (CAPTURE_STRIP_HEIGHT * (w0 / 820.0)));
+            const double z0 = juce::jmin (w0 / 820.0, juce::jmax (1, h0 - strip0) / 656.0);
+            uiZoom_ = restZoom_ = dprZoom_ = z0;
+            terrainApplyWebScale (*this, z0, 1.0, false);
+        }
+        webView->goToURL (bootUrl());
     }
 
     // fb516 -- resize limits / boot size / the FL junk-size war moved to the SHELL (the window
@@ -6686,6 +6779,25 @@ void TerrainUiCore::timerCallback()
 {
     if (webView == nullptr) return;
 
+    if (openTraceTicks_ > 0 && tiOpenTraceOn())   // tpsz — opt-in open trace (TERRAIN_OPEN_TRACE), inert otherwise
+    {
+        --openTraceTicks_;
+        tiOpenTrace ("tick shell=" + (shell_ != nullptr ? juce::String (shell_->getWidth()) + "x" + juce::String (shell_->getHeight()) : juce::String ("-"))
+                     + " core=" + juce::String (getWidth()) + "x" + juce::String (getHeight())
+                     + " rest=" + juce::String (restZoom_, 4) + " ui=" + juce::String (uiZoom_, 4)
+                     + " settle=" + juce::String (settleTicks_) + " push=" + juce::String (zoomPushLeft_)
+                     + " ready=" + juce::String (pageReady ? 1 : 0) + " showing=" + juce::String (isShowing() ? 1 : 0));
+        if ((openTraceTicks_ & 1) == 0)
+            webView->evaluateJavascript ("(function(){var b=document.body;return 'js iw='+innerWidth+' ih='+innerHeight"
+                                         "+' zf='+(window.__zoomFix||0)+' ui='+(window.__uiScale||0)"
+                                         "+' op='+(b?getComputedStyle(b).opacity:'-')+' vis='+document.visibilityState"
+                                         "+' ready='+(document.documentElement.classList.contains('ti-ready')?1:0)"
+                                         "+' sx='+scrollX+' sy='+scrollY+(window.visualViewport?(' vv='+visualViewport.offsetLeft.toFixed(1)+','+visualViewport.offsetTop.toFixed(1)"
+                                         "+' vs='+visualViewport.scale.toFixed(3)+' vw='+visualViewport.width.toFixed(1)):'');})()",
+                [] (juce::WebBrowserComponent::EvaluationResult r)
+                { if (auto* v = r.getResult()) tiOpenTrace (v->toString()); });
+    }
+
     // fb635 — A RESTORE THE PAGE WAS NOT TOLD ABOUT. setStateInformation has three callers and only two of them (the
     // browser/drop load and Init) ever called afterPatchLoad; the HOST's (undo, A/B compare, a host preset recall, a
     // project reloaded into a live window) left the page on the previous patch — and the page's next LFO edit pushed
@@ -6827,18 +6939,22 @@ void TerrainUiCore::timerCallback()
                 [] (juce::WebBrowserComponent::EvaluationResult r)
                 { if (auto* v = r.getResult()) juce::File ("/tmp/tzoom3.log").appendText (v->toString() + "\n"); });
     }
+    // tpsz — pageZoom itself is applied in resized() at once (see there); what settles here is only
+    // the page's DPR (canvas backing stores), which waits for a drag to rest.
     if (settleTicks_ > 0 && --settleTicks_ == 0)
     {
         restZoom_ = uiZoom_;
-        terrainApplyWebScale (*this, restZoom_, 1.0);
-        webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");");
+        dprZoom_  = uiZoom_;
+        terrainApplyWebScale (*this, restZoom_, 1.0);   // idempotent (only a change is sent)
+        webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (dprZoom_, 4) + ");");
         zoomVerifyTicks_ = 20;                     // fb175 — verify the settle actually took (~330ms)
     }
-    // boot retries: the peer may not exist on the first resized(); idempotent
+    // boot retries of the settled push (a page still coming up); idempotent on both sides. Mid-drag this
+    // must re-assert the drag's magnification, not reset it: restZoom_ is still the pre-drag pageZoom.
     if (zoomPushLeft_ > 0 && (++zoomTick2_ % 10) == 0)
     {
         terrainApplyWebScale (*this, restZoom_, uiZoom_ / restZoom_);
-        webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");");
+        webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (dprZoom_, 4) + ");");
         --zoomPushLeft_;
         if (zoomPushLeft_ == 0) zoomVerifyTicks_ = 20;
     }
@@ -6854,15 +6970,26 @@ void TerrainUiCore::timerCallback()
             { if (auto* v = r.getResult()) pageVW_ = v->toString().getDoubleValue(); });
     if (pageVW_ >= 0.0)
     {
-        const bool landed = std::abs (pageVW_ - 820.0) < 8.0;
+        // tpsz — the width the page must see is the web area / the zoom: 820 whenever the window keeps
+        // the design aspect, wider when tp64's height-limited zoom letterboxes it. Asking for a flat 820
+        // there called a WORKING zoom a miss and re-applied it every 500 ms forever.
+        const double wantVW = uiZoom_ > 0.01 ? getWidth() / uiZoom_ : 820.0;
+        const bool landed = std::abs (pageVW_ - wantVW) < 8.0;
         pageVW_ = -1.0;
         if (! landed)
         {
-            terrainApplyWebScale (*this, restZoom_, uiZoom_ / restZoom_);
-            webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");"
-                                         "window.__zoomHeals=(window.__zoomHeals||0)+1;");
+            restZoom_ = uiZoom_;
+            terrainApplyWebScale (*this, uiZoom_, 1.0);
+            // tpsz — the page's CSS-zoom fallback is disarmed on a native-zoom host (the boot URL's
+            // nz=1) so it can never engage on a mere late settle and double-scale the page; two misses
+            // in a row (~0.8 s) is a real failure, and that is what re-arms it (fb175's last resort).
+            webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (dprZoom_, 4) + ");"
+                                         "window.__zoomHeals=(window.__zoomHeals||0)+1;"
+                                         + juce::String (++zoomMisses_ >= 2 ? "if(!window.__nativeZoomFailed){window.__nativeZoomFailed=1;"
+                                                                              "try{window.dispatchEvent(new Event('resize'));}catch(e){}}" : ""));
             zoomVerifyTicks_ = 30;                 // re-verify ~500ms — converges or hands to the JS fallback
         }
+        else zoomMisses_ = 0;
     }
     // fb103 — SIZE SELF-HEAL (first ~4s): hosts replay remembered junk sizes at
     // attach (FL kept restoring the 533 minimum from one old shrink → "baby mini
@@ -6938,10 +7065,9 @@ void TerrainUiCore::timerCallback()
         {
             // fb514 -- reopen lands on the user's page: carry the saved page in the boot URL so
             // the page applies the panel at PARSE time (zero hero flash, the front painters never
-            // start). uiPage==0 (fresh instance) emits no param -- byte-identical boot.
-            auto tiRoot = juce::WebBrowserComponent::getResourceProviderRoot();
-            const int tiPg = audioProcessor.uiPage.load (std::memory_order_relaxed);
-            webView->goToURL (tiPg > 0 ? tiRoot + "?page=" + juce::String (tiPg) : tiRoot);
+            // start). tpsz: + the zoom the page is born at (bootUrl).
+            dprZoom_ = uiZoom_;
+            webView->goToURL (bootUrl());
         }
         return;                       // nothing to push into a page that is reloading
     }
@@ -8213,12 +8339,48 @@ void TerrainUiCore::resized()
     captureDragStrip.setBounds (b.removeFromBottom (strip));
     if (webView != nullptr)
         webView->setBounds(b);
+    if (tiOpenTraceOn())
+        tiOpenTrace ("core.resized " + juce::String (W) + "x" + juce::String (H) + " sc=" + juce::String (sc, 4)
+                 + " rest=" + juce::String (restZoom_, 4) + " peer=" + juce::String (getPeer() != nullptr ? 1 : 0));
     uiZoom_ = sc;
-    // fb102 — live phase: magnification rides the drag (no reflow); pageZoom stays
-    // at the last settled value. timerCallback settles to a crisp re-raster.
-    terrainApplyWebScale (*this, restZoom_, sc / restZoom_);
-    settleTicks_ = 10;                  // ~160ms after the last resize → settle crisp
-    zoomPushLeft_ = 12;                 // retries cover the first resized() (peer not up yet)
+    /* 🚨 tpsz — AN OPEN IS NOT A DRAG. (Max: "it starts off small, then gets really big, then finally
+       gets to its exact size ... Serum 2 just pops open at its size.")
+       fb102 treated every size change as a drag: only the MAGNIFICATION moved at once, pageZoom kept
+       its last settled value, and a timer tick ~160 ms later settled it. For a real drag that is right
+       (below), but an OPEN, a host setSize or a Settings → Window size change is ONE step with nothing
+       to be smooth about — and with the zoom also unapplied until that tick (the peer-only lookup, see
+       terrainApplyWebScale) the page was on screen at the zoom of its previous window first. Filmed
+       (Tests/mac_open_frames.mm): parked at 125 %, reopened at 100 %: 1.23x the final size for 100-215
+       ms, then a snap; parked at 125 %, reopened at 158 %: 0.80x for ~250 ms. So a change with no mouse
+       button down gets its final zoom NOW, whole: pageZoom = width / 820 (the fb95 contract — the page
+       lays out at 820 CSS px), magnification 1, and the canvases' DPR in the same breath.
+
+       A LIVE DRAG still books its scale as fb102's pair (restZoom_ x magnification) so the no-SPI
+       fallback keeps working — there a pageZoom per drag event was filmed starving the WebContent
+       process for 2.4 s. With the view scale (terrainApplyWebScale) the pair collapses to one page-
+       scale change per event, no restyle, and the page keeps its 820 CSS px layout mid-drag; only the
+       canvases' DPR waits for the settle. What made the fb102 drag look broken — the magnified page
+       scrolling (scrollbars, header cut) — is also gone: the root cannot scroll on a native-zoom host
+       (index.html, nz). Left, and inherent to an out-of-process WKWebView: mid-drag its content lags
+       the frame by a frame or two on a heavy page (filmed: the preset browser). */
+    const bool liveDrag = pageLoaded_ && tiMouseButtonDown();
+    if (tiOpenTraceOn()) openTraceTicks_ = juce::jmax (openTraceTicks_, 60);   // keep tracing through a resize
+    if (liveDrag)
+    {
+        terrainApplyWebScale (*this, restZoom_, sc / restZoom_);   // restZoom_ = the settled pageZoom
+    }
+    else
+    {
+        restZoom_ = sc;
+        terrainApplyWebScale (*this, sc, 1.0, pageLoaded_);
+        if (pageLoaded_ && webView != nullptr && std::abs (sc - dprZoom_) > 1.0e-4)
+        {
+            dprZoom_ = sc;
+            webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (dprZoom_, 4) + ");");
+        }
+    }
+    settleTicks_ = 10;                  // ~160 ms after the last resize: pageZoom + canvases settle crisp (a no-op after a non-drag)
+    zoomPushLeft_ = 12;                 // retries of the settled push (a page still coming up); idempotent
     // fb516 -- the fb103/fb176/fb514 junk-size latch moved to the shell (the window owner).
 }
 
@@ -16879,6 +17041,25 @@ int TerrainUiCore::bootWidth() const
     return w0;
 }
 
+// tpsz — the page URL: the saved page (fb514) + the zoom the page is born at (z, the DPR factor every
+// canvas sizes its first backing store from) + nz=1 where the zoom is NATIVE (WKWebView pageZoom), which
+// tells the page its CSS-zoom self-heal (fb175) is a last resort to hold back until the C++ verify says
+// the native zoom really failed. Windows gets z too (its __setUIScale carries the same value) but not
+// nz: there the page's CSS zoom IS the scaler and it behaves exactly as before.
+juce::String TerrainUiCore::bootUrl() const
+{
+    auto url = juce::WebBrowserComponent::getResourceProviderRoot();
+    juce::StringArray q;
+    if (const int pg = audioProcessor.uiPage.load (std::memory_order_relaxed); pg > 0)
+        q.add ("page=" + juce::String (pg));
+    q.add ("z=" + juce::String (dprZoom_, 4));
+   #if JUCE_MAC
+    if (std::getenv ("TERRAIN_ZOOM_KILL") == nullptr)   // fb176 diag: native zoom neutered, the fallback must stay live
+        q.add ("nz=1");
+   #endif
+    return url + "?" + q.joinIntoString ("&");
+}
+
 // ══ tp62 — THE PUSH LANE'S RATE FOLLOWS THE MOTION SETTING ═════════════════════════════════════
 //  fb501 measured this timer at 11.8 % of a core on Windows — more than the audio thread — and every
 //  tick it runs is a build plus a cross-process hop. With motion off the decorative feeds are gone
@@ -16905,6 +17086,8 @@ void TerrainUiCore::attach (TerrainAudioProcessorEditor* shell)
     lastFrameHash_  = 0;                                          // force a full first frame (the fb484 law)
     idleSkips_      = 0;
     uiExpDone_      = false;                                      // the fb504 exp hook fires once per OPEN (the fb516a harness depends on this)
+    openTraceTicks_ = 180;                                        // tpsz — opt-in open trace window (inert without TERRAIN_OPEN_TRACE)
+    tiOpenTrace ("attach core=" + juce::String (getWidth()) + "x" + juce::String (getHeight()) + " rest=" + juce::String (restZoom_, 4));
     ackSinceAttach_ = false; wdTripsNoAck_ = 0; rebuildRequested_ = false;   // fb520 -- fresh life-proof window
     // bootSettingsJson_ deliberately NOT refreshed: it only feeds the pre-ready RESTORE pushes,
     // which never run again for a kept-alive page (pageReady stays true); theme changes reach a
@@ -17092,13 +17275,18 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     core_->attach (this);
 
     constexpr int kBaseW = 820, kBaseH = 672;   // 672 = 656 + the capture strip (core-private constant)
+    /* tpsz — THE SIZE FIRST, THE LIMITS SECOND. setResizeLimits() ends in setBoundsConstrained() on
+       the CURRENT bounds, and a brand-new editor is 0x0 — so it was first clamped to the 533 px
+       minimum (every line of Max's terrain-size.txt opens "w=533 … host"), the core laid out and
+       zoomed for 533, and only then did setSize() bring the real width. Sized first, the limits
+       find a size already inside them and change nothing: the core is laid out once, at its size. */
+    intendedW_ = core_->bootWidth();   // fb103 -- the self-heal defends this against host junk
+    setSize (intendedW_, juce::roundToInt ((double) intendedW_ * kBaseH / kBaseW));
     setResizeLimits (juce::roundToInt (kBaseW * 0.65), juce::roundToInt (kBaseH * 0.65),
                      juce::roundToInt (kBaseW * 1.90), juce::roundToInt (kBaseH * 1.90));
     if (auto* cons = getConstrainer())
         cons->setFixedAspectRatio ((double) kBaseW / (double) kBaseH);
     setResizable (true, true);
-    intendedW_ = core_->bootWidth();   // fb103 -- the self-heal defends this against host junk
-    setSize (intendedW_, juce::roundToInt ((double) intendedW_ * kBaseH / kBaseW));
     traceSize ("boot (from the saved width)");   // tp33
 }
 
@@ -17223,6 +17411,7 @@ void TerrainAudioProcessorEditor::onShowingChanged()
 void TerrainAudioProcessorEditor::traceSize (const char* why)
 {
     tracedW_ = getWidth();
+    tiOpenTrace ("shell w=" + juce::String (getWidth()) + " h=" + juce::String (getHeight()) + " intended=" + juce::String (intendedW_) + " " + why);
     static const bool on = juce::File::getSpecialLocation (juce::File::userHomeDirectory)
                                .getChildFile ("Library/Caches/Terrain/terrain-cpu-on.txt").existsAsFile()
                         || std::getenv ("TERRAIN_CPU_PROBE") != nullptr;
