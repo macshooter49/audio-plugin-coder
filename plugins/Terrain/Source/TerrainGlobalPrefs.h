@@ -22,7 +22,11 @@ namespace tw { namespace prefs {
 inline juce::File settingsFile()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+            #if TERRAIN_FX
+             .getChildFile ("Waves Crate").getChildFile ("Terrain FX")   // tpfx — the effect's own Settings
+            #else
              .getChildFile ("Waves Crate").getChildFile ("Terrain")
+            #endif
              .getChildFile ("InstrumentSettings.json");
 }
 

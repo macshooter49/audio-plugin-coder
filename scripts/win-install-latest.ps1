@@ -4,9 +4,9 @@
 #      powershell -ExecutionPolicy Bypass -File C:\dev\audio-plugin-coder\scripts\win-install-latest.ps1
 #
 #  What it does: finds the newest "Terrain Windows" CI run on the windows-test branch, WAITS for it
-#  if it is still building, downloads its artifact, and copies Terrain.vst3 (plus Terrain Glitch /
-#  Terrain Chop) into C:\Program Files\Common Files\VST3, and the Standalone into
-#  %LOCALAPPDATA%\Terrain\Standalone. It refuses to run while a DAW is open (Windows locks a loaded
+#  if it is still building, downloads its artifact, and copies Terrain.vst3 (plus Terrain FX, Terrain Glitch /
+#  Terrain Chop) into C:\Program Files\Common Files\VST3, and the Standalones into
+#  %LOCALAPPDATA%\Terrain\Standalone and %LOCALAPPDATA%\Terrain FX\Standalone. It refuses to run while a DAW is open (Windows locks a loaded
 #  plugin), and it never installs a FAILED build.
 #
 #  One-time setup:  winget install GitHub.cli   then   gh auth login
@@ -34,7 +34,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 & gh auth status *> $null
 if ($LASTEXITCODE -ne 0) { Write-Host "Sign in once:  gh auth login" -ForegroundColor Yellow; exit 1 }
 
-$daws = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(FL64|FL|Ableton.*|reaper|Bitwig.*|Cubase.*|Studio One|Terrain)$' }
+$daws = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(FL64|FL|Ableton.*|reaper|Bitwig.*|Cubase.*|Studio One|Terrain|Terrain FX)$' }
 if ($daws) {
     Write-Host ("Close these first (Windows locks a loaded plugin): " + (($daws | Select-Object -ExpandProperty ProcessName -Unique) -join ', ')) -ForegroundColor Red
     exit 1
@@ -70,6 +70,8 @@ Write-Host "Downloading build $sha ($($run.createdAt))..." -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { Write-Host "Download failed." -ForegroundColor Red; exit 1 }
 # Terrain Glitch + Terrain Chop ship as their own artifact since fb636 (absent on older runs - not an error).
 & gh run download $run.databaseId --repo $Repo --name TerrainFX-cards-windows-vst3 --dir (Join-Path $tmp 'cards') *> $null
+# tpfx — Terrain FX (the Patcher as an effect) is its own artifact too (absent on runs before it - not an error).
+& gh run download $run.databaseId --repo $Repo --name TerrainFX-windows-vst3 --dir (Join-Path $tmp 'fx') *> $null
 
 $vst3Dst  = 'C:\Program Files\Common Files\VST3'
 $bundles  = Get-ChildItem -Path $tmp -Recurse -Directory -Filter '*.vst3' | Where-Object { $_.Parent.Name -eq 'VST3' }
@@ -105,6 +107,15 @@ if ($exe) {
     New-Item -ItemType Directory -Path $sa -Force | Out-Null
     Copy-Item -Path (Join-Path $exe.Directory.FullName '*') -Destination $sa -Recurse -Force
     Write-Host "Standalone: $sa\Terrain.exe" -ForegroundColor Green
+}
+
+# tpfx — the Terrain FX standalone, beside Terrain's
+$fxExe = Get-ChildItem -Path $tmp -Recurse -File -Filter 'Terrain FX.exe' | Select-Object -First 1
+if ($fxExe) {
+    $saFx = Join-Path $env:LOCALAPPDATA 'Terrain FX\Standalone'
+    New-Item -ItemType Directory -Path $saFx -Force | Out-Null
+    Copy-Item -Path (Join-Path $fxExe.Directory.FullName '*') -Destination $saFx -Recurse -Force
+    Write-Host "Standalone: $saFx\Terrain FX.exe" -ForegroundColor Green
 }
 
 Remove-Item -Recurse -Force $tmp

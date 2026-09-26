@@ -311,6 +311,9 @@ static juce::StringArray terrainFilterEngineNames()
 //==============================================================================
 TerrainAudioProcessor::TerrainAudioProcessor()
     : AudioProcessor (BusesProperties()
+                      #if TERRAIN_FX   // tpfx — Terrain FX: the host's audio comes IN (it is the Patcher's "Audio In")
+                       .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+                      #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
 
       apvts (*this, nullptr, "Parameters", createParameterLayout())
@@ -775,6 +778,9 @@ static juce::File terrainCaptureDirP()
 {
     const auto wc     = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
                           .getChildFile ("Waves Crate");
+   #if TERRAIN_FX
+    return wc.getChildFile ("Terrain FX");                         // tpfx — the effect's captures, never the synth's
+   #endif
     const auto legacy = wc.getChildFile ("Terrain Instrument");    // fb605 — the owner's captures
     if (legacy.exists()) return legacy;
     return wc.getChildFile ("Terrain");                            // fb605 — what a new user sees
@@ -6799,7 +6805,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_FREEZE, 1 }, "Reverb Freeze", false));
     // fb287 device POWER + DUCK. fb303 — POWER default OFF: a fresh patch is DRY; turning a device ON with no
     // route pills = MAIN SEND (whole synth through it). Existing saved projects restore their own power state.
+   #if TERRAIN_FX
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_POWER,  1 }, "Reverb Power",  true));    // tpfx — the default patch's Reverb is on
+   #else
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_POWER,  1 }, "Reverb Power",  false));
+   #endif
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_DUCK,   1 }, "Reverb Duck",   false));
 
     // ════════ FX RACK · DELAY — fb296. setSynParam-only; choices = INDEX; routes default OFF; parallel to reverb. ════════
@@ -6939,7 +6949,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         // 🔑 DEFAULT = NOT IN THE CHAIN. Max's spec: "whenever I open up Terrain … I should see a big
         // plus button" — a fresh instance boots with an EMPTY rack. Pre-fb346 sessions are migrated in
         // setStateInformation (they predate these params, so absence == "the old 3-device rack").
+       #if TERRAIN_FX
+        addChainSlot (ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_RVB_RANK, "Reverb",     true,  0.10f);   // tpfx — the default patch's Reverb
+       #else
         addChainSlot (ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_RVB_RANK, "Reverb",     false, 0.10f);
+       #endif
         addChainSlot (ParameterIDs::SYN_DLY_ACTIVE, ParameterIDs::SYN_DLY_RANK, "Delay",      false, 0.20f);
         addChainSlot (ParameterIDs::SYN_DST_ACTIVE, ParameterIDs::SYN_DST_RANK, "Distortion", false, 0.30f);
 
@@ -8208,9 +8222,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     //  🔑 DECLARED LAST, ON PURPOSE. Every other parameter's index is unchanged by this block, so a
     //  host project automating an existing parameter by index still points at the same control.
     {
+       #if TERRAIN_FX
+        // tpfx — THE DEFAULT PATCH IS A PARAMETER DEFAULT: Audio In (chop layer A = the host input) feeds the
+        //  first Reverb. Init / a fresh instance / a headless render all start Audio In → Reverb → Audio Out.
+        auto CH = [&layoutReal] (const juce::String& id, const juce::String& nm)
+        { layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id + "_CHOPS", 1 },
+                                                                     nm + " Chop Sources", 0, 15, id == "SYN_RVB" ? 1 : 0)); };
+       #else
         auto CH = [&layoutReal] (const juce::String& id, const juce::String& nm)
         { layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { id + "_CHOPS", 1 },
                                                                      nm + " Chop Sources", 0, 15, 0)); };
+       #endif
         static const std::pair<const char*, const char*> kCKinds[] = {
             { "SYN_RVB", "Reverb" }, { "SYN_DLY", "Delay" }, { "SYN_DST", "Distortion" }, { "SYN_GRN", "Granular" },
             { "SYN_TPE", "Tape" }, { "SYN_FLT", "Filter" }, { "SYN_CHO", "Chorus" }, { "SYN_FLA", "Flanger" },
@@ -10252,6 +10274,9 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     // then the results are summed (with mixer math) into the master `buffer`.
     for (auto& buf : layerScratch)
         buf.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);
+   #if TERRAIN_FX
+    fxIn_.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);   // tpfx — the Audio In
+   #endif
 
     for (auto& layer : layers)
         layer.synth.setCurrentPlaybackSampleRate (sampleRate);
@@ -10639,7 +10664,15 @@ bool TerrainAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) 
     // Instrument: only require mono or stereo output. No input bus check —
     // instruments don't have an audio input bus (host disables it).
     const auto out = layouts.getMainOutputChannelSet();
+   #if TERRAIN_FX
+    // tpfx — the effect: stereo out (the chain is stereo end to end), stereo or mono in (a mono input is
+    //  copied to both sides at the Audio In). No disabled input — an effect with no input has nothing to do.
+    const auto in = layouts.getMainInputChannelSet();
+    return out == juce::AudioChannelSet::stereo()
+        && (in == juce::AudioChannelSet::stereo() || in == juce::AudioChannelSet::mono());
+   #else
     return out == juce::AudioChannelSet::mono() || out == juce::AudioChannelSet::stereo();
+   #endif
 }
 
 // ── CPU: equality for the ModConfig broadcast change-gate (field-wise — memcmp is unsafe
@@ -11032,6 +11065,55 @@ double TerrainAudioProcessor::tailWindowSeconds() const noexcept
 //  browser preview, a slice audition, the tape loop, live input on the input bus, a patch load's flush, the
 //  setting being turned off, or an offline render (a bounce is never slept). The capture ring still receives
 //  the silence, so an export keeps its timeline.
+#if TERRAIN_FX
+//  tpfx — THE AUDIO IN. Copies this block's host input (a mono input onto both sides) into fxIn_, which the
+//  layer stage hands on as chop layer A, and reads it for the three things a synth gets from its notes:
+//    · fxFollow_  — a peak follower (instant attack, the voices' kFollowReleaseMs release): every Follower
+//    · fxTrigOn_  — a TRANSIENT: the fast envelope (instant attack, 5 ms release) jumps 2x (+6 dB) over the
+//                   slow one (20 ms attack, 250 ms release) above -50 dBFS, at most every 60 ms: a note-on
+//                   for the mono envelope pool, a new Random 1-4 draw, an Alt flip
+//    · fxTrigOff_ — the input has sat under -60 dBFS for 60 ms: the note-off
+//  Block-rate triggers (the pool itself retriggers per block). No allocation; ~6 flops a sample.
+void TerrainAudioProcessor::fxAnalyseInput (const juce::AudioBuffer<float>& buffer, int numSamples) noexcept
+{
+    if (fxIn_.getNumSamples() < numSamples || fxIn_.getNumChannels() < 2)
+        fxIn_.setSize (2, numSamples, false, true, true);   // a host that lies about its block size
+    const int nIn = juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels());
+    if (nIn <= 0) { fxIn_.clear (0, numSamples); }
+    else
+    {
+        fxIn_.copyFrom (0, 0, buffer, 0, 0, numSamples);
+        fxIn_.copyFrom (1, 0, buffer, nIn > 1 ? 1 : 0, 0, numSamples);
+    }
+    const float* L = fxIn_.getReadPointer (0);
+    const float* R = fxIn_.getReadPointer (1);
+    const double sr = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    const float fastRel = 1.0f - std::exp (-1.0f / (float) (0.005 * sr));
+    const float slowAtk = 1.0f - std::exp (-1.0f / (float) (0.020 * sr));
+    const float slowRel = 1.0f - std::exp (-1.0f / (float) (0.250 * sr));
+    const float folRel  = 1.0f - std::exp (-1.0f / (float) (25.0 * 0.001 * sr));   // = SynthVoice kFollowReleaseMs
+    const int   refr    = (int) (0.060 * sr);
+    bool on = false;
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const float a = juce::jmax (std::fabs (L[i]), std::fabs (R[i]));
+        fxFast_   = (a > fxFast_)   ? a : fxFast_   + (a - fxFast_)   * fastRel;
+        fxSlow_  += (a - fxSlow_) * ((a > fxSlow_) ? slowAtk : slowRel);
+        fxFollow_ = (a > fxFollow_) ? a : fxFollow_ + (a - fxFollow_) * folRel;
+        if (fxHold_ > 0) --fxHold_;
+        else if (fxFast_ > 0.00316f && fxFast_ > 2.0f * fxSlow_) { on = true; fxHold_ = refr; }
+        fxQuiet_ = (fxFast_ < 0.001f) ? juce::jmin (fxQuiet_ + 1, 1 << 30) : 0;   // capped: hours of silence with Sleep off
+    }
+    if (! (fxFast_ > 1.0e-12f)) fxFast_ = 0.0f;       // denormal / NaN guard on the recursions
+    if (! (fxSlow_ > 1.0e-12f)) fxSlow_ = 0.0f;
+    if (! (fxFollow_ > 1.0e-12f)) fxFollow_ = 0.0f;
+    fxTrigOn_  = on;
+    fxTrigOff_ = ! on && fxGate_ && fxQuiet_ >= refr;
+    if (on)         { fxGate_ = true; fxSeed_ = fxSeed_ * 1664525u + 1013904223u; fxAlt_ = fxAlt_ > 0.5f ? 0.0f : 1.0f; }
+    if (fxTrigOff_) fxGate_ = false;
+}
+#endif
+
 bool TerrainAudioProcessor::sleepGate (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi) noexcept
 {
     bool playing = false;
@@ -11407,8 +11489,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+   #if TERRAIN_FX
+    midiMessages.clear();   // tpfx — an effect: nothing may start a voice (no host MIDI, no computer keyboard)
+    if (false)
+   #else
     // fb484 — standalone QWERTY-to-MIDI: drain the key-note ring into the normal MIDI stream.
     if (wrapperType == wrapperType_Standalone)
+   #endif
     {
         int r = qwertyR_.load (std::memory_order_relaxed);
         const int w = qwertyW_.load (std::memory_order_acquire);
@@ -11425,6 +11512,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // tp103 — Settings → Performance → Sleep when silent. After the QWERTY drain (a computer-keyboard note
     // wakes it like any MIDI) and before anything writes the output. Asleep = silence + the capture timeline.
     if (sleepGate (buffer, midiMessages)) return;
+   #if TERRAIN_FX
+    fxAnalyseInput (buffer, numSamples);   // tpfx — keep the host input (the Audio In) before anything writes the buffer
+   #endif
     // tp103 — Settings → Performance → Playing / Bounce quality: the voice filter's 2× policy for this block.
     filterOsPolicy_.store ((isNonRealtime() && offQuality_.load (std::memory_order_relaxed) >= 1)
                                ? 2 : rtQuality_.load (std::memory_order_relaxed), std::memory_order_relaxed);
@@ -11900,6 +11990,41 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // Task 9 complete: each layer now receives its own per-layer SliceContext.
     buffer.clear();   // master starts silent; we sum each layer into it below
 
+   #if TERRAIN_FX
+    // ══ tpfx — THE AUDIO IN IS CHOP LAYER A ═════════════════════════════════════════════════════════
+    //  The host input takes layer A's seat (Sampler A on the canvas, named "Audio In"), so every piece of
+    //  tp56/tp61's machinery carries it with no new router: a cable = the device's _CHOPS bit, it ENTERS the
+    //  chain at the first device claiming it and travels on through fxTopo_'s feeds, a flow card (Glitch /
+    //  Shaper) takes it through FLOW_*_CHOPS, and NO cable = the Chop page's dry law — it sums straight into
+    //  the master here, at unity: an empty chain is the input, bit for bit. The four sampler layers do not
+    //  render at all in the effect (no Chop page, no notes).
+    {
+        auto& scratch = layerScratch[0];
+        if (scratch.getNumSamples() < numSamples || scratch.getNumChannels() < 2)
+            scratch.setSize (2, numSamples, false, true, true);   // a host that lies about its block size
+        scratch.copyFrom (0, 0, fxIn_, 0, 0, numSamples);
+        scratch.copyFrom (1, 0, fxIn_, 1, 0, numSamples);
+        if ((chopRoutedMask_ & 1u) != 0u)
+        {
+            chopLive_[0] = true; chopGainL_[0] = 1.0f; chopGainR_[0] = 1.0f;
+        }
+        else
+        {
+            buffer.copyFrom (0, 0, scratch, 0, 0, numSamples);
+            if (buffer.getNumChannels() > 1) buffer.copyFrom (1, 0, scratch, 1, 0, numSamples);
+        }
+        if (vizLive)   // the Audio In module's meter (getLayerPeakLevels, layer A) — the mixer strip's own curve
+        {
+            const double blockSec = (double) numSamples / juce::jmax (1.0, getSampleRate());
+            const float  decay    = (float) std::exp (-blockSec / 0.065);
+            auto& layer = layers[0];
+            const float visL = juce::jmin (1.0f, std::sqrt (scratch.getMagnitude (0, 0, numSamples)) * 1.6f);
+            const float visR = juce::jmin (1.0f, std::sqrt (scratch.getMagnitude (1, 0, numSamples)) * 1.6f);
+            layer.peakLevelL.store (juce::jmax (visL, layer.peakLevelL.load (std::memory_order_relaxed) * decay), std::memory_order_relaxed);
+            layer.peakLevelR.store (juce::jmax (visR, layer.peakLevelR.load (std::memory_order_relaxed) * decay), std::memory_order_relaxed);
+        }
+    }
+   #else
     {
         const bool anySolo = std::any_of (layers.begin(), layers.end(),
                                            [](const tw::LayerState& l){ return l.solo.load(); });
@@ -12056,6 +12181,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             }
         }
     }
+   #endif   // tpfx
 
     TI_PROF ("layers");
     // ── Synth section render (Phase 1 MPV) ──────────────────────────────
@@ -12227,6 +12353,22 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     terrain_setEnvDAHDSR (monoDynEnv_[k], de.dl, de.a, de.h, de.d, de.s, de.r, de.ca, de.cd, de.cr, de.loop);
                 }
                 // ANY note-on retriggers the pool; the last note-off releases it.
+               #if TERRAIN_FX
+                // tpfx — THE EFFECT HAS NO NOTES: a transient on the Audio In is the note-on, the input falling
+                //  quiet is the note-off (fxAnalyseInput). Same pool, same click-free retrigger from the level.
+                if (fxTrigOn_)
+                {
+                    monoHeld_ = 1;
+                    for (int k = 0; k < 5; ++k)           if (gm & (1u << k))       monoLegEnv_[k].noteOn();
+                    for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) monoDynEnv_[k].noteOn();
+                }
+                else if (fxTrigOff_ && monoHeld_ > 0)
+                {
+                    monoHeld_ = 0;
+                    for (int k = 0; k < 5; ++k)           if (gm & (1u << k))       monoLegEnv_[k].noteOff();
+                    for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) monoDynEnv_[k].noteOff();
+                }
+               #endif
                 for (const auto meta : midiMessages)
                 {
                     const auto msg = meta.getMessage();
@@ -14411,6 +14553,33 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else if (ce.kind == 2) { if (ce.inst == 1) dstChopEntry_  = ec; else poolChopEntry_[(size_t) (kFxExtra + ce.inst - 2)] = ec; }
             else if (ce.kind >= 3 && ce.kind < 19) poolChopEntry_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)] = ec;
         }
+       #if TERRAIN_FX
+        // ══ tpfx — THE AUDIO IN NEVER VANISHES ══════════════════════════════════════════════════════
+        //  The layer stage took the Audio In out of the dry mix because some _CHOPS mask names it. If the
+        //  device it ENTERS is not running (taken out of the chain with its cable left behind, or bypassed),
+        //  nothing would ever play it: in an effect that is a dead plugin, so it goes back to the dry path
+        //  here — the same unity sum the layer stage makes, so it is still the input bit for bit.
+        if ((chopRoutedMask_ & 1u) != 0u && chopLive_[0])
+        {
+            auto runs = [this] (const ChainEntry& ce) noexcept -> bool
+            {
+                if (ce.kind == 0) return ce.inst == 1 ? hallRouteActive_ : poolRouteAny_[(size_t) (2 * kFxExtra + ce.inst - 2)];
+                if (ce.kind == 1) return ce.inst == 1 ? dlyRouteActive_  : poolRouteAny_[(size_t) (ce.inst - 2)];
+                if (ce.kind == 2) return ce.inst == 1 ? dstRouteActive_  : poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)];
+                if (ce.kind >= 3 && ce.kind < 19) return poolRouteAny_[(size_t) (kBaseOf[ce.kind] + ce.inst - 1)];
+                return false;
+            };
+            bool entered = false;
+            for (int c = 0; c < n && ! entered; ++c)
+                entered = ((fxTopo_.entry[c] >> (unsigned) tw::FxChainTopology::kChopShift) & 1u) != 0u && runs (chainOrder_[(size_t) c]);
+            if (! entered)
+            {
+                chopLive_[0] = false;   // nothing downstream feeds it now
+                buffer.addFrom (0, 0, fxIn_, 0, 0, numSamples);
+                if (buffer.getNumChannels() > 1) buffer.addFrom (1, 0, fxIn_, 1, 0, numSamples);
+            }
+        }
+       #endif
         resolveLanes();   // fb444 — turn the flat card list into Splitter lane ownership
         // tp30 — which chain slot each audio FLOW card landed in this block (-1 = not in the chain).
         //  The deferred pass walks THIS, in chain order, so a flow card fed by an upstream flow card
@@ -15046,6 +15215,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         randSeedVis_.store ((any && bestVoice != nullptr) ? bestVoice->getNoteSeed() : 0u, std::memory_order_relaxed);   // fb572 — the seed, hashed per route by the readers
         randSeedLive_.store ((any && bestVoice != nullptr) ? 1 : 0, std::memory_order_relaxed);
         altVis_.store ((any && bestVoice != nullptr) ? bestVoice->getAlt01() : 0.f, std::memory_order_relaxed);
+       #if TERRAIN_FX
+        // tpfx — NO VOICE EVER SOUNDS IN THE EFFECT, so the voice-borne sources read the Audio In instead:
+        //  every follower follows the input (the voice's own peak law: instant attack, kFollowReleaseMs
+        //  release), and Random 1-4 / Alt draw a new value on every input transient (the effect's note-on).
+        for (int fk = 0; fk < wc::kNumFollowers; ++fk) followVis_[fk].store (juce::jlimit (0.0f, 1.0f, fxFollow_), std::memory_order_relaxed);
+        randSeedVis_.store (fxSeed_, std::memory_order_relaxed);
+        randSeedLive_.store (1, std::memory_order_relaxed);
+        altVis_.store (fxAlt_, std::memory_order_relaxed);
+       #endif
         if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
         {
             ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
@@ -16464,6 +16642,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // Independent of tapeOn so the EQ panel works even when the tape
         // section is toggled off. Master gate is EQ_MASTER_BYPASS only.
         // The per-band/per-cut params and analyzer feeds tap around this.
+       #if TERRAIN_FX
+        if (false)   // tpfx — Terrain FX has no EQ page: the synth's master EQ never runs (its flat biquads are not a wire, ~-80 dB)
+       #endif
         {
             const float hpF    = smoothedEqHpFreq.getNextValue();
             const float lpF    = smoothedEqLpFreq.getNextValue();
@@ -17561,7 +17742,11 @@ juce::AudioProcessorEditor* TerrainAudioProcessor::createEditor()
 bool TerrainAudioProcessor::hasEditor() const { return true; }
 
 const juce::String TerrainAudioProcessor::getName() const { return JucePlugin_Name; }
+#if TERRAIN_FX
+bool TerrainAudioProcessor::acceptsMidi() const { return false; }   // tpfx — audio in, audio out (aufx / Fx)
+#else
 bool TerrainAudioProcessor::acceptsMidi() const { return true; }
+#endif
 bool TerrainAudioProcessor::producesMidi() const { return false; }
 bool TerrainAudioProcessor::isMidiEffect() const { return false; }
 double TerrainAudioProcessor::getTailLengthSeconds() const { return 5.0; }
@@ -21334,6 +21519,11 @@ juce::File TerrainAudioProcessor::getUserPresetsFile() const
     // file, save-from-one would clobber/merge incompatibly with the other.
     // fb605 — and that is exactly why terrainNoizefieldDirP() resolves LEGACY-FIRST: the new
     // short name "Terrain" is the folder the sentence above is warning about. Nothing moved.
+   #if TERRAIN_FX
+    // tpfx — the new Terrain FX never reads the synth's or the old FX's store: its own folder.
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("WavesCrate").getChildFile ("Terrain FX").getChildFile ("UserPresets.xml");
+   #endif
     return terrainNoizefieldDirP().getChildFile ("UserPresets.xml");
 }
 
@@ -22006,6 +22196,12 @@ bool TerrainAudioProcessor::readPatchHeader (const juce::File& f, juce::String& 
 //  gone (an unplugged drive) saving still lands in the default rather than failing, and the page says which is live.
 juce::File TerrainAudioProcessor::banksUserRoot()
 {
+   #if TERRAIN_FX
+    // tpfx — Terrain FX keeps its OWN bank, never the synth's (and never a folder the synth's Settings moved):
+    //  ~/Library/WavesCrate/Terrain FX/Banks (%APPDATA%\WavesCrate\Terrain FX\Banks on Windows).
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("WavesCrate").getChildFile ("Terrain FX").getChildFile ("Banks");
+   #endif
     const auto o = tw::prefs::libraryOverride (tw::prefs::Lib::presets);
     return o.isDirectory() ? o : terrainDataDirP().getChildFile ("Banks");
 }
@@ -22017,6 +22213,9 @@ juce::File TerrainAudioProcessor::userSamplesRoot()
 
 juce::File TerrainAudioProcessor::banksFactoryRoot()
 {
+   #if TERRAIN_FX
+    return {};   // tpfx — no factory FX presets yet (Max makes the first ones); never the synth's banks
+   #endif
     // tp103 — a factory library moved out of the bundle (Settings → Where things live) is a folder holding Banks/
     if (const auto o = tw::prefs::libraryOverride (tw::prefs::Lib::factory); o.getChildFile ("Banks").isDirectory())
         return o.getChildFile ("Banks");

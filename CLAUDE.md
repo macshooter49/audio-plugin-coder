@@ -134,9 +134,14 @@ Same for the `.component`. If pluginval `Open plugin (cold)` fails with exit 137
   bundle `com.wavescrate.terrain`, PRODUCT_NAME "Terrain", AU `aumu` subtype `Tern`.
   Build with `Terrain_VST3` / `Terrain_AU`. (fb605 — was "Terrain Instrument" in
   `plugins/Terrain/`. The rename is DONE. **Do not revert it.**)
-- **`Terrain FX`** = the separate **FX/sampler** plugin. Dir `plugins/TerrainFX/`, target
-  `TerrainFX`, bundle `com.wavescrate.terrainfx`, AU `aufx` subtype `Trrn`. Different
-  plugin, different source. (fb605 — was plain "Terrain" in `plugins/Terrain/`.)
+- **`Terrain FX`** = **the Terrain Patcher as an audio effect** (tpfx, 2026-09-26): target
+  `TerrainFX`, declared in `plugins/Terrain/CMakeLists.txt` and built from the SYNTH'S OWN
+  sources with `TERRAIN_FX=1` (every difference is `#if TERRAIN_FX`; the synth target compiles
+  exactly what it did). Bundle `com.wavescrate.terrainfx`, AU `aufx` subtype `Trrn`, mfr `Wvcr`
+  — the identity the old FX/sampler plugin held. That old plugin (`plugins/TerrainFX/`, never
+  released) keeps its source in the repo but the root CMakeLists skips it; do not re-enable it
+  (two targets cannot own one identity). Build `TerrainFX_VST3` / `TerrainFX_AU` /
+  `TerrainFX_Standalone`. (fb605 — the old one was plain "Terrain" in `plugins/Terrain/`.)
 - **Resynth** is the engine's name. It was called Geode; that name is retired.
   ⛔ The `SYN_OSC_*_GEODE_*` parameter IDs stay `GEODE` on disk forever — they are in every
   saved patch. Rename labels, never IDs.

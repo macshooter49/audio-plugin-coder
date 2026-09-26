@@ -28,7 +28,8 @@
 #  ── WHAT IT READS ────────────────────────────────────────────────────────────────────────────
 #  Nothing is trusted twice. The frozen constants below are the ONLY hardcoded values; every
 #  other number is read off disk:
-#    · plugins/Terrain/CMakeLists.txt   and  plugins/TerrainFX/CMakeLists.txt  (the declaration)
+#    · plugins/Terrain/CMakeLists.txt — BOTH declarations since tpfx: juce_add_plugin(Terrain ...) and
+#      juce_add_plugin(TerrainFX ...) (Terrain FX is built from the synth's sources; plugins/TerrainFX no longer builds)
 #    · build/.../Terrain.vst3/Contents/Resources/moduleinfo.json               (the ARTEFACT)
 #    · build/.../Terrain.component/Contents/Info.plist                         (the ARTEFACT)
 #    · the two INSTALLED bundles, when they are installed                      (what Max loads)
@@ -74,6 +75,7 @@ SYNTH = dict(
                 'ABCDEF011234ABCD577663725465726E'],   # Component Controller Class
 )
 FX = dict(
+    dir      = 'Terrain',                   # tpfx: built by plugins/Terrain from the synth's sources (was plugins/TerrainFX)
     target   = 'TerrainFX',                 # fb605: was Terrain
     product  = 'Terrain FX',                # fb605: was "Terrain"
     bundleid = 'com.wavescrate.terrainfx',
@@ -96,9 +98,14 @@ def note(msg):
     print(f"        {msg}")
 
 # ── readers ───────────────────────────────────────────────────────────────────────────────────
-def read_cmake(path, mutate_code=None):
-    """PLUGIN_CODE / PLUGIN_MANUFACTURER_CODE / BUNDLE_ID / PRODUCT_NAME, as DECLARED."""
+def read_cmake(path, mutate_code=None, target=None):
+    """PLUGIN_CODE / PLUGIN_MANUFACTURER_CODE / BUNDLE_ID / PRODUCT_NAME, as DECLARED.
+    tpfx — `target` reads the juce_add_plugin(<target> ...) block of a file that declares several plugins
+    (plugins/Terrain/CMakeLists.txt declares Terrain AND TerrainFX); None = the first declaration."""
     txt = open(path, encoding='utf-8').read()
+    if target:
+        m = re.search(r'juce_add_plugin\(\s*' + re.escape(target) + r'\b(.*?)\n\s*\)', txt, re.S)
+        txt = m.group(1) if m else ''
     def one(key, quoted=False):
         m = re.search(r'^\s*' + key + r'\s+' + (r'"([^"]+)"' if quoted else r'(\S+)'),
                       txt, re.M)
@@ -133,8 +140,8 @@ def cid_tail_ascii(cid):
     try:    return bytes.fromhex(cid[-16:]).decode('ascii')
     except Exception: return '<not ascii>'
 
-def artefact(target, product, kind):
-    base = os.path.join(BUILD, 'plugins', target, f'{target}_artefacts', 'Release')
+def artefact(target, product, kind, pdir=None):
+    base = os.path.join(BUILD, 'plugins', pdir or target, f'{target}_artefacts', 'Release')
     if kind == 'vst3':
         return os.path.join(base, 'VST3', f'{product}.vst3', 'Contents', 'Resources', 'moduleinfo.json')
     return os.path.join(base, 'AU', f'{product}.component', 'Contents', 'Info.plist')
@@ -157,10 +164,10 @@ note(f"PRODUCT_NAME={cm_s['product']!r} · BUNDLE_ID={cm_s['bundleid']!r}  <- fb
      "and that is the point: they are presentation, the codes are identity")
 
 # ── [1] the FX's declared codes ───────────────────────────────────────────────────────────────
-cm_f = read_cmake(os.path.join(REPO, 'plugins', 'TerrainFX', 'CMakeLists.txt'),
-                  mutate_code='Trrx' if MUT == 'fx' else None)
+cm_f = read_cmake(os.path.join(REPO, 'plugins', FX['dir'], 'CMakeLists.txt'),
+                  mutate_code='Trrx' if MUT == 'fx' else None, target=FX['target'])
 ok = cm_f['code'] == FX['code'] and cm_f['mfr'] == FX['mfr']
-chk(ok, '[1]  plugins/TerrainFX/CMakeLists.txt still declares the FROZEN FX codes',
+chk(ok, f"[1]  plugins/{FX['dir']}/CMakeLists.txt juce_add_plugin({FX['target']}) still declares the FROZEN FX codes",
     f"PLUGIN_CODE={cm_f['code']} (frozen {FX['code']}) · "
     f"PLUGIN_MANUFACTURER_CODE={cm_f['mfr']} (frozen {FX['mfr']})")
 note(f"PRODUCT_NAME={cm_f['product']!r} · BUNDLE_ID={cm_f['bundleid']!r}")
@@ -181,7 +188,7 @@ else:
 
 # ── [3] THE MECHANISM: the UID is a function of the CODES, not of the name ────────────────────
 want_s, want_f = SYNTH['mfr'] + SYNTH['code'], FX['mfr'] + FX['code']
-mi_f = artefact(FX['target'], FX['product'], 'vst3')
+mi_f = artefact(FX['target'], FX['product'], 'vst3', FX['dir'])
 f_name, f_cids = (read_moduleinfo(mi_f) if os.path.isfile(mi_f) else (None, []))
 tails = [(c, cid_tail_ascii(c), want_s) for c in s_cids] + \
         [(c, cid_tail_ascii(c), want_f) for c in f_cids]
@@ -220,7 +227,7 @@ else:
     note(f"moduleinfo Name={f_name!r}  <- fb605 renamed it from 'Terrain' to 'Terrain FX'")
 
 # ── [6] the BUILT FX AU quad ──────────────────────────────────────────────────────────────────
-ap_f = artefact(FX['target'], FX['product'], 'au')
+ap_f = artefact(FX['target'], FX['product'], 'au', FX['dir'])
 if not os.path.isfile(ap_f):
     chk(False, '[6]  the built FX AU reports aufx / Trrn / Wvcr', f'NOT BUILT — no {ap_f}')
 else:

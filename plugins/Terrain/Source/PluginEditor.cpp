@@ -107,7 +107,11 @@ static juce::File sampleFactoryRoot()
 static juce::File terrainSettingsFile()
 {
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+            #if TERRAIN_FX
+             .getChildFile ("Waves Crate").getChildFile ("Terrain FX")   // tpfx — the effect's own Settings (= TerrainGlobalPrefs.h)
+            #else
              .getChildFile ("Waves Crate").getChildFile ("Terrain")
+            #endif
              .getChildFile ("InstrumentSettings.json");
 }
 
@@ -176,6 +180,9 @@ static juce::File terrainCaptureDir()
 {
     const auto wc     = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
                           .getChildFile ("Waves Crate");
+   #if TERRAIN_FX
+    return wc.getChildFile ("Terrain FX");                         // tpfx — the effect's captures (= PluginProcessor.cpp)
+   #endif
     const auto legacy = wc.getChildFile ("Terrain Instrument");    // fb605 — the owner's captures
     if (legacy.exists()) return legacy;
     return wc.getChildFile ("Terrain");                            // fb605 — what a new user sees
@@ -8552,6 +8559,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     // Inject saved theme into HTML so the page loads with the correct theme from frame one
     if (tiDark)
         html = html.replace("<html lang=\"en\">", "<html lang=\"en\" data-theme=\"dark\">");
+   #if TERRAIN_FX
+    // tpfx — the ONE switch the page reads (with ?fx=1 from bootUrl as its twin): this binary is Terrain FX.
+    html = html.replaceFirstOccurrenceOf ("<head>", "<head><script>window.__TERRAIN_FX=1;</script>");
+   #endif
 
     // Inject JS-side file drag-drop bridge (Phase C — Task 11). WKWebView
     // intercepts native file drops at the OS level, so we have to handle them
@@ -17059,6 +17070,9 @@ juce::String TerrainUiCore::bootUrl() const
     juce::StringArray q;
     if (const int pg = audioProcessor.uiPage.load (std::memory_order_relaxed); pg > 0)
         q.add ("page=" + juce::String (pg));
+   #if TERRAIN_FX
+    q.add ("fx=1");   // tpfx — Terrain FX: the page boots on the Patcher, effects only
+   #endif
     q.add ("z=" + juce::String (dprZoom_, 4));
    #if JUCE_MAC
     if (std::getenv ("TERRAIN_ZOOM_KILL") == nullptr)   // fb176 diag: native zoom neutered, the fallback must stay live
