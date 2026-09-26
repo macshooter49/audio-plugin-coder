@@ -16,8 +16,17 @@
       if (A.preset) { await NF('loadPatchFile')(A.preset); await wait(2500); }
       if (typeof setActivePanel === 'function') setActivePanel('syn'); await wait(1200);
       out.syn = marks(); document.title = 'tpzP:syn'; await wait(1500);
+      if (A.silent) { document.title = 'tpzP:cpu-silent'; await wait(2500); }   /* the harness releases the chord: an idle page, like Max's */
       setActivePanel('tp'); await wait(2500);
       out.tp = marks(); out.view = window.__tpView ? window.__tpView() : null; out.moving = !!window.__tpMoving; out.frozen = !!window.__tiFrozen;
+      /* pan with the trackpad (wheel over blank canvas) and zoom (ctrl-wheel), as a hand does, then let it settle */
+      var pg = document.getElementById('tp-page'), pr = pg.getBoundingClientRect(), x = pr.left + 30, y = pr.top + 60;
+      function wh(dx, dy, ctrl){ var t = document.elementFromPoint(x, y) || pg; t.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: x, clientY: y, deltaX: dx, deltaY: dy, deltaMode: 0, ctrlKey: !!ctrl, view: window })); }
+      for (var i = 0; i < 30; i++) { wh(-6, -5); await wait(16); if (i === 20) { out.mid = marks(); out.midMoving = !!window.__tpMoving; } }   /* MID-GLIDE: Max's video */
+      for (var j = 0; j < 20; j++) { wh(0, 4, true); await wait(16); }
+      await wait(900);
+      out.pan = marks(); out.view2 = window.__tpView ? window.__tpView() : null;
+      document.title = 'tpzP:panned'; await wait(1500);
       document.title = 'tpzP:tp'; await wait(1500);
     } catch (e) { out.errs.push(String(e.message)); }
     pub(); setTimeout(pub, 600);

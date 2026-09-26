@@ -294,8 +294,12 @@
     motionStep();                    /* fb636 — THE MOTION CLOCK (below) steps once per painter pass, glass or not, so its envelope stays true */
     if (window.__tiFrozen) return;   /* fb620 — the preset browser's glass covers every painter; nothing under it needs a frame */
     lastRunAt = nowMs();
-    if (window.__tpMoving) return;   /* tp110 — the Patcher's view is gliding: every picture holds (see __tpMoving) */
-    var lod = ! full && window.__tpLod;
+    /* tp110 — the Patcher's view is gliding: every picture holds (see __tpMoving) … tp112d — EXCEPT the screen-space overlays.
+       Max's video: dragging the canvas left a purple mod mark floating where the knob WAS until the glide settled. The marks
+       (.sm-ul) are position:fixed, not children of the moving world, so a held mark is a mark left behind; they (and the
+       footer meters) keep running every frame of a glide, exactly as they do in the far view. */
+    var lod = ! full && (window.__tpLod || window.__tpMoving);
+    if (window.__tpMoving) { reg.forEach(function(fn, name){ try { if (LOD_KEEP[name]) fn(ts); } catch(e) {} }); return; }
     reg.forEach(function(fn, name){ try { if (! lod || LOD_KEEP[name]) fn(ts); } catch(e) {} });
   }
   window.__tiFrameReg   = function(name, fn){ reg.set(name, fn); };
