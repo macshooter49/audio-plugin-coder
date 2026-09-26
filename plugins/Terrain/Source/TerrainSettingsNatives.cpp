@@ -565,10 +565,19 @@ juce::WebBrowserComponent::Options TiSettingsNatives::add (TerrainUiCore& core, 
 //  The chosen width becomes THIS window's intended size at once and this instance's remembered one; new instances
 //  read the global choice in TerrainUiCore::bootWidth(). Same bookkeeping as a real drag (resized()), so the size
 //  heal defends it instead of undoing it.
+/* tpsz — THE RULE, stated once: a Terrain window opens at (1) the size you DRAGGED this instance to, if you
+   ever did (saved with the project); otherwise (2) Settings → Interface → Window size; otherwise (3) 100 %.
+   Choosing a Window size is the global choice, so it must not ALSO pin this one instance: tp103 stored it
+   as this instance's own drag size, and from then on that instance ignored every later Window-size choice
+   made in any other window — two instances of the same session opening at different sizes, the "sometimes
+   it opens bigger" Max reported. Now the pick resizes this window, and this instance forgets any size of its
+   own and follows the global choice like every other un-dragged instance. The size heal defends it
+   (healTicks_), exactly as it defends a fresh instance's Settings size. */
 void TerrainAudioProcessorEditor::applyChosenWidth (int w)
 {
-    userSized_ = true;
+    userSized_ = false;
     intendedW_ = w;
-    audioProcessor.editorWidth.store (w);
+    audioProcessor.editorWidth.store (0);
     setSize (w, juce::roundToInt (w * 672.0 / 820.0));
+    traceSize ("settings: window size");
 }

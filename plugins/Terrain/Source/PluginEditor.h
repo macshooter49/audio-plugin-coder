@@ -996,6 +996,10 @@ private:
     // tp34 — PER-STATEMENT IDLE-SKIP (see reduceFrame): the last shipped hash of every frame statement, by key
     std::unordered_map<std::string, uint64_t> segLast_;
     juce::String reduceFrame (const juce::String& full);   // fb516 -- healTicks_ moved to the shell
+    int    openTraceTicks_ = 0;     // tpsz — opt-in open trace (TERRAIN_OPEN_TRACE)
+    double dprZoom_ = 1.0;          // tpsz — the scale last handed to the page's __setUIScale (canvas DPR); pageZoom is restZoom_
+    int    zoomMisses_ = 0;        // tpsz — consecutive failed zoom verifies (2 re-arm the page's CSS-zoom fallback)
+    juce::String bootUrl() const;   // tpsz — the page URL: saved page + the zoom it is born at
     int    zoomVerifyTicks_ = 0;    // fb175 — countdown to the post-settle layout verify
     double pageVW_ = -1.0;          // fb175 — page-reported innerWidth (eval callback, message thread)
     // fb516 -- intendedW_/userSized_ moved to the shell: the FL junk-size war is a WINDOW

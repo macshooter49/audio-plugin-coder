@@ -985,6 +985,19 @@ window.__bootPage=+((location.search.match(/[?&]page=([1-5])/)||[])[1]||0);   /*
    resolution. '__dprchange' + 'resize' re-run the sizing paths. */
 (function(){ var d0=window.devicePixelRatio||1;
   window.__baseDPR=d0; window.__uiScale=1; window.DPR=d0;
+  /* tpsz — THE PAGE IS BORN AT ITS SCALE: C++ puts the zoom in the boot URL (z=) and has already set
+     it on the WKWebView, so every canvas sizes its FIRST backing store at the final DPR and the reveal
+     need not wait for a settle push (which used to arrive ~10 ticks after load and re-buffer them all). */
+  (function(){ var z=+((location.search.match(/[?&]z=([0-9.]+)/)||[])[1]||0);
+    if(z>0.3&&z<3&&!window.__cardOnly){ window.__uiScale=z; window.DPR=Math.min(d0*z,3); window.__uiScaleSettled=1; } })();
+  window.__nativeZoom=/[?&]nz=1(&|$)/.test(location.search);   /* tpsz — the zoom is the WKWebView's own (Mac) */
+  /* tpsz — and the root never scrolls there. Mid-drag the WKWebView is magnified from its settled layout
+     (PluginEditor.cpp resized()), and a viewport momentarily narrower than the 820 body made the DOCUMENT
+     scrollable: filmed, scrollbars and a page slid under the drag. Nothing in this 820x656 page is ever
+     meant to be scrolled to at the root (panels scroll inside themselves). Windows (no nz) is untouched. */
+  if(window.__nativeZoom&&!window.__cardOnly){ document.documentElement.style.overflow='hidden';
+    var nzs=document.createElement('style'); nzs.textContent='html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}';
+    document.head.appendChild(nzs); }
   try{ Object.defineProperty(window,'devicePixelRatio',{configurable:true,
     get:function(){ return Math.min(window.__baseDPR*window.__uiScale,3); } }); }catch(e){}
   window.__setUIScale=function(z){ window.__uiScaleSettled=1; if(window.__cardOnly)return; z=z||1;
@@ -1009,6 +1022,11 @@ window.__bootPage=+((location.search.match(/[?&]page=([1-5])/)||[])[1]||0);   /*
   function apply(){ pend=0;
     var z=(W.innerWidth||820)/820;
     if(Math.abs(z-1)<0.02||Date.now()-t0<1200) z=1;
+    /* tpsz — on a native-zoom host (nz=1) a width other than 820 means the native zoom is merely LATE
+       (a frame not yet attached, a busy host), not broken — and engaging then stacks a CSS zoom on top
+       of the native one the moment that lands (x1.25 twice = 1.56 at 125 %, until the next resize).
+       Only the C++ verify's second consecutive miss (__nativeZoomFailed) hands the page this job. */
+    if(W.__nativeZoom&&!W.__nativeZoomFailed) z=1;
     if(Math.abs(z-(W.__zoomFix||1))<0.002)return;
     W.__zoomFix=z;
     document.documentElement.style.zoom=(z===1?'':String(z));
