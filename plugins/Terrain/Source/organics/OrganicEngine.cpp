@@ -41,7 +41,7 @@ namespace tw
         std::atomic<int> gNzDecisions { 0 }, gNzHits { 0 }, gNzVar { -1 }, gNzVarN { 0 }, gNzDelay { 0 }; std::atomic<float> gNzDb { 0.f };   // tp107
         std::atomic<bool> gTnEnabled { true };   // tp108 test hook: the Tone stages off = the tp107 tilt alone (CPU A/B)
         std::atomic<bool> gLimOn { true };       // tp114 test hook: the safety limiter bypassed = the tp113 engine exactly
-        std::atomic<float> gLimMaxGr { 0.f }; std::atomic<int64_t> gLimSamples { 0 }, gLimLast { 0 }, gLimChunks { 0 };   // tp114 stats
+        std::atomic<float> gLimMaxGr { 0.f }; std::atomic<int64_t> gLimSamples { 0 }, gLimLast { 0 }, gLimChunks { 0 }, gLimGr05 { 0 };   // tp114 stats
         std::atomic<float> gTnSwing { 0.f }, gTnSwingR { 0.f }, gTnFlat { 0.f }, gTnGap { 0.f }, gTnDom { 0.f }, gTnExc { 0.f }, gTnLp { 0.f }, gTnGateA { 1.f }, gTnRho { 0.f }; std::atomic<int> gTnStages { 0 };  // tp108
 
         inline uint32_t mix32 (uint32_t h) noexcept
@@ -520,12 +520,12 @@ namespace tw
     organics_debug::LimiterStats organics_debug::limiterStats() noexcept
     {
         return { gLimMaxGr.load (std::memory_order_relaxed), gLimSamples.load (std::memory_order_relaxed),
-                 gLimLast.load (std::memory_order_relaxed), gLimChunks.load (std::memory_order_relaxed) };
+                 gLimLast.load (std::memory_order_relaxed), gLimChunks.load (std::memory_order_relaxed), gLimGr05.load (std::memory_order_relaxed) };
     }
     void organics_debug::resetLimiterStats() noexcept
     {
         gLimMaxGr.store (0.f, std::memory_order_relaxed); gLimSamples.store (0, std::memory_order_relaxed);
-        gLimLast.store (0, std::memory_order_relaxed);    gLimChunks.store (0, std::memory_order_relaxed);
+        gLimLast.store (0, std::memory_order_relaxed);    gLimChunks.store (0, std::memory_order_relaxed); gLimGr05.store (0, std::memory_order_relaxed);
     }
     organics_debug::ToneState organics_debug::lastTone() noexcept
     {
@@ -2529,7 +2529,7 @@ namespace tw
             if (surprise) { surprise = false; for (int k = 0; k < H && ! surprise; ++k) surprise = hm[k] < ho[k]; }
             double So = S;
             if (surprise) { So = 0.0; for (int k = 0; k <= H; ++k) So += (double) (k < H ? ho[k] : hm[k]); }
-            float peak = 0.f, gmin = 1.f; int64_t lim = 0; int last = -1;
+            float peak = 0.f, gmin = 1.f; int64_t lim = 0, gr05 = 0; int last = -1;
             for (int s = 0; s < n; ++s)
             {
                 float ga = std::min ((float) (S * invD), need[H + s]);   // ≤ the need by construction (the min is float rounding)
@@ -2556,7 +2556,7 @@ namespace tw
                     const double a = G.relFast + (G.relSlow - G.relFast) * std::min (1.0, (double) G.run / G.relRun);
                     G.g = std::min (ga, G.g + std::max ((float) ((double) (ga - G.g) * a), G.relMin));
                 }
-                if (G.g < 1.f) { ++G.run; ++lim; last = s; gmin = std::min (gmin, G.g); }
+                if (G.g < 1.f) { ++G.run; ++lim; last = s; gmin = std::min (gmin, G.g); if (G.g < 0.944061f) ++gr05; }
                 else G.run = 0;
                 const float yl = mk * sumL[(size_t) s], yr = mk * sumR[(size_t) s];
                 const float ol = G.g * yl, orr = G.g * yr;
@@ -2571,6 +2571,7 @@ namespace tw
             if (lim > 0)
             {
                 gLimSamples.fetch_add (lim, std::memory_order_relaxed);
+                gLimGr05.fetch_add (gr05, std::memory_order_relaxed);
                 gLimLast.store (sinceOn + last, std::memory_order_relaxed);
                 const float gr = -20.f * std::log10 (gmin);
                 if (gr > gLimMaxGr.load (std::memory_order_relaxed)) gLimMaxGr.store (gr, std::memory_order_relaxed);

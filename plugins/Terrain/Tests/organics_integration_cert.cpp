@@ -44,9 +44,9 @@
 //   tp107:
 //   [25] ATTACK is back: onset vs the knob (0 … 1), onset = max(amp attack, knob), LFO 1 → the Attack dest 5352 + osc (A, and E
 //        through bank B's rebase).
-//   tp114 (the Organics safety limiter): [15] [23] [25] run with it bypassed (test.sine is full scale, ~10 dB over its ceiling at
-//   the default Volume, and they measure engine features); [27] the limiter itself: ≤ −1 dBFS out of the voice at Volume 0.5 and
-//        1.0, and at Volume 0.1 (nothing reaches the ceiling, which follows the knob) every sample identical to the bypass.
+//   tp114 (the Organics safety limiter): [15] [23] [25] run with it bypassed (test.sine is full scale — over the ceiling at Volume
+//   1.0 — and they measure engine features); [27] the limiter itself: ≤ −1 dBFS out of the voice at Volume 1.0 (hot) and 0.5,
+//        and at Volume 0.1 (nothing reaches the ceiling, which follows the knob) every sample identical to the bypass.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -1104,17 +1104,18 @@ int main()
                 L = a.L; R = a.R;
                 tw::organics_debug::setLimiter (true);
             };
+            // tp114b (makeup +12): the full-scale sine reaches the ceiling only with the osc Volume up — 1.0 (+6 dB) is the hot case
             double pOff = 0, pOn = 0, pLoOff = 0, pLoOn = 0, pHi = 0; std::vector<float> L0, R0, L1, R1, Lx, Rx;
-            render (false, 0.5f, pOff, Lx, Rx); render (true, 0.5f, pOn, Lx, Rx);
+            render (false, 1.0f, pOff, Lx, Rx); render (true, 1.0f, pOn, Lx, Rx);
             render (false, 0.1f, pLoOff, L0, R0); render (true, 0.1f, pLoOn, L1, R1);
-            render (true, 1.0f, pHi, Lx, Rx);
+            render (true, 0.5f, pHi, Lx, Rx);
             const bool same = L0.size() == L1.size() && std::memcmp (L0.data(), L1.data(), L0.size() * sizeof (float)) == 0
                               && std::memcmp (R0.data(), R1.data(), R0.size() * sizeof (float)) == 0;
-            chk (dbOf (pOff) > 0.0 && dbOf (pOn) <= -1.0 + 1e-3, "27a a full-scale note at the default Volume: over 0 dBFS bypassed, <= -1 dBFS limited",
+            chk (dbOf (pOff) > -1.0 && dbOf (pOn) <= -1.0 + 1e-3, "27a a full-scale note at Volume 1.0: over -1 dBFS bypassed, <= -1 dBFS limited",
                  fmt ("bypassed %+.2f dBFS -> limited %+.3f dBFS", dbOf (pOff), dbOf (pOn)));
             chk (same, "27b Volume 0.1: the ceiling follows the knob - nothing reaches it, every sample identical to the bypass",
                  fmt ("peak %+.2f dBFS (bypassed %+.2f)", dbOf (pLoOn), dbOf (pLoOff)));
-            chk (dbOf (pHi) <= -1.0 + 1e-3, "27c Volume 1.0 (+6 dB): still <= -1 dBFS out of the voice", fmt ("limited %+.3f dBFS", dbOf (pHi)));
+            chk (dbOf (pHi) <= -1.0 + 1e-3, "27c the default Volume 0.5: <= -1 dBFS out of the voice", fmt ("limited %+.3f dBFS", dbOf (pHi)));
         }
     }
 

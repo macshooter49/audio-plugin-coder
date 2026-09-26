@@ -403,6 +403,38 @@ int main (int argc, char** argv)
         std::printf ("PROBE worst excess of the plugin output over engine × bound: %+.2f dB\n", worst);
         return 0;
     }
-    std::printf ("usage: gain|keys|wav|layer|probe <id> ...\n");
+    if (mode == "median")
+    {
+        // the tp113 measure at the plugin output: every FACTORY instrument's centre key (artic 0; middle C when playable), v100,
+        // Human 0, K-weighted first 1 s from the onset, default osc Volume / master, limiter as it plays — vs the init patch's
+        // Wavetable on the same note. MEDIAN line = the Organics median.
+        std::vector<double> lv;
+        {
+            Inst w; w.clear(); w.block ({ { 60, 1, 100 } }); w.run (1.2); w.block ({ { 60, 0, 0 } }); w.run (0.2);
+            std::printf ("WT init patch C4 v100: %.2f LUFS\n", lufs (w.L, w.R, onset (w.L, w.R), (int64_t) SR));
+        }
+        const auto idx = tw::OrganicsLibrary::get().index();
+        for (auto& ent : *idx.getArray())
+        {
+            const juce::String iid = ent["id"].toString();
+            if (iid.startsWith ("user.")) continue;
+            Inst a; if (! useOrganic (a, 0, iid)) { std::printf ("LOADFAIL %s\n", iid.toRawUTF8()); continue; }
+            auto I = a.p->orgSlot_[0].inst;
+            int lo = 128, hi = -1;
+            for (auto& r : I->regions) if (r.artic == 0 && r.kind == tw::org::Kind::Attack) { lo = std::min (lo, r.lk); hi = std::max (hi, r.hk); }
+            const int centre = (lo <= 60 && 60 <= hi) ? 60 : (lo + hi + 1) / 2;
+            setP (*a.p, ParameterIDs::kOsc_ORG_NOISE[0], 0.f); a.run (0.05);
+            I->resetPerformanceState();
+            a.clear(); a.block ({ { centre, 1, 100 } }); a.run (1.2); a.block ({ { centre, 0, 0 } }); a.run (0.2);
+            const double l = lufs (a.L, a.R, onset (a.L, a.R), (int64_t) SR);
+            lv.push_back (l);
+            std::printf ("OUTLUFS %s k%d %.2f\n", iid.toRawUTF8(), centre, l);
+            std::fflush (stdout);
+        }
+        std::sort (lv.begin(), lv.end());
+        if (! lv.empty()) std::printf ("MEDIAN %.2f LUFS over %d factory instruments (min %.2f max %.2f)\n", lv[lv.size() / 2], (int) lv.size(), lv.front(), lv.back());
+        return 0;
+    }
+    std::printf ("usage: gain|keys|wav|layer|probe|median <id> ...\n");
     return 2;
 }

@@ -37,7 +37,7 @@ sys.path.insert(0, HERE)
 import peaktrim              # noqa: E402  (the makeup constant, read from OrganicsApi.h)
 LIB_CALIB_LUFS = -24.0       # library units (the engine at unity) — torgc.CALIB_LUFS
 MAKEUP_DB = peaktrim.MAKEUP_DB
-CALIB_LUFS = LIB_CALIB_LUFS + MAKEUP_DB      # tp113: what the engine plays (−24 + 20 = −4 LUFS; −16 LUFS at the plugin output)
+CALIB_LUFS = LIB_CALIB_LUFS + MAKEUP_DB      # tp113: what the engine plays (tp114b makeup +12: −24 + 12 = −12 LUFS; ≈ −24 LUFS at the plugin output)
 PEAK_CEIL_DB = peaktrim.TARGET_DB            # reported only (tp113: never a limit on the calibration any more)
 
 

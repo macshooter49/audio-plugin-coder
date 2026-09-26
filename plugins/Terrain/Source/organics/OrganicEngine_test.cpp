@@ -999,7 +999,8 @@ static void tp114LimiterBars (const std::shared_ptr<const OrganicInstrument>& si
                         if (is > worstIsp) { worstIsp = is; ispAt = fmt ("%s k%d blk %d", I == &sine ? "sine" : "piano", key, blk); }
                     }
                 }
-        bar ("limiter: hot notes never pass the ceiling", worst <= ceil * (1.0 + 1e-6) && worstRaw > 1.5 * ceil && worstIsp <= ceilTp,
+        bar ("limiter: hot notes never pass the ceiling", worst <= ceil * (1.0 + 1e-6) && worstRaw > 1.25 * ceil && worstIsp <= ceilTp,   // tp114b: the fixtures sit +3.4 dB over at the +12 makeup
+            
              fmt ("%d notes × block sizes 1-777: raw up to %+.2f dBFS → limited %+.4f dBFS (ceiling %+.2f), 4× ISP %+.2f (%s; bar %+.2f = 0 dBTP at the plugin output)",
                   n, an::db (worstRaw), an::db (worst), an::db (ceil), an::db (worstIsp), ispAt.c_str(), an::db (ceilTp)));
     }
@@ -2203,7 +2204,7 @@ int main (int argc, char** argv)
             };
             double on0, off0, a, b, on5, off5, onL, offE, on1, off1;
             nz (0.f, on0, off0, a, b); nz (0.5f, on5, off5, onL, offE); nz (1.f, on1, off1, a, b);
-            const double u = organics::outputMakeupGain();   // tp113: the floors are in library units (the engine plays +20 dB)
+            const double u = organics::outputMakeupGain();   // tp113: the floors are in library units (the engine plays kOutputMakeupDb over them)
             const bool ok = on0 < 1e-6 * u && off0 < 1e-6 * u && on5 > 0.05 * u && off5 > 0.05 * u && onL < 0.01 * on5 && offE < 1e-6 * u
                          && std::abs (an::db (on1 / on5) - 12.0) <= 0.5 && std::abs (an::db (off1 / off5) - 12.0) <= 0.5;
             bar ("Noise: trig on with the note, off at note-off, 0/authored/+12", ok,

@@ -19,8 +19,8 @@
 // the note's own first 30 ms) · DC (the note's mean over −50 dBFS and within 20 dB of its RMS) · centre-key loudness ±1 dB of −24 LUFS (less any peak limit the calibration reports) ·
 // adjacent-velocity jump ≤ 6 dB · the per-engine reader cap · tp108: every key's velocity-127 peak ≤ −1 dBFS (the library
 // trims the recording per key — Tools/organics/peaktrim.py — never a clipper, never a limiter).
-// tp113: every level above is in LIBRARY UNITS (the engine at unity); the engine now plays organics::kOutputMakeupDb (+20 dB)
-// over them, so each ABSOLUTE bar here is the library bar + kMk: loudness −24 + 20 = −4 LUFS, the v127 key bar −1 + 20 (+ the
+// tp113: every level above is in LIBRARY UNITS (the engine at unity); the engine now plays organics::kOutputMakeupDb (tp114b: +12 dB)
+// over them, so each ABSOLUTE bar here is the library bar + kMk: loudness −24 + kMk LUFS, the v127 key bar −1 + kMk (+ the
 // instrument's loudness.peakLiftDb: the calibration is lifted, never peak-limited), and the level floors of the silence, DC
 // and click metrics move up with it (a floor is "inaudible in the library", not "inaudible at 20 dB less gain").
 //   organics_audit --peaks <root> [idFilter] [vels]  every key's v127 peak, every RR take (Tools/organics/peaktrim.py)
@@ -417,7 +417,7 @@ static int runLib (const juce::File& root, const juce::String& filter, FILE* tsv
             if (capN)    fails.push_back (fmt ("%s: reader cap exceeded on %d notes", an_.c_str(), capN));
             if (srcN)    flags.push_back (fmt ("%s: %d notes carry an isolated HF transient that is IN THE RECORDING (not the engine)", an_.c_str(), srcN));
             // tp108: a BAR, no longer a flag — the library trims every key (Tools/organics/peaktrim.py). tp114: at the engine output
-            // (after the +20 dB makeup) the safety limiter holds every key to its ceiling — over it is a FAIL
+            // (after the kOutputMakeupDb makeup) the safety limiter holds every key to its ceiling — over it is a FAIL
             if (hotN)    fails.push_back (fmt ("%s: %d keys over %+.1f dBFS at vel 127 (first %s)", an_.c_str(), hotN, hotBar, hotWhere.c_str()));
             info += fmt (" [%s k%d-%d pk127 %.1f dc %.0f]", an_.c_str(), lo, hi, peak127, worstDc);
 
@@ -861,7 +861,7 @@ static int runPeaks (const juce::String& filter, const juce::String& velList)
                     bool rnd = false; int cand = 0;
                     for (uint32_t i = 0; i < sp.count; ++i) { const auto& r = I->regions[I->list (sp)[i]]; ++cand; rnd |= (r.randLo > 0.f || r.randHi < 1.f); }
                     const int presses = std::clamp (rnd ? 2 * cand : cand, 1, 12);
-                    double pk = -200.0, lpk = -200.0, lisp = -200.0, gr = 0.0;
+                    double pk = -200.0, lpk = -200.0, lisp = -200.0, gr = 0.0, grMs = 0.0;
                     // tp114: every press twice — the LIBRARY (limiter bypassed: the PEAK line peaktrim.py trims from, the round
                     // robin carried from key to key exactly as before) and the engine as it plays (limited: LPEAK + its 4×
                     // inter-sample peak), replayed from the same performance state → the same takes, the same seeds.
@@ -889,7 +889,7 @@ static int runPeaks (const juce::String& filter, const juce::String& velList)
                                 if (lim) { NL.insert (NL.end(), l.begin(), l.end()); NR.insert (NR.end(), r.begin(), r.end()); }
                                 if (off && ! e.isActive()) break;
                             }
-                            if (lim) { lisp = std::max (lisp, db (interSamplePeak (NL, NR))); gr = std::max (gr, (double) organics_debug::limiterStats().maxGrDb); }
+                            if (lim) { lisp = std::max (lisp, db (interSamplePeak (NL, NR))); gr = std::max (gr, (double) organics_debug::limiterStats().maxGrDb); grMs = std::max (grMs, 1000.0 * (double) organics_debug::limiterStats().gr05Samples / gSR); }
                             e.kill(); e.setInstrument (nullptr);
                         }
                     }
@@ -898,8 +898,9 @@ static int runPeaks (const juce::String& filter, const juce::String& velList)
                     if (pk > -1.0 + kMk) ++rawOver;
                     if (lpk > kLimDb + 1.0e-4 || lisp > kLimDb + 1.0) ++worstBad;
                     std::printf ("PEAK %s %d %d %d %.3f %d\n", id.toRawUTF8(), a, key, vel, pk, presses);
-                    // LPEAK <id> <artic> <key> <vel> <limited peak> <its 4× ISP> <deepest GR> — engine dBFS (plugin output = − kPathDb)
-                    std::printf ("LPEAK %s %d %d %d %.3f %.3f %.2f\n", id.toRawUTF8(), a, key, vel, lpk, lisp, gr);
+                    // LPEAK <id> <artic> <key> <vel> <limited peak> <its 4× ISP> <deepest GR> <ms with GR > 0.5 dB, the longest press>
+                    //   — engine dBFS (plugin output = − kPathDb)
+                    std::printf ("LPEAK %s %d %d %d %.3f %.3f %.2f %.1f\n", id.toRawUTF8(), a, key, vel, lpk, lisp, gr, grMs);
                 }
         }
         std::fflush (stdout);
@@ -917,7 +918,7 @@ static int runPeaks (const juce::String& filter, const juce::String& velList)
 //  tp114 — the safety limiter's cost in LOUDNESS and in SOUND
 //  --lim [idFilter]: every instrument's calibration point (artic 0, centre key, v100, Noise 0, Human 0) raw vs limited, K-weighted
 //      over the same first second; the same key at v127. One line per instrument:
-//      LIMLOUD <id> <key> <lufsRaw100> <lufsLim100> <Δ100> <grDb100> <Δ127> <grDb127>
+//      LIMLOUD <id> <key> <lufsRaw100> <lufsLim100> <Δ100> <grDb100> <Δ127> <grDb127> <ms GR>0.5dB v100> <… v127>
 //  --limnote <id> <artic> <key> <vel> [wavdir]: one note (Human 0, the other knobs at their defaults) raw vs limited.
 //==================================================================================================
 static void writeWav32 (const juce::File& f, const Buf& L, const Buf& R, double gainDb)
@@ -947,7 +948,7 @@ static int runLim (const juce::String& filter)
         for (auto& r : I->regions) if (r.artic == 0 && r.kind == org::Kind::Attack) { lo = std::min (lo, r.lk); hi = std::max (hi, r.hk); }
         const int centre = (lo <= 60 && 60 <= hi) ? 60 : (lo + hi + 1) / 2;
         OrganicParams q; q.human = 0.f; q.noise = 0.f; q.release = 0.f;
-        double d[2] = {}, gr[2] = {}, lr100 = 0, ll100 = 0;
+        double d[2] = {}, gr[2] = {}, grMs[2] = {}, lr100 = 0, ll100 = 0;
         for (int vi = 0; vi < 2; ++vi)
         {
             const int vel = vi == 0 ? 100 : 127;
@@ -955,14 +956,14 @@ static int runLim (const juce::String& filter)
             auto raw = renderNote (I, q, centre, vel, 2.0, 0.05);
             organics_debug::setLimiter (true); organics_debug::resetLimiterStats();
             auto lim = renderNote (I, q, centre, vel, 2.0, 0.05);
-            gr[vi] = organics_debug::limiterStats().maxGrDb;
+            gr[vi] = organics_debug::limiterStats().maxGrDb; grMs[vi] = 1000.0 * (double) organics_debug::limiterStats().gr05Samples / gSR;
             const int64_t on = an::onset (mono (raw));
             const double a = an::lufs (raw.L, raw.R, on, (int64_t) gSR), b = an::lufs (lim.L, lim.R, on, (int64_t) gSR);
             d[vi] = b - a;
             if (vi == 0) { lr100 = a; ll100 = b; }
         }
         if (std::abs (d[0]) > std::abs (worst)) { worst = d[0]; worstId = id; }
-        std::printf ("LIMLOUD %s %d %.3f %.3f %+.3f %.2f %+.3f %.2f\n", id.toRawUTF8(), centre, lr100, ll100, d[0], gr[0], d[1], gr[1]);
+        std::printf ("LIMLOUD %s %d %.3f %.3f %+.3f %.2f %+.3f %.2f %.1f %.1f\n", id.toRawUTF8(), centre, lr100, ll100, d[0], gr[0], d[1], gr[1], grMs[0], grMs[1]);
         std::fflush (stdout);
         I.reset(); org::drainDeferredReleases();
     }

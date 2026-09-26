@@ -8838,7 +8838,7 @@ class SynthVoice : public juce::SynthesiserVoice
             float amp = 1.0f;
             for (int k = 0; k < 4; ++k) if (envDest_[k + 1] == kEnvAmp) amp += juce::jmax (0.0f, envDepth_[k + 1]);
             const float uni = uniCount > 1 ? 1.0f / std::sqrt ((float) juce::jlimit (1, kMaxUnison, uniCount)) : 1.0f;
-            return vol * pan[o] * env * amp * uni;
+            return 1.0116f * vol * pan[o] * env * amp * uni;   // + 0.1 dB: the mixer's per-sample glides can land a hair over the block's bound (measured +0.03 dB, mbira k49 v127)
         }
 
         void renderOrganicOsc (int o, bool isOrg, int oct, int semi, float cent,
