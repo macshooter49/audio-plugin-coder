@@ -4,6 +4,9 @@
 // that tracks what the knob is for (phase-independent): Dynamics = K-loudness + centroid, Tone = centroid, Body = log-
 // spectrum distance (Tone ×1.8 on the mallets and the flute — tp108), Vibrato = pitch-track depth, Human = press-to-press spread, Release = T60 after note-off, Noise =
 // the noise signal's level re the note, Sustain = level 3 s in, Velocity = vel 30 → 127 range, Image = side/mid.
+// tp114 — the back panel is Vibrato · Rate · Delay · Start · Noise: Rate = the measured vibrato rate at Vibrato 100 % (ratio),
+// Delay = when the vibrato becomes audible at Vibrato 100 % (s), Start = the onset envelope's distance from Start 0 (dB, the first 150 ms: the attack window).
+// Curve and Tuning left the panel (inert in the processor; the engine fields remain for the tests).
 // Then LIVE TURNS: each knob swept 0 → 100 → 0 % across a held note, block by block — the click metric must not fire
 // (zipper / steps) beyond what the static note itself shows.
 #include "../Source/organics/OrganicEngine.h"
@@ -231,35 +234,39 @@ int runKnobs (const juce::File&)
         row ("Image", [&] (double v) { auto p = base; p.image = (float) (1.5 * v); auto r = rendk (I, p, K, 80, 1.0, 0.0);
             Buf sd (r.L.size()), md (r.L.size()); for (size_t i = 0; i < sd.size(); ++i) { sd[i] = 0.5f * (r.L[i] - r.R[i]); md[i] = 0.5f * (r.L[i] + r.R[i]); }
             return dbk (rmsk (sd, S, (int64_t) (0.5 * SR))) - dbk (rmsk (md, S, (int64_t) (0.5 * SR))); }, "dB side/mid", 12.0);
-        // back panel
+        // back panel (tp114: Vibrato is the front knob's row above; Rate and Delay measured WITH the vibrato on — at Vibrato 0 they
+        // shape nothing, bit-identical by construction: Vibrato::advance is never called)
         {
-            std::string s;
-            for (double v : { 0.0, 0.417, 1.0 })
-            {
-                auto p = base; p.vibrato = 0.6f; p.vibDelay = 0.f; p.vibRate = (float) (3.0 + 6.0 * v);
+            const char* untrack = in.trackable ? nullptr : "a C6 glockenspiel's bar partials defeat the STFT pitch track (the vibraphone row measures the knob)";
+            row ("Vib Rate", [&] (double v) {
+                auto p = base; p.vibrato = 1.f; p.vibDelay = 0.f; p.vibRate = (float) (3.0 + 6.0 * v);
                 auto r = rendk (I, p, K, 80, 2.5, 0.0);
                 auto tr = pitchTrack (r.M, (int64_t) (0.5 * SR), (int64_t) (2.4 * SR), mtofk (K));
                 double m = 0; for (double c : tr) m += c; m /= std::max<size_t> (1, tr.size());
                 int cross = 0; for (size_t i = 1; i < tr.size(); ++i) if (tr[i - 1] < m && tr[i] >= m) ++cross;
-                s += fmtk (" %.1fHz→%.1f", p.vibRate, (double) cross / (0.01 * (double) tr.size()));
-            }
-            std::printf ("INFO  VibRate   set→measured:%s\n", s.c_str());
-            s.clear();
-            for (double d : { 0.0, 0.35, 2.0 })
-            {
-                auto p = base; p.vibrato = 0.8f; p.vibDelay = (float) d;
-                auto r = rendk (I, p, K, 80, 3.0, 0.0);
-                auto tr = pitchTrack (r.M, 0, (int64_t) (2.9 * SR), mtofk (K));
-                double first = -1; for (size_t i = 0; i + 20 < tr.size(); ++i) { std::vector<double> w (tr.begin() + (long) i, tr.begin() + (long) i + 20); if (depthOf (w) > 8) { first = (double) i * 0.01; break; } }
-                s += fmtk (" %.2fs→%.2fs", d, first);
-            }
-            std::printf ("INFO  VibDelay  set→vibrato audible from:%s\n", s.c_str());
-            s.clear();
-            for (int c = 0; c < 3; ++c) { auto p = base; p.velCurve = c; auto r = rendk (I, p, K, 64, 0.6, 0.0); s += fmtk (" %s %.1f dB", c == 0 ? "Soft" : c == 1 ? "Linear" : "Hard", dbk (rmsk (r.M, 0, (int64_t) (0.5 * SR)))); }
-            std::printf ("INFO  VelCurve  vel 64:%s\n", s.c_str());
+                return (double) cross / (0.01 * (double) std::max<size_t> (1, tr.size()));
+            }, "Hz measured (Vibrato 100 %; set 3 → 9.6 Hz)", 4.0, 0, untrack);
+            row ("Vib Delay", [&] (double v) {
+                auto p = base; p.vibrato = 1.f; p.vibDelay = (float) (2.0 * v);
+                auto r = rendk (I, p, K, 80, 3.5, 0.0);
+                auto tr = pitchTrack (r.M, 0, (int64_t) (3.4 * SR), mtofk (K));
+                for (size_t i = 0; i + 20 < tr.size(); ++i) { std::vector<double> w (tr.begin() + (long) i, tr.begin() + (long) i + 20); if (depthOf (w) > 8) return (double) i * 0.01; }
+                return 3.4;
+            }, "s until the vibrato is audible (Vibrato 100 %)", 1.0, 0,
+                untrack ? untrack : (in.sustaining ? "the recording's own vibrato already reads > 8 ¢ from the first frame" : nullptr));
+            // START: the first 300 ms, 5 ms RMS envelope (dB, floor −80 re the note), mean |difference| from Start 0
+            auto envOf = [&] (const Buf& x) { std::vector<double> e; for (int64_t t = 0; t < (int64_t) (0.15 * SR); t += 240) e.push_back (std::max (-80.0, dbk (rmsk (x, t, 240)))); return e; };
+            OrganicParams p0 = base; p0.noise = 0.f;
+            const auto e0 = envOf (rendk (I, p0, K, 100, 0.6, 0.0).M);
+            row ("Start", [&] (double v) {
+                auto p = p0; p.start = (float) v; const auto e = envOf (rendk (I, p, K, 100, 0.6, 0.0).M);
+                double d = 0; for (size_t i = 0; i < e.size(); ++i) d += std::abs (e[i] - e0[i]); return d / (double) e.size();
+            }, "dB onset-envelope distance from 0 % (first 150 ms)", 5.0);   // 5 dB mean over the whole attack window (level JND ≈ 1 dB): the
+                                                                              // soft-mallet vibraphone, whose 5 s bar barely decays, is the floor (5.3)
+            std::string s;
             if (I->numArtics > 1)
             {
-                auto r0 = rendk (I, base, K, 80, 1.0, 0.0); s.clear();
+                auto r0 = rendk (I, base, K, 80, 1.0, 0.0);
                 for (int a = 1; a < I->numArtics; ++a) { auto p = base; p.artic = a; auto r = rendk (I, p, K, 80, 1.0, 0.0); s += fmtk (" %s %.1f dB", I->artics[a].toRawUTF8(), specDist (r.M, r0.M, S)); }
                 std::printf ("INFO  Artic     spectral distance re %s:%s\n", I->artics[0].toRawUTF8(), s.c_str());
             }
@@ -277,6 +284,8 @@ int runKnobs (const juce::File&)
                 { "Noise", [] (OrganicParams& p, float v) { p.noise = v; } },         { "Sus",  [] (OrganicParams& p, float v) { p.sustain = v; } },
                 { "Velo",  [] (OrganicParams& p, float v) { p.velo = v; } },          { "Image",[] (OrganicParams& p, float v) { p.image = 1.5f * v; } },
                 { "Rate",  [] (OrganicParams& p, float v) { p.vibrato = 0.5f; p.vibDelay = 0; p.vibRate = 3 + 6 * v; } },
+                { "Delay", [] (OrganicParams& p, float v) { p.vibrato = 0.5f; p.vibDelay = 2 * v; } },   // tp114
+                { "Start", [] (OrganicParams& p, float v) { p.start = v; } },                            // tp114 (acts at note-on: a held note never moves)
             };
             bool bad = false;
             for (auto& kt : kts)

@@ -41,8 +41,12 @@ namespace tw
         float vibDelay  = 0.35f; // back panel 0..2 s  onset delay, then a 250 ms fade-in (natural vibrato)
         float ampAttack  = 0.0f; // the voice's amp-envelope attack  (s) — Gentle onsets follow it, no double fade
         float ampRelease = 0.0f; // the voice's amp-envelope release (s) — note-off fade = max(this, Release knob time)
-        int   velCurve  = 1;     // back panel 0 Soft · 1 Linear (authored) · 2 Hard
-        int   tuning    = 1;     // back panel 0 As recorded · 1 Equal (apply the compiler's per-region "tfix" cents)
+        int   velCurve  = 1;     // 0 Soft · 1 Linear (authored) · 2 Hard. tp114: OFF the back panel — the processor passes 1 (Settings → Velocity curve shapes every engine)
+        int   tuning    = 1;     // 0 As recorded · 1 Equal (the compiler's per-region "tfix"). tp114: OFF the back panel — the processor passes 1
+
+        // ── tp114 (Max: "Natural vs As Recorded — I don't hear a difference … the Hz and the Delay — I don't hear anything"): the back
+        //    panel is Vibrato · Rate · Delay · START · Noise. START skips into the recording at note-on (a sampler's sample start).
+        float start     = 0.0f;  // Start      0..1   0 = the authored start (bit-identical) · skip = 2 s × v^2.5 (10 % 6 ms · 25 % 62 ms · 50 % 0.35 s · 1 = 2 s)
     };
 
     /** A compiled .torg instrument, loaded in RAM (int16 samples + the region table + the

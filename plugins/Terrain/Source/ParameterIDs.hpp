@@ -1251,6 +1251,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_ORG_VIBDELAY[] = "SYN_OSC_A_ORG_VIBDELAY";
     constexpr char SYN_OSC_A_ORG_VCURVE[] = "SYN_OSC_A_ORG_VCURVE";
     constexpr char SYN_OSC_A_ORG_TUNING[] = "SYN_OSC_A_ORG_TUNING";
+    constexpr char SYN_OSC_A_ORG_START[] = "SYN_OSC_A_ORG_START";   // tp114 — the back panel's Start (sample start)
     constexpr char SYN_OSC_B_MODAL_FAMILY[]   = "SYN_OSC_B_MODAL_FAMILY";
     constexpr char SYN_OSC_B_MODAL_FORM[]     = "SYN_OSC_B_MODAL_FORM";
     constexpr char SYN_OSC_B_MODAL_SOURCE[]   = "SYN_OSC_B_MODAL_SOURCE";
@@ -1281,6 +1282,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_ORG_VIBDELAY[] = "SYN_OSC_B_ORG_VIBDELAY";
     constexpr char SYN_OSC_B_ORG_VCURVE[] = "SYN_OSC_B_ORG_VCURVE";
     constexpr char SYN_OSC_B_ORG_TUNING[] = "SYN_OSC_B_ORG_TUNING";
+    constexpr char SYN_OSC_B_ORG_START[] = "SYN_OSC_B_ORG_START";   // tp114 — the back panel's Start (sample start)
     constexpr char SYN_OSC_C_MODAL_FAMILY[]   = "SYN_OSC_C_MODAL_FAMILY";
     constexpr char SYN_OSC_C_MODAL_FORM[]     = "SYN_OSC_C_MODAL_FORM";
     constexpr char SYN_OSC_C_MODAL_SOURCE[]   = "SYN_OSC_C_MODAL_SOURCE";
@@ -1311,6 +1313,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_ORG_VIBDELAY[] = "SYN_OSC_C_ORG_VIBDELAY";
     constexpr char SYN_OSC_C_ORG_VCURVE[] = "SYN_OSC_C_ORG_VCURVE";
     constexpr char SYN_OSC_C_ORG_TUNING[] = "SYN_OSC_C_ORG_TUNING";
+    constexpr char SYN_OSC_C_ORG_START[] = "SYN_OSC_C_ORG_START";   // tp114 — the back panel's Start (sample start)
     constexpr char SYN_OSC_D_MODAL_FAMILY[]   = "SYN_OSC_D_MODAL_FAMILY";
     constexpr char SYN_OSC_D_MODAL_FORM[]     = "SYN_OSC_D_MODAL_FORM";
     constexpr char SYN_OSC_D_MODAL_SOURCE[]   = "SYN_OSC_D_MODAL_SOURCE";
@@ -1341,6 +1344,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_ORG_VIBDELAY[] = "SYN_OSC_D_ORG_VIBDELAY";
     constexpr char SYN_OSC_D_ORG_VCURVE[] = "SYN_OSC_D_ORG_VCURVE";
     constexpr char SYN_OSC_D_ORG_TUNING[] = "SYN_OSC_D_ORG_TUNING";
+    constexpr char SYN_OSC_D_ORG_START[] = "SYN_OSC_D_ORG_START";   // tp114 — the back panel's Start (sample start)
 
     // ── BLEND MODES (Serum-2-style cross-osc warp) — 4 slots (B1..B4) × 4 oscs, any-to-any.
     //    Each slot = MODE (Off/FM/PD/AM/RM/Sync/Warp/Dist/Filter) + SRC (Osc A..D/Sub/Noise/Self) + DEPTH 0..1.
@@ -1609,6 +1613,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_E_ORG_VIBDELAY[] = "SYN_OSC_E_ORG_VIBDELAY";
     constexpr char SYN_OSC_E_ORG_VCURVE[] = "SYN_OSC_E_ORG_VCURVE";
     constexpr char SYN_OSC_E_ORG_TUNING[] = "SYN_OSC_E_ORG_TUNING";
+    constexpr char SYN_OSC_E_ORG_START[] = "SYN_OSC_E_ORG_START";   // tp114 — the back panel's Start (sample start)
     constexpr char SYN_OSC_E_WSLOT1_MODE[] = "SYN_OSC_E_WSLOT1_MODE";
     constexpr char SYN_OSC_E_WSLOT1_SRC[] = "SYN_OSC_E_WSLOT1_SRC";
     constexpr char SYN_OSC_E_WSLOT1_DEPTH[] = "SYN_OSC_E_WSLOT1_DEPTH";
@@ -1784,6 +1789,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_F_ORG_VIBDELAY[] = "SYN_OSC_F_ORG_VIBDELAY";
     constexpr char SYN_OSC_F_ORG_VCURVE[] = "SYN_OSC_F_ORG_VCURVE";
     constexpr char SYN_OSC_F_ORG_TUNING[] = "SYN_OSC_F_ORG_TUNING";
+    constexpr char SYN_OSC_F_ORG_START[] = "SYN_OSC_F_ORG_START";   // tp114 — the back panel's Start (sample start)
     constexpr char SYN_OSC_F_WSLOT1_MODE[] = "SYN_OSC_F_WSLOT1_MODE";
     constexpr char SYN_OSC_F_WSLOT1_SRC[] = "SYN_OSC_F_WSLOT1_SRC";
     constexpr char SYN_OSC_F_WSLOT1_DEPTH[] = "SYN_OSC_F_WSLOT1_DEPTH";
@@ -1959,6 +1965,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_G_ORG_VIBDELAY[] = "SYN_OSC_G_ORG_VIBDELAY";
     constexpr char SYN_OSC_G_ORG_VCURVE[] = "SYN_OSC_G_ORG_VCURVE";
     constexpr char SYN_OSC_G_ORG_TUNING[] = "SYN_OSC_G_ORG_TUNING";
+    constexpr char SYN_OSC_G_ORG_START[] = "SYN_OSC_G_ORG_START";   // tp114 — the back panel's Start (sample start)
     constexpr char SYN_OSC_G_WSLOT1_MODE[] = "SYN_OSC_G_WSLOT1_MODE";
     constexpr char SYN_OSC_G_WSLOT1_SRC[] = "SYN_OSC_G_WSLOT1_SRC";
     constexpr char SYN_OSC_G_WSLOT1_DEPTH[] = "SYN_OSC_G_WSLOT1_DEPTH";
@@ -2134,6 +2141,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_H_ORG_VIBDELAY[] = "SYN_OSC_H_ORG_VIBDELAY";
     constexpr char SYN_OSC_H_ORG_VCURVE[] = "SYN_OSC_H_ORG_VCURVE";
     constexpr char SYN_OSC_H_ORG_TUNING[] = "SYN_OSC_H_ORG_TUNING";
+    constexpr char SYN_OSC_H_ORG_START[] = "SYN_OSC_H_ORG_START";   // tp114 — the back panel's Start (sample start)
     constexpr char SYN_OSC_H_WSLOT1_MODE[] = "SYN_OSC_H_WSLOT1_MODE";
     constexpr char SYN_OSC_H_WSLOT1_SRC[] = "SYN_OSC_H_WSLOT1_SRC";
     constexpr char SYN_OSC_H_WSLOT1_DEPTH[] = "SYN_OSC_H_WSLOT1_DEPTH";

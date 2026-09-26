@@ -275,6 +275,13 @@ namespace tw
             Exactly 0.5 is Natural (no swell: the 2 ms declick, bit-identical). */
         inline float swellSec (float g) noexcept { g = clamp01 (g); return 0.010f * std::pow (300.f, g); }
 
+        /** tp114 START — how far into the recording a note begins (seconds of SOURCE audio): 2 s × v^2.5. 10 % → 6 ms (a lazy
+            onset tightened), 25 % → 62 ms (the strike gone), 50 % → 0.35 s, 75 % → 0.97 s, 100 % → 2 s (deep in the body: no attack
+            at all — a one-shot never skips past half its length). Exactly 0 is the authored start (bit-identical). */
+        inline double startSec (float v) noexcept { v = clamp01 (v); return 2.0 * std::pow ((double) v, 2.5); }
+        /** The fade a skipped start enters with: the 2 ms declick at 0, 12 ms from 25 % up (a mid-waveform entry never clicks). */
+        inline double startFadeSec (float v) noexcept { v = clamp01 (v); return v <= 0.f ? 0.002 : 0.002 + 0.010 * (double) std::min (1.f, v / 0.25f); }
+
         /** tp105 Vibrato depth taper: 0..1 → 0..50 cents peak, v^1.6 (0.25 → 5 ¢, 0.5 → 16.5 ¢ musical; 1 → 50 ¢ wild). */
         inline float vibDepthCents (float v) noexcept { v = clamp01 (v); return v <= 0.f ? 0.f : 50.f * std::pow (v, 1.6f); }
         /** The widest rate multiplier a vibrato plan can hold (100 ¢ = Vibrato::kMaxDepthCents): boundary counts use it. */
@@ -565,6 +572,7 @@ namespace tw
             uint64_t gen = 0;
             int mapKey = 60;                                                  // tp105 NO-SILENCE: the key the lookups use
             float vibPhase = 0.f, vibDepthSm = 0.f, vibRateMul = 1.f;         // tp105: this player's vibrato (phase, depth, rate)
+            float start = 0.f;                                                // tp114: the Start knob, fixed at the note's start (like Attack)
         };
 
         /** tp108 — TONE ON PURE TONES. The tilt (in renderChunk) can only re-weight partials that exist, so on a near-sine (a
@@ -1324,6 +1332,16 @@ namespace tw
             {
                 if (atk > 0.f) p += (double) atk * std::max (0.0, (double) r.onset - 0.0015 * s.sampleRate - (double) r.start);
                 p += (double) n.humStartSec * s.sampleRate;
+                // tp114 START: skip into the recording. A loop keeps its place inside the loop; a one-shot never skips past half its
+                // length (the no-silence law: every press still sounds). 0 adds nothing (bit-identical).
+                if (n.start > 0.f)
+                {
+                    p += startSec (n.start) * s.sampleRate;
+                    if (r.looping() && p >= (double) r.le)
+                        p = (double) r.ls + std::fmod (p - (double) r.ls, (double) (r.le - r.ls));
+                    else if (! r.looping())
+                        p = std::min (p, std::max ((double) r.start, 0.5 * (double) (r.start + r.end)));
+                }
             }
             const double pStart = p;
             if (role == org::Kind::Attack && ! atStart)
@@ -1345,6 +1363,7 @@ namespace tw
             int fin = fadeFrames (0.002);
             if (role == org::Kind::Attack && atk > 0.f)
                 fin = std::clamp ((int) (((double) r.onset - pStart) / ratio), fadeFrames (0.0005), fin);
+            if (role == org::Kind::Attack && n.start > 0.f) fin = std::max (fin, fadeFrames (startFadeSec (n.start)));   // tp114: a mid-waveform entry
             // tp107 THE SWELL: knob 0.5..1 → a log-tapered fade 2 ms … 3 s. LINKED TO THE AMP ENVELOPE like Release: the onset
             // is max(amp-env attack, the knob's fade) — while the amp attack is the longer one the voice's VCA ramp is the
             // onset and the engine keeps its 2 ms declick (no double fade); past it, the engine's fade is the onset.
@@ -1464,6 +1483,7 @@ namespace tw
             n.vL = std::clamp ((float) n.vIdx + 63.f * sDyn, 1.f, 127.f);
             attackP = std::clamp (P.attack, -1.f, 1.f);
             n.attack = attackP;
+            n.start = clamp01 (P.start);
             const int key0 = std::clamp (n.key + (int) std::lround (6.f * sBody), 0, 127);
 
             // random RR: no immediate repeat (remap the draw into the complement of the last pick's range)

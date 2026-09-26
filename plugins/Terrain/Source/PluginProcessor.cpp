@@ -3607,7 +3607,7 @@ juce::String TerrainAudioProcessor::organicsSwitchInstrument (int o, const juce:
             ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
             ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE,
             ParameterIDs::kOsc_ORG_VIBRATO, ParameterIDs::kOsc_ORG_VIBRATE, ParameterIDs::kOsc_ORG_VIBDELAY, ParameterIDs::kOsc_ORG_VCURVE,
-            ParameterIDs::kOsc_ORG_TUNING };
+            ParameterIDs::kOsc_ORG_TUNING, ParameterIDs::kOsc_ORG_START };   // tp114: + Start
         for (auto* tbl : ids)
             if (auto* prm = apvts.getParameter (tbl[o]))
                 if (prm->getValue() != prm->getDefaultValue())
@@ -8277,6 +8277,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                                 "Synth OSC " + L + " Organic Velocity Curve", 0, 2, 1));
             layoutReal.add (std::make_unique<juce::AudioParameterInt> (juce::ParameterID { ParameterIDs::kOsc_ORG_TUNING[o], 1 },
                                 "Synth OSC " + L + " Organic Tuning", 0, 1, 1));
+        }
+    }
+    // ══ tp114 — THE BACK PANEL, MEASURED (Max: "Natural vs As Recorded — I don't hear a difference … the Hz and the Delay — I don't hear
+    //  anything"). Tuning moved a typical instrument 0–4 ¢ (the library's tfix: median 0.8 ¢ over 15,949 regions) and Curve duplicated
+    //  Settings → Velocity curve; both leave the panel and go INERT (declared, never read: the engine plays Equal + Linear). The back
+    //  panel is now Vibrato · Rate · Delay · START · Noise, and START is new: how far into the recording a note begins, 0..1 → 2 s × v^2.5
+    //  (0 = the authored start, bit-identical). Declared LAST for the same reason as every appended block.
+    {
+        for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+        {
+            const juce::String L = juce::String::charToString ((juce::juce_wchar) ('A' + o));
+            layoutReal.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { ParameterIDs::kOsc_ORG_START[o], 1 },
+                                "Synth OSC " + L + " Organic Start", juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
         }
     }
     return layoutReal;
@@ -13097,8 +13110,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 // tp105 back panel + the amp envelope the engine's release links to (EFFECTIVE values, ms → s)
                 q.vibRate    = 3.0f + 6.0f * juce::jlimit (0.0f, 1.0f, (float) *rpar (ParameterIDs::kOsc_ORG_VIBRATE[o]));
                 q.vibDelay   = 2.0f * juce::jlimit (0.0f, 1.0f, (float) *rpar (ParameterIDs::kOsc_ORG_VIBDELAY[o]));
-                q.velCurve   = juce::jlimit (0, 2, (int) *rpar (ParameterIDs::kOsc_ORG_VCURVE[o]));
-                q.tuning     = juce::jlimit (0, 1, (int) *rpar (ParameterIDs::kOsc_ORG_TUNING[o]));
+                // tp114: Curve and Tuning are INERT (off the panel; the params stay declared so saved sessions load): the engine plays
+                //   Linear (Settings → Velocity curve shapes every engine's velocity) and Equal (the compiler's per-region tfix)
+                q.velCurve   = 1;
+                q.tuning     = 1;
+                q.start      = juce::jlimit (0.0f, 1.0f, (float) *rpar (ParameterIDs::kOsc_ORG_START[o]));   // tp114: the back panel's Start
                 q.ampAttack  = juce::jmax (0.0f, ampA) * 0.001f;
                 q.ampRelease = juce::jmax (0.0f, ampR) * 0.001f;
                 orgP[o] = q;

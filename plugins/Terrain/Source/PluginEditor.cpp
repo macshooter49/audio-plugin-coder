@@ -4986,7 +4986,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
                 ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE,
                 ParameterIDs::kOsc_ORG_VIBRATO, ParameterIDs::kOsc_ORG_VIBRATE, ParameterIDs::kOsc_ORG_VIBDELAY,   // tp105
-                ParameterIDs::kOsc_ORG_VCURVE, ParameterIDs::kOsc_ORG_TUNING };
+                ParameterIDs::kOsc_ORG_VCURVE, ParameterIDs::kOsc_ORG_TUNING, ParameterIDs::kOsc_ORG_START };   // tp114: + Start
             for (int o = 0; o < 4; ++o)
                 for (int k = 0; k < kOrgRelayKnobs; ++k)
                     if (orgRelay_[o][k] != nullptr)
@@ -17465,7 +17465,7 @@ juce::WebBrowserComponent::Options TerrainUiCore::withOrganics (juce::WebBrowser
         ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
         ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE,
         ParameterIDs::kOsc_ORG_VIBRATO, ParameterIDs::kOsc_ORG_VIBRATE, ParameterIDs::kOsc_ORG_VIBDELAY,   // tp105
-        ParameterIDs::kOsc_ORG_VCURVE, ParameterIDs::kOsc_ORG_TUNING };
+        ParameterIDs::kOsc_ORG_VCURVE, ParameterIDs::kOsc_ORG_TUNING, ParameterIDs::kOsc_ORG_START };   // tp114: + Start
     for (int osc = 0; osc < 4; ++osc)
         for (int k = 0; k < kOrgRelayKnobs; ++k)
         {
