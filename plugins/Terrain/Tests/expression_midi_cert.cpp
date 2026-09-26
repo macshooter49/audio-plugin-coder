@@ -475,6 +475,26 @@ int main()
                                     text.removeCharacters ("\n ").toRawUTF8(), got.curve, got.start, got.ceiling,
                                     (double) page["pressCurve"], (double) page["pressStart"], (double) page["pressCeil"], cl.curve, cl.start, cl.ceiling));
     }
+    {   // [15] tp110e — THE RING SEES THE PRESSURE. Max: "the modulation ring … needs to actually get the signal of the PolyBrute
+        //      or the MPE". The page's Aftertouch ring + underline read modVizAftertouch() (window.__mvAT); press in every mode and
+        //      that value must rise with the key held, then fall back when released.
+        const char* names[] = { "MIDI channel pressure", "MIDI poly aftertouch", "MPE member pressure (ch 3)" };
+        std::string rows; bool ok = true;
+        for (int mode = 0; mode < 3; ++mode)
+        {
+            auto pp = fresh(); auto& p = *pp; if (mode == 2) p.setMpeOn (true, 48.0f, false);
+            const int ch = mode == 2 ? 3 : 1; double held = 0, after = 1;
+            render (p, 200, [&] (int b, juce::MidiBuffer& m) {
+                if (b == 2)   m.addEvent (juce::MidiMessage::noteOn (ch, 64, (juce::uint8) 100), 0);
+                if (b == 20)  m.addEvent (mode == 1 ? juce::MidiMessage::aftertouchChange (ch, 64, 127) : juce::MidiMessage::channelPressureChange (ch, 127), 0);
+                if (b == 120) m.addEvent (mode == 1 ? juce::MidiMessage::aftertouchChange (ch, 64, 0) : juce::MidiMessage::channelPressureChange (ch, 0), 0); },
+                [&] (int b) { const double v = p.modVizAftertouch(); if (b == 110) held = v; if (b == 190) after = v; });
+            neutral (p);
+            const bool r = held > 0.9 && after < 0.02; ok = ok && r;
+            rows += fmt ("\n        %-28s held %.3f -> released %.3f %s", names[mode], held, after, r ? "" : "  <-- the ring would not show it");
+        }
+        bar ("15 ring", ok, fmt ("the value the Aftertouch ring + underline draw (__mvAT):%s", rows.c_str()));
+    }
 
     printf ("expression_midi_cert: %d passed, %d failed -> %s\n", passes, fails, fails == 0 ? "PASS" : "FAIL");
     return fails == 0 ? 0 : 1;
