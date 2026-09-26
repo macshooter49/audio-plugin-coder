@@ -3594,6 +3594,28 @@ juce::String TerrainAudioProcessor::organicsSetInstrument (int o, const juce::St
     return organicsJsonOf (o);
 }
 
+juce::String TerrainAudioProcessor::organicsSwitchInstrument (int o, const juce::String& id)
+{
+    /* tp112c — Max: "every time I switch to a different organic … I want the settings to reset … if I'm dragging Human down on
+       one thing, Human should be at default on the other … only for organics." A switch to ANOTHER instrument (the browser,
+       the ‹ › arrows, a scroll) puts every Organics control of that oscillator back to its default first; picking the same
+       instrument again keeps them. Presets / sessions restore through the state, never through here. */
+    o = juce::jlimit (0, ParameterIDs::kOscCount - 1, o);
+    if (id != orgSlot_[o].id)
+    {
+        const char* const* ids[] = { ParameterIDs::kOsc_ORG_ARTIC, ParameterIDs::kOsc_ORG_DYNAMICS, ParameterIDs::kOsc_ORG_TONE,
+            ParameterIDs::kOsc_ORG_BODY, ParameterIDs::kOsc_ORG_ATTACK, ParameterIDs::kOsc_ORG_HUMAN, ParameterIDs::kOsc_ORG_RELEASE,
+            ParameterIDs::kOsc_ORG_NOISE, ParameterIDs::kOsc_ORG_SUSTAIN, ParameterIDs::kOsc_ORG_VELOCITY, ParameterIDs::kOsc_ORG_IMAGE,
+            ParameterIDs::kOsc_ORG_VIBRATO, ParameterIDs::kOsc_ORG_VIBRATE, ParameterIDs::kOsc_ORG_VIBDELAY, ParameterIDs::kOsc_ORG_VCURVE,
+            ParameterIDs::kOsc_ORG_TUNING };
+        for (auto* tbl : ids)
+            if (auto* prm = apvts.getParameter (tbl[o]))
+                if (prm->getValue() != prm->getDefaultValue())
+                    prm->setValueNotifyingHost (prm->getDefaultValue());
+    }
+    return organicsSetInstrument (o, id);
+}
+
 juce::String TerrainAudioProcessor::organicsStateJson (int o) { return organicsJsonOf (o); }
 
 void TerrainAudioProcessor::organicsPreview (const juce::String& id)

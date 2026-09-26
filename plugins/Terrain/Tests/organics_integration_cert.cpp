@@ -1052,6 +1052,23 @@ int main()
              fmt ("onset (−6 dB) SD over 8 presses: A %.1f → %.1f ms · E %.1f → %.1f ms (unrouted → routed)", sA0, sA1, sE0, sE1));
     }
 
+    // ═══ [26] tp112c — A DIFFERENT INSTRUMENT STARTS FROM THE DEFAULTS (the page's switch; the state restore is untouched) ═══
+    std::printf ("\n[26] tp112c: switching to another instrument resets the Organics knobs; re-picking the same one keeps them\n");
+    if (want (26))
+    {
+        Inst a; useOrganic (a, 0, "test.sine"); a.waitLoaded (0);
+        auto* hu = a.p->apvts.getParameter (ParameterIDs::kOsc_ORG_HUMAN[0]); auto* to = a.p->apvts.getParameter (ParameterIDs::kOsc_ORG_TONE[0]);
+        hu->setValueNotifyingHost (0.05f); to->setValueNotifyingHost (0.9f);
+        a.p->organicsSwitchInstrument (0, "test.sine");                          // the same one: kept
+        const float keptH = hu->getValue(), keptT = to->getValue();
+        a.p->organicsSwitchInstrument (0, "test.piano"); a.waitLoaded (0);         // another one: defaults
+        const float resH = hu->getValue(), resT = to->getValue();
+        chk (std::abs (keptH - 0.05f) < 1e-4f && std::abs (keptT - 0.9f) < 1e-4f
+             && std::abs (resH - hu->getDefaultValue()) < 1e-6f && std::abs (resT - to->getDefaultValue()) < 1e-6f,
+             "26 Human / Tone: kept on re-picking test.sine, back to default on test.piano",
+             fmt ("same %.2f / %.2f · switched %.2f / %.2f (normalised; switched must equal the defaults)", keptH, keptT, resH, resT));
+    }
+
     std::printf ("\norganics_integration_cert: %d PASS · %d FAIL · %d SKIP\n", npass, nfail, nskip);
     return nfail ? 1 : 0;
 }

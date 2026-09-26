@@ -5748,6 +5748,7 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
 /* tp112b — Max: "get the old plus sign back … smaller … the same color as the A … the same size as the A, so it sits pretty in
    the box." The drawn two-bar + (tp105, centred by the grid, never typed) at the A's own size: 7 px bars, 1 px, currentColor =
    the letter's colour. The IC_PLUS swap is undone. */
+#syn-panel .device.osc .swap-btn:not(.act) { color: var(--text-secondary); }   /* the header + next to Init: gray, not white (white on hover) */
 #syn-panel .device.osc .swap-btn:not(.act)::before { width: 7px; height: 7px; }   /* odd: the 1 px bars sit on a pixel centre */
 #syn-panel .device.osc .swap-btn.act::after { display: block; width: 4.2px; height: 4.2px; box-sizing: border-box; border-left: 1px solid currentColor; border-bottom: 1px solid currentColor;
   transform: translateX(-1.9px) rotate(45deg); }

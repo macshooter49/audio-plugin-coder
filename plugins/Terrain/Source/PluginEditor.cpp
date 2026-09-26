@@ -17479,7 +17479,7 @@ juce::WebBrowserComponent::Options TerrainUiCore::withOrganics (juce::WebBrowser
         { complete (juce::var (organicsUserPatch (audioProcessor.organicsIndexJson(), true))); })
         // organicsSetInstrument(osc 0..7, id) → {ok,id,name,family,category,artics,hasNoise,hasRelease,status}; also ORG_INST
         .withNativeFunction ("organicsSetInstrument", [this, oscArg] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
-        { complete (juce::var (organicsUserPatch (audioProcessor.organicsSetInstrument (oscArg (a), a.size() > 1 ? a[1].toString() : juce::String()), false))); })
+        { complete (juce::var (organicsUserPatch (audioProcessor.organicsSwitchInstrument (oscArg (a), a.size() > 1 ? a[1].toString() : juce::String()), false))); })   // tp112c — a switch resets the knobs
         // organicsGetState(osc) → the same JSON for the osc's current instrument (the page reads back on open)
         .withNativeFunction ("organicsGetState", [this, oscArg] (const juce::Array<juce::var>& a, juce::WebBrowserComponent::NativeFunctionCompletion complete)
         { complete (juce::var (organicsUserPatch (audioProcessor.organicsStateJson (oscArg (a)), false))); })

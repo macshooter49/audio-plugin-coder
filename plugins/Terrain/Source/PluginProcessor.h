@@ -3088,6 +3088,9 @@ public:
     /** Natives (message thread). JSON per contract §6. */
     juce::String organicsIndexJson();
     juce::String organicsSetInstrument (int osc, const juce::String& id);
+    // tp112c — the page's instrument switch: a DIFFERENT instrument starts from every Organics knob's default (Max). Not the
+    // state restore or the tests (they call organicsSetInstrument directly).
+    juce::String organicsSwitchInstrument (int osc, const juce::String& id);
     juce::String organicsStateJson (int osc);
     void         organicsPreview (const juce::String& id);
     /** The organicViz feed: true + fills `out` when something sounded within the last 300 ms (≤ 15 Hz is the caller's
