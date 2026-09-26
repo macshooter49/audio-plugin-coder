@@ -1587,7 +1587,11 @@ public:
     // fb537 — 1 == the SYN page. Was 0 (front/hero): a fresh instance opened on the hero page
     // and every session reload went back to it. Codes are shared with the JS UI_PAGE_IDS list:
     // 0 front, 1 syn, 2 eq, 3 dly, 4 mod. Persisted in the state blob as "uiPage".
+   #if TERRAIN_FX
+    std::atomic<int> uiPage { 5 };   // tpfx — Terrain FX IS the Patcher
+   #else
     std::atomic<int> uiPage { 1 };
+   #endif
 
     // fb148 — UI-consumer census: the main editor + every popped card window. The audio
     // thread gates PURE-VIZ production on this (spectrum FFTs, osc-scope publish), so a
@@ -3524,6 +3528,15 @@ private:
     /** Bottom of processBlock, just above the capture: the cut-tails fade and the silence detector. */
     void  tailStage (juce::AudioBuffer<float>& buffer, int numSamples) noexcept;
     double tailWindowSeconds() const noexcept;   // how long the output must stay silent before sleeping
+   #if TERRAIN_FX
+    // tpfx — THE AUDIO IN (see fxAnalyseInput in the .cpp): this block's host input + what it reads off it.
+    void  fxAnalyseInput (const juce::AudioBuffer<float>& buffer, int numSamples) noexcept;
+    juce::AudioBuffer<float> fxIn_;
+    float    fxFast_ = 0.0f, fxSlow_ = 0.0f, fxFollow_ = 0.0f, fxAlt_ = 0.0f;
+    int      fxHold_ = 0, fxQuiet_ = 0;
+    bool     fxGate_ = false, fxTrigOn_ = false, fxTrigOff_ = false;
+    uint32_t fxSeed_ = 0x5EEDF00Du;
+   #endif
 
     std::array<DelayEngine, (size_t) kFxExtra>          delayPool_;
     std::array<tw::DistortionEngine, (size_t) kFxExtra> distPool_;

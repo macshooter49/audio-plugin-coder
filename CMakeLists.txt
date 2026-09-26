@@ -91,6 +91,13 @@ foreach(PLUGIN_DIR ${PLUGIN_DIRS})
     get_filename_component(DIR_NAME ${PLUGIN_DIR} NAME)
     
     if(IS_DIRECTORY "${PLUGIN_DIR}")
+        # tpfx — Terrain FX (Trrn / com.wavescrate.terrainfx) is now built by plugins/Terrain from the synth's
+        # sources (target TerrainFX). The old, never-released plugins/TerrainFX keeps its source but must not
+        # build: two targets cannot own one plugin identity (or one CMake target name).
+        if(DIR_NAME STREQUAL "TerrainFX")
+            message(STATUS " -> SKIPPING: ${DIR_NAME} (Terrain FX is built by plugins/Terrain, tpfx)")
+            continue()
+        endif()
         if(EXISTS "${PLUGIN_DIR}/CMakeLists.txt")
             message(STATUS " -> FOUND: ${DIR_NAME}")
             add_subdirectory("${PLUGIN_DIR}")

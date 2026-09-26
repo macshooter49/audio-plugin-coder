@@ -997,7 +997,12 @@ window.__ctlMenuRows = (function () { var byEl = new WeakMap(), matchers = [];
    loaded in its own native window with ?card=<id>; sniffed synchronously here (before
    any CSS/JS) so the card-only chrome applies from frame one — no full-UI flash. */
 window.__cardOnly=(location.search.match(/[?&]card=((?:arp|chop|gli)[2-4]?|rbn|mod|lfo|crv)/)||[])[1]||'';   /* tp20 — an instance digit rides along */   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */   /* fb328 — crv = the Distortion curve card. ⚠️ THIS regex is the SECOND card-id whitelist (the first is popOutCardWindow's in C++) — miss it and the popped window boots the FULL UI as a mini Terrain */
-window.__bootPage=+((location.search.match(/[?&]page=([1-5])/)||[])[1]||0);   /* tp1 — 5 = the Patcher */   /* fb514 -- reopen lands on the saved panel: C++ appends ?page=N (processor uiPage atomic) so the panel applies at PARSE time -- the hero never paints, no flash, no reopen CPU spike */
+window.__bootPage=+((location.search.match(/[?&]page=([1-5])/)||[])[1]||0);
+/* tpfx — TERRAIN FX: the same page, the effect's build. The C++ says so twice (window.__TERRAIN_FX injected into <head>,
+   ?fx=1 on the boot URL). It IS the Patcher, effects only: every FX branch below keys on window.__TFX, so the synth's
+   page never takes one. */
+window.__TFX=!!window.__TERRAIN_FX||/[?&]fx=1(&|$)/.test(location.search);
+if(window.__TFX){ window.__bootPage=5; try{ document.documentElement.classList.add('tfx'); }catch(e){} }   /* tp1 — 5 = the Patcher */   /* fb514 -- reopen lands on the saved panel: C++ appends ?page=N (processor uiPage atomic) so the panel applies at PARSE time -- the hero never paints, no flash, no reopen CPU spike */
 /* fb103 — CRISP AT ANY SIZE: the editor's settled pageZoom is pushed here; the
    devicePixelRatio the page sees becomes base×zoom (capped 3 for CPU), so every
    canvas that sizes buffers from clientWidth×dpr re-rasters at TRUE device
@@ -7540,6 +7545,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
 #syn-panel .device.osc.uni-page:not(.swapped).engine-organic .osc-display { display: none; }
 #syn-panel .device.osc.uni-page:not(.swapped) .organic-knob-wrap { display: none; }
 #syn-panel .device.osc.engine-organic .wt-knob-wrap { display: none; }
+/* tpfx — TERRAIN FX: no synth page, no Chop page, no DLY / EQ pages. The first pill is the Patcher's own (FX). */
+html.tfx #mix-btn, html.tfx #delay-btn, html.tfx #eq-btn { display: none !important; }
 </style>
 </head>
 <body>
@@ -8231,6 +8238,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
    {p:'about',g:'Waves Crate',id:'wc',blk:'wc',label:'About Waves Crate',help:'',where:'—'},
    {p:'about',g:'Reset',id:'reset',label:'Reset all settings',help:'Puts every setting on this page back to how Terrain shipped. Your presets, packs and registration are not touched.',where:'Every host · this computer',ctl:{t:'btns',btns:[{label:'Reset settings…',on:function(){ resetSheet(); }}]}}
   ];
+  /* tpfx — TERRAIN FX'S SETTINGS: only what matters to an effect. Gone: MIDI & Controllers (no MIDI in an effect), the
+     standalone's MIDI ports / computer keyboard, the voice ceiling and the voice-filter quality (no voices), the factory
+     sample / wavetable library and where it lives, and the synth-page "Open on". Kept: Account, the audio device (the
+     standalone's input matters here), Performance, the preset rows, Interface, Themes, About. */
+  if (window.__TFX) {
+    var FXDROP={ports:1,qwerty:1,voices:1,rtQ:1,libdirs:1,rescan:1,scan:1,factory:1,openOn:1};
+    ROWS=ROWS.filter(function(r){ return r.p!=='control' && !FXDROP[r.id]; });
+    PAGES=PAGES.filter(function(p){ return p.id!=='control'; });
+  }
   var RID={}; ROWS.forEach(function(r){ RID[r.id]=r; });
   function ms(b){ return (b/S.sr*1000).toFixed(1)+' ms'; }
 
@@ -13153,6 +13169,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var d=DEVS[idx]; if(!d) return;
             try{ window.__setSynParam(d.actP,0); }catch(e){}      // out of the chain
             try{ if(d.pwrP) window.__setSynParam(d.pwrP,0); }catch(e){}  // and silent (no ghost effect)
+            if(window.__TFX&&d.tapsP){ try{ window.__setSynParam(String(d.tapsP).replace(/_TAPS$/,'_CHOPS'),0); }catch(e){} }   /* tpfx — its Audio In cable goes with it (the next card in this slot is born unrouted) */
             /* fb453 — and out of the MOD MATRIX: drop every route inside this device's 12-wide
                destination block, or the next card to claim this (kind, instance) slot is born
                already modulated by a route the user never dropped there. */
@@ -14400,6 +14417,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
              still standing: at 100 nodes (96 cards) that was 1.3 s on the main thread, measured with the CPU profiler. */
           window.__fxrClear=function(){ try{ var n=DEVS.length; for(var i=n-1;i>=0;i--){ var d=DEVS[i]; if(!d) continue;
               try{ window.__setSynParam(d.actP,0); }catch(e){} try{ if(d.pwrP) window.__setSynParam(d.pwrP,0); }catch(e){}
+              if(window.__TFX&&d.tapsP){ try{ window.__setSynParam(String(d.tapsP).replace(/_TAPS$/,'_CHOPS'),0); }catch(e){} }   /* tpfx */
               try{ var lo=fxModDest(d.core,d.inst,0); if(lo!=null&&window.__tiPruneFxRoutes) window.__tiPruneFxRoutes(lo,lo+FXMOD_KNOBS); }catch(e){} }
             DEVS.length=0; fxPushRanks(); render(); return n; }catch(e){ return -1; } };
           /* ══ tp14 — RANDOMIZE CHAIN (Max: "a randomized effect chain … purely effects") ══════════════════════════
@@ -14433,6 +14451,8 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               picked.push('cmp');   /* the chain ends in a compressor, at its defaults, untouched (Max) */
               picked.forEach(function(core,pi){
                 var ri=window.__fxrAdd(core); if(ri<0) return; var last=(pi===picked.length-1);
+                if(window.__TFX){ var cd=DEVS[ri]; if(cd&&cd.tapsP) setP(String(cd.tapsP).replace(/_TAPS$/,'_CHOPS'),1/15); }   /* tpfx — every card hears the Audio In (chop layer A): it enters at the first and runs through the chain in order */
+                else
                 for(var r=0;r<6;r++) window.__fxrSetRoute(ri,r,(last||!big||rnd()>.35||r>3)?1:(rnd()<.6?1:0));   /* it hears everything; heavy/wild may drop an oscillator */
                 var d=DEVS[ri]; if(!d||last) return;
                 if(d.types&&d.types.length>1&&rnd()<(big?.9:.55)){ var ty=d.types.filter(function(t){ return t!==d.type&&t!=='Convolution'; }); if(ty.length) setType(ri,pick(ty)); d=DEVS[ri]||d; }
@@ -14462,6 +14482,13 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             var ENVPF=['AMP','FLT','PIT','M1','M2'];
             var OSCSFX=['WT_FRAME','WARP_AMOUNT','WARP2_AMT','FOLD_AMT','SPECTRAL_AMT','SPECTRAL_LO','SPECTRAL_HI','WVAR','W2VAR','PAN','LEVEL','UWIDTH','UBLEND','SUB_WEIGHT','SUB_HEAT','SAMPLE_SCAN','SAMPLE_FORMANT','SAMPLE_STRETCH','SAMPLE_SPRAY','SAMPLE_WARP','SAMPLE_START','SAMPLE_AIR','WSLOT1_DEPTH','WSLOT2_DEPTH','WSLOT3_DEPTH','WSLOT4_DEPTH','FM_DEPTH1','FM_DEPTH2','FM_FB','HARM_COUNT','HARM_SHINE','MODAL_MATERIAL','MODAL_DECAY','MODAL_BODY'];   /* no COARSE/OCT/SEMI/CENT/URANGE/UDETUNE/PHASE: pitch, detune and the 180 stay out of it */
             function mdests(){ var out=[];
+              if(window.__TFX){   /* tpfx — Terrain FX: only what is in the effect — the rack cards, the tape machine, the modulators themselves */
+                (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d){ if(!d||d.core==='cmp'||d.core==='eqz') return; for(var k=0;k<12;k++){ if(d.core==='flt'&&k===1) continue; var dd=window.__fxModDest?window.__fxModDest(d.core,d.inst,k):null; if(dd!=null) out.push(dd); } });
+                [1887,1888,1889].forEach(function(d){ out.push(d); });
+                for(var n0=0;n0<10;n0++){ out.push(12+n0); out.push(673+n0); out.push(683+n0); }
+                for(var e0=1;e0<=5;e0++) for(var q0=0;q0<6;q0++) out.push(481+(e0-1)*6+q0);
+                for(var m0=0;m0<9;m0++) out.push((window.__MACRO_DEST||1878)+m0);
+                return out; }
               ['A','B','C','D'].forEach(function(o){ OSCSFX.forEach(function(k){ var d=window.__knobDest?window.__knobDest('SYN_OSC_'+o+'_'+k):null; if(d!=null) out.push(d); }); });
               [0,1,56,57,58,59,60,61,62,63,340,341,342,343,344,345].forEach(function(d){ out.push(d); });   /* both filter slots, front and back · tp44 — never the two resonances (54/55) */
               (window.__fxrDevs?window.__fxrDevs():[]).forEach(function(d){ if(!d||d.core==='cmp'||d.core==='eqz') return; for(var k=0;k<12;k++){ if(d.core==='flt'&&k===1) continue; var dd=window.__fxModDest?window.__fxModDest(d.core,d.inst,k):null; if(dd!=null) out.push(dd); } });   /* tp44 — no random modulation on the Equalizer, none on a filter card's Res (Max) */
@@ -14473,6 +14500,7 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
             function srcPool(R){ var S=[]; var nl=R.lfo; for(var i=1;i<=nl;i++) S.push({lfo:i});
               for(var e=2;e<=5;e++) S.push({env:e});
               if(rnd()<R.mac) for(var m=1;m<=9;m++) S.push({mac:m});
+              if(window.__TFX){ if(rnd()<R.exotic+0.25){ for(var fr=1;fr<=4;fr++) S.push({rnd:fr}); S.push({alt:1}); S.push({fol:1}); } return S; }   /* tpfx — no notes, keys or wheels in an effect: the input's follower and the per-transient Random / Alt */
               if(rnd()<R.exotic+0.25){ S.push({vel:1}); S.push({note:1}); }
               if(rnd()<R.exotic){ S.push({whl:1}); S.push({at:1}); S.push({bend:1}); S.push({alt:1}); for(var r=1;r<=4;r++) S.push({rnd:r}); for(var f=1;f<=7;f++) S.push({fol:f}); }
               return S; }
@@ -20079,6 +20107,7 @@ function applySynPanelOpen(open) {
 }
 function setActivePanel(which, restoring) {
   // which = 'syn' | 'eq' | 'dly' | 'mod' | null
+  if (window.__TFX && which !== 'mod') which = 'tp';   /* tpfx — Terrain FX has two pages: the Patcher and MOD */
   currentActivePanel = which;   // fb636 — first: a step below that throws must never leave the page believing the front is shown
   applySynPanelOpen(which === 'syn' || which === 'tp');   /* tp1 — the Patcher IS the synth panel, showing the canvas instead of the grid */
   document.body.classList.toggle('tp-open', which === 'tp');
@@ -20179,8 +20208,14 @@ document.getElementById('syn-btn').addEventListener('click', () => {
      synth page (never toggle through to the Patcher), so "settings → synth" always reaches synth. */
   var __stOpen = false; try { __stOpen = document.getElementById('st-overlay').classList.contains('on'); } catch (e) {}
   if (__stOpen) { try { if (window.__st && window.__st.open) window.__st.open(false); } catch (e) {} setActivePanel('syn'); return; }
+  if (window.__TFX) { setActivePanel('tp'); return; }   /* tpfx — the FX pill is the Patcher, always */
   setActivePanel(currentActivePanel === 'syn' ? 'tp' : 'syn');
 });
+/* tpfx — Terrain FX names itself: the brand reads "Terrain FX", the first pill "FX" (the Patcher). */
+if (window.__TFX) { try {
+  var __tfxB = document.querySelector('#header .brand-name'); if (__tfxB) __tfxB.textContent = 'Terrain FX';
+  var __tfxS = document.getElementById('syn-btn'); if (__tfxS) { __tfxS.textContent = 'FX'; __tfxS.title = 'The effect rack (Patcher)'; }
+} catch (e) {} }
 /* POLISH — PAGE NAVIGATION CLOSES THE SETTINGS OVERLAY. The header stays clickable above #st-overlay, so
    a page pill (SYN/CHOP/MOD) or a re-click of the active pill used to switch the page UNDER a stuck settings
    sheet. Close settings on every navigation. SYN is handled in its own click above; MOD / CHOP / EQ / DLY
@@ -46010,6 +46045,9 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var ST = function(){ try{ return (typeof state!=='undefined')?state:null; }catch(e){ return null; } };
   var page=null, world=null, cg=null, drawg=null, nodesEl=null, addM=null, nMenu=null, toastEl=null, miniEl=null, modesEl=null, modesHome=null, tileHome={}, tileOrder=[];
   var isOpen=false, built=false, view={x:0,y:0,z:0.6}, nodes=[], cables=[], sel=null, drag=null, raf=0, shims={}, addCtx=null, addCat='All', suppressClick=false, syncT=0, applying=false, prevTapeTab=null, zTop=1;
+  /* tpfx — TERRAIN FX: this canvas is the whole plugin. Audio In (chop layer A) → effects / Glitch / Shaper / tape → Out,
+     plus the modulators (LFO, envelopes, the Randomizer). No MIDI In, oscillators, noise, filter, voices or samplers. */
+  var TFX=!!window.__TFX;
   var layout={v:6,pos:{},ext:{},view:null,aim:'anything',dlevel:'medium',rlevel:'medium',rlinks:[],viz:false,nodes:[],finl:{}};   /* tp41 — finl: an inline flow card's anchor, the rack device it sits after */
   var SIZES={osc:[332,140],noise:[220,132],voiceCanvas:[202,196],filter:[332,146],env:[332,96],lfo:[448,96],flow:[120,84],fx:[314,176],voice:[178,176],midi:[124,62],out:[176,86],tape:[220,238],tapeloop:[380,300],rnd:[200,150],samp:[208,92]};   /* the module kinds are RE-MEASURED from the synth page on every open (measureHome) — these are the fallbacks */
   /* tp11 — Max: "extend the bottom … then the top … evenly": a module with dots under its knobs gets 7 px of air on top and 17 at the bottom, so a dot never lands on a knob's LFO streak */
@@ -46065,7 +46103,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function choiceNorm(id,idx,fallbackN){ var n=0; try{ n=window.__paramCardinality?window.__paramCardinality(id):0; }catch(e){} if(!(n>1)) n=fallbackN||2; return Math.max(0,Math.min(1,idx/(n-1))); }
   function oscLetter(o){ return String(o||'').toUpperCase(); }   /* A, B, C, D … the alphabet is the ceiling: A–Z */
   function OX(o){ return 'SYN_OSC_'+String(o).toUpperCase()+'_'; }
-  function nodeName(n){ if(n.kind==='samp') return 'Sampler '+String(n.sub||'').toUpperCase();   /* tp56 */
+  function nodeName(n){ if(n.kind==='samp') return (TFX&&n.sub==='a')?'Audio In':'Sampler '+String(n.sub||'').toUpperCase();   /* tp56 · tpfx — layer A is the effect's input */
     if(n.kind==='osc') return 'Oscillator '+oscLetter(n.sub); if(n.kind==='noise') return n.sub==='n2'?'Noise 2':'Noise'; if(n.kind==='fx') return (n.core==='tape'?(n.type||'Tape'):FXNAMES[n.core])||'Effect'; if(n.kind==='flow') return flowLabel(n.sub);
     if(n.kind==='tape'){ var S=ST(); return MACHINES[S?S.tapeMachine|0:0]||'Tape'; }   /* tp63 — Reel / Porta / Wire, no prefix */
     return {midi:'MIDI In',out:'Out',filter:'Filter',env:'Envelope',lfo:'LFO',tapeloop:'Deck',voice:'Voices',rnd:'Randomizer'}[n.kind]||n.kind; }
@@ -46115,7 +46153,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     /* tp56 — the SAMPLERS stack under the oscillator column. They are sources like the oscillators,
        so they belong in the source column; they take no MIDI cable, so nothing reaches left of them. */
     { var sps=of('samp').sort(function(a,b){ return String(a.sub).localeCompare(String(b.sub)); });
-      var yS=Math.max(1,oscs.length)*(S.osc[1]+G)+nzs.length*(S.noise[1]+G);
+      var yS=TFX?Math.max(0,Math.round(synthH/2-S.samp[1]/2)):Math.max(1,oscs.length)*(S.osc[1]+G)+nzs.length*(S.noise[1]+G);   /* tpfx — the Audio In heads the signal row */
       sps.forEach(function(n,i){ P[n.key]=[x1,yS+i*(S.samp[1]+G)]; });
       if(sps.length) synthH=Math.max(synthH,yS+sps.length*(S.samp[1]+G)-G); }
     P.filter=[x2,0]; P.env=[x2,S.filter[1]+G]; P.voice=[x2,S.filter[1]+G+S.env[1]+G];   /* tp43 — the voice column under the envelope */
@@ -46234,16 +46272,19 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   function setOscOn(o,on){ var d=oscDev(o); setP(OX(o)+'ENABLE',on?1:0); if(d) d.classList.toggle('osc-off',!on);
     if(on) phase180(OX(o),setP); }   /* tp12b — a created oscillator sits at 180°, aligned (Max) */
   function adoptAll(){ if(nodes.length){ try{ returnAll(); }catch(e){} } nodes=[]; nodesEl.innerHTML=''; measureHome();
+    if(TFX){ adoptSamp('a'); sampMeters(); }   /* tpfx — the Audio In, always on the canvas (it is the effect's input, like Out is its output) */
+    else {
     mkNode('midi','midi',null).body.innerHTML='<div class="tp-end tp-viz"><div class="tp-keys">'+'wbwbwwbwbwbw'.split('').map(function(k){return '<i class="'+(k==='b'?'bk':'')+'"></i>';}).join('')+'</div></div>';
     oscList().forEach(function(o){ if(oscOn(o)) adoptOsc(o); });
     [1,2].forEach(function(i){ if(noiseOn(i)) adoptNoise(i); });   /* tp42 */
     if(layout.voice) adoptVoice();   /* tp43 */
     var fd=q('#filter-device'); if(fd) mkNode('filter','filter',fd);
+    }
     var ev=q('#syn-panel .device.envs'); if(ev) mkNode('env','env',ev);
     var lf=q('#syn-panel .device.mod'); if(lf) mkNode('lfo','lfo',lf);
     /* the FLOW tiles' home comes along (display:contents) so the engine's renderChain still finds every tile; a tile is on the canvas while it is in the chain */
     modesEl=document.getElementById('flow-modes'); if(modesEl){ modesHome={parent:modesEl.parentNode,next:modesEl.nextSibling}; tileHome={}; tileOrder=[]; Array.prototype.forEach.call(modesEl.querySelectorAll('.flow-mode'),function(t){ tileHome[t.getAttribute('data-mode')]=t; tileOrder.push(t); }); nodesEl.appendChild(modesEl); }
-    (window.__flowChain?window.__flowChain():[]).forEach(function(m){ adoptFlowNode(m); });
+    (window.__flowChain?window.__flowChain():[]).forEach(function(m){ if(TFX&&!/^(chop|glitch)\d*$/.test(m)) return; adoptFlowNode(m); });   /* tpfx — Glitch and Shaper only */
     if(toggleOn('tape-toggle')) adoptTape();   /* tp8 — the deck is not on the canvas (Max) */
     if(deckActive()||layout.deck) adoptLoop();   /* tp64 — unless it is cabled, or was dragged out of the Tape shelf */
     try{ if(window._fxSizeFn) setTimeout(window._fxSizeFn,60); }catch(e){}   /* tp8 — no window resize inside the world */
@@ -46279,11 +46320,11 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   var SAMPL = ['a','b','c','d'];
   function sampKey(L){ return 'samp-' + L; }
   function sampIdx(L){ return SAMPL.indexOf(String(L||'').toLowerCase()); }
-  function sampName(L){ try{ var i=sampIdx(L); var lib=window.__tiLib?window.__tiLib():null;
+  function sampName(L){ if(TFX&&sampIdx(L)===0) return 'Audio In'; try{ var i=sampIdx(L); var lib=window.__tiLib?window.__tiLib():null;
       var nm=lib&&lib.names?lib.names[i]:null; if(nm) return String(nm).replace(/\.[^.]+$/,''); }catch(e){} return 'No sample'; }
   function mkSampEl(L){
     var d=document.createElement('div'); d.className='tp-samp'; d.setAttribute('data-samp',L);
-    d.innerHTML='<div class="tp-samp-head"><span class="tp-samp-l">'+String(L).toUpperCase()+'</span>'
+    d.innerHTML='<div class="tp-samp-head"><span class="tp-samp-l">'+((TFX&&sampIdx(L)===0)?'IN':String(L).toUpperCase())+'</span>'   /* tpfx — the Audio In's chip */
               + '<span class="tp-samp-n"></span></div>'
               + '<div class="tp-samp-mtr"><span><i class="l"></i></span><span><i class="r"></i></span></div>';
     return d; }
@@ -46473,6 +46514,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     try{ if(window.__fxrRender) window.__fxrRender(); }catch(e){} try{ if(window._fxSizeFn) window._fxSizeFn(); window.dispatchEvent(new Event('resize')); }catch(e){} }
   /* presence — a module is on the canvas exactly while it is on (tp6): the oscillators' ENABLE, the tape / deck toggles, the FLOW chain */
   function syncPresence(){ var changed=false;
+    if(TFX) return syncPresenceFx();   /* tpfx */
     oscList().forEach(function(o){ if(!oscDev(o)) return; var on=oscOn(o), n=nodeByKey('osc-'+o); if(on&&!n){ if(adoptOsc(o)) changed=true; } else if(!on&&n){ returnOsc(n); changed=true; } });
     [1,2].forEach(function(i){ if(!noiseEl(i)) return; var on=noiseOn(i), n=nodeByKey(noiseKey(i)); if(on&&!n){ if(adoptNoise(i)) changed=true; } else if(!on&&n){ returnNoise(n); changed=true; } });   /* tp42 */
     var tOn=toggleOn('tape-toggle'), tn=nodeByKey('tape'); if(tOn&&!tn){ if(adoptTape()) changed=true; } else if(!tOn&&tn){ returnTape(tn); changed=true; }
@@ -46496,16 +46538,28 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var ch=window.__flowChain?window.__flowChain():[]; ch.forEach(function(m){ if(!nodeByKey('flow-'+m)){ if(adoptFlowNode(m)) changed=true; } });
     nodes.slice().forEach(function(n){ if(n.kind==='flow'&&ch.indexOf(n.sub)<0){ returnFlowNode(n); changed=true; } });   /* tp20 — presence follows the chain, every instance */
     if(changed){ var o=nodeByKey('out'); if(o) o.wrap.style.zIndex=++zTop; drawMini(); } return changed; }
+  /* tpfx — Terrain FX's presence: the Audio In always, the tape machine / deck as the synth has them, and the flow chain's
+     Glitch / Shaper cards only (an Arp or Robin in the chain has nothing to play in an effect and never shows). */
+  function syncPresenceFx(){ var changed=false;
+    if(!nodeByKey(sampKey('a'))){ if(adoptSamp('a')) changed=true; }
+    var tOn=toggleOn('tape-toggle'), tn=nodeByKey('tape'); if(tOn&&!tn){ if(adoptTape()) changed=true; } else if(!tOn&&tn){ returnTape(tn); changed=true; }
+    { var dWant=deckActive()||!!layout.deck, dn=nodeByKey('tapeloop'); if(dWant&&!dn){ if(!toggleOn('loop-toggle')) setToggle('loop-toggle',true); if(adoptLoop()) changed=true; } else if(!dWant&&dn){ returnLoop(dn); changed=true; } }
+    nodes.forEach(function(n){ if(n.kind==='samp') sampPaint(n); });
+    sampMeters();
+    var ch=(window.__flowChain?window.__flowChain():[]).filter(function(m){ return /^(chop|glitch)\d*$/.test(m); });
+    ch.forEach(function(m){ if(!nodeByKey('flow-'+m)){ if(adoptFlowNode(m)) changed=true; } });
+    nodes.slice().forEach(function(n){ if(n.kind==='flow'&&ch.indexOf(n.sub)<0){ returnFlowNode(n); changed=true; } });
+    if(changed){ var o=nodeByKey('out'); if(o) o.wrap.style.zIndex=++zTop; drawMini(); } return changed; }
 
   /* ── the cables — derived from the parameters every pass ── */
   function curFilterSlot(){ var p=document.getElementById('filter-pill-2'); return p&&p.classList.contains('act')?2:1; }
-  function derive(){ var out=[], seen={}; var midi=nodeByKey('midi'), outN=nodeByKey('out'); if(!midi||!outN) return out;
+  function derive(){ var out=[], seen={}; var midi=nodeByKey('midi'), outN=nodeByKey('out'); if((!midi&&!TFX)||!outN) return out;   /* tpfx — the effect has no MIDI In */
     function add(a,ak,ai,b,bk,bi,t,edit,fixed){ var id=a.key+'.'+ak+ai+'>'+b.key+'.'+bk+bi;
       if(edit&&edit.route){ edit={routes:[edit.route]}; } else if(edit&&edit.frt){ edit={frts:[edit.frt]}; }   /* tp41 — one cable may carry several oscillators (the filter → a device); cutting it cuts them all */
       if(seen[id]){ var ex=seen[id]; if(ex.edit&&edit){ if(ex.edit.routes&&edit.routes) ex.edit.routes=ex.edit.routes.concat(edit.routes); else if(ex.edit.frts&&edit.frts) ex.edit.frts=ex.edit.frts.concat(edit.frts); } return; }
       var cb={id:id,from:a,fk:ak,fi:ai,to:b,tk:bk,ti:bi,t:t,edit:edit||null,fixed:!!fixed}; seen[id]=cb; out.push(cb); }
     var chain=window.__flowChain?window.__flowChain():[]; var noteT=chain.filter(function(m){var k=fKind(m); return k==='arp'||k==='drift';}), audioT=chain.filter(function(m){var k=fKind(m); return k==='chop'||k==='glitch';});
-    var src=midi; noteT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(!t) return; add(src,'out',0,t,'in',0,'n',{flow:m}); src=t; });
+    var src=midi; if(src) noteT.forEach(function(m){ var t=nodeByKey('flow-'+m); if(!t) return; add(src,'out',0,t,'in',0,'n',{flow:m}); src=t; });
     var oscs=nodes.filter(function(n){ return n.kind==='osc'||n.kind==='noise'; });   /* tp42 — the noise modules ride the notes and cable like oscillators */
     oscs.forEach(function(o){ add(src,'out',0,o,'in',0,'n',null,true); });
     /* tp30 — THE AUDIO FLOW CARDS NO LONGER SIT IN FRONT OF EVERYTHING. Each one takes exactly
@@ -47281,6 +47335,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   window.__tpDiceLevelSet=function(l){ if(LEVELS.indexOf(l)<0) return false; layout.dlevel=l; saveLayout(); return true; };   /* tp36 — the gates set the reach without a menu */
   window.__tpDiceMenu=function(x,y){
     try{ build(); }catch(e){}
+    if(TFX){ if(isOpen) openAimMenuFx(x,y); return true; }   /* tpfx — the effect's own short menu (no sound aims, no oscillator blocks) */
     if(openDiceSheet()) return true;   /* tp39 — the randomization sheet, wherever the dice was pressed */
     if(isOpen){ openAimMenu(x,y); return true; }
     /* the canvas's own menu lives inside #tp-page and cannot be seen while that is hidden, so off-canvas it is
@@ -47685,7 +47740,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     if(c){ h='<div class="ps">Cable</div><div class="pi danger" data-a="cut">Cut</div>'; }
     else if(n.kind==='flow'){ h='<div class="ps">'+nodeName(n)+'</div><div class="pi" data-a="ext">'+(n.ext?'Minimize':'Extend')+'</div>'+(flowInline(n.sub)?'<div class="pi" data-a="uninl">Run after the rack</div>':'')+'<div class="pi danger" data-a="rm">Remove from the chain</div>'; }
     else if(n.kind==='osc'||n.kind==='noise'||n.kind==='voice'||n.kind==='fx'||n.kind==='tape'||n.kind==='tapeloop'){ h='<div class="ps">'+nodeName(n)+'</div>'+(n.kind==='fx'?'<div class="pi" data-a="pwr">'+(n.wrap.classList.contains('off')?'Turn on':'Bypass')+'</div>':'')+'<div class="pi danger" data-a="rm">Remove</div>'; }
-    else { h='<div class="ps">'+nodeName(n)+'</div><div class="pi dis">Part of the synth</div>'; }
+    else { h='<div class="ps">'+nodeName(n)+'</div><div class="pi dis">'+(TFX?'Part of Terrain FX':'Part of the synth')+'</div>'; }
     nMenu.innerHTML=h; placeMenu(nMenu,cx,cy);
     nMenu.onmousedown=function(ev){ ev.stopPropagation();
       var a=ev.target.dataset.a; if(!a) return; if(a==='cut'&&c) cut(c); if(a==='rm'&&n) removeNode(n);
@@ -47737,7 +47792,14 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   window.__tpDiceSheetOpen=openDiceSheet;
   window.__tpDiceAims=function(a){ if(a===undefined) return (layout.aims||[]).slice(); layout.aims=Array.isArray(a)?a.filter(function(x){ return AIMS.indexOf(x)>0; }):[]; saveLayout(); return layout.aims.slice(); };   /* the gates and the probes */
   window.__tpDiceBlocks=function(b){ if(b===undefined) return Object.assign({},layout.blocks||{}); layout.blocks=Object.assign({osc:0,flt:0,env:0,fx:0,mod:0,flow:0},b||{}); saveLayout(); return Object.assign({},layout.blocks); };
-  function openAimMenu(cx,cy){ if(openDiceSheet()) return; closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
+  function openAimMenuFx(cx,cy){ closeMenus(); var dl=layout.dlevel||'medium';   /* tpfx — the effect's dice menu: roll the chain, roll the modulation, and the reach */
+    nMenu.innerHTML='<div class="pi" data-act="fx">New effect chain</div><div class="pi" data-act="mod">New modulation</div><div class="sepd"></div>'
+      +LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('');
+    placeMenu(nMenu,cx,cy);
+    nMenu.onmousedown=function(ev){ ev.stopPropagation(); var t=ev.target&&ev.target.closest?ev.target.closest('[data-dl],[data-act]'):null; if(!t) return;
+      if(t.dataset.dl){ layout.dlevel=t.dataset.dl; saveLayout(); closeMenus(); toast('The dice reaches '+t.dataset.dl); }
+      if(t.dataset.act){ closeMenus(); rollRack(t.dataset.act); } }; }
+  function openAimMenu(cx,cy){ if(TFX) return openAimMenuFx(cx,cy); if(openDiceSheet()) return; closeMenus(); var cur=layout.aim||'anything', dl=layout.dlevel||'medium';
     nMenu.innerHTML=AIMS.concat(DTARGETS).map(function(a){ return '<div class="pi'+(a===cur?' cur':'')+'" data-aim="'+a+'">'+aimLabel(a)+'</div>'; }).join('')
       +'<div class="sepd"></div>'+LEVELS.map(function(l){ return '<div class="pi'+(l===dl?' cur':'')+'" data-dl="'+l+'">'+cap(l)+'</div>'; }).join('')
       +'<div class="sepd"></div>'+CAPS.map(function(c){ return '<div class="pi'+(String(layout.cpuCap||'auto')===String(c)?' cur':'')+'" data-cap="'+c+'">'+capLabel(c)+'</div>'; }).join('');   /* tp36 */
@@ -47751,14 +47813,27 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
   /* tp23 — EVERY click of the dice honours the selection that is already there (Max: "if I have it set to FX all I
      have to do is keep clicking the random button until I get something good"). layout.aim is saved by saveLayout,
      so it survives a reload too — the menu is for CHANGING the aim, never for repeating it. */
-  function rollDice(){ var a=layout.aim||'anything';
+  /* tpfx — TERRAIN FX'S DICE: effects and modulation only (Max: "randomize = effects only"). A new chain fed from the
+     Audio In (the rack dice, TFX branch), then new modulation aimed at effect knobs (the mod dice, TFX branch). Never an
+     oscillator, filter, voice or note source. */
+  function rollDiceFx(){ rollRack('fx'); setTimeout(function(){ try{ rollRack('mod'); }catch(e){} },560); }
+  function rollDice(){ if(TFX) return rollDiceFx(); var a=layout.aim||'anything';
     if(layout.blocks&&isTarget(a)){ layout.aim='anything'; saveLayout(); a='anything'; }   /* tp39c — the sheet's blocks replaced the old FX/Modulation targets: once it has been used they never swallow a roll */
     if(a==='fx') return rollRack('fx');
     if(a==='modulation') return rollRack('mod');
     generate(); }
   /* the add browser — two panes, names only: All · Oscillators · Filters · Flow · Tape · Effects */
-  var CATS=['All','Oscillators','Chop','Filters','Flow','Tape','Effects','Utility'];   /* tp56 — the Chop samplers get their own shelf, next to the oscillators they are not */   /* tp43 — Utility: the voice column */
-  function catalog(){ var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');
+  var CATS=TFX?['All','Flow','Tape','Effects']:['All','Oscillators','Chop','Filters','Flow','Tape','Effects','Utility'];   /* tp56 — the Chop samplers get their own shelf, next to the oscillators they are not */   /* tp43 — Utility: the voice column */   /* tpfx — the effect's shelves */
+  /* tpfx — TERRAIN FX'S BROWSER: effects, the tape shelf (the routed machines + the Deck), and the two audio flow cards,
+     Glitch and Shaper. Nothing that makes a sound of its own (oscillators, noise, samplers) and nothing that plays notes. */
+  function catalogFx(){ var it=[];
+    FLOWS.forEach(function(m){ if(m!=='chop'&&m!=='glitch') return; var mx=FLOW_INST_MAX[m]||1, free=null; for(var n=1;n<=mx;n++){ var key=n>1?m+n:m; if(!nodeByKey('flow-'+key)){ free=key; break; } }
+      if(free) it.push({k:'flow:'+free,n:flowLabel(free),cat:'Flow'});
+      else it.push({k:'flow:'+m,n:FLOWNAME[m],cat:'Flow',dis:true,note:mx>1?('All '+mx+' are on the canvas'):'Already on the canvas'}); });
+    TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:nm,cat:'Tape'}); });
+    { var dOn=!!nodeByKey('tapeloop'); it.push({k:'deck',n:'Deck',cat:'Tape',dis:dOn,note:dOn?'Already on the canvas':'Records what is cabled in, plays it back into the chain'}); }
+    FXLIST.forEach(function(k){ it.push({k:k,n:FXNAMES[k],cat:'Effects'}); }); return it; }
+  function catalog(){ if(TFX) return catalogFx(); var it=[]; var S=ST(), mach=S?S.tapeMachine|0:0, tapeUp=!!nodeByKey('tape');
     oscList().forEach(function(o){ var on=!!nodeByKey('osc-'+o); it.push({k:'osc:'+o,n:'Oscillator '+oscLetter(o),cat:'Oscillators',dis:on,note:on?'Already on the canvas':null}); });
     { var n1=!!nodeByKey(noiseKey(1)), n2=!!nodeByKey(noiseKey(2)); it.push(n1&&n2?{k:'noise:2',n:'Noise',cat:'Oscillators',dis:true,note:'Both noises are on the canvas'}:{k:n1?'noise:2':'noise:1',n:'Noise',cat:'Oscillators',dis:false,note:n1?'A second noise (Noise 2)':null}); }   /* tp49 — ONE entry (Max: "why put Noise 2 when we can just duplicate the same Noise"): the first add is Noise, the next is Noise 2 on the canvas */   /* tp42 — the noise modules */
     SAMPL.forEach(function(L){ var on=!!nodeByKey(sampKey(L));
@@ -47778,7 +47853,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     TAPEFX.forEach(function(nm){ it.push({k:'tapefx:'+nm,n:nm,cat:'Tape'}); });
     { var dOn=!!nodeByKey('tapeloop'); it.push({k:'deck',n:'Deck',cat:'Tape',dis:dOn,note:dOn?'Already on the canvas':'Records what is cabled in, plays it back into the chain'}); }
     FXLIST.forEach(function(k){ it.push({k:k,n:FXNAMES[k],cat:'Effects'}); }); return it; }
-  function fitsCtx(it){ if(!addCtx) return true; var t=addCtx.t; if(t==='m') return false; if(t==='n') return it.cat==='Flow'&&/arp|drift/.test(it.k); if(t==='a') return it.cat==='Effects'||it.cat==='Tape'||(it.cat==='Flow'&&/chop|glitch/.test(it.k)); return false; }
+  function fitsCtx(it){ if(TFX&&!/^(Flow|Tape|Effects)$/.test(it.cat)) return false; if(!addCtx) return true; var t=addCtx.t; if(t==='m') return false; if(t==='n') return it.cat==='Flow'&&/arp|drift/.test(it.k); if(t==='a') return it.cat==='Effects'||it.cat==='Tape'||(it.cat==='Flow'&&/chop|glitch/.test(it.k)); return false; }
   function openAdd(cx,cy,ctx){ closeMenus(); addCtx=ctx; var w=toWorld(cx,cy); addM.dataset.wx=w.x; addM.dataset.wy=w.y; addM.querySelector('input').value=''; renderAdd(); placeMenu(addM,cx,cy); try{ addM.querySelector('input').focus(); }catch(e){} }
   function renderAdd(){ var q2=addM.querySelector('input').value.trim().toLowerCase(), all=catalog().filter(fitsCtx);
     addM.querySelector('.cats').innerHTML=CATS.map(function(c){ return '<div class="row'+(c===addCat?' cur':'')+'" data-c="'+c+'">'+c+'</div>'; }).join('');

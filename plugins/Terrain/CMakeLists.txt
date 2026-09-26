@@ -360,3 +360,99 @@ if (WIN32)
             juce::juce_recommended_config_flags
     )
 endif()
+
+# ══ tpfx — TERRAIN FX: THE PATCHER AS AN AUDIO EFFECT, BUILT FROM THESE SAME SOURCES ═════════════════════════════
+#  Max: "Terrain FX is only the Patcher, and the Patcher only has the effects … audio in, audio out."
+#  A second plugin target over the synth's own Source/, switched by ONE compile definition, TERRAIN_FX=1. Every
+#  difference is behind `#if TERRAIN_FX` (the processor's buses and Audio In, the page's effects-only Patcher, its own
+#  bank / settings folders), so the synth target above compiles exactly what it compiled before.
+#  🔒 IDENTITY: this takes over the Terrain FX identity (Tests/identity_lock_gate.py [1]/[5]/[6]) — PRODUCT_NAME
+#  "Terrain FX", com.wavescrate.terrainfx, PLUGIN_CODE Trrn, Wvcr, AU `aufx` (no MIDI: envelopes are triggered by
+#  transients on the input). The old plugins/TerrainFX sampler/FX was never released; its source stays in the repo
+#  but the root CMakeLists no longer builds it (two targets cannot own one identity).
+#  No factory wavetables / samples / banks are copied into its bundles: it has no oscillators, no Chop page, and
+#  its preset bank starts empty (WavesCrate/Terrain FX/Banks).
+option(TERRAIN_BUILD_FX "Build Terrain FX (the Patcher as an effect) from the Terrain sources" ON)
+if (TERRAIN_BUILD_FX)
+    juce_add_plugin(TerrainFX
+        COMPANY_NAME "Waves Crate"
+        BUNDLE_ID "com.wavescrate.terrainfx"
+        PLUGIN_MANUFACTURER_CODE Wvcr
+        PLUGIN_CODE Trrn
+        FORMATS VST3 AU Standalone
+        PRODUCT_NAME "Terrain FX"
+        DESCRIPTION "Terrain FX — the Terrain Patcher as an effect rack"
+        ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
+        ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
+        IS_SYNTH FALSE
+        NEEDS_MIDI_INPUT FALSE
+        NEEDS_WEBVIEW2 ${NEEDS_WEBVIEW2}
+        NEEDS_WEB_BROWSER ${NEEDS_WEB_BROWSER}
+        AU_MAIN_TYPE kAudioUnitType_Effect
+        VST3_CATEGORIES Fx
+    )
+    target_sources(TerrainFX
+        PRIVATE
+            Source/PluginProcessor.cpp
+            Source/PluginEditor.cpp
+            Source/TerrainUiPark.cpp
+            Source/TerrainSettingsNatives.cpp
+            Source/ParametricEQ_test.cpp
+            Source/MoogDelay_test.cpp
+            Source/TerrainChorus_test.cpp
+            Source/Warp/WarpProcessor_test.cpp
+            Source/LayerState_test.cpp
+            Source/FxMask_test.cpp
+            Source/IndyFxChain_test.cpp
+            Source/SynthVoice_test.cpp
+            Source/Wavetable_test.cpp
+    )
+    if (EXISTS "${TERRAIN_ORG_DIR}/OrganicEngine.cpp" AND EXISTS "${TERRAIN_ORG_DIR}/OrganicsLibrary.cpp")
+        target_sources(TerrainFX PRIVATE Source/organics/OrganicEngine.cpp Source/organics/OrganicsLibrary.cpp)
+        if (EXISTS "${TERRAIN_ORG_DIR}/OrganicsImport.cpp")
+            target_sources(TerrainFX PRIVATE Source/organics/OrganicsImport.cpp)
+            target_compile_definitions(TerrainFX PRIVATE TERRAIN_ORG_IMPORT=1)
+        endif()
+    else()
+        target_sources(TerrainFX PRIVATE Source/organics/OrganicsStub.cpp)
+    endif()
+    target_include_directories(TerrainFX PRIVATE Source)
+    target_link_libraries(TerrainFX
+        PRIVATE
+            Terrain_WebUI
+            signalsmith-stretch
+            juce::juce_audio_basics
+            juce::juce_audio_devices
+            juce::juce_audio_formats
+            juce::juce_audio_plugin_client
+            juce::juce_audio_processors
+            juce::juce_audio_utils
+            juce::juce_core
+            juce::juce_data_structures
+            juce::juce_dsp
+            juce::juce_events
+            juce::juce_graphics
+            juce::juce_gui_basics
+            juce::juce_gui_extra
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_lto_flags
+            juce::juce_recommended_warning_flags
+    )
+    if (MSVC)
+        target_compile_definitions(TerrainFX PUBLIC _USE_MATH_DEFINES)
+        target_compile_options(TerrainFX PUBLIC /bigobj /utf-8 /arch:AVX)
+    endif()
+    if (APPLE)
+        target_link_libraries(TerrainFX PRIVATE "-framework Accelerate")
+    endif()
+    target_compile_definitions(TerrainFX
+        PUBLIC
+            TERRAIN_FX=1
+            JUCE_WEB_BROWSER=1
+            JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
+            JUCE_USE_CURL=0
+            JUCE_VST3_CAN_REPLACE_VST2=0
+    )
+    message(STATUS "Terrain: + TerrainFX (Terrain FX — the Patcher as an effect, TERRAIN_FX=1)")
+endif()
