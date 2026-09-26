@@ -17,8 +17,10 @@
 //   6  NOISE GREYS (with its tooltip) when the instrument has no mechanical noise — tp107: the back panel's Noise pill
 //   7  STATE READ-BACK — a fresh page paints the saved instrument, articulation and picture; a missing one says so
 //   8  ENGINE AWAY AND BACK keeps the instrument (no re-set, no default)
-//  10  tp105 THE BACK PANEL: Organics' own row replaces the Sample warp row — tp107: Rate · Delay · Curve · Tuning · Noise,
-//      Noise a drag 0–100 on SYN_OSC_x_ORG_NOISE (double-click = 50), and no pill moves while the values change
+//  10  tp105 THE BACK PANEL: Organics' own row replaces the Sample warp row — tp114: Vibrato · Rate · Delay · Start · Noise, all
+//      five drags (no dropdown left). Vibrato IS the front knob's SYN_OSC_x_ORG_VIBRATO (the ring follows a drag on the back);
+//      Rate/Delay dim while Vibrato is Off; Start reads the skip in ms (2 s × v^2.5); Noise 0–100 (double-click = 50); a flip back
+//      to the back reads the params again; no pill moves while the values change
 //  11  tp107 PAGE 2 = Attack · Release · Sustain · Velocity · Image; Attack reads Tight … Natural … 3 s
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const H = require('./_org_harness.js');
@@ -179,45 +181,55 @@ const realErrs = errs => errs.filter(e => !/formatOutput/.test(e));   // formatO
       out.push({ id, dest, rings: [...el.querySelectorAll('circle.sm-ring')].filter(c => getComputedStyle(c).display !== 'none').length, ul, name: window.__destShortName ? window.__destShortName(dest) : '' }); }
     return out; });
   ok(mod.every(m => m.rings === 1 && m.ul), '[9] a modulated Organics knob shows the house mod ring and underline (routes to dest 5273 / 5274)', JSON.stringify(mod));
-  // [10] tp105 — the back panel: Organics' own row, the Sample warp row gone — tp107: Rate · Delay · Curve · Tuning · Noise
+  // [10] tp105 — the back panel: Organics' own row, the Sample warp row gone — tp114: Vibrato · Rate · Delay · Start · Noise
   const bk = await p.evaluate(async () => { const sleep = ms => new Promise(r => setTimeout(r, ms));
     await window.__orgSetInstrument('a', 'vsco.violin.section'); await sleep(200);
     const d = document.getElementById('osc-a-device'); if (!d.classList.contains('swapped')) d.querySelector('.swap-btn').click(); await sleep(300);
     const vis = e => !!(e && e.getClientRects().length && getComputedStyle(e).display !== 'none');
     const rows = [...d.querySelectorAll('.back-only > .selector-pills')], org = d.querySelector('.org-pills'), std = rows.find(r => !r.classList.contains('org-pills'));
-    const out = { orgShown: vis(org), stdShown: vis(std), labels: [...org.querySelectorAll('.ph-label')].map(e => e.textContent), values: [...org.querySelectorAll('.org-bp b')].map(e => e.textContent) };
+    const out = { orgShown: vis(org), stdShown: vis(std), labels: [...org.querySelectorAll('.ph-label')].map(e => e.textContent), values: [...org.querySelectorAll('.org-bp b')].map(e => e.textContent),
+                  dropdowns: org.querySelectorAll('.org-dd').length };
     const rects = () => [...org.querySelectorAll('.org-bp')].map(e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(v => +v.toFixed(3)).join(','); }).join(' ');
-    out.rects0 = rects();
-    // drag Rate up 75 px → +0.5
-    const rate = org.querySelector('[data-org$="_VIBRATE"]'), rr = rate.getBoundingClientRect(); window.__natLog.length = 0;
-    rate.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientX: rr.left + 10, clientY: rr.top + 10, pointerId: 3 }));
-    document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rr.left + 10, clientY: rr.top + 10 - 75, pointerId: 3 }));
-    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 3 }));
-    out.rateWrite = (window.__natLog.filter(q => q[0] === 'SYN_OSC_A_ORG_VIBRATE').pop() || [])[1]; out.rateText = rate.querySelector('b').textContent;
-    rate.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })); out.rateReset = rate.querySelector('b').textContent;
-    // tp107 — Noise: drag up 45 px → 0.5 + 0.3 = 0.8 → "80", double-click → "50"
-    const nz = org.querySelector('[data-org$="_NOISE"]'), nr = nz.getBoundingClientRect(); window.__natLog.length = 0;
-    nz.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientX: nr.left + 10, clientY: nr.top + 10, pointerId: 4 }));
-    document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: nr.left + 10, clientY: nr.top + 10 - 45, pointerId: 4 }));
-    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
-    out.noiseWrite = (window.__natLog.filter(q => q[0] === 'SYN_OSC_A_ORG_NOISE').pop() || [])[1]; out.noiseText = nz.querySelector('b').textContent; out.rects1 = rects();
-    nz.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })); out.noiseReset = nz.querySelector('b').textContent;
+    const dim = k => org.querySelector('[data-org$="_' + k + '"]').classList.contains('org-na');
+    const drag = (k, dy, id) => { const el = org.querySelector('[data-org$="_' + k + '"]'), r = el.getBoundingClientRect(); window.__natLog.length = 0;
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientX: r.left + 10, clientY: r.top + 10, pointerId: id }));
+      document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + 10, clientY: r.top + 10 - dy, pointerId: id }));
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: id }));
+      return { write: (window.__natLog.filter(q => q[0] === 'SYN_OSC_A_ORG_' + k).pop() || [])[1], text: el.querySelector('b').textContent }; };
+    const reset = k => { const el = org.querySelector('[data-org$="_' + k + '"]'); el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })); return el.querySelector('b').textContent; };
+    ['VIBRATO', 'VIBRATE', 'VIBDELAY', 'START', 'NOISE'].forEach(reset);   /* the earlier bars' drags moved some of them: from the defaults */
+    out.values = [...org.querySelectorAll('.org-bp b')].map(e => e.textContent);
+    out.rects0 = rects(); out.dimOff = [dim('VIBRATE'), dim('VIBDELAY'), dim('START'), dim('NOISE')];
+    // Vibrato: drag up 75 px → 0.5 → 50·0.5^1.6 = 16 ct; the front ring follows; Rate/Delay light up
+    out.vib = drag('VIBRATO', 75, 2);
+    const ring = d.querySelector('.knob[data-syn="SYN_OSC_A_ORG_VIBRATO"] .knob-ring'); out.frontN = ring && ring.__n;
+    out.dimOn = [dim('VIBRATE'), dim('VIBDELAY')];
+    // Rate: drag up 75 px → +0.5 → 8.5 Hz, double-click → 5.5 Hz
+    out.rate = drag('VIBRATE', 75, 3); out.rateReset = reset('VIBRATE');
+    // Start: drag up 75 px → 0.5 → 250 ms; 150 px → 1 → 1.00 s; double-click → 0 ms
+    const over = () => [...org.querySelectorAll('.ph-label, .org-bv')].filter(e => e.scrollWidth > e.clientWidth + 0.5).map(e => e.textContent);   /* a word cut = a defect */
+    out.start = drag('START', 75, 5); out.over = over(); out.startFull = drag('START', 150, 6); out.over = out.over.concat(over()); out.startReset = reset('START');
+    // Noise: drag up 45 px → 0.5 + 0.3 = 0.8 → "80", double-click → "50"
+    out.noise = drag('NOISE', 45, 4); out.rects1 = rects(); out.noiseReset = reset('NOISE');
     out.noArtic = !org.querySelector('[data-org$="_ARTIC"]');
-    // Curve → Hard, Tuning → As recorded: real dropdowns (the house .pmenu)
-    const pick = async (sel, label) => { const pl = org.querySelector(sel); pl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })); await sleep(50);
-      const m = document.querySelector('.org-artic-menu'); const items = m ? [...m.querySelectorAll('.pi .nm')].map(e => e.textContent) : []; const it = m && [...m.querySelectorAll('.pi')].find(e => e.textContent === label); if (it) it.click(); await sleep(50);
-      const dv = pl.querySelector('b').parentElement; return { items, shown: pl.querySelector('b').textContent, over: dv.scrollWidth > dv.clientWidth + 0.5 }; };
-    window.__natLog.length = 0;
-    out.curve = await pick('[data-org$="_VCURVE"]', 'Hard'); out.tuning = await pick('[data-org$="_TUNING"]', 'As recorded'); out.rects2 = rects();
-    out.writes = window.__natLog.filter(q => /_ORG_(VCURVE|TUNING)$/.test(q[0])).map(q => q[0].replace('SYN_OSC_A_ORG_', '') + '=' + (+q[1]).toFixed(3));
-    // another engine: the Organics row is gone, the standard row is back
+    // the front knob moves while the back is hidden → a flip to the back reads it again
+    d.querySelector('.swap-btn').click(); await sleep(150);
+    window.__params['SYN_OSC_A_ORG_VIBRATO'] = 1; window.__params['SYN_OSC_A_ORG_START'] = 0.2;
+    d.querySelector('.swap-btn').click(); await sleep(250);
+    out.readBack = [org.querySelector('[data-org$="_VIBRATO"] b').textContent, org.querySelector('[data-org$="_START"] b').textContent];
+    out.vibReset = reset('VIBRATO'); out.dimAgain = dim('VIBRATE'); out.rects2 = rects();
     d.querySelector('.swap-btn').click(); await sleep(200);
     return out; });
-  const bkOk = bk.orgShown && !bk.stdShown && bk.labels.join('|') === 'Rate|Delay|Curve|Tuning|Noise' && bk.noArtic && Math.abs(bk.rateWrite - 0.917) < 0.01 && /^8\.5 Hz$/.test(bk.rateText) && bk.rateReset === '5.5 Hz'
-    && Math.abs(bk.noiseWrite - 0.8) < 0.01 && bk.noiseText === '80' && bk.noiseReset === '50'
-    && bk.curve.items.join('|') === 'Soft|Linear|Hard' && bk.curve.shown === 'Hard' && bk.tuning.items.join('|') === 'As recorded|Equal' && bk.tuning.shown === 'Natural'
-    && bk.writes.indexOf('VCURVE=1.000') >= 0 && bk.writes.indexOf('TUNING=0.000') >= 0 && bk.rects0 === bk.rects1 && bk.rects0 === bk.rects2;
-  ok(bkOk, '[10] the back panel: Rate · Delay · Curve · Tuning · Noise (the Sample warp row hidden, no Style pill); Rate and Noise drag and reset, Curve/Tuning are dropdowns that write their params, and no pill moves',
+  const bkOk = bk.orgShown && !bk.stdShown && bk.labels.join('|') === 'Vibrato|Rate|Delay|Start|Noise' && bk.dropdowns === 0 && bk.noArtic
+    && bk.values.join('|') === 'Off|5.5 Hz|0.35 s|0 ms|50'
+    && bk.dimOff.join() === 'true,true,false,false' && bk.dimOn.join() === 'false,false' && bk.dimAgain === true
+    && Math.abs(bk.vib.write - 0.5) < 0.01 && bk.vib.text === '16 ct' && Math.abs(bk.frontN - 0.5) < 0.01
+    && Math.abs(bk.rate.write - 0.917) < 0.01 && /^8\.5 Hz$/.test(bk.rate.text) && bk.rateReset === '5.5 Hz'
+    && Math.abs(bk.start.write - 0.5) < 0.01 && bk.start.text === '354 ms' && Math.abs(bk.startFull.write - 1) < 0.01 && bk.startFull.text === '2.00 s' && bk.startReset === '0 ms'
+    && Math.abs(bk.noise.write - 0.8) < 0.01 && bk.noise.text === '80' && bk.noiseReset === '50'
+    && bk.readBack.join('|') === '50 ct|36 ms' && bk.vibReset === 'Off'
+    && bk.over.length === 0 && bk.rects0 === bk.rects1 && bk.rects0 === bk.rects2;
+  ok(bkOk, '[10] the back panel: Vibrato · Rate · Delay · Start · Noise (the Sample warp row hidden, no dropdown); Vibrato drives the front ring, Rate/Delay dim while it is Off, Start reads ms, all drag and reset, a flip reads them back, and no pill moves',
      JSON.stringify(Object.assign({}, bk, { rects0: undefined, rects1: undefined, rects2: undefined, still: bk.rects0 === bk.rects1 && bk.rects0 === bk.rects2 })));
   // [11] tp107 — page 2 and the Attack readout
   const p2 = await p.evaluate(async () => { const d = document.getElementById('osc-a-device'), w = d.querySelector('.organic-knob-wrap');

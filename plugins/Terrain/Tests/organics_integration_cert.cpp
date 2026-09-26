@@ -44,6 +44,10 @@
 //   tp107:
 //   [25] ATTACK is back: onset vs the knob (0 … 1), onset = max(amp attack, knob), LFO 1 → the Attack dest 5352 + osc (A, and E
 //        through bank B's rebase).
+//   tp114:
+//   [27] the back panel measured: START declared A–H (default 0); Curve Soft + Tuning As recorded play bit-identical to the
+//        defaults (inert); Start 0 → 100 % enters 2 s into the decaying test.piano (quieter, no strike); swept live across
+//        repeated presses, no click.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -1067,6 +1071,67 @@ int main()
              && std::abs (resH - hu->getDefaultValue()) < 1e-6f && std::abs (resT - to->getDefaultValue()) < 1e-6f,
              "26 Human / Tone: kept on re-picking test.sine, back to default on test.piano",
              fmt ("same %.2f / %.2f · switched %.2f / %.2f (normalised; switched must equal the defaults)", keptH, keptT, resH, resT));
+    }
+
+    // ═══ [27] tp114 — THE BACK PANEL, MEASURED: START (new) · Curve + Tuning inert ═══
+    std::printf ("\n[27] tp114 back panel: START skips into the recording (A–H, default 0); Curve and Tuning are inert\n");
+    if (want (27))
+    {
+        Inst a; int have = 0; bool def0 = true;
+        for (int o = 0; o < ParameterIDs::kOscCount; ++o)
+            if (auto* prm = a.p->apvts.getParameter (ParameterIDs::kOsc_ORG_START[o])) { ++have; def0 = def0 && prm->getDefaultValue() == 0.f; }
+        chk (have == 8 && def0, "27a START declared for A–H, default 0 (the authored start)", fmt ("%.0f of 8 declared · defaults 0: %.0f", have, def0 ? 1 : 0));
+        // one press through the processor; `edit` sets the knobs under test (Human 0, Noise 0: the recording alone)
+        auto press = [] (const char* id, int key, double sec, std::function<void (TerrainAudioProcessor&)> edit) {
+            Inst b; useOrganic (b, 0, id); b.waitLoaded (0);
+            setP (*b.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f); setP (*b.p, ParameterIDs::SYN_OSC_A_ORG_NOISE, 0.f);
+            if (edit) edit (*b.p);
+            b.run (0.05); b.clear(); b.block ({ { key, 1 } }); b.run (sec);
+            return b.L;
+        };
+        // 27b INERT: Curve = Soft and Tuning = As recorded (test.noisy carries tfix +25 ¢; velocity 100 → Soft would be v111) play
+        // bit-identical to the defaults — a saved session with either lands on Linear + Equal
+        {
+            const auto d = press ("test.noisy", 57, 0.8, {});
+            const auto x = press ("test.noisy", 57, 0.8, [] (TerrainAudioProcessor& p) { setP (p, ParameterIDs::SYN_OSC_A_ORG_VCURVE, 0.f); setP (p, ParameterIDs::SYN_OSC_A_ORG_TUNING, 0.f); });
+            double md = 0; for (size_t i = 0; i < std::min (d.size(), x.size()); ++i) md = std::max (md, (double) std::abs (d[i] - x[i]));
+            chk (d.size() == x.size() && md == 0.0 && rmsOf (d, 0, d.size()) > 1e-3, "27b Curve Soft + Tuning As recorded = the defaults, sample for sample (both inert)",
+                 fmt ("max |diff| %.3g over %.0f samples", md, (double) d.size()));
+        }
+        // 27c START on the decaying test.piano (key 72: a 4 s one-shot at its root): 0 → 100 % skips 2 s of it — through the whole
+        // processor, the Start-100 % note at 0.15–0.35 s plays what the untouched note plays at 2.15–2.35 s (the amp envelope has
+        // settled in both windows), and the first 300 ms fall step by step with the knob
+        {
+            auto lvl = [] (const std::vector<float>& x, double a, double b) { return dbOf (rmsOf (x, (size_t) (a * SR), (size_t) (b * SR))); };
+            std::string t; double L[4] = {}; int i = 0;
+            for (float v : { 0.f, 0.25f, 0.5f, 1.f })
+            {
+                const auto x = press ("test.piano", 72, 0.6, [v] (TerrainAudioProcessor& p) { setP (p, ParameterIDs::SYN_OSC_A_ORG_START, v); });
+                L[i++] = lvl (x, 0.0, 0.3); t += fmt ("%.0f%%: %.1f dB · ", 100 * v, L[i - 1]);
+            }
+            const auto x0 = press ("test.piano", 72, 2.5, {});
+            const auto x1 = press ("test.piano", 72, 0.5, [] (TerrainAudioProcessor& p) { setP (p, ParameterIDs::SYN_OSC_A_ORG_START, 1.f); });
+            const double at2 = lvl (x0, 2.15, 2.35), s100 = lvl (x1, 0.15, 0.35);
+            t += fmt ("Start 100 %% at 0.15–0.35 s %.2f dB vs the untouched note at 2.15–2.35 s %.2f dB", s100, at2);
+            chk (L[0] - L[3] > 6.0 && L[0] >= L[1] && L[1] >= L[2] && L[2] >= L[3] && std::abs (s100 - at2) < 1.0,
+                 "27c Start 0 → 100 %: the note enters 2 s into the recording (the first 300 ms fall with the knob)", t);
+        }
+        // 27d CLICK-FREE WHILE TURNED: Start swept 0 → 1 → 0 across 3 s of repeated presses — it acts at note-on only, and every
+        // skipped entry fades in (12 ms): the HP-residual click metric stays quiet
+        {
+            Inst b; useOrganic (b, 0, "test.piano"); b.waitLoaded (0);
+            setP (*b.p, ParameterIDs::SYN_OSC_A_ORG_HUMAN, 0.f); setP (*b.p, ParameterIDs::SYN_OSC_A_ORG_NOISE, 0.f);
+            b.run (0.05); b.clear();
+            const int nb = (int) (3.0 * SR / BLK);
+            for (int k = 0; k < nb; ++k)
+            {
+                const double ph = (double) k / nb; setP (*b.p, ParameterIDs::SYN_OSC_A_ORG_START, (float) (ph < 0.5 ? 2 * ph : 2 - 2 * ph));
+                if (k % 24 == 0) b.block ({ { 72, 1 }, { 64, 1 } }); else if (k % 24 == 20) b.block ({ { 72, 0 }, { 64, 0 } }); else b.block();
+            }
+            const auto c = clickScan (b.L, (size_t) (0.02 * SR), b.L.size(), SR);
+            chk (! c.hit, "27d Start swept 0 → 100 → 0 % over 3 s of presses (keys 64 + 72, 4 per second): no click",
+                 fmt ("worst HP excess %.1f dB (%.1f dB re local) at %.2f s", c.ex, c.rel, (double) c.at / SR));
+        }
     }
 
     std::printf ("\norganics_integration_cert: %d PASS · %d FAIL · %d SKIP\n", npass, nfail, nskip);

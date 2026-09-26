@@ -57,7 +57,9 @@ TABLES = ['ENGINE','ENABLE','WT_PRESET','WT_FRAME','HARM_TABLE','HARM_MODE','SPE
           # tp104 — the Organics engine's twelve (the message-thread lazy arm / instrument requests index them by oscillator)
           'ORG_INST','ORG_ARTIC','ORG_DYNAMICS','ORG_TONE','ORG_BODY','ORG_ATTACK','ORG_HUMAN','ORG_RELEASE','ORG_NOISE','ORG_SUSTAIN','ORG_VELOCITY','ORG_IMAGE',
           # tp105 — Vibrato (knob 3) + the Organics back panel
-          'ORG_VIBRATO','ORG_VIBRATE','ORG_VIBDELAY','ORG_VCURVE','ORG_TUNING']
+          'ORG_VIBRATO','ORG_VIBRATE','ORG_VIBDELAY','ORG_VCURVE','ORG_TUNING',
+          # tp114 — the back panel's Start
+          'ORG_START']
 for n in TABLES:
     if n in names:
         hdr.append(f'inline constexpr const char* const kOsc_{n}[kOscCount] = {{ ' + ', '.join(f'SYN_OSC_{L}_{n}' for L in 'ABCDEFGH') + ' };')

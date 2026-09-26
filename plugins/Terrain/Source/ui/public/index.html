@@ -9696,11 +9696,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
               <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
+              <!-- tp114 — Vibrato · Rate · Delay · Start · Noise (Max: "Natural vs As Recorded — I don't hear a difference … the Hz and the Delay —
+                   I don't hear anything"). Measured: Tuning moved a typical instrument 0–4 ¢ and Curve repeated Settings → Velocity curve, so both
+                   left; Rate/Delay were silent because the vibrato they shape sat on the FRONT at 0 — its depth now sits beside them (the same
+                   parameter as the front knob), and they dim while it is Off; Start (new) skips into the recording. All five drag. -->
               <div class="selector-pills org-pills">
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_A_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_A_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_VIBRATO" data-def="0" title="Vibrato — how far the pitch swings, 0 to &plusmn;50 cents: the front panel&#39;s Vibrato knob, here beside its Rate and Delay. Drag; double-click = Off"><div class="sel-value ph-label">Vibrato</div><div class="sel-value ph-val org-bv"><b>Off</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_A_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz (turn Vibrato up to hear it). Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_A_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s (turn Vibrato up to hear it). Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_START" data-def="0" title="Start — how far into the recording each note begins, 0 to 2 s. 0 = the whole attack as recorded · 25 = the strike gone (62 ms in) · 50 = a third of a second in · 100 = two seconds in: no attack at all, the note enters in its body (Noise keeps its own thumps). Drag; double-click = 0"><div class="sel-value ph-label">Start</div><div class="sel-value ph-val org-bv"><b>0 ms</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_A_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
@@ -10067,11 +10071,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
               <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
+              <!-- tp114 — Vibrato · Rate · Delay · Start · Noise (Max: "Natural vs As Recorded — I don't hear a difference … the Hz and the Delay —
+                   I don't hear anything"). Measured: Tuning moved a typical instrument 0–4 ¢ and Curve repeated Settings → Velocity curve, so both
+                   left; Rate/Delay were silent because the vibrato they shape sat on the FRONT at 0 — its depth now sits beside them (the same
+                   parameter as the front knob), and they dim while it is Off; Start (new) skips into the recording. All five drag. -->
               <div class="selector-pills org-pills">
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_B_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_B_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_VIBRATO" data-def="0" title="Vibrato — how far the pitch swings, 0 to &plusmn;50 cents: the front panel&#39;s Vibrato knob, here beside its Rate and Delay. Drag; double-click = Off"><div class="sel-value ph-label">Vibrato</div><div class="sel-value ph-val org-bv"><b>Off</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_B_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz (turn Vibrato up to hear it). Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_B_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s (turn Vibrato up to hear it). Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_START" data-def="0" title="Start — how far into the recording each note begins, 0 to 2 s. 0 = the whole attack as recorded · 25 = the strike gone (62 ms in) · 50 = a third of a second in · 100 = two seconds in: no attack at all, the note enters in its body (Noise keeps its own thumps). Drag; double-click = 0"><div class="sel-value ph-label">Start</div><div class="sel-value ph-val org-bv"><b>0 ms</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_B_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
@@ -10462,11 +10470,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
               <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
+              <!-- tp114 — Vibrato · Rate · Delay · Start · Noise (Max: "Natural vs As Recorded — I don't hear a difference … the Hz and the Delay —
+                   I don't hear anything"). Measured: Tuning moved a typical instrument 0–4 ¢ and Curve repeated Settings → Velocity curve, so both
+                   left; Rate/Delay were silent because the vibrato they shape sat on the FRONT at 0 — its depth now sits beside them (the same
+                   parameter as the front knob), and they dim while it is Off; Start (new) skips into the recording. All five drag. -->
               <div class="selector-pills org-pills">
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_C_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_C_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_VIBRATO" data-def="0" title="Vibrato — how far the pitch swings, 0 to &plusmn;50 cents: the front panel&#39;s Vibrato knob, here beside its Rate and Delay. Drag; double-click = Off"><div class="sel-value ph-label">Vibrato</div><div class="sel-value ph-val org-bv"><b>Off</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_C_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz (turn Vibrato up to hear it). Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_C_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s (turn Vibrato up to hear it). Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_START" data-def="0" title="Start — how far into the recording each note begins, 0 to 2 s. 0 = the whole attack as recorded · 25 = the strike gone (62 ms in) · 50 = a third of a second in · 100 = two seconds in: no attack at all, the note enters in its body (Noise keeps its own thumps). Drag; double-click = 0"><div class="sel-value ph-label">Start</div><div class="sel-value ph-val org-bv"><b>0 ms</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_C_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
@@ -10833,11 +10845,15 @@ html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-
               <!-- tp105 — ORGANICS' BACK ROW (contract tp105): replaces the selector row above while the osc runs Organics.
                    The house .sel pills: the two times drag like Phase (vertical, double-click = default), the three choices are dropdowns. -->
               <!-- tp107 — Rate · Delay · Curve · Tuning · Noise: Noise (a drag, 0–100) replaces "Style"; the articulation keeps its header pill. -->
+              <!-- tp114 — Vibrato · Rate · Delay · Start · Noise (Max: "Natural vs As Recorded — I don't hear a difference … the Hz and the Delay —
+                   I don't hear anything"). Measured: Tuning moved a typical instrument 0–4 ¢ and Curve repeated Settings → Velocity curve, so both
+                   left; Rate/Delay were silent because the vibrato they shape sat on the FRONT at 0 — its depth now sits beside them (the same
+                   parameter as the front knob), and they dim while it is Off; Start (new) skips into the recording. All five drag. -->
               <div class="selector-pills org-pills">
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz. Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
-                <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s. Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_D_ORG_VCURVE" data-n="3" data-opts="Soft|Linear|Hard" data-def="1" title="Velocity curve — how your touch maps to the layers and the level: Soft (a light touch reaches the loud layers), Linear, Hard"><div class="sel-value ph-label">Curve</div><div class="sel-value org-dv"><b>Linear</b></div></div>
-                <div class="sel ph-pill org-bp org-dd" data-org="SYN_OSC_D_ORG_TUNING" data-n="2" data-opts="As recorded|Equal" data-def="1" title="Tuning — Equal: every sample corrected to equal temperament; As recorded: the players&#39; own intonation"><div class="sel-value ph-label">Tuning</div><div class="sel-value org-dv"><b>Equal</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_VIBRATO" data-def="0" title="Vibrato — how far the pitch swings, 0 to &plusmn;50 cents: the front panel&#39;s Vibrato knob, here beside its Rate and Delay. Drag; double-click = Off"><div class="sel-value ph-label">Vibrato</div><div class="sel-value ph-val org-bv"><b>Off</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_D_ORG_VIBRATE" data-def="0.417" title="Vibrato rate — how fast the vibrato swings, 3 to 9 Hz (turn Vibrato up to hear it). Drag; double-click = 5.5 Hz"><div class="sel-value ph-label">Rate</div><div class="sel-value ph-val org-bv"><b>5.5 Hz</b></div></div>
+                <div class="sel ph-pill org-bp org-vib" data-org="SYN_OSC_D_ORG_VIBDELAY" data-def="0.175" title="Vibrato delay — how long a note holds still before the vibrato eases in, 0 to 2 s (turn Vibrato up to hear it). Drag; double-click = 0.35 s"><div class="sel-value ph-label">Delay</div><div class="sel-value ph-val org-bv"><b>0.35 s</b></div></div>
+                <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_START" data-def="0" title="Start — how far into the recording each note begins, 0 to 2 s. 0 = the whole attack as recorded · 25 = the strike gone (62 ms in) · 50 = a third of a second in · 100 = two seconds in: no attack at all, the note enters in its body (Noise keeps its own thumps). Drag; double-click = 0"><div class="sel-value ph-label">Start</div><div class="sel-value ph-val org-bv"><b>0 ms</b></div></div>
                 <div class="sel ph-pill org-bp" data-org="SYN_OSC_D_ORG_NOISE" data-def="0.5" title="Noise — the player&#39;s mechanical noises (hammer, pedal, fret, breath, key-up), round-robin like a player: each note decides for itself. 0 = never · 50 = as recorded on about 2 of 3 notes · 100 = +12 dB on about 9 of 10. Drag; double-click = 50"><div class="sel-value ph-label">Noise</div><div class="sel-value ph-val org-bv"><b>50</b></div></div>
               </div>
               <!-- BOTTOM ROW: 7 knobs — OCT/SEMI/CENT/LEVEL/PAN + the fb467 spectral partial window (Low/High) -->
@@ -21955,7 +21971,7 @@ setTimeout(function wireSynControls () {
       };
       /* tp104 — Organics: the contract's defaults (organics-contract.md §4), all eight oscillators */
       ['A','B','C','D','E','F','G','H'].forEach (function (L) {
-        var D = { DYNAMICS: .5, TONE: .5, BODY: .5, ATTACK: .5, VIBRATO: 0, HUMAN: .25, RELEASE: .5, NOISE: .5, SUSTAIN: 0, VELOCITY: .75, IMAGE: .667, VIBRATE: .417, VIBDELAY: .175 };   /* tp105 — + Vibrato (rate/delay on the back) */
+        var D = { DYNAMICS: .5, TONE: .5, BODY: .5, ATTACK: .5, VIBRATO: 0, HUMAN: .25, RELEASE: .5, NOISE: .5, SUSTAIN: 0, VELOCITY: .75, IMAGE: .667, VIBRATE: .417, VIBDELAY: .175, START: 0 };   /* tp105 — + Vibrato (rate/delay on the back) · tp114 — + Start */
         Object.keys (D).forEach (function (k) { KNOB_DEFAULTS_NORMALISED['SYN_OSC_' + L + '_ORG_' + k] = D[k]; });
       });
       // Fill EVERY remaining per-OSC knob default so ALL knobs get double-click-to-reset (the general
@@ -22068,6 +22084,8 @@ setTimeout(function wireSynControls () {
         /* tp105 — the back panel's two times read in their units (contract tp105: rate 3..9 Hz, delay 0..2 s) */
         if (k === 'VIBRATE')  return ring ? (3 + 6 * n).toFixed (1) : (3 + 6 * n).toFixed (1) + ' Hz';
         if (k === 'VIBDELAY') return ring ? (2 * n).toFixed (n < 0.5 ? 2 : 1) : (2 * n).toFixed (2) + ' s';
+        /* tp114 — Start: the skip into the recording, 2 s × v^2.5 (OrganicEngine startSec) */
+        if (k === 'START')    { const t = 2 * Math.pow (n, 2.5); return t < 0.9995 ? Math.round (t * 1000) + (ring ? '' : ' ms') : t.toFixed (2) + (ring ? '' : ' s'); }
         if (k === 'VIBRATO')  { const ct = 50 * Math.pow (n, 1.6); return ring ? String (Math.round (ct)) : (n < 0.005 ? 'Off' : (ct < 9.95 ? ct.toFixed (1) : Math.round (ct)) + ' ct'); }   /* the engine's depth: 50·v^1.6 cents */
         if (ring) return String (pct);
         /* tp105 — Release is a real release now: 20 ms at 0, the recording's own at the centre, ≥ 12 s at 100, log in both halves (the amp envelope's release always lengthens it) */
@@ -47195,6 +47213,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
       P(X+'ORG_VIBRATO',rnd()<.6?0:between(.1,.45)); P(X+'ORG_RELEASE',rnd()<.7?.5:between(.3,.8)); P(X+'ORG_NOISE',rnd()<.7?.5:between(.25,.75));
       P(X+'ORG_SUSTAIN',rnd()<.7?0:between(0,.5)); P(X+'ORG_VELOCITY',rnd()<.7?.75:between(.5,1)); P(X+'ORG_ARTIC',0);
       P(X+'ORG_ATTACK',rnd()<.75?.5:between(.3,.7));   /* tp107 — Attack is on page 2 again: a roll sets it (mostly Natural) */
+      P(X+'ORG_START',rnd()<.8?0:between(.1,.35));   /* tp114 — Start on the back row: mostly the whole attack, sometimes skipped in */
       try{ if(typeof window!=='undefined'&&window.__orgReadBack) setTimeout(function(){ window.__orgReadBack(o); },300); }catch(e){} }   /* tp107 — the back panel (Noise…) repaints from the rolled params */
     if(samp){ rollSample(X,seng,aim,lvl,P); oneShot(o,aim,function(){
       /* tp29 — no one-shot reached it, so it is not a sampler: put it back on a wavetable rather
@@ -49656,7 +49675,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var e = entry (id); if (e && e.installed === false) return Promise.resolve ();
     if (e) paintHead (o, Object.assign ({}, S[o] || {}, { id: id, name: e.name, family: e.family, category: e.category, status: 'loading', ok: true, artics: [], artic: 0 }));   /* the name moves NOW; the rest lands with the reply */
     try { if (window.__setSynParam) window.__setSynParam (P (o, 'ARTIC'), 0); } catch (x) {}
-    return call ('organicsSetInstrument', [idx (o), String (id)]).then (function (js) { var st = parse (js) || {}; st.artic = 0; apply (o, st); }).catch (function () {}); }
+    return call ('organicsSetInstrument', [idx (o), String (id)]).then (function (js) { var st = parse (js) || {}; st.artic = 0; apply (o, st); readBack (o); }).catch (function () {}); }   /* tp114 — + the back row (the switch put it back to its defaults) */
   function setArtic (o, i) {
     try { if (window.__setSynParam) window.__setSynParam (P (o, 'ARTIC'), Math.max (0, Math.min (7, i)) / 7); } catch (e) {}
     try { if (window.__orgMock && window.__orgMock.setArtic && !hasNative ('organicsSetInstrument')) window.__orgMock.setArtic (idx (o), i); } catch (e) {}
@@ -49678,6 +49697,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     var vl = dev.querySelector ('.uni-voices .knob-label'); if (vl) vl.textContent = on ? 'Players' : 'Voices';   /* §2.5 — on this engine the unison page is an ENSEMBLE: each voice is a player */
     var ua = dev.querySelector ('.organic-knob-wrap'); void ua;
     if (!on) { ens[o] = false; releaseAll (o); return; }
+    watchFlip ();   /* tp114 — a device born after boot (the Patcher's E–H) is watched too */
     if (!ens[o] || Date.now () - (readAt[o] || 0) > 400) { ens[o] = true; refresh (o, 'engine'); readKnobs (o); readBack (o); }
   };
   window.__orgHeal = function (o) { if (isOrg (o)) build (o); };
@@ -49900,25 +49920,39 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     openMenu (anchor, 'Articulation', ar, st.artic | 0, function (i) { setArtic (o, i); }); }
 
   /* ═══ tp105 — THE BACK PANEL: Rate · Delay (drag, like Phase) · Curve · Tuning (dropdowns) · tp107: Noise (drag, 0–100) ════════
+     tp114 — Vibrato · Rate · Delay · Start · Noise, every one a drag. Vibrato IS the front knob's parameter (a write here repaints that
+     ring; a flip to the back reads it again). Rate and Delay dim while Vibrato is Off (they shape a vibrato that isn't there). Curve
+     and Tuning are gone from the panel (the engine plays Linear + Equal; the parameters stay declared, inert).
      A local model per oscillator (BK) written straight to the APVTS (__setSynParam) and read back from it on every switch
      to Organics (state persists). Until the engine declares these IDs the writes land nowhere, harmlessly. */
-  var BK = {}, BACK = { VIBRATE: 0.417, VIBDELAY: 0.175, VCURVE: 0.5, TUNING: 1, NOISE: 0.5 };
-  var DRAG = { VIBRATE: 1, VIBDELAY: 1, NOISE: 1 };   /* the pills that drag like Phase (the rest are dropdowns) */
-  var CHOICES = { VCURVE: ['Soft', 'Linear', 'Hard'], TUNING: ['As recorded', 'Equal'] }, PILLWORD = { 'As recorded': 'Natural' };   /* the pill never cuts a word: the menu says it in full */
+  var BK = {}, BACK = { VIBRATO: 0, VIBRATE: 0.417, VIBDELAY: 0.175, START: 0, NOISE: 0.5 };
+  var DRAG = { VIBRATO: 1, VIBRATE: 1, VIBDELAY: 1, START: 1, NOISE: 1 };   /* the pills that drag like Phase (tp114: all five) */
+  var CHOICES = {}, PILLWORD = {};   /* tp114 — no dropdown left on the back row (the house dropdown below still serves the articulation) */
   function bk (o) { return BK[o] || (BK[o] = Object.assign ({}, BACK)); }
   function paintBack (o) { var dev = devOf (o); if (!dev) return; var b = bk (o), st = S[o] || {};
     dev.querySelectorAll ('.org-pills .org-bp').forEach (function (pill) { var id = pill.getAttribute ('data-org') || '', k = id.slice (id.indexOf ('_ORG_') + 5), v = pill.querySelector ('b'); if (!v) return;
-      if (k === 'VIBRATE' || k === 'VIBDELAY') v.textContent = window.__orgFmt ? window.__orgFmt (id, b[k], false) : String (b[k]);
+      if (pill.classList.contains ('org-vib')) pill.classList.toggle ('org-na', !(b.VIBRATO >= 0.005));   /* tp114 — nothing to shape while Vibrato is Off */
+      if (k === 'VIBRATE' || k === 'VIBDELAY' || k === 'VIBRATO' || k === 'START') v.textContent = window.__orgFmt ? window.__orgFmt (id, b[k], false) : String (b[k]);
       else if (k === 'NOISE') v.textContent = String (Math.round (b[k] * 100));   /* tp107 — a bare 0–100, like the knob it was */
       else if (CHOICES[k]) { var n = CHOICES[k].length, i = Math.round (b[k] * (n - 1)); v.textContent = PILLWORD[CHOICES[k][i]] || CHOICES[k][i] || ''; pill.title = pill.title.split (' — now:')[0]; } }); void st; }
-  /* until the engine declares these IDs, getSynParam answers 0 for every one of them — and all four at 0 (Soft · As recorded · 3 Hz ·
-     no delay) is not a state anyone reaches by accident — so four zeros read as "not there yet" and the defaults stay painted */
+  /* until the engine declares these IDs, getSynParam answers 0 for every one of them — and all five at 0 (3 Hz · no delay · Noise
+     off …) is not a state anyone reaches by accident — so all zeros read as "not there yet" and the defaults stay painted */
   function readBack (o) { var ks = Object.keys (BACK);
     Promise.all (ks.map (function (k) { return readParam (P (o, k)); })).then (function (vs) {
       if (vs.every (function (v) { return v == null || v === 0; })) { paintBack (o); return; }
       ks.forEach (function (k, i) { if (vs[i] != null) bk (o)[k] = vs[i]; }); paintBack (o); });
     paintBack (o); }
-  function setBack (o, k, v) { bk (o)[k] = v; try { if (window.__setSynParam) window.__setSynParam (P (o, k), v); } catch (e) {} paintBack (o); }
+  function setBack (o, k, v) { bk (o)[k] = v; try { if (window.__setSynParam) window.__setSynParam (P (o, k), v); } catch (e) {} paintBack (o);
+    if (k === 'VIBRATO') { var d = devOf (o), kn = d && d.querySelector ('.knob[data-syn="' + P (o, 'VIBRATO') + '"]'); if (kn && kn.__applyFill) kn.__applyFill (v); } }   /* tp114 — the front ring follows */
+  /* tp114 — flipping an Organics oscillator to its back reads the five again (the front Vibrato knob, a mod-free automation, a preset
+     may have moved them while the back was hidden); flipping to the front repaints the knobs the back may have moved */
+  var flipSeen = {}, flipObs = null;
+  function watchFlip () { try { if (!flipObs) flipObs = new MutationObserver (function (ms) { ms.forEach (function (m) {
+        var mm = /^osc-([a-h])-device$/.exec (m.target.id || ''); if (!mm) return;
+        var o = mm[1], sw = m.target.classList.contains ('swapped'); if (flipSeen[o] === sw) return; flipSeen[o] = sw; if (!isOrg (o)) return;
+        if (sw) readBack (o); else readKnobs (o); }); });
+      for (var i = 0; i < 8; i++) { var d = devOf (LET.charAt (i)); if (d && !d.__orgFlipWatch) { d.__orgFlipWatch = true; flipSeen[LET.charAt (i)] = d.classList.contains ('swapped');
+        flipObs.observe (d, { attributes: true, attributeFilter: ['class'] }); } } } catch (e) {} }   /* the eight devices only, their own class attribute */
   window.__orgBack = function (o) { return Object.assign ({}, bk (String (o))); };
   window.__orgReadBack = function (o) { readBack (String (o)); };
   var bDrag = null;
@@ -49977,7 +50011,7 @@ body.tp-menu-open .sm-ul { visibility: hidden !important; }   /* tp9 — the mod
     setInstrument (String (o), e.id); return e.id; };
 
   /* ═══ 6 · BOOT: the index, then every oscillator already on Organics reads its state back ═════════════════════════ */
-  function boot () { loadIndex ().then (function () { for (var i = 0; i < 8; i++) { var o = LET.charAt (i); if (isOrg (o)) { ens[o] = true; refresh (o, 'boot'); readKnobs (o); readBack (o); } } }); }
+  function boot () { watchFlip (); loadIndex ().then (function () { for (var i = 0; i < 8; i++) { var o = LET.charAt (i); if (isOrg (o)) { ens[o] = true; refresh (o, 'boot'); readKnobs (o); readBack (o); } } }); }
   if (document.readyState === 'loading') document.addEventListener ('DOMContentLoaded', boot); else boot ();
   [600, 1800].forEach (function (ms) { setTimeout (function () { for (var i = 0; i < 8; i++) { var o = LET.charAt (i); if (isOrg (o) && !S[o]) refresh (o, 'boot'); } }, ms); });
   /* the gates' bench: one UNCACHED build of a family into oscillator o's box (render + DOM), in ms */

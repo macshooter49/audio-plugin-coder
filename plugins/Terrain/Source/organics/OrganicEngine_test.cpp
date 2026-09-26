@@ -1897,6 +1897,54 @@ int main (int argc, char** argv)
                   missing ? "ptr" : "null", bad ? "ptr" : "null", c1 ? "ptr" : "null", c2 ? "ptr" : "null", c3 ? "ptr" : "null", silent ? "yes" : "NO"));
     }
 
+    // ══ tp114 — START (the back panel): skip into the recording at note-on (2 s × v^2.5), a one-shot never past half ══════════
+    if (piano)
+    {
+        auto press = [&] (float start, int key, int64_t frames, float noise = 0.f) {
+            OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (piano);
+            auto p = P0(); p.noise = noise; p.start = start;
+            e.noteOn (key, 0.8f, 1, kNoDet, 11u);
+            Rec r; run (e, p, r, frames, 512); return mono (r);
+        };
+        // the skipped note IS the recording from the offset: key 72 = its root (ratio 1), Start 0.5 → 2·0.5^2.5 = 0.3536 s
+        {
+            const auto x0 = press (0.f, 72, (int64_t) (2.0 * kSR)), xs = press (0.5f, 72, (int64_t) (1.2 * kSR));
+            const int64_t skip = (int64_t) std::llround (2.0 * std::pow (0.5, 2.5) * kSR);
+            double worst = 0; for (int64_t w = (int64_t) (0.05 * kSR); w + 2400 <= (int64_t) (1.1 * kSR); w += 2400)
+                worst = std::max (worst, std::abs (an::db (an::rms (xs, w, 2400)) - an::db (an::rms (x0, w + skip, 2400))));
+            const double on0 = an::db (an::rms (x0, 0, 2400)), onS = an::db (an::rms (xs, 0, 2400));
+            bar ("Start 50 %: the note is the recording from 0.354 s", worst < 0.5 && onS < on0 - 1.0,
+                 fmt ("50 ms envelope vs the unskipped note shifted 0.354 s: worst %.2f dB · first 50 ms %.1f → %.1f dB (the strike gone)", worst, on0, onS));
+        }
+        // never silent: Start 100 % on every fixture zone (one-shots 4 s → capped at 2 s; the looped 48–59 zone wraps into its loop)
+        {
+            int quiet = 0; std::string d;
+            for (int key : { 30, 43, 47, 50, 55, 59, 60, 72, 90, 110 })
+            {
+                const auto x = press (1.f, key, (int64_t) (0.5 * kSR)), x0 = press (0.f, key, (int64_t) (0.5 * kSR));
+                const double l = an::db (an::rms (x, 0, (int64_t) (0.5 * kSR))), l0 = an::db (an::rms (x0, 0, (int64_t) (0.5 * kSR)));
+                if (! (l > -60.0)) ++quiet;
+                d += fmt ("%s%d %.0f/%.0f", key == 30 ? "" : " ", key, l0, l);
+            }
+            bar ("Start 100 %: every zone still sounds", quiet == 0, fmt ("key: dB at Start 0 / 100 %% (first 0.5 s): %s", d.c_str()));
+        }
+        // turned while playing: Start 0 → 1 → 0 across presses every 250 ms (it acts at note-on; a skipped entry fades 12 ms in)
+        {
+            OrganicEngine e; e.prepare (kSR, 512); e.setInstrument (piano);
+            auto p = P0(); p.noise = 0.f; Rec r;
+            const int64_t N = (int64_t) (3.0 * kSR);
+            for (int64_t t = 0; t < N; t += 512)
+            {
+                const double ph = (double) t / (double) N; p.start = (float) (ph < 0.5 ? 2.0 * ph : 2.0 - 2.0 * ph);
+                if (t % 12288 == 0) e.noteOn (t % 24576 == 0 ? 72 : 64, 0.8f, 1, kNoDet, 13u + (uint32_t) t);
+                run (e, p, r, 512, 512);
+            }
+            const auto ck = an::clicks (mono (r));
+            bar ("Start swept 0→1→0 across 12 presses: no click", ck.relDb <= -60.0 || ck.localRatio <= 1.5,
+                 fmt ("HP(8k) residual %.1f dB re peak (local ratio %.2f, worst at %.0f ms)", ck.relDb, ck.localRatio, ck.atMs));
+        }
+    }
+
     // ── 9. Real data: Agent A's compiled library (runs when <compiledRoot> is given and exists) ──────
 
     // ══ tp105 — VIBRATO · A REAL RELEASE · NOISE ON/OFF · TUNING (tfix) · VELOCITY CURVE (fixture test.noisy) ══════════
