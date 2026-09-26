@@ -5745,13 +5745,10 @@ body.ti-syn-open > #plugin > #footer,        body.ti-syn-open > #plugin > #foote
 #syn-panel .device.osc .swap-btn.act::before { content: ''; font-size: 0; width: 8px; height: 8px; transform: none;
   background: linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat; }
 #syn-panel .device.osc .swap-btn::after { content: ''; display: none; grid-area: 1 / 1; }
-/* tp112 — Max: "did you make a new plus button? … I want the same plus button that the effect has … keep it in that same box …
-   it should never move off centre." The + is now IC_PLUS itself (the effects' glyph: 14-unit box, bars 2.6→11.4, stroke 1.4,
-   round caps) as a mask filled with currentColor, 14 px in the box's 14 px content, centred by the grid — no drawn bars,
-   no offset. The ← (.act) is unchanged. */
-#syn-panel .device.osc .swap-btn:not(.act)::before { width: 14px; height: 14px; background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Cline x1='7' y1='2.6' x2='7' y2='11.4'/%3E%3Cline x1='2.6' y1='7' x2='11.4' y2='7'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
-          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Cline x1='7' y1='2.6' x2='7' y2='11.4'/%3E%3Cline x1='2.6' y1='7' x2='11.4' y2='7'/%3E%3C/svg%3E") center / 14px 14px no-repeat; }
+/* tp112b — Max: "get the old plus sign back … smaller … the same color as the A … the same size as the A, so it sits pretty in
+   the box." The drawn two-bar + (tp105, centred by the grid, never typed) at the A's own size: 7 px bars, 1 px, currentColor =
+   the letter's colour. The IC_PLUS swap is undone. */
+#syn-panel .device.osc .swap-btn:not(.act)::before { width: 7px; height: 7px; }   /* odd: the 1 px bars sit on a pixel centre */
 #syn-panel .device.osc .swap-btn.act::after { display: block; width: 4.2px; height: 4.2px; box-sizing: border-box; border-left: 1px solid currentColor; border-bottom: 1px solid currentColor;
   transform: translateX(-1.9px) rotate(45deg); }
 #syn-panel .device.osc .osc-emblems .osc-letter:hover,
@@ -20183,21 +20180,28 @@ document.getElementById('syn-btn').addEventListener('click', () => {
    native windows are not floating cards and are left alone: the synchronous pass marks what sits in the Patcher
    BEFORE the Patcher's own listener adopts / returns anything, the deferred pass runs after it. */
 (function(){
-  var SEL = '.ti-card, .mv-ext, .filt-ext', prev = (typeof currentActivePanel !== 'undefined') ? currentActivePanel : null;
-  function key(p){ return p || 'front'; }
-  window.addEventListener('tipanelchange', function(e){
-    var p = key(e.detail && e.detail.panel), was = key(prev); prev = e.detail && e.detail.panel;
-    var cs = document.querySelectorAll(SEL);
-    cs.forEach(function(c){ c.__tpWasIn = !!(c.closest && c.closest('#tp-page')); });
-    setTimeout(function(){ cs.forEach(function(c){
+  var SEL = '.ti-card, .mv-ext, .filt-ext', prev = (typeof currentActivePanel !== 'undefined') ? currentActivePanel : null, stOn = false;
+  function key(p){ return stOn ? 'settings' : (p || 'front'); }   /* tp112b — Settings is a page too (Max's Glitch card over Account) */
+  function relocate(p, was, cs){ cs = cs || document.querySelectorAll(SEL); cs.forEach(function(c){
       try {
         if (c.__tpWasIn || (c.closest && c.closest('#tp-page')) || c.classList.contains('ti-popcard')) { c.classList.remove('tp-away'); delete c.dataset.tpHome; return; }
         var open = c.classList.contains('open'), away = c.classList.contains('tp-away');
         if (open && !away) c.dataset.tpHome = was;                       // it was showing on the page we just left
         if (!open && !away) { delete c.dataset.tpHome; return; }         // closed: it belongs nowhere
         c.classList.toggle('tp-away', (c.dataset.tpHome || p) !== p);
-      } catch (err) {} }); }, 0);
+      } catch (err) {} }); }
+  window.addEventListener('tipanelchange', function(e){
+    var was = key(prev); prev = e.detail && e.detail.panel; var p = key(prev);
+    var cs = document.querySelectorAll(SEL);
+    cs.forEach(function(c){ c.__tpWasIn = !!(c.closest && c.closest('#tp-page')); });
+    setTimeout(function(){ relocate(p, was, cs); }, 0);
   });
+  /* the Settings sheet is an overlay (#st-overlay.on), not a panel: its open / close is watched on the class itself */
+  function watchSt(){ var st = document.getElementById('st-overlay'); if (!st) return false;
+    new MutationObserver(function(){ var on = st.classList.contains('on'); if (on === stOn) return;
+      var was = key(prev); stOn = on; var cs = document.querySelectorAll(SEL); cs.forEach(function(c){ c.__tpWasIn = false; }); relocate(key(prev), was, cs); }).observe(st, { attributes: true, attributeFilter: ['class'] });
+    return true; }
+  if (!watchSt()) document.addEventListener('DOMContentLoaded', watchSt);
 })();
 
 // Bridge raw <input type="range"> / <select> elements to the
